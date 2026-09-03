@@ -266,6 +266,18 @@
         "implementation_recommendation": {
           "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
         },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
         "condition": {
           "type": "string",
           "const": "awaiting-client"
@@ -359,6 +371,18 @@
         },
         "implementation_recommendation": {
           "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
         },
         "condition": {
           "type": "string",
@@ -458,6 +482,18 @@
         "implementation_recommendation": {
           "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
         },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
         "condition": {
           "type": "string",
           "const": "ready"
@@ -551,6 +587,18 @@
         },
         "implementation_recommendation": {
           "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
         },
         "condition": {
           "type": "string",
@@ -659,6 +707,18 @@
         "implementation_recommendation": {
           "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
         },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
         "condition": {
           "type": "string",
           "const": "blocked"
@@ -758,6 +818,18 @@
         },
         "implementation_recommendation": {
           "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
         },
         "condition": {
           "type": "string",

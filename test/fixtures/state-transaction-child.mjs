@@ -51,7 +51,7 @@ try {
       });
     });
     process.send({ type: "released", pid: process.pid });
-  } else if (["run-transaction", "run-crash-transaction", "run-result-transaction", "run-crash-result-transaction"].includes(action)) {
+  } else if (["run-transaction", "run-crash-transaction", "run-result-transaction", "run-crash-result-transaction", "run-validation-transaction", "run-crash-validation-transaction"].includes(action)) {
     if (intentId === undefined || expectedRevisionText === undefined) {
       throw new Error("run-transaction requires repository, intent id, and expected revision");
     }
@@ -104,6 +104,7 @@ try {
     };
     const inputFingerprint = fingerprints.computeInputFingerprint(subject);
     const resultMode = action.includes("result");
+    const validationMode = action.includes("validation");
     const retainedBytes = new TextEncoder().encode("retained-result\n");
     const outputPath = `.archflow/tasks/${taskId}/phases/result.md`;
     const contentDigest = canonical.sha256Bytes(retainedBytes);
@@ -145,7 +146,12 @@ try {
       input_fingerprint: inputFingerprint,
       phase_instance: "phase-impl-9",
       step: "produce",
-      status: "succeeded",
+      status: validationMode ? "failed" : "succeeded",
+      ...(validationMode ? {
+        operation: "request_validation_override",
+        reason: "device lab unavailable",
+        validation_override_request: { displaced_validations: ["hardware suite"] },
+      } : {}),
       ...(resultMode ? { artifact } : {}),
     });
     const requestDigest = requestModule.identifyTransactionRequest(call, authority.value, inputFingerprint).request_digest;
@@ -261,7 +267,7 @@ try {
     }, { call, authority: authority.value }, async (current) => {
       prepareCalls += 1;
       const { revision: _revision, last_transition: _lastTransition, ...nextState } = current.value;
-      const success = { path: "state.json", revision: current.value.revision + 1, status: "succeeded" };
+      const success = { path: "state.json", revision: current.value.revision + 1, status: validationMode ? "failed" : "succeeded" };
       const reference = {
         phase_instance: current.value.phase_instance, step: current.value.step,
         result_digest: resultManifest.digest, result_id: resultId,
@@ -283,7 +289,16 @@ try {
             success,
           }),
           result: tools.validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success }),
-          next_state: { ...nextState, status: "succeeded",
+          next_state: { ...nextState, status: validationMode ? "failed" : "succeeded",
+            ...(validationMode ? { pending_validation_override: {
+              phase_instance: current.value.phase_instance,
+              input_fingerprint: current.value.input_fingerprint,
+              governing_phase_design_digest: "9".repeat(64),
+              displaced_validations: ["hardware suite"],
+              producer_reason: "device lab unavailable",
+              request_digest: requestDigest,
+              request_revision: current.value.revision + 1,
+            } } : {}),
             ...(resultMode ? { authoritative_results: [reference] } : {}) },
           ...(resultMode ? { result_installation: transaction.prepareResultInstallation({ reference, ...installation }) } : {}),
         },

@@ -13,6 +13,7 @@ import {
 import { projectAutomationStatus, projectAutomationStatusV2 } from "../../src/local/automation-status.js";
 import type { NextAction, NextActionCode } from "../../src/state/next-action.js";
 import type { TaskStatusV1 } from "../../src/state/status.js";
+import { computeTaxonomyDenialRates } from "../../src/state/semantic-status.js";
 
 const task = parseTaskSlug("automation-projection");
 const digestA = parseSha256Digest("a".repeat(64));
@@ -51,6 +52,7 @@ function snapshot(action: NextAction, extra: Partial<SemanticStatusSnapshotV1> =
     live_config_digest: digestB,
     status: structuredClone(status) as unknown as PlainJsonValue,
     full_findings: [],
+    taxonomy_denial_rates: computeTaxonomyDenialRates([]),
     reopen_impacts: [],
     implementation_recommendation: recommendation,
     ...extra,

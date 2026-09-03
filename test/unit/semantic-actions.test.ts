@@ -19,6 +19,7 @@ import {
   semanticSubstepIntentId,
 } from "../../src/state/semantic-actions.js";
 import { projectSemanticStatus } from "../../src/state/semantic-view.js";
+import { computeTaxonomyDenialRates } from "../../src/state/semantic-status.js";
 import type { TaskStatusV1 } from "../../src/state/status.js";
 import type { ProductionServices } from "../../src/state/production.js";
 
@@ -56,6 +57,7 @@ function snapshot(
   return {
     schema_version: "1", repository_identity_digest: durable.repository_identity_digest, state: durable,
     status: status as unknown as SemanticStatusSnapshotV1["status"], full_findings: [],
+    taxonomy_denial_rates: computeTaxonomyDenialRates([]),
     implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
     reopen_impacts: [], ...extra,
   };
@@ -127,8 +129,26 @@ describe("semantic one-action planning", () => {
     const declared = apply(implementationPosition, implementationInvocation, { kind: "work-result", outcome: "succeeded", implementation: facts });
     expect(declared.action_kind).toBe("submit-work");
     expect(declared.request_facts).toMatchObject({ kind: "produce", implementation: { outputs: ["src/a.ts"] } });
-    expect(apply(implementationPosition, implementationInvocation, { kind: "work-result", outcome: "failed", reason: "verification failed" }))
-      .toMatchObject({ action_kind: "submit-work", request_facts: { kind: "failed" } });
+    const plainFailure = apply(implementationPosition, implementationInvocation, {
+      kind: "work-result", outcome: "failed", reason: "verification failed",
+    });
+    expect(plainFailure).toMatchObject({ action_kind: "submit-work", request_facts: { kind: "failed" } });
+    expect(plainFailure.request_facts).not.toHaveProperty("reason");
+    expect(plainFailure.request_facts).not.toHaveProperty("validation_override_request");
+    const overrideFailure = apply(implementationPosition, implementationInvocation, {
+      kind: "work-result", outcome: "failed", reason: "hardware runner is unavailable",
+      validation_override_request: {
+        displaced_validations: ["hardware integration suite", "physical-device smoke test"],
+      },
+    });
+    expect(overrideFailure.request_facts).toMatchObject({
+      kind: "failed",
+      reason: "hardware runner is unavailable",
+      validation_override_request: {
+        displaced_validations: ["hardware integration suite", "physical-device smoke test"],
+      },
+    });
+    expect(overrideFailure.operation_digest).not.toBe(plainFailure.operation_digest);
 
     const documentPosition = snapshot(state("produce", "running"), {
       code: "run-step", detail: "Submit document.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "produce",
@@ -137,6 +157,10 @@ describe("semantic one-action planning", () => {
       .toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH" }));
     expect(apply(documentPosition, invocation, { kind: "work-result", outcome: "failed", reason: "document work failed" }))
       .toMatchObject({ action_kind: "submit-work", request_facts: { kind: "failed" } });
+    expect(() => apply(documentPosition, invocation, {
+      kind: "work-result", outcome: "failed", reason: "not an implementation",
+      validation_override_request: { displaced_validations: ["device suite"] },
+    })).toThrow();
   });
 
   it("uses fixed review continuations without redispatching a finding-free retained review", () => {
@@ -528,7 +552,7 @@ describe("semantic one-action planning", () => {
       task_id: "api-refactor", state: "missing", blocking_reasons: [], config: { verified: true },
       next_action: { code: "create-task", detail: "Create task.", human_required: false },
     } as unknown as TaskStatusV1;
-    const missing: SemanticStatusSnapshotV1 = { schema_version: "1", repository_identity_digest: digest("1"), status: missingStatus as unknown as SemanticStatusSnapshotV1["status"], full_findings: [], implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."), reopen_impacts: [] };
+    const missing: SemanticStatusSnapshotV1 = { schema_version: "1", repository_identity_digest: digest("1"), status: missingStatus as unknown as SemanticStatusSnapshotV1["status"], full_findings: [], taxonomy_denial_rates: computeTaxonomyDenialRates([]), implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."), reopen_impacts: [] };
     const owner: WorkflowInvocationV1 = { skill: "archflow-prd", intent: "resume" };
     const plan = apply(missing, owner, { kind: "task-ask", text: " exact ask\n" });
     const order: string[] = [];

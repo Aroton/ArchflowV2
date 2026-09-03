@@ -43,7 +43,8 @@ export const DECISIONS: Readonly<Record<GateKind, readonly string[]>> = Object.f
   "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
-  "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
+  "attempts-exhausted": ["retry-once", "revise", "abort", "push-through-review", "cancel"],
+  "validation-override": ["grant-validation-override", "deny-validation-override", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
@@ -101,9 +102,22 @@ export type GateOpenResult = Readonly<{
 export type GateResolution = Readonly<{
   state: CanonicalDocument<TaskStateV1>;
   record: CanonicalDocument<GateDecisionRecordV1>;
-  effect: "advance" | "retry" | "redirect-waiver" | "redirect-upstream" | "non-advancing";
+  effect: "advance" | "retry" | "redirect-waiver" | "redirect-upstream" | "validation-resume" | "non-advancing";
   replayed: boolean;
 }>;
+
+/** Fresh attempts-exhausted requests advertise push-through only when exact eligibility exists. */
+export function decisionsForGate(
+  kind: GateKind,
+  context: GateRequestV1["context"],
+): readonly string[] {
+  if (kind === "attempts-exhausted" &&
+      !("review_push_through" in context) &&
+      (context as Record<string, unknown>).review_push_through === undefined) {
+    return Object.freeze(["retry-once", "revise", "abort", "cancel"]);
+  }
+  return DECISIONS[kind];
+}
 
 export const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 export const fail = <T = never>(error: ProjectError): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: false, error });

@@ -6,8 +6,12 @@ import { safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./e
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
 import {
   implementationRecommendationV1Schema,
+  publicReviewPushThroughAuditV1Schema,
+  publicValidationOverrideAuditV1Schema,
   workflowPositionV1Schema,
   type ImplementationRecommendationV1,
+  type PublicReviewPushThroughAuditV1,
+  type PublicValidationOverrideAuditV1,
   type WorkflowPositionV1,
 } from "./semantic-workflow.js";
 
@@ -189,6 +193,8 @@ type AutomationStatusCommonV2 = {
   readonly observation_id: Sha256Digest;
   readonly state_revision: SafeInteger | null;
   readonly implementation_recommendation: ImplementationRecommendationV1;
+  readonly validation_overrides?: readonly PublicValidationOverrideAuditV1[];
+  readonly review_push_throughs?: readonly PublicReviewPushThroughAuditV1[];
 };
 
 type AutomationPositionedStatusCommonV2 = AutomationStatusCommonV2 & {
@@ -371,12 +377,16 @@ const commonShapeV2 = {
   schema_version: z.literal("2"), task_id: taskSlugV1Schema, observation_id: digest,
   state_revision: revision.nullable(), position: workflowPositionV1Schema,
   implementation_recommendation: implementationRecommendationV1Schema,
+  validation_overrides: z.array(publicValidationOverrideAuditV1Schema).optional(),
+  review_push_throughs: z.array(publicReviewPushThroughAuditV1Schema).optional(),
 } as const;
 const positionlessCommonShapeV2 = { ...commonShapeV2, position: z.null() } as const;
 const withoutIdCommonShapeV2 = {
   schema_version: z.literal("2"), task_id: taskSlugV1Schema,
   state_revision: revision.nullable(), position: workflowPositionV1Schema,
   implementation_recommendation: implementationRecommendationV1Schema,
+  validation_overrides: z.array(publicValidationOverrideAuditV1Schema).optional(),
+  review_push_throughs: z.array(publicReviewPushThroughAuditV1Schema).optional(),
 } as const;
 const positionlessWithoutIdCommonShapeV2 = { ...withoutIdCommonShapeV2, position: z.null() } as const;
 

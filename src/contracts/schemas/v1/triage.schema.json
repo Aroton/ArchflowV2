@@ -145,6 +145,69 @@
               "evidence"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "review_evidence_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "finding_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "disposition": {
+                "type": "string",
+                "const": "escalated-human"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "review_evidence_digest",
+              "finding_id",
+              "disposition",
+              "rationale"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "review_evidence_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "finding_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "disposition": {
+                "type": "string",
+                "const": "deferred"
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "review_evidence_digest",
+              "finding_id",
+              "disposition",
+              "rationale"
+            ],
+            "additionalProperties": false
           }
         ]
       }
@@ -164,74 +227,259 @@
       "minimum": 0,
       "maximum": 9007199254740991
     },
+    "escalated_human_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "deferred_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
     "disposition_ledger": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "review_evidence_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "finding_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "disposition": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "accepted-editorial",
+                  "rejected",
+                  "escalated-human",
+                  "deferred"
+                ]
+              },
+              "attempt": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "revision_intent": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "suggested_resolution": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "claim_type": {
+                "type": "string",
+                "enum": [
+                  "defect",
+                  "risk",
+                  "gap",
+                  "preference"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "certain",
+                  "likely",
+                  "suspicion"
+                ]
+              },
+              "falsifier": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "review_evidence_digest",
+              "finding_id",
+              "disposition",
+              "attempt",
+              "claim_type",
+              "confidence",
+              "falsifier"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "review_evidence_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "finding_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "disposition": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "accepted-editorial",
+                  "rejected",
+                  "escalated-human",
+                  "deferred"
+                ]
+              },
+              "attempt": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "revision_intent": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "suggested_resolution": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "blocker",
+                  "major",
+                  "minor"
+                ]
+              },
+              "blocking": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "review_evidence_digest",
+              "finding_id",
+              "disposition",
+              "attempt",
+              "severity",
+              "blocking"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "review_evidence_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "finding_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "disposition": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "accepted-editorial",
+                  "rejected",
+                  "escalated-human",
+                  "deferred"
+                ]
+              },
+              "attempt": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "revision_intent": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "suggested_resolution": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "review_evidence_digest",
+              "finding_id",
+              "disposition",
+              "attempt"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "review_round_history": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "review_evidence_digest": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          },
-          "finding_id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          "disposition": {
-            "type": "string",
-            "enum": [
-              "accepted",
-              "accepted-editorial",
-              "rejected"
-            ]
-          },
           "attempt": {
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
           },
-          "rationale": {
+          "review_evidence_digest": {
             "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "revision_intent": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "evidence": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "severity": {
-            "type": "string",
-            "enum": [
-              "blocker",
-              "major",
-              "minor"
-            ]
-          },
-          "blocking": {
-            "type": "boolean"
-          },
-          "summary": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          },
-          "suggested_resolution": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
+            "pattern": "^[0-9a-f]{64}$"
           }
         },
         "required": [
-          "review_evidence_digest",
-          "finding_id",
-          "disposition",
-          "attempt"
+          "attempt",
+          "review_evidence_digest"
         ],
         "additionalProperties": false
       }

@@ -113,10 +113,12 @@ export async function loadAuthenticatedGateApproval(
     parseArchivedGateDecisionRecord,
   );
   if (request === "missing" || request === "invalid") {
-    return issue("STATE_INVALID", current.value.value, "gate-approval-request-invalid");
+    return issue("STATE_INVALID", current.value.value,
+      request === "missing" ? "gate-approval-request-unavailable" : "gate-approval-request-invalid");
   }
   if (decision === "missing" || decision === "invalid") {
-    return issue("STATE_INVALID", current.value.value, "gate-approval-decision-invalid");
+    return issue("STATE_INVALID", current.value.value,
+      decision === "missing" ? "gate-approval-decision-unavailable" : "gate-approval-decision-invalid");
   }
   if (
     decision.digest !== claimed.decision_digest ||

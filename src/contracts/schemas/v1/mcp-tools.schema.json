@@ -122,6 +122,86 @@
       ],
       "additionalProperties": false
     },
+    "baselineObservation": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "observation_kind": {
+          "type": "string",
+          "const": "projection-drift"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "observed_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "drift_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "schema_version",
+        "observation_kind",
+        "task_id",
+        "phase_instance",
+        "observed_at_revision",
+        "drift_digest"
+      ],
+      "additionalProperties": false
+    },
+    "validationOverrideRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "evidence_kind": {
+          "type": "string",
+          "const": "validation-override-request"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "input_fingerprint": {
+          "$ref": "#/$defs/digest"
+        },
+        "governing_phase_design_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "request_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "validation_request_subject_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "schema_version",
+        "evidence_kind",
+        "task_id",
+        "phase_instance",
+        "input_fingerprint",
+        "governing_phase_design_digest",
+        "request_revision",
+        "validation_request_subject_digest"
+      ],
+      "additionalProperties": false
+    },
     "failure": {
       "type": "object",
       "properties": {
@@ -234,7 +314,8 @@
               "recover_milestone_authority",
               "recover_approval_trigger_authority",
               "refresh_stale_baseline",
-              "set_commit_authority"
+              "set_commit_authority",
+              "request_validation_override"
             ]
           },
           "target_commit": {
@@ -257,6 +338,26 @@
           },
           "reason": {
             "$ref": "#/$defs/text"
+          },
+          "validation_override_request": {
+            "type": "object",
+            "properties": {
+              "displaced_validations": {
+                "minItems": 1,
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "\\S"
+                }
+              }
+            },
+            "required": [
+              "displaced_validations"
+            ],
+            "additionalProperties": false
           },
           "ask_base_digest": {
             "$ref": "#/$defs/digest"
@@ -553,37 +654,6 @@
                 ],
                 "additionalProperties": false
               },
-              "effort-reviewer": {
-                "type": "object",
-                "properties": {
-                  "model": {
-                    "type": "string",
-                    "minLength": 1,
-                    "pattern": "\\S"
-                  },
-                  "effort": {
-                    "type": "string",
-                    "enum": [
-                      "low",
-                      "medium",
-                      "high",
-                      "xhigh",
-                      "max",
-                      "ultra"
-                    ]
-                  },
-                  "provider": {
-                    "type": "string",
-                    "minLength": 1,
-                    "pattern": "\\S"
-                  }
-                },
-                "required": [
-                  "model",
-                  "effort"
-                ],
-                "additionalProperties": false
-              },
               "adjudicator": {
                 "type": "object",
                 "properties": {
@@ -633,101 +703,283 @@
         "additionalProperties": false
       },
       "success": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
-          },
-          "verdict": {
-            "type": "string",
-            "enum": [
-              "pass",
-              "advisory",
-              "fail"
-            ]
-          },
-          "blocking_count": {
-            "$ref": "#/$defs/integer"
-          },
-          "constitution": {
-            "anyOf": [
-              {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "advisory",
+                  "review-raised"
+                ]
+              },
+              "total_findings": {
+                "$ref": "#/$defs/integer"
+              },
+              "partition_counts": {
                 "type": "object",
                 "properties": {
-                  "status": {
-                    "type": "string",
-                    "const": "evaluated"
+                  "defect:certain": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
-                  "path": {
-                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                  "defect:likely": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
-                  "constitution": {
-                    "type": "string",
-                    "enum": [
-                      "pass",
-                      "fail",
-                      "uncertain"
-                    ]
+                  "defect:suspicion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
-                  "drift": {
-                    "type": "string",
-                    "enum": [
-                      "aligned",
-                      "incidental",
-                      "material"
-                    ]
+                  "risk:certain": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   },
-                  "triggers": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/rule"
-                    }
+                  "risk:likely": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "risk:suspicion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "gap:certain": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "gap:likely": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "gap:suspicion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "preference:certain": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "preference:likely": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "preference:suspicion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
-                  "status",
-                  "path",
-                  "constitution",
-                  "drift",
-                  "triggers"
+                  "defect:certain",
+                  "defect:likely",
+                  "defect:suspicion",
+                  "risk:certain",
+                  "risk:likely",
+                  "risk:suspicion",
+                  "gap:certain",
+                  "gap:likely",
+                  "gap:suspicion",
+                  "preference:certain",
+                  "preference:likely",
+                  "preference:suspicion"
                 ],
                 "additionalProperties": false
               },
-              {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "const": "not-run"
+              "constitution": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "evaluated"
+                      },
+                      "path": {
+                        "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                      },
+                      "constitution": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail",
+                          "uncertain"
+                        ]
+                      },
+                      "drift": {
+                        "type": "string",
+                        "enum": [
+                          "aligned",
+                          "incidental",
+                          "material"
+                        ]
+                      },
+                      "triggers": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/rule"
+                        }
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "path",
+                      "constitution",
+                      "drift",
+                      "triggers"
+                    ],
+                    "additionalProperties": false
                   },
-                  "reason": {
-                    "type": "string",
-                    "const": "no-active-constitution-rules"
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "not-run"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "const": "no-active-constitution-rules"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "reason"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "status",
-                  "reason"
-                ],
-                "additionalProperties": false
+                ]
+              },
+              "revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "request_digest": {
+                "$ref": "#/$defs/digest"
               }
-            ]
+            },
+            "required": [
+              "path",
+              "verdict",
+              "total_findings",
+              "partition_counts",
+              "constitution",
+              "revision"
+            ],
+            "additionalProperties": false
           },
-          "revision": {
-            "$ref": "#/$defs/integer"
-          },
-          "request_digest": {
-            "$ref": "#/$defs/digest"
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "advisory",
+                  "fail"
+                ]
+              },
+              "blocking_count": {
+                "$ref": "#/$defs/integer"
+              },
+              "constitution": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "evaluated"
+                      },
+                      "path": {
+                        "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                      },
+                      "constitution": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail",
+                          "uncertain"
+                        ]
+                      },
+                      "drift": {
+                        "type": "string",
+                        "enum": [
+                          "aligned",
+                          "incidental",
+                          "material"
+                        ]
+                      },
+                      "triggers": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/rule"
+                        }
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "path",
+                      "constitution",
+                      "drift",
+                      "triggers"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "not-run"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "const": "no-active-constitution-rules"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "request_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "required": [
+              "path",
+              "verdict",
+              "blocking_count",
+              "constitution",
+              "revision"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "path",
-          "verdict",
-          "blocking_count",
-          "constitution",
-          "revision"
-        ],
-        "additionalProperties": false
+        ]
       },
       "result": {
         "anyOf": [
@@ -806,7 +1058,17 @@
                 "$ref": "#/$defs/digest"
               },
               "current_evidence": {
-                "$ref": "#/$defs/currentEvidence"
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/currentEvidence"
+                  },
+                  {
+                    "$ref": "#/$defs/baselineObservation"
+                  },
+                  {
+                    "$ref": "#/$defs/validationOverrideRequest"
+                  }
+                ]
               },
               "kind": {
                 "enum": [
@@ -815,6 +1077,7 @@
                   "constitution-review",
                   "material-drift",
                   "attempts-exhausted",
+                  "validation-override",
                   "constitution-edit",
                   "commit-authorization",
                   "restore-collision",
@@ -900,6 +1163,16 @@
                   {
                     "properties": {
                       "kind": {
+                        "const": "validation-override"
+                      },
+                      "context": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/validationOverride/properties/context"
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "kind": {
                         "const": "constitution-edit"
                       },
                       "context": {
@@ -954,6 +1227,7 @@
               "constitution-review",
               "material-drift",
               "attempts-exhausted",
+              "validation-override",
               "constitution-edit",
               "commit-authorization",
               "restore-collision",

@@ -228,8 +228,8 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Automation v1 retains its legacy effort-failure surrogate
 
-**Not provided:** The strict automation-status v1 `failed_role` vocabulary cannot represent `effort-reviewer` without breaking existing consumers.
+**Not provided:** The strict automation-status v1 `failed_role` vocabulary cannot represent historical `effort-reviewer` failures without breaking existing consumers.
 
-**Existing mitigation:** Automation status v2 truthfully admits `effort-reviewer`, includes the authenticated implementation recommendation, and is what the CLI emits. V1 remains a separate strict compatibility contract and keeps the legacy `adjudicator` surrogate while its human text names effort review. Semantic status always retains the distinct real role.
+**Existing mitigation:** Fresh effort-selector failures no longer reach automation at all: the server uses the fixed Sol-medium default and continues ordinary review. V2 retains the historical enum for archived projections; V1 remains a separate strict compatibility contract.
 
 **Why accepted:** Widening v1 would break strict readers. A deliberate v2 lets updated controllers consume the real role and advice while old consumers can continue parsing exactly the contract they adopted.

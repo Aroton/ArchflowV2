@@ -9,6 +9,8 @@ import {
   waiverInputSchema,
 } from "../mcp-tools.js";
 import { requiredReviewSlotsSchema } from "../trust.js";
+import { taskSlugV1Schema } from "../evidence.js";
+import { phaseInstanceIdV1Schema } from "../phase-instance.js";
 import { SCHEMA_IDS } from "../versions.js";
 import { serializedProjectErrorV1Schema } from "./schema-generation-errors.js";
 import type { GeneratedDefOverride, SchemaGenerationGroup } from "./schema-generation.js";
@@ -23,6 +25,24 @@ const digest = mcpToolsSchemaDefs.digest as ZodType;
  * mcp-tools fixture corpus, which exercises the committed bytes against the runtime parsers.
  */
 const currentEvidence = z.object({ set_digest: digest, slots: requiredReviewSlotsSchema }).strict();
+const baselineObservationEvidence = z.object({
+  schema_version: z.literal("1"),
+  observation_kind: z.literal("projection-drift"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  observed_at_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  drift_digest: digest,
+}).strict();
+const validationOverrideRequestEvidence = z.object({
+  schema_version: z.literal("1"),
+  evidence_kind: z.literal("validation-override-request"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  input_fingerprint: digest,
+  governing_phase_design_digest: digest,
+  request_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  validation_request_subject_digest: digest,
+}).strict();
 
 /** The failure envelope every tool result union shares; the error body is the project-error document root. */
 const failure = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: serializedProjectErrorV1Schema }).strict();
@@ -103,7 +123,7 @@ const gateInputEmission: GeneratedDefOverride = {
         phase_instance: { $ref: "#/$defs/phase" },
         summary: { $ref: "#/$defs/text" },
         subject_digest: { $ref: "#/$defs/digest" },
-        current_evidence: { $ref: "#/$defs/currentEvidence" },
+        current_evidence: { anyOf: [{ $ref: "#/$defs/currentEvidence" }, { $ref: "#/$defs/baselineObservation" }, { $ref: "#/$defs/validationOverrideRequest" }] },
         kind: {
           enum: [
             "artifact-approval",
@@ -111,6 +131,7 @@ const gateInputEmission: GeneratedDefOverride = {
             "constitution-review",
             "material-drift",
             "attempts-exhausted",
+            "validation-override",
             "constitution-edit",
             "commit-authorization",
             "restore-collision",
@@ -137,6 +158,7 @@ const gateInputEmission: GeneratedDefOverride = {
             { properties: { kind: { const: "constitution-review" }, context: gateContractContext("constitutionReview") } },
             { properties: { kind: { const: "material-drift" }, context: gateContractContext("materialDrift") } },
             { properties: { kind: { const: "attempts-exhausted" }, context: gateContractContext("attemptsExhausted") } },
+            { properties: { kind: { const: "validation-override" }, context: gateContractContext("validationOverride") } },
             { properties: { kind: { const: "constitution-edit" }, context: gateContractContext("constitutionEdit") } },
             { properties: { kind: { const: "commit-authorization" }, context: gateContractContext("commitAuthorization") } },
             { properties: { kind: { const: "restore-collision" }, context: gateContractContext("restoreCollision") } },
@@ -165,6 +187,8 @@ export const mcpToolsSchemaGroup: SchemaGenerationGroup = {
       defs: {
         ...mcpToolsSchemaDefs,
         currentEvidence,
+        baselineObservation: baselineObservationEvidence,
+        validationOverrideRequest: validationOverrideRequestEvidence,
         failure,
         "archflow_state/input": inputContracts.archflow_state,
         "archflow_state/success": toolSuccessSchemas.archflow_state,

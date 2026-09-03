@@ -14,6 +14,8 @@ import {
   legacyArtifactApprovalContextSchema,
   legacyDesignApprovalContextSchema,
   legacyExactCommitAuthorizationContextSchema,
+  legacyAttemptsExhaustedContextSchema,
+  reviewPushThroughAttemptsExhaustedContextSchema,
   type ArchivedPreExactCommitAuthorizationContextV1,
   type BaselineObservationRef,
   type GateContext,
@@ -24,8 +26,10 @@ import {
   type LegacyArtifactApprovalContextV1,
   type LegacyDesignApprovalContextV1,
   type LegacyExactCommitAuthorizationContextV1,
+  type ValidationOverrideRequestRefV1,
   type WaiverOriginRef,
   type WaiverScope,
+  validationOverrideRequestRefV1Schema,
 } from "./gates.js";
 import { currentEvidenceSetRefSchema, type CurrentEvidenceSetRef } from "./trust.js";
 import { MODEL_FAMILIES, type ModelFamily } from "./review.js";
@@ -86,7 +90,9 @@ type GateRequestCommon = {
  * set; `baseline-adoption` opens pre-review, so it cites the drift observation itself
  * (`BaselineObservationRef`) — the only evidence a human deciding on drifted projections has.
  */
-export type GateEvidenceByKind<K extends GateKind> = K extends "baseline-adoption" ? BaselineObservationRef : CurrentEvidenceSetRef;
+export type GateEvidenceByKind<K extends GateKind> = K extends "baseline-adoption"
+  ? BaselineObservationRef
+  : K extends "validation-override" ? ValidationOverrideRequestRefV1 : CurrentEvidenceSetRef;
 
 export type GateRequestV1 = {
   readonly [K in GateKind]: Omit<GateRequestCommon, "current_evidence"> & {
@@ -286,7 +292,8 @@ const GATE_REQUEST_DECISIONS = {
   "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
-  "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
+  "attempts-exhausted": ["retry-once", "revise", "abort", "push-through-review", "cancel"],
+  "validation-override": ["grant-validation-override", "deny-validation-override", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
@@ -298,6 +305,7 @@ const WAIVER_DECISIONS = ["grant", "deny", "cancel"] as const;
 const LEGACY_ARTIFACT_APPROVAL_DECISIONS = ["approve", "revise", "reject", "cancel"] as const;
 const LEGACY_DESIGN_APPROVAL_DECISIONS = ["approve", "revise", "reject", "waiver-requested", "cancel"] as const;
 const LEGACY_COMMIT_AUTHORIZATION_DECISIONS = ["authorize-commit", "revise", "abort", "cancel"] as const;
+const LEGACY_ATTEMPTS_EXHAUSTED_DECISIONS = ["retry-once", "revise", "abort", "cancel"] as const;
 
 const literalTuple = (values: readonly [string, ...string[]]) =>
   z.tuple(values.map((value) => z.literal(value)) as [z.ZodLiteral<string>, ...z.ZodLiteral<string>[]]);
@@ -312,6 +320,7 @@ const allowedDecisionTuples = Object.fromEntries(
   GATE_KINDS.map((kind) => [kind, literalTuple(GATE_REQUEST_DECISIONS[kind])])
 ) as unknown as Readonly<Record<GateKind, z.ZodType>>;
 const waiverDecisionsTuple = literalTuple(WAIVER_DECISIONS);
+const legacyAttemptsExhaustedDecisionsTuple = literalTuple(LEGACY_ATTEMPTS_EXHAUSTED_DECISIONS);
 
 const waiverGateContextSchema = z.object({ origin, rationale: text }).strict();
 
@@ -328,9 +337,21 @@ const gateRequestCommon = {
   current_evidence: currentEvidenceSetRefSchema,
   opened_at_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
 } as const;
+const phaseImpl = z.string().regex(/^phase-impl-[1-9][0-9]*$/u);
 
 const gateArm = (kind: GateKind, context: z.ZodType, decisions: z.ZodType, extra: Record<string, z.ZodType>) =>
   z.object({ ...gateRequestCommon, ...extra, kind: z.literal(kind), context, allowed_decisions: decisions }).strict();
+const reviewPushThroughGateArm = (extra: Record<string, z.ZodType>) => gateArm(
+  "attempts-exhausted",
+  reviewPushThroughAttemptsExhaustedContextSchema,
+  allowedDecisionTuples["attempts-exhausted"],
+  extra,
+).superRefine((request, context) => {
+  const pushThrough = request.context as GateContext<"attempts-exhausted">;
+  if (request.current_evidence.set_digest !== pushThrough.review_push_through?.current_evidence_set_digest) {
+    context.addIssue({ code: "custom", path: ["context", "review_push_through", "current_evidence_set_digest"], message: "review push-through must bind the gate current evidence set" });
+  }
+});
 
 /**
  * One arm per current `gate-request.schema.json` `$defs` branch. The policy-context
@@ -347,7 +368,9 @@ const gateArms = (extra: Record<string, z.ZodType>) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
   designApproval: gateArm("design-approval", GATE_CONTRACTS["design-approval"].context, allowedDecisionTuples["design-approval"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
-  attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
+  attemptsExhausted: gateArm("attempts-exhausted", legacyAttemptsExhaustedContextSchema, legacyAttemptsExhaustedDecisionsTuple, extra),
+  attemptsExhaustedPushThrough: reviewPushThroughGateArm(extra),
+  validationOverride: gateArm("validation-override", GATE_CONTRACTS["validation-override"].context, allowedDecisionTuples["validation-override"], { ...extra, phase_instance: phaseImpl, current_evidence: validationOverrideRequestRefV1Schema }),
   constitutionEdit: gateArm("constitution-edit", GATE_CONTRACTS["constitution-edit"].context, allowedDecisionTuples["constitution-edit"], extra),
   commitAuthorization: gateArm("commit-authorization", GATE_CONTRACTS["commit-authorization"].context, allowedDecisionTuples["commit-authorization"], extra),
   restoreCollision: gateArm("restore-collision", GATE_CONTRACTS["restore-collision"].context, allowedDecisionTuples["restore-collision"], extra),
@@ -411,6 +434,14 @@ const archivedSupersededBaselineAdoptionRequestV1Schema = gateArm(
   { current_evidence: baselineObservationRefV1Schema, supersedes: legacySupersession },
 );
 
+/** Exact compatibility arm for requests archived before push-through-review existed. */
+const archivedAttemptsExhaustedRequestV1Schema = gateArm(
+  "attempts-exhausted",
+  legacyAttemptsExhaustedContextSchema,
+  legacyAttemptsExhaustedDecisionsTuple,
+  {},
+);
+
 const PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"] as const;
 const WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"] as const;
 const CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"] as const;
@@ -456,6 +487,12 @@ const archivedSupersededBaselineActiveGateV1Schema = gateArm(
   literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
   { ...archivedActiveGateExtra, current_evidence: baselineObservationRefV1Schema, supersedes: legacySupersession },
 );
+const archivedAttemptsExhaustedActiveGateV1Schema = gateArm(
+  "attempts-exhausted",
+  legacyAttemptsExhaustedContextSchema,
+  legacyAttemptsExhaustedDecisionsTuple,
+  archivedActiveGateExtra,
+);
 
 /**
  * The generated `$defs` layouts, keyed by committed def name. The arms are the union options above,
@@ -464,12 +501,15 @@ const archivedSupersededBaselineActiveGateV1Schema = gateArm(
 export const gateRequestSchemaDefs: Readonly<Record<string, z.ZodType>> = Object.freeze({
   currentEvidence: currentEvidenceSetRefSchema,
   baselineObservation: baselineObservationRefV1Schema,
+  validationOverrideRequest: validationOverrideRequestRefV1Schema,
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
   designApprovalDecisions: allowedDecisionTuples["design-approval"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
-  attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
+  attemptsExhaustedDecisions: legacyAttemptsExhaustedDecisionsTuple,
+  reviewPushThroughDecisions: allowedDecisionTuples["attempts-exhausted"],
+  validationOverrideDecisions: allowedDecisionTuples["validation-override"],
   constitutionEditDecisions: allowedDecisionTuples["constitution-edit"],
   commitAuthorizationDecisions: allowedDecisionTuples["commit-authorization"],
   restoreCollisionDecisions: allowedDecisionTuples["restore-collision"],
@@ -488,7 +528,9 @@ export const gateRequestSchemaDefOverrides: Readonly<Record<string, Readonly<Rec
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
   designApprovalDecisions: { const: GATE_REQUEST_DECISIONS["design-approval"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
-  attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
+  attemptsExhaustedDecisions: { const: LEGACY_ATTEMPTS_EXHAUSTED_DECISIONS },
+  reviewPushThroughDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
+  validationOverrideDecisions: { const: GATE_REQUEST_DECISIONS["validation-override"] },
   constitutionEditDecisions: { const: GATE_REQUEST_DECISIONS["constitution-edit"] },
   commitAuthorizationDecisions: { const: GATE_REQUEST_DECISIONS["commit-authorization"] },
   restoreCollisionDecisions: { const: GATE_REQUEST_DECISIONS["restore-collision"] },
@@ -540,6 +582,7 @@ export function parseArchivedGateRequest(value: unknown): ArchivedGateRequestV1 
     archivedPolicyGateRequestV1Schema,
     archivedOrdinaryGateRequestV1Schema,
     archivedBaselineAdoptionRequestV1Schema,
+    archivedAttemptsExhaustedRequestV1Schema,
     legacyGateRequestV1Schema,
     archivedSupersededOrdinaryGateRequestV1Schema,
     archivedSupersededBaselineAdoptionRequestV1Schema,
@@ -581,6 +624,7 @@ export function parseActiveGate(value: unknown): ActiveGateV1 {
     archivedPolicyActiveGateV1Schema,
     archivedOrdinaryActiveGateV1Schema,
     archivedBaselineActiveGateV1Schema,
+    archivedAttemptsExhaustedActiveGateV1Schema,
     archivedSupersededBaselineActiveGateV1Schema,
     archivedSupersededActiveGateV1Schema,
     archivedSupersededOrdinaryActiveGateV1Schema,

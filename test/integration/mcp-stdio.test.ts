@@ -334,6 +334,12 @@ describe("bundled MCP stdio runtime", () => {
         headline: "Task initialization is ready", detail: "Create durable state for this task.",
         resources: [],
         next_action: { kind: "initialize-task", instruction: "Create the task from the exact user ask." },
+        taxonomy_denial_rates: {
+          "defect:certain": 0, "defect:likely": 0, "defect:suspicion": 0,
+          "risk:certain": 0, "risk:likely": 0, "risk:suspicion": 0,
+          "gap:certain": 0, "gap:likely": 0, "gap:suspicion": 0,
+          "preference:certain": 0, "preference:likely": 0, "preference:suspicion": 0,
+        },
         implementation_recommendation: unavailableImplementationRecommendation(
           "not-applicable",
           "Implementation effort advice does not apply at the current workflow position.",

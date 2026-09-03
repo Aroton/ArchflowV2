@@ -565,7 +565,7 @@ describe("computeTaskStatus", () => {
           gate_kind: "artifact-approval",
           error: {
             code: "STATE_INVALID",
-            diagnostic: { parameters: { issue_code: "gate-approval-request-invalid" } },
+            diagnostic: { parameters: { issue_code: "gate-approval-request-unavailable" } },
             next_action: "inspect-current-state",
           },
         }],

@@ -80,6 +80,7 @@
         "constitution-review",
         "material-drift",
         "attempts-exhausted",
+        "validation-override",
         "constitution-edit",
         "commit-authorization",
         "restore-collision",

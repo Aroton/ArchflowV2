@@ -1,8 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { adjudicationEvidenceSchema, rawAdjudicationSchema } from "../../src/contracts/adjudication.js";
-import { rawReviewSchema, reviewEvidenceSchema } from "../../src/contracts/review.js";
-import { rawEffortReviewV1Schema } from "../../src/contracts/effort-review.js";
+import {
+  childReviewOutputV2Schema,
+  expectedReviewSummaryV2,
+  rawReviewSchema,
+  reviewEvidenceSchema,
+  type ChildReviewOutputV2,
+} from "../../src/contracts/review.js";
+import { rawEffortSelectionV2Schema } from "../../src/contracts/effort-review.js";
 import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 const json = async (url: URL) => JSON.parse(await readFile(url, "utf8")) as unknown;
@@ -11,41 +17,41 @@ const adjudicationOutput = (value: unknown): unknown => {
   return output;
 };
 const schema = async (name: string) => await json(new URL(`../../src/contracts/schemas/v1/${name}.schema.json`, import.meta.url)) as object;
+const durableV2 = (child: unknown): Record<string, unknown> => {
+  const parsed = childReviewOutputV2Schema.parse(child) as ChildReviewOutputV2;
+  return { schema_version: "2", ...parsed, ...expectedReviewSummaryV2(parsed.findings) };
+};
 /** The generated evidence documents reference the raw review and adjudication documents by URI. */
 const referenceStems = ["primitives", "path-claim", "review", "adjudication", "effort-assessment"] as const;
 const validator = async (name: string) =>
   createJsonSchemaValidator(await schema(name), await Promise.all(referenceStems.filter((stem) => stem !== name).map(schema)));
 describe("review and adjudication schema agreement", () => {
-  it("accepts the same review corpus without mutation", async () => { const value = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)); const before = structuredClone(value); expect(assertZodAgreement(value, await validator("review"), rawReviewSchema)).toBe(value); expect(value).toEqual(before); });
-  it("accepts the same strict raw effort-review corpus without mutation", async () => {
+  it("accepts the same child-review corpus without mutation", async () => { const value = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)); const before = structuredClone(value); expect(assertZodAgreement(value, await validator("review"), childReviewOutputV2Schema)).toBe(value); expect(value).toEqual(before); });
+  it("accepts the same strict profile-only effort-selector corpus without mutation", async () => {
     const value = {
-      schema_version: "1", task_id: "demo", phase_instance: "phase-design-1",
+      schema_version: "2", task_id: "demo", phase_instance: "phase-design-1",
       step: "effort_review", role: "effort-reviewer", subject_digest: "1".repeat(64),
-      input_fingerprint: "2".repeat(64), component_manifest_digest: "3".repeat(64),
-      hazard_registry_digest: "4".repeat(64), policy_id: "implementation-effort-v1",
-      decomposition: { status: "adequate", rationale: "Independent boundaries." },
-      components: [{
-        component_id: "contracts", axes: Object.fromEntries(["A", "B", "C", "D", "E"].map((axis) =>
-          [axis, { score: 1, rationale: `${axis} rationale.` }])),
-        long_tool_loop: { value: "no", rationale: "Bounded." },
-        short_component: { value: "yes", rationale: "Small." },
-      }],
+      input_fingerprint: "2".repeat(64), policy_id: "implementation-agent-selector-v2",
+      profile_id: "gpt-5-6-sol-medium",
     };
     const before = structuredClone(value);
-    expect(assertZodAgreement(value, await validator("effort-review"), rawEffortReviewV1Schema)).toEqual(value);
+    expect(assertZodAgreement(value, await validator("effort-review"), rawEffortSelectionV2Schema)).toEqual(value);
     expect(value).toEqual(before);
   });
   it("accepts the reduced adjudication output without mutation", async () => { const value = adjudicationOutput(await json(new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url))); const before = structuredClone(value); expect(assertZodAgreement(value, await validator("adjudication"), rawAdjudicationSchema)).toEqual(value); expect(value).toEqual(before); });
-  it("rejects closed-shape substitutions", async () => { const value = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>; const reviewValidator = await validator("review"); expect(() => assertZodAgreement({ ...value, authority: true }, reviewValidator, rawReviewSchema)).toThrow(); });
+  it("rejects closed child-shape substitutions", async () => { const value = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>; const reviewValidator = await validator("review"); expect(() => assertZodAgreement({ ...value, authority: true }, reviewValidator, childReviewOutputV2Schema)).toThrow(); });
 
   it("agrees across every evidence variant without mutation", async () => {
-    const review = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>;
+    const review = durableV2(await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)));
+    const legacyReview = await json(new URL("../fixtures/contracts/review/valid-v1.json", import.meta.url)) as Record<string, unknown>;
     const adjudication = await json(new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url)) as Record<string, unknown>;
     const reviewValidator = await validator("review-evidence");
     const adjudicationValidator = await validator("adjudication-evidence");
     const variants = [
       [reviewValidator, reviewEvidenceSchema, { ...review, assurance: "degraded", model_family: "unknown", model: "unknown", effort: "unknown", reason: "Manual fallback." }],
       [reviewValidator, reviewEvidenceSchema, { ...review, assurance: "server-attested", adapter: "codex-cli", cli_version: "1.0.0", model_family: "codex", model: "gpt-5", effort: "high", invocation_id: "invocation-1", envelope_input_digest: "d".repeat(64), observed_output_digest: "e".repeat(64), result_id: "result-1" }],
+      [reviewValidator, reviewEvidenceSchema, { ...legacyReview, assurance: "degraded", model_family: "unknown", model: "unknown", effort: "unknown", reason: "Manual fallback." }],
+      [reviewValidator, reviewEvidenceSchema, { ...legacyReview, assurance: "server-attested", adapter: "codex-cli", cli_version: "1.0.0", model_family: "codex", model: "gpt-5", effort: "high", invocation_id: "invocation-1", envelope_input_digest: "d".repeat(64), observed_output_digest: "e".repeat(64), result_id: "result-v1" }],
       [adjudicationValidator, adjudicationEvidenceSchema, { ...adjudication, assurance: "agent-declared", model_family: "unknown", model: "unknown", effort: "unknown" }],
       [adjudicationValidator, adjudicationEvidenceSchema, { ...adjudication, assurance: "degraded", model_family: "unknown", model: "unknown", effort: "unknown", reason: "Manual fallback." }],
       [adjudicationValidator, adjudicationEvidenceSchema, { ...adjudication, assurance: "server-attested", adapter: "codex-cli", cli_version: "1.0.0", model_family: "codex", model: "gpt-5", effort: "high", invocation_id: "invocation-1", envelope_input_digest: "d".repeat(64), observed_output_digest: "e".repeat(64), result_id: "result-1" }],
@@ -60,7 +66,7 @@ describe("review and adjudication schema agreement", () => {
   });
 
   it("rejects cross-family, cross-assurance, and nested closed-shape substitutions", async () => {
-    const review = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>;
+    const review = durableV2(await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)));
     const adjudication = await json(new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url)) as Record<string, unknown>;
     const reviewValidator = await validator("review-evidence");
     const adjudicationValidator = await validator("adjudication-evidence");
@@ -77,7 +83,7 @@ describe("review and adjudication schema agreement", () => {
   });
 
   it("rejects wrong role and step in both authorities", async () => {
-    const review = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>;
+    const review = durableV2(await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)));
     const evidenceValidator = await validator("review-evidence");
     const base = { ...review, assurance: "degraded", reason: "Manual fallback.", model_family: "unknown", model: "unknown", effort: "unknown" };
     for (const value of [{ ...base, role: "self-review" }, { ...base, step: "self_review" }]) {
@@ -90,14 +96,14 @@ describe("review and adjudication schema agreement", () => {
     // The x-archflow-review-summary keyword and the unique-by finding rule retired from the
     // generated document; the Zod source is the surviving authority for these, so the compiled
     // JSON Schema now accepts what Zod still rejects.
-    const review = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>;
+    const review = durableV2(await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)));
     const evidenceValidator = await validator("review-evidence");
     const base = { ...review, assurance: "degraded", reason: "Manual fallback.", model_family: "unknown", model: "unknown", effort: "unknown" };
     const server = { ...review, assurance: "server-attested", adapter: "codex-cli", cli_version: "1", model_family: "codex", model: "gpt", effort: "high", invocation_id: "invocation-1", envelope_input_digest: "d".repeat(64), observed_output_digest: "e".repeat(64), result_id: "result-1" };
     const cases = [
       { ...base, findings: [...(review.findings as unknown[]), ...(review.findings as unknown[])] },
       { ...base, verdict: "pass" },
-      { ...base, blocking_count: 2 },
+      { ...base, total_findings: 2 },
     ];
     for (const value of cases) {
       expect(evidenceValidator.validate(value), JSON.stringify(evidenceValidator.validate.errors)).toBe(true);

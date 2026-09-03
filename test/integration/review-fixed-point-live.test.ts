@@ -585,10 +585,10 @@ else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
   const output = subject.role === "counter-review" ? {
-    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-    producer_family: subject.producer_family, findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0
+    producer_family: subject.producer_family, findings: [], matched_rule_versions: []
   } : {
     schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
@@ -657,7 +657,7 @@ else {
         artifact: { schema_version: "1", artifact_kind: "triage", evidence: { schema_version: "1", task_id: task,
           phase_instance: phase, step: "triage", subject_digest: produceDigest, input_fingerprint: nonProduceFingerprint,
           current_evidence_set_digest: current.set_digest, source_evidence_digests: current.slots.map((slot) => slot.evidence_digest),
-          dispositions: [], accepted_count: 0, rejected_count: 0, accepted_editorial_count: 0 } } }, "triage-succeeded");
+          dispositions: [], accepted_count: 0, rejected_count: 0, accepted_editorial_count: 0, escalated_human_count: 0, deferred_count: 0 } } }, "triage-succeeded");
       const finalServices = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-final") });
       if (!finalServices.ok) throw new Error(finalServices.error.code);
       const retained = await loadRetainedEvidence({ load_retained_manifest: finalServices.value.dependencies.load_retained_manifest! },
@@ -728,7 +728,6 @@ else {
         await writeFile(artifactPath, "after\n");
         const dispatched = JSON.parse(new TextDecoder().decode(envelope.bytes));
         return { cli_version: "fixture-1", extracted_output_bytes: canonicalJsonBytes({
-          schema_version: "1",
           task_id: dispatched.subject.task_id,
           phase_instance: dispatched.subject.phase_instance,
           step: "counter_review",
@@ -739,8 +738,6 @@ else {
           producer_family: dispatched.subject.producer_family,
           findings: [],
           matched_rule_versions: [],
-          verdict: "pass",
-          blocking_count: 0,
         }) };
       },
       reobserve_projection_digest: async () => ({

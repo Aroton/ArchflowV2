@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import { rawAdjudicationSchema } from "../../src/contracts/adjudication.js";
 import { parseSha256Digest } from "../../src/contracts/evidence.js";
 import { gateInputSchema, resultExpectationDataSchema, waiverInputSchema } from "../../src/contracts/mcp-tools.js";
-import { rawReviewSchema } from "../../src/contracts/review.js";
 import {
   assertZodAgreement,
   createJsonSchemaValidator,
@@ -52,7 +51,6 @@ const MCP_REFERENCE_STEMS = [
 ] as const;
 
 const sharedReferences = [schema("primitives"), schema("path-claim")];
-const reviewValidator = createJsonSchemaValidator<unknown>(schema("review"), sharedReferences);
 const adjudicationValidator = createJsonSchemaValidator<unknown>(schema("adjudication"), sharedReferences);
 const mcpValidator = createJsonSchemaValidator<unknown>(schema("mcp-tools"), MCP_REFERENCE_STEMS.map(schema));
 const expectationValidator = createJsonSchemaValidator<unknown>(schema("result-expectation"), [schema("mcp-tools"), ...MCP_REFERENCE_STEMS.map(schema)]);
@@ -68,14 +66,6 @@ type KeywordCase = {
 };
 
 const CASES: readonly KeywordCase[] = [
-  {
-    keyword: "x-archflow-review-summary",
-    json: reviewValidator,
-    zod: rawReviewSchema,
-    jsonKeywordRetired: true,
-    valid: fixture("review/valid"),
-    invalid: [["a summary contradicting its findings", fixture("review/invalid-summary-mismatch")]],
-  },
   {
     keyword: "x-archflow-adjudication-semantics",
     json: adjudicationValidator,

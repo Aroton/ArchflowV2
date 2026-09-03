@@ -897,6 +897,9 @@ describe("the pinned issue_code literals", () => {
       statePhaseInstanceUndecodable: "state-phase-instance-undecodable",
       documentDigestMismatch: "document-digest-mismatch",
       openGateFrozenStateMismatch: "open-gate-frozen-state-mismatch",
+      gateValidationEvidenceMismatch: "gate-validation-evidence-mismatch",
+      gateReviewPushThroughEvidenceMismatch: "gate-review-push-through-evidence-mismatch",
+      pendingValidationTransitionMismatch: "pending-validation-transition-mismatch",
       phaseInstanceUndecodable: "phase-instance-undecodable",
       implementationOutputPhaseKind: "implementation-output-phase-kind",
       implementationSecondaryPathInvalid: "implementation-secondary-path-invalid",
@@ -966,7 +969,7 @@ describe("the pinned issue_code literals", () => {
 
   it("are all SafeCode, and rank 8 has none", () => {
     for (const code of Object.values(DURABLE_ISSUE_CODES)) expect(code).toMatch(SAFE_CODE);
-    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(67);
+    expect(Object.values(DURABLE_ISSUE_CODES)).toHaveLength(70);
     expect(Object.values(DURABLE_ISSUE_CODES)).not.toContain("input-fingerprint-mismatch");
   });
 });

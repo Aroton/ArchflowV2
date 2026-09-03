@@ -470,6 +470,7 @@ export function projectSemanticStatus(
   if (invocation?.intent === "reopen") {
     reopen = reopenImpactFor(snapshot, invocation);
     const safe = status.state === "active" && status.open_gate === undefined &&
+      snapshot.state?.pending_validation_override === undefined &&
       status.blocking_reasons.length === 0 && (status.reconciliation?.findings.length ?? 0) === 0;
     shape = reopen !== undefined && safe
       ? Object.freeze({
@@ -536,7 +537,14 @@ export function projectSemanticStatus(
     ...(shape.findings !== true ? {} : { findings: snapshot.full_findings }),
     ...(context === undefined ? {} : { review_context: context }),
     ...(strength === undefined ? {} : { review_strength: strength }),
+    taxonomy_denial_rates: snapshot.taxonomy_denial_rates,
     implementation_recommendation: snapshot.implementation_recommendation,
+    ...(snapshot.validation_overrides === undefined ? {} : {
+      validation_overrides: snapshot.validation_overrides,
+    }),
+    ...(snapshot.review_push_throughs === undefined ? {} : {
+      review_push_throughs: snapshot.review_push_throughs,
+    }),
     ...(shape.presentation === undefined ? {} : { presentation: shape.presentation }),
     ...(status.dispatch_failure === undefined ? {} : { dispatch_failure: status.dispatch_failure }),
     ...(status.repositories === undefined ? {} : { repositories: status.repositories }),

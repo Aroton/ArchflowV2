@@ -242,6 +242,8 @@ describe("evidence result preparation", () => {
       accepted_count: 0,
       rejected_count: 0,
       accepted_editorial_count: 0,
+      escalated_human_count: 0,
+      deferred_count: 0,
     } as const;
     const rawAdjudication = JSON.parse(await readFile(
       new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url),

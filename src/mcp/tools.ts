@@ -33,24 +33,18 @@ const MCP_SCHEMA_ID = "https://archflow.dev/schemas/v1/mcp-tools";
 // only need its public discriminator and field map in the advertised output schema; embedding the
 // full nested assessment vocabulary twice (once per semantic tool) consumes the catalogue budget
 // without admitting any client input or strengthening server-output validation.
-const ADVERTISED_IMPLEMENTATION_RECOMMENDATION = Object.freeze({
+const ADVERTISED_IMPLEMENTATION_RECOMMENDATION = deepFreeze({
   type: "object",
-  description: "Authenticated advisory implementation recommendation; strict ready, blocked, and unavailable arms are validated by the semantic runtime.",
+  description: "Authenticated advisory implementation agent; successful selection exposes only model and effort.",
   properties: {
-    status: { enum: ["ready", "blocked", "unavailable"] },
+    status: { enum: ["ready", "unavailable"] },
+    model: { enum: ["gemini-3.7-flash", "glm-5.3-flash", "gpt-5.6-sol"] },
+    effort: { enum: ["medium", "xhigh", "max"] },
     phase: { type: "integer", minimum: 1 },
     reason: { enum: ["not-applicable", "not-produced", "subject-stale", "legacy-evidence"] },
     explanation: { type: "string" },
-    policy_id: { type: "string" },
-    reviewer: { type: "object" },
-    components: { type: "array" },
-    phase_profile: { type: "object" },
-    determining_component_ids: { type: "array", items: { type: "string" } },
-    blockers: { type: "array" },
-    registry_drift: { type: "object" },
-    actual_implementation_route: { type: "object" },
   },
-  required: ["status", "actual_implementation_route"],
+  required: ["status"],
 } as const);
 
 const schemaDocuments = Object.freeze([

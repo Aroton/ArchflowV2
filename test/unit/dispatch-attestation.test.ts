@@ -33,7 +33,6 @@ const subject = (producer_family: "claude" | "codex"): DispatchSubject => ({
 });
 
 const rawReview = (value: DispatchSubject): Record<string, unknown> => ({
-  schema_version: "1",
   task_id: value.task_id,
   phase_instance: value.phase_instance,
   step: value.step,
@@ -44,8 +43,6 @@ const rawReview = (value: DispatchSubject): Record<string, unknown> => ({
   producer_family: value.producer_family,
   findings: [],
   matched_rule_versions: [],
-  verdict: "pass",
-  blocking_count: 0,
 });
 
 const adjudicationSubject = (): AdjudicationSubject => ({
@@ -141,6 +138,9 @@ describe("review observation attestation mint", () => {
       raw_output_digest: createHash("sha256").update(output).digest("hex"),
     });
     expect(result.evidence).toMatchObject({
+      schema_version: "2",
+      verdict: "pass",
+      total_findings: 0,
       assurance: "server-attested",
       adapter: route.adapter,
       cli_version: reviewerFamily === "codex" ? "0.146.0" : "2.1.220",
@@ -152,6 +152,8 @@ describe("review observation attestation mint", () => {
       envelope_input_digest: digest("d"),
       observed_output_digest: result.observation.raw_output_digest,
     });
+    if (result.evidence.schema_version !== "2") throw new Error("expected V2 evidence");
+    expect(Object.keys(result.evidence.partition_counts)).toHaveLength(12);
   });
 
   it.each([
@@ -228,7 +230,7 @@ describe("review observation attestation mint", () => {
     expect(observed.evidence).toMatchObject({ provider: "zai", route_source: routeSource });
   });
 
-  it.each(["not JSON", JSON.stringify({ schema_version: "1" })])("rejects malformed output without returning evidence", (output) => {
+  it.each(["not JSON", JSON.stringify({ schema_version: "2" })])("rejects malformed output without returning evidence", (output) => {
     expect(() => mint("claude", new TextEncoder().encode(output))).toThrow();
   });
 });

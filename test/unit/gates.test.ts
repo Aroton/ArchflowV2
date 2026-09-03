@@ -13,8 +13,8 @@ const TRIGGER = {
 const PASSING_POLICY = { constitution: "pass", policy_findings: [], eligible_waivers: [], approval_trigger: TRIGGER } as const;
 
 describe("gate catalogue", () => {
-  it("contains exactly the ten independent kinds", () => {
-    expect(GATE_KINDS).toEqual(["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "baseline-adoption", "migration-audit"]);
+  it("contains exactly the eleven independent kinds", () => {
+    expect(GATE_KINDS).toEqual(["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "validation-override", "constitution-edit", "commit-authorization", "restore-collision", "baseline-adoption", "migration-audit"]);
   });
 
   it("binds a baseline adoption to its exact drift set", () => {
@@ -169,6 +169,9 @@ describe("gate catalogue", () => {
     expect(envelope.kind).toBe("commit-authorization");
     expect(gateDecisionEffect(envelope.payload)).toBe("advance");
     expect(gateDecisionEffect({ decision: "waiver-requested", reason: "x", rule: RULE, operation: "review-trigger", rationale: "x" })).toBe("redirect-waiver");
+    expect(gateDecisionEffect({ decision: "push-through-review", reason: "x" })).toBe("advance");
+    expect(gateDecisionEffect({ decision: "grant-validation-override", reason: "x" })).toBe("validation-resume");
+    expect(gateDecisionEffect({ decision: "deny-validation-override", reason: "x" })).toBe("validation-resume");
     expect(() => parseGateDecisionEnvelope({ ...envelope, human_provenance: { ...envelope.human_provenance, recorded_at: "2026-07-27T12:00:00Z" } })).toThrow();
     expect(() => parseGateDecisionEnvelope({ ...envelope, human_provenance: { ...envelope.human_provenance, recorded_at: "2026-07-27T07:00:00.000-05:00" } })).toThrow();
   });

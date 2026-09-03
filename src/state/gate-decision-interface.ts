@@ -156,6 +156,12 @@ export type HumanGatePresentationDetails = Readonly<{
   content_trigger?: readonly string[];
   /** Repository commits derived from the exact review evidence bound by the gate request. */
   reviewed_repositories?: readonly string[];
+  /** Review findings escalated for human decision. */
+  escalated_findings?: readonly string[];
+  /** Authenticated finding descriptions eligible for the attempts-exhausted push-through. */
+  review_push_through_findings?: readonly string[];
+  /** Authenticated granted validation exceptions disclosed at commit authorization. */
+  validation_overrides?: readonly string[];
 }>;
 
 type PresentedDecision =
@@ -166,6 +172,9 @@ type PresentedDecision =
   | "amend-upstream"
   | "revise-current"
   | "retry-once"
+  | "push-through-review"
+  | "grant-validation-override"
+  | "deny-validation-override"
   | "abort"
   | "revert-edit"
   | "start-base-amendment"
@@ -208,6 +217,10 @@ const PRESENTATION_COPY = Object.freeze({
     title: "Automated review needs your direction",
     question: "The review did not converge within its normal attempts. What would you like to do next?",
   }),
+  "validation-override": Object.freeze({
+    title: "Decide whether to skip named validation",
+    question: "Should ArchFlow record these exact validations as not run and return implementation to its retry boundary?",
+  }),
   "constitution-edit": Object.freeze({
     title: "Review a project policy change",
     question: "Should the policy edit be undone, moved into the project baseline, or abandoned?",
@@ -237,6 +250,9 @@ const OPTION_COPY = Object.freeze({
   "amend-upstream": Object.freeze({ token: "update-earlier-work", label: "Update the earlier work", consequence: "Return to the affected earlier artifact and bring the plan back in line with reality." }),
   "revise-current": Object.freeze({ token: "change-current-work", label: "Change the current work", consequence: "Keep the earlier plan and revise the current artifact to match it." }),
   "retry-once": Object.freeze({ token: "try-review-again", label: "Try the review once more", consequence: "Allow one more automated review attempt without changing the work first." }),
+  "push-through-review": Object.freeze({ token: "continue-despite-review", label: "Push through this review", consequence: "Record an exception for the exact accepted findings shown here, then continue through every remaining constitution, approval, and commit boundary." }),
+  "grant-validation-override": Object.freeze({ token: "grant-validation-exception", label: "Grant the validation exception", consequence: "Record these exact validations as not run and return implementation to its ordinary retry boundary; this does not count them as passed." }),
+  "deny-validation-override": Object.freeze({ token: "deny-validation-exception", label: "Deny the validation exception", consequence: "Grant no exception and return implementation to its ordinary retry boundary so the checks can be run or a different request made." }),
   abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
   "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
   "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
@@ -316,7 +332,7 @@ function policyFindingReasons(findings: readonly DesignPolicyFinding[]): HumanPr
   });
 }
 
-function ordinaryReasons(active: ActiveGateV1): readonly HumanPresentationReasonV1[] | undefined {
+function ordinaryReasons(active: ActiveGateV1, authenticatedDetails?: HumanGatePresentationDetails): readonly HumanPresentationReasonV1[] | undefined {
   if (active.kind !== "artifact-approval" && active.kind !== "design-approval" &&
       active.kind !== "commit-authorization") return undefined;
   const context = active.context;
@@ -353,6 +369,12 @@ function ordinaryReasons(active: ActiveGateV1): readonly HumanPresentationReason
         text: "The pinned constitution does not authorize rule-based advancement, so this reviewed subject requires a human decision.",
       }));
     }
+  }
+  if (authenticatedDetails?.escalated_findings !== undefined && authenticatedDetails.escalated_findings.length > 0) {
+    reasons.push(Object.freeze({
+      class: "exception",
+      text: `${authenticatedDetails.escalated_findings.length} review finding${authenticatedDetails.escalated_findings.length === 1 ? " was" : "s were"} escalated for human decision.`,
+    }));
   }
   reasons.push(...policyFindingReasons(context.policy_findings));
   if (reasons.length === 0) {
@@ -414,7 +436,11 @@ function exceptionalReasons(active: ActiveGateV1): readonly HumanPresentationRea
       case "material-drift":
         return "The reviewed work materially diverges from approved upstream work and requires a recovery decision.";
       case "attempts-exhausted":
-        return `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.`;
+        return active.context.review_push_through === undefined
+          ? `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.`
+          : `Automated review reached its limit after ${active.context.review_push_through.minimum_attempt} or more completed review rounds; continuing despite the exact accepted findings is an explicit exception.`;
+      case "validation-override":
+        return "The producer could not or should not run the named validations, and only a human may grant this recorded exception.";
       case "constitution-edit":
         return "The project constitution changed from the version this task reviewed and requires a policy decision.";
       case "restore-collision":
@@ -434,8 +460,8 @@ function exceptionalReasons(active: ActiveGateV1): readonly HumanPresentationRea
   return Object.freeze([Object.freeze({ class: "exception", text })]);
 }
 
-function presentationReasons(active: ActiveGateV1): readonly HumanPresentationReasonV1[] {
-  return ordinaryReasons(active) ?? exceptionalReasons(active);
+function presentationReasons(active: ActiveGateV1, authenticatedDetails?: HumanGatePresentationDetails): readonly HumanPresentationReasonV1[] {
+  return ordinaryReasons(active, authenticatedDetails) ?? exceptionalReasons(active);
 }
 
 function policyDetails(active: ActiveGateV1): readonly string[] {
@@ -455,6 +481,29 @@ function policyDetails(active: ActiveGateV1): readonly string[] {
   }));
 }
 
+function validationOverrideDetails(
+  active: Extract<ActiveGateV1, { readonly kind: "validation-override" }>,
+): readonly string[] {
+  return Object.freeze([
+    `Producer reason: ${active.context.producer_reason}`,
+    ...active.context.displaced_validations.map((validation) => `Not run if granted: ${validation}`),
+    "Only the validations listed above are covered; every unlisted check remains required.",
+    "Granting this exception records missing verification. It does not treat any skipped validation as passed.",
+  ]);
+}
+
+function reviewPushThroughDetails(
+  active: Extract<ActiveGateV1, { readonly kind: "attempts-exhausted" }>,
+  authenticatedDetails: HumanGatePresentationDetails,
+): readonly string[] {
+  if (active.context.review_push_through === undefined) return Object.freeze([]);
+  return Object.freeze([
+    `At least ${active.context.review_push_through.minimum_attempt} distinct counter-review rounds completed before this option became available.`,
+    ...(authenticatedDetails.review_push_through_findings ?? []),
+    "This exception settles only the exact ordinary accepted findings shown here. Constitution findings, review triggers, upstream drift, configured approval, verification disclosure, and commit authorization remain in force.",
+  ]);
+}
+
 /** Renders the live gate as a conversational human decision without exposing binding material. */
 export function buildHumanGatePresentation(
   active: ActiveGateV1,
@@ -467,6 +516,12 @@ export function buildHumanGatePresentation(
   if (authenticatedDetails.reviewed_repositories !== undefined && request.kind === "baseline-adoption") {
     throw new TypeError("internal invariant: baseline adoption has no reviewed repository details");
   }
+  if (authenticatedDetails.review_push_through_findings !== undefined && request.kind !== "attempts-exhausted") {
+    throw new TypeError("internal invariant: push-through finding details require an attempts-exhausted gate");
+  }
+  if (authenticatedDetails.validation_overrides !== undefined && request.kind !== "commit-authorization") {
+    throw new TypeError("internal invariant: validation override disclosure requires a commit-authorization gate");
+  }
   const waiver = waiverContext(request.context);
   const copy = waiver === undefined
     ? PRESENTATION_COPY[request.kind]
@@ -474,21 +529,30 @@ export function buildHumanGatePresentation(
         title: "Decide a policy exception",
         question: "Should this narrowly scoped policy exception be granted?",
       });
-  const reasons = presentationReasons(request);
+  const hasEscalations = authenticatedDetails.escalated_findings !== undefined && authenticatedDetails.escalated_findings.length > 0;
+  const reasons = presentationReasons(request, authenticatedDetails);
   const details = [
     ...policyDetails(request),
+    ...(request.kind === "validation-override" ? validationOverrideDetails(request) : []),
+    ...(request.kind === "attempts-exhausted" ? reviewPushThroughDetails(request, authenticatedDetails) : []),
     ...(request.kind === "baseline-adoption" ? baselineProjectionDetails(request.context) : []),
     ...(request.kind === "commit-authorization" && authenticatedDetails.content_trigger !== undefined
       ? [...authenticatedDetails.content_trigger]
       : []),
     ...(authenticatedDetails.reviewed_repositories ?? []),
+    ...(authenticatedDetails.escalated_findings ?? []),
+    ...(authenticatedDetails.validation_overrides ?? []),
   ];
   return Object.freeze({
     class: reasons.some((reason) => reason.class === "exception") ? "exception" : "configured-approval",
     title: copy.title,
-    summary: request.summary,
+    summary: hasEscalations
+      ? `${request.summary} Review findings were escalated for human decision.`
+      : request.summary,
     ...(details.length === 0 ? {} : { details: Object.freeze(details) }),
-    question: `${copy.question} Choose an option and briefly explain why.`,
+    question: hasEscalations
+      ? `${copy.question} Escalated review findings require your decision. Choose an option and briefly explain why.`
+      : `${copy.question} Choose an option and briefly explain why.`,
     reasons,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option)),
   });

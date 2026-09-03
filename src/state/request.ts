@@ -46,16 +46,35 @@ function subjectFor(call: ParsedToolCall, authority: TransactionAuthority, input
           },
         };
       }
+      if (call.input.operation === "request_validation_override") {
+        return {
+          ...common,
+          tool: call.name,
+          operation: "request-validation-override",
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            step: call.input.step,
+            status: call.input.status,
+            reason: call.input.reason,
+            validation_override_request: call.input.validation_override_request,
+          },
+        };
+      }
       if (call.input.operation !== undefined) {
         const operation = ({
           refresh_milestone_baseline: "refresh-milestone-baseline",
           recover_milestone_authority: "recover-milestone-authority",
           recover_approval_trigger_authority: "recover-approval-trigger-authority",
           refresh_stale_baseline: "refresh-stale-baseline",
-        } satisfies Readonly<Record<Exclude<typeof call.input.operation, "planning_restart" | "set_commit_authority">, StateControlOperation>>)[call.input.operation];
+        } satisfies Readonly<Record<Exclude<typeof call.input.operation, "planning_restart" | "set_commit_authority" | "request_validation_override">, StateControlOperation>>)[call.input.operation];
         return {
           ...common, tool: call.name, operation,
-          operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status },
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            step: call.input.step,
+            status: call.input.status,
+            intent_id: call.input.intent_id,
+          },
         };
       }
       if (call.input.artifact === undefined) {

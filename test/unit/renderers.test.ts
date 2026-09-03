@@ -6,7 +6,7 @@ import { createTestAuthorityLink, createTestCurrentReviewSetAuthority, createTes
 import { createVerifiedEvidenceReference } from "../../src/contracts/internal/trust-mints.js";
 import { encodePhaseInstance } from "../../src/contracts/phase-instance.js";
 import { renderAdjudicationEvidence, renderReviewEvidence, renderTriage } from "../../src/contracts/renderers.js";
-import { parseReviewEvidence, type DegradedReview } from "../../src/contracts/review.js";
+import { computeFindingPartitionCounts, parseReviewEvidence, type DegradedReview } from "../../src/contracts/review.js";
 import { authorityQualifier, type QualifiedAdjudicationEvidence, type QualifiedReviewEvidence } from "../../src/contracts/trust.js";
 import { validateTriage } from "../../src/contracts/triage.js";
 
@@ -31,11 +31,40 @@ function qualifyReview(evidenceDigest: ReturnType<typeof digest>): QualifiedRevi
 }
 
 describe("anti-spoofing renderers", () => {
+  it("renders V2 taxonomy labels and falsifiers while retaining native summary counts", () => {
+    const findings = [{
+      finding_id: "unsafe-default",
+      claim_type: "risk" as const,
+      confidence: "likely" as const,
+      falsifier: "Run npm test -- unsafe-default and observe the guarded branch.",
+      summary: "The default may bypass the guard.",
+      evidence: "src/example.ts selects the unguarded branch.",
+      suggested_resolution: "Use the guarded default.",
+    }];
+    const evidence = parseReviewEvidence({
+      schema_version: "2", task_id: TASK, phase_instance: phase, step: "counter_review", role: "counter-review",
+      subject_digest: digest("a"), input_fingerprint: digest("b"), rubric_digest: digest("c"), producer_family: "claude",
+      findings, matched_rule_versions: [], verdict: "review-raised", total_findings: 1,
+      partition_counts: computeFindingPartitionCounts(findings),
+      assurance: "degraded", model_family: "codex", model: "unknown", effort: "unknown", reason: "manual",
+    });
+    const rendered = new TextDecoder().decode(renderReviewEvidence(createVerifiedEvidenceReference(evidence)));
+    expect(rendered).toContain('schema_version: "2"');
+    expect(rendered).toContain('verdict: "review-raised"');
+    expect(rendered).toContain("total_findings: 1");
+    expect(rendered).toContain('### Finding "unsafe-default" [risk: likely]');
+    expect(rendered).toContain('falsifier: "Run npm test -- unsafe-default and observe the guarded branch."');
+    expect(rendered).not.toContain("severity:");
+    expect(rendered).not.toContain("blocking_count:");
+  });
+
   it("renders genuinely qualified review evidence and visibly escapes prose", () => {
     const value = qualifyReview(digest("2"));
     const bytes = renderReviewEvidence(value);
     const rendered = new TextDecoder().decode(bytes);
     expect(rendered.startsWith("# ArchFlow Review Evidence\nschema_version:")).toBe(true);
+    expect(rendered).toContain('severity: "minor"');
+    expect(rendered).toContain("blocking: false");
     expect(rendered).toContain("\\u000a"); expect(rendered).toContain("\\u0060"); expect(rendered).toContain("\\u003c"); expect(rendered).toContain("\\u202e");
     expect(rendered.endsWith("\n")).toBe(true); expect(rendered.endsWith("\n\n")).toBe(false); expect(rendered).not.toContain("\r");
     const verified = createVerifiedEvidenceReference(value.evidence);
@@ -105,14 +134,20 @@ describe("anti-spoofing renderers", () => {
       { role: "counter-review", evidence_digest: digest("2"), assurance: "degraded", producer_family: "claude", reviewer_family: "codex" },
     ] as const;
     const set = authorityQualifier.currentReviews(createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots }), [counter]);
-    const candidate = { schema_version: "1", task_id: TASK, phase_instance: phase, step: "triage", subject_digest: digest("a"), input_fingerprint: digest("b"), current_evidence_set_digest: set.current_evidence_set.set_digest, source_evidence_digests: [digest("2")], dispositions: [{ review_evidence_digest: digest("2"), finding_id: "spoof", disposition: "rejected", rationale: "not applicable", evidence: "source confirms" }], accepted_count: 0, rejected_count: 1, accepted_editorial_count: 0 };
+    const candidate = { schema_version: "1", task_id: TASK, phase_instance: phase, step: "triage", subject_digest: digest("a"), input_fingerprint: digest("b"), current_evidence_set_digest: set.current_evidence_set.set_digest, source_evidence_digests: [digest("2")], dispositions: [{ review_evidence_digest: digest("2"), finding_id: "spoof", disposition: "rejected", rationale: "not applicable", evidence: "source confirms" }], accepted_count: 0, rejected_count: 1, accepted_editorial_count: 0, escalated_human_count: 0, deferred_count: 0 };
     const validated = validateTriage(set, candidate);
     expect(new TextDecoder().decode(renderTriage(validated))).toMatch(/^# ArchFlow Review Triage/mu);
     // A server-computed ledger renders as its own section; the producer-supplied field is refused.
-    const ledger = [{ review_evidence_digest: digest("8"), finding_id: "older", disposition: "rejected" as const, attempt: 1, rationale: "older", severity: "major" as const, blocking: false, summary: "older summary", evidence: "rejection evidence" }];
+    const ledger = [
+      { review_evidence_digest: digest("8"), finding_id: "older", disposition: "rejected" as const, attempt: 1, rationale: "older", severity: "major" as const, blocking: false, summary: "older summary", evidence: "rejection evidence" },
+      { review_evidence_digest: digest("8"), finding_id: "deferred-finding", disposition: "deferred" as const, attempt: 1, rationale: "deferred reason", claim_type: "gap" as const, confidence: "likely" as const, falsifier: "falsifier", summary: "gap summary", suggested_resolution: "gap resolution" },
+      { review_evidence_digest: digest("8"), finding_id: "escalated-finding", disposition: "escalated-human" as const, attempt: 1, rationale: "human call", claim_type: "risk" as const, confidence: "likely" as const, falsifier: "falsifier", summary: "risk summary", suggested_resolution: "risk resolution" },
+    ];
     const ledgerRendered = new TextDecoder().decode(renderTriage(validateTriage(set, candidate, ledger as never)));
     expect(ledgerRendered).toMatch(/^## Disposition Ledger/mu);
     expect(ledgerRendered).toContain("(attempt 1)");
+    expect(ledgerRendered).toContain("deferred");
+    expect(ledgerRendered).toContain("escalated-human");
     expect(() => validateTriage(set, { ...candidate, disposition_ledger: [] })).toThrow(/server-computed/u);
     expect(() => renderTriage({ ...validated } as never)).toThrow(/validated triage/);
     expect(() => renderTriage(candidate as never)).toThrow(/validated triage/);

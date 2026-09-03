@@ -87,7 +87,6 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
       implementation_recommendation: {
         status: "unavailable",
         reason: "not-applicable",
-        actual_implementation_route: { status: "not-recorded" },
       },
       next_action: {
         actor: "skill",
@@ -165,7 +164,7 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
       state_revision: null,
       position: null,
       implementation_recommendation: {
-        status: "unavailable", reason: "not-applicable", actual_implementation_route: { status: "not-recorded" },
+        status: "unavailable", reason: "not-applicable",
       },
       next_action: { actor: "operator", kind: "repair" },
       blocked: { category: "legacy-upgrade-staged" },
@@ -252,7 +251,7 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
       state_revision: null,
       position: null,
       implementation_recommendation: {
-        status: "unavailable", reason: "not-applicable", actual_implementation_route: { status: "not-recorded" },
+        status: "unavailable", reason: "not-applicable",
       },
       next_action: { actor: "operator", kind: "repair" },
       blocked: {

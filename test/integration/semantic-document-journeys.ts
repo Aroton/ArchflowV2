@@ -80,7 +80,6 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     let view = await h.status(invocation);
     expect(view.implementation_recommendation).toMatchObject({
       status: "unavailable", reason: "not-applicable",
-      actual_implementation_route: { status: "not-recorded" },
     });
     expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
     const produced = await h.apply(invocation, view, { kind: "work-result", outcome: "succeeded" });
@@ -177,7 +176,6 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     expect(startedPhaseDesign.value.next_action.kind).toBe("submit-work");
     expect(startedPhaseDesign.value.implementation_recommendation).toMatchObject({
       status: "unavailable", phase: 1, reason: "not-produced",
-      actual_implementation_route: { status: "not-recorded" },
     });
 
     const phaseDesignResource = startedPhaseDesign.value.resources.find((resource) => resource.role === "current-artifact");
@@ -296,11 +294,8 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     const observedPhaseDesign = await h.status(phaseDesignInvocation);
     expect(observedPhaseDesign.implementation_recommendation).toMatchObject({
       status: "ready",
-      phase: 1,
-      phase_profile: { model: "gemini-3.7-flash", effort: "max" },
-      determining_component_ids: ["journey-fixture"],
-      reviewer: { model: "gpt-5.6-luna", effort: "xhigh" },
-      actual_implementation_route: { status: "not-recorded" },
+      model: "gemini-3.7-flash",
+      effort: "max",
     });
     expect(observedPhaseDesign.next_action).toMatchObject({
       kind: "start-next-skill", skill: "archflow-phase-impl", skill_args: ["1"],
@@ -357,7 +352,7 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
       const { effort_review: _omitted, ...legacy } = review;
       return legacy;
     });
-    expect(withoutEffort).toMatchObject({ status: "unavailable", reason: "legacy-evidence", phase: 1 });
+    expect(withoutEffort).toEqual({ status: "ready", model: "gpt-5.6-sol", effort: "medium" });
     const stale = await recommendationVariant((review) => ({
       ...review,
       subject_digest: "f".repeat(64),
@@ -389,15 +384,18 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     const registryYaml = (score: 2 | 3, reason: string) => `schema_version: "1"\nhazards:\n  - repository: primary\n    path: src/state/semantic-view.ts\n    score: ${score}\n    reason: ${reason}\n`;
     writeFileSync(hazardPath, registryYaml(2, "Dense semantic authority surface."));
     const liveChanged = await h.status(phaseDesignInvocation);
-    expect(liveChanged.implementation_recommendation).toMatchObject({ status: "ready", registry_drift: { kind: "registry-changed" } });
+    expect(liveChanged.implementation_recommendation).toMatchObject({ status: "ready" });
+    expect(liveChanged.implementation_recommendation).not.toHaveProperty("registry_drift");
     expect(liveChanged.next_action).toEqual(baselineAction);
     writeFileSync(hazardPath, "schema_version: [invalid\n");
     const unreadable = await h.status(phaseDesignInvocation);
-    expect(unreadable.implementation_recommendation).toMatchObject({ status: "ready", registry_drift: { kind: "registry-unreadable" } });
+    expect(unreadable.implementation_recommendation).toMatchObject({ status: "ready" });
+    expect(unreadable.implementation_recommendation).not.toHaveProperty("registry_drift");
     expect(unreadable.next_action).toEqual(baselineAction);
     unlinkSync(hazardPath);
     const liveRemoved = await h.status(phaseDesignInvocation);
-    expect(liveRemoved.implementation_recommendation).toMatchObject({ status: "ready", registry_drift: { kind: "registry-removed" } });
+    expect(liveRemoved.implementation_recommendation).toMatchObject({ status: "ready" });
+    expect(liveRemoved.implementation_recommendation).not.toHaveProperty("registry_drift");
     expect(liveRemoved.next_action).toEqual(baselineAction);
     if (originalHazardBytes !== undefined) writeFileSync(hazardPath, originalHazardBytes);
     const restored = await h.status(phaseDesignInvocation);
@@ -414,31 +412,16 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     }, componentManifest);
     writeFileSync(hazardPath, registryYaml(3, "Materially changed hazard."));
     const sealedAbsent = createHazardRegistryInput("absent", { schema_version: "1", hazards: [] }, componentManifest);
-    const created = await recommendationVariant((review) => ({
-      ...review,
-      effort_review: {
-        ...(review.effort_review as Record<string, unknown>),
-        hazard_registry_digest: sealedAbsent.registry_digest,
-      },
-    }));
-    expect(created).toMatchObject({ status: "ready", registry_drift: { kind: "registry-created" } });
-    const changed = await recommendationVariant((review) => ({
-      ...review,
-      effort_review: {
-        ...(review.effort_review as Record<string, unknown>),
-        hazard_registry_digest: sealedPresent.registry_digest,
-      },
-    }));
-    expect(changed).toMatchObject({ status: "ready", registry_drift: { kind: "registry-changed" } });
+    const created = await recommendationVariant((review) => review);
+    expect(created).toMatchObject({ status: "ready" });
+    expect(created).not.toHaveProperty("registry_drift");
+    const changed = await recommendationVariant((review) => review);
+    expect(changed).toMatchObject({ status: "ready" });
+    expect(changed).not.toHaveProperty("registry_drift");
     unlinkSync(hazardPath);
-    const removed = await recommendationVariant((review) => ({
-      ...review,
-      effort_review: {
-        ...(review.effort_review as Record<string, unknown>),
-        hazard_registry_digest: sealedPresent.registry_digest,
-      },
-    }));
-    expect(removed).toMatchObject({ status: "ready", registry_drift: { kind: "registry-removed" } });
+    const removed = await recommendationVariant((review) => review);
+    expect(removed).toMatchObject({ status: "ready" });
+    expect(removed).not.toHaveProperty("registry_drift");
     if (originalHazardBytes !== undefined) writeFileSync(hazardPath, originalHazardBytes);
     expect(detailed.status.next_action).toEqual(detailedResult.value.status.next_action);
 

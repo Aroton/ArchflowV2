@@ -1,10 +1,8 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
-import { parseHazardRegistryYaml } from "../../src/contracts/hazard-registry.js";
 import { createProductionServices } from "../../src/state/production.js";
 import { loadRetainedEvidence } from "../../src/state/evidence-results.js";
 import { parseSafeCode } from "../../src/contracts/evidence.js";
@@ -49,16 +47,18 @@ async function retainedReview(workspace: TaskWorkspace) {
 }
 
 describe("phase-design effort review handler", { timeout: 180_000 }, () => {
-  it("rejects a manifest-less phase design before dispatching any review child", async () => {
+  it("accepts a manifest-less phase design", async () => {
     const workspace = await createTaskWorkspace({ taskId: "effort-no-manifest", label: "effort-no-manifest" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[], []]));
     const h = semanticJourneyHarness(workspace);
     const boundary = await reachPhaseDesignReviewOffer(workspace, h, "# Phase 1: Missing manifest\n");
-    const before = Number(readFileSync(join(workspace.root, "semantic-review-count"), "utf8"));
     const result = await h.apply(boundary.invocation, boundary.view);
-    expect(result).toMatchObject({ ok: false, error: { code: "CONTRACT_INVALID" } });
-    expect(Number(readFileSync(join(workspace.root, "semantic-review-count"), "utf8"))).toBe(before);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect((await retainedReview(workspace)).effort_review).toMatchObject({
+      schema_version: "2",
+      profile: { model: "gemini-3.7-flash", effort: "max" },
+    });
   });
 
   it("captures a live hazards edit in the minted effort assessment", async () => {
@@ -72,32 +72,24 @@ describe("phase-design effort review handler", { timeout: 180_000 }, () => {
     const reviewed = await h.apply(boundary.invocation, boundary.view);
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     const evidence = await retainedReview(workspace);
-    const registry = parseHazardRegistryYaml(hazardYaml, ["primary"]);
-    expect(evidence.effort_review?.hazard_registry_digest).toBe(canonicalJsonDigest({
-      schema_version: "1", state: "present", registry,
-    }));
+    expect(evidence.effort_review).toMatchObject({
+      schema_version: "2",
+      source: { kind: "reviewer" },
+    });
   });
 
-  it("records the displaced fixed Luna model on an effort-reviewer route override", async () => {
+  it("defaults to Sol medium when the effort selector route fails", async () => {
     const workspace = await createTaskWorkspace({ taskId: "effort-route-override", label: "effort-route-override" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[], [], []], { failFixedEffortRoute: true }));
     const h = semanticJourneyHarness(workspace);
     const boundary = await reachPhaseDesignReviewOffer(workspace, h, validDesign);
-    const failed = await h.apply(boundary.invocation, boundary.view);
-    expect(failed).toMatchObject({ ok: false, view: { dispatch_failure: { role: "effort-reviewer" } } });
-    const retry = failed.ok ? failed.value : failed.view;
-    if (retry === undefined) throw new Error("effort failure did not return a retry view");
-    const reviewed = await h.apply(boundary.invocation, retry, {
-      kind: "review-dispatch",
-      route_override: {
-        reason: "The fixed Luna route is unavailable in this fixture.",
-        "effort-reviewer": { model: "gpt-5.6-sol", effort: "high" },
-      },
-    });
+    const reviewed = await h.apply(boundary.invocation, boundary.view);
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
-    expect((await retainedReview(workspace)).effort_review?.reviewer.route_override).toMatchObject({
-      pinned_model: "gpt-5.6-luna",
+    expect((await retainedReview(workspace)).effort_review).toMatchObject({
+      schema_version: "2",
+      profile: { model: "gpt-5.6-sol", effort: "medium" },
+      source: { kind: "default" },
     });
   });
 });

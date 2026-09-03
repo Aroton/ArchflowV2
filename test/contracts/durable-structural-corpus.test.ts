@@ -360,6 +360,81 @@ const taskStateBaselineAdoptionCollections: JsonObject = {
   ],
 };
 
+const validationOverrideRecord = (gateId: string, phaseInstance: string, fill: string): JsonObject => ({
+  gate_id: gateId,
+  decision_digest: fill.repeat(64),
+  phase_instance: phaseInstance,
+  input_fingerprint: "2".repeat(64),
+  governing_phase_design_digest: "3".repeat(64),
+  subject_digest: "4".repeat(64),
+  displaced_validations: ["README validation", "archflow validation"],
+  human_reason: "The named validations are unavailable in this environment.",
+  decided_at: "2026-09-02T12:00:00.000Z",
+  granted_at_revision: 6,
+});
+const taskStateValidationOverrideCollections: JsonObject = {
+  ...taskStateWithoutOpenGate,
+  validation_overrides: [
+    validationOverrideRecord("gate-validation-a", "phase-impl-1", "a"),
+    validationOverrideRecord("gate-validation-b", "phase-impl-2", "b"),
+  ],
+};
+
+const reviewPushThroughRecord = (gateId: string, phaseInstance: string, fill: string): JsonObject => ({
+  gate_id: gateId,
+  decision_digest: fill.repeat(64),
+  phase_instance: phaseInstance,
+  subject_digest: "5".repeat(64),
+  current_evidence_set_digest: "6".repeat(64),
+  triage_result_digest: "7".repeat(64),
+  accepted_occurrences: [
+    { review_evidence_digest: "a".repeat(64), finding_id: "accepted-a" },
+    { review_evidence_digest: "b".repeat(64), finding_id: "accepted-b" },
+  ],
+  attempt: 3,
+  human_reason: "Continue despite the exact accepted findings.",
+  decided_at: "2026-09-02T12:00:00.000Z",
+  resolved_at_revision: 6,
+});
+const pushA = reviewPushThroughRecord("gate-push-a", "phase-impl-1", "a");
+const pushB = reviewPushThroughRecord("gate-push-b", "phase-impl-2", "b");
+const taskStateReviewPushThroughCollections: JsonObject = {
+  ...taskStateWithoutOpenGate,
+  approvals: [
+    ...items(taskStateWithoutOpenGate.approvals),
+    {
+      gate_id: pushA.gate_id,
+      gate_kind: "attempts-exhausted",
+      subject_digest: pushA.subject_digest,
+      decision_digest: pushA.decision_digest,
+      resolved_at_revision: pushA.resolved_at_revision,
+    },
+    {
+      gate_id: pushB.gate_id,
+      gate_kind: "attempts-exhausted",
+      subject_digest: pushB.subject_digest,
+      decision_digest: pushB.decision_digest,
+      resolved_at_revision: pushB.resolved_at_revision,
+    },
+  ],
+  review_push_throughs: [pushA, pushB],
+};
+
+const taskStatePendingValidationCollections: JsonObject = {
+  ...taskStateWithoutOpenGate,
+  step: "produce",
+  status: "failed",
+  pending_validation_override: {
+    phase_instance: "phase-impl-1",
+    input_fingerprint: "2".repeat(64),
+    governing_phase_design_digest: "3".repeat(64),
+    displaced_validations: ["archflow validation", "README validation"],
+    producer_reason: "The named validations are unavailable in this environment.",
+    request_digest: "8".repeat(64),
+    request_revision: 7,
+  },
+};
+
 /**
  * Rule settlements, sorted by the triple `(phase_instance, subject_digest,
  * settled_at_revision)` — the exact-restart key, where the same pair legally re-settles at a new
@@ -443,6 +518,11 @@ const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; r
   { shape: "task-state", path: "baseline_adoptions", base: taskStateBaselineAdoptionCollections },
   { shape: "task-state", path: "baseline_adoptions.0.adopted_projections", base: taskStateBaselineAdoptionCollections },
   { shape: "task-state", path: "baseline_adoptions.0.adopted_absences", base: taskStateBaselineAdoptionCollections },
+  { shape: "task-state", path: "pending_validation_override.displaced_validations", base: taskStatePendingValidationCollections },
+  { shape: "task-state", path: "validation_overrides", base: taskStateValidationOverrideCollections },
+  { shape: "task-state", path: "validation_overrides.0.displaced_validations", base: taskStateValidationOverrideCollections },
+  { shape: "task-state", path: "review_push_throughs", base: taskStateReviewPushThroughCollections },
+  { shape: "task-state", path: "review_push_throughs.0.accepted_occurrences", base: taskStateReviewPushThroughCollections },
   { shape: "task-state", path: "rule_settlements", base: taskStateRuleSettlementCollections },
   { shape: "task-state", path: "rule_settlements.1.conclusion.match.paths", base: taskStateRuleSettlementCollections },
   { shape: "task-state", path: "last_seen_repository_bindings", base: taskStateRepositoryBindingCollection },
@@ -576,10 +656,13 @@ describe("no array in this phase is exempt from set ordering", () => {
         "task-state/$defs/plainJson/anyOf/4",
         "task-state/$defs/humanRevisionRecord/properties/evidence",
         "task-state/$defs/pendingHumanRevision/properties/evidence",
+        "task-state/$defs/pendingValidationOverride/properties/displaced_validations",
         "task-state/$defs/planningRestartRecord/properties/cleared_waivers",
         "task-state/$defs/planningRestartRecord/properties/superseded_results",
         "task-state/$defs/ruleSettlement/properties/secondary_milestones",
         "task-state/$defs/ruleSettlement/properties/secondary_milestones/items/properties/paths",
+        "task-state/$defs/reviewPushThroughRecord/properties/accepted_occurrences",
+        "task-state/$defs/validationOverrideRecord/properties/displaced_validations",
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
         "task-state/properties/baseline_adoptions",
@@ -591,10 +674,12 @@ describe("no array in this phase is exempt from set ordering", () => {
         "task-state/properties/milestone_recovery_history/items/properties/cleared_waivers",
         "task-state/properties/milestone_recovery_history/items/properties/superseded_results",
         "task-state/properties/restart_history",
+        "task-state/properties/review_push_throughs",
         "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/paths",
         "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/secondary_paths",
         "task-state/$defs/ruleSettlementConclusion/oneOf/1/properties/match/oneOf/1/properties/secondary_paths/items/properties/paths",
         "task-state/properties/rule_settlements",
+        "task-state/properties/validation_overrides",
         "task-state/properties/waivers",
       ].sort()
     );

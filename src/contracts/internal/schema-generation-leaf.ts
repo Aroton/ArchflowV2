@@ -6,7 +6,7 @@ import { configOverridesSchema, configRolesSchema, configRouteSchema, configV1Sc
 import { constitutionRuleV1Schema } from "../constitution.js";
 import { phaseDesignComponentManifestV1Schema } from "../component-manifest.js";
 import { dispatchFailureObservationV1Schema } from "../dispatch-failure.js";
-import { effortAssessmentV1Schema, effortEnvelopeV1Schema, rawEffortReviewV1Schema } from "../effort-review.js";
+import { effortDocumentDefs, effortEnvelopeV2Schema, effortEvidenceSchema, rawEffortSelectionV2Schema } from "../effort-review.js";
 import {
   pathSafeIdV1Schema,
   safeCodeV1Schema,
@@ -20,7 +20,7 @@ import { resultExpectationDataSchema } from "../mcp-tools.js";
 import { hazardRegistryInputV1Schema, hazardRegistryV1Schema } from "../hazard-registry.js";
 import { pathClaimLexicalV1Schema, repositoryPathClaimV1Schema, taskPathClaimV1Schema } from "../path-claims.js";
 import { phaseInstanceIdV1Schema, phaseInstanceV1Schema, positiveSafePhaseNumberV1Schema } from "../phase-instance.js";
-import { rawReviewSchema, reviewDocumentDefs, reviewEvidenceSchema } from "../review.js";
+import { childReviewOutputV2Schema, reviewDocumentDefs, reviewEvidenceSchema } from "../review.js";
 import { rubricV1Schema } from "../rubric.js";
 import { secretFindingV1Schema, secretScanResultV1Schema } from "../secret-scan.js";
 import { triageCandidateSchema } from "../triage.js";
@@ -153,7 +153,7 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
     {
       file: "review",
       id: SCHEMA_IDS.review,
-      root: rawReviewSchema,
+      root: childReviewOutputV2Schema,
       defs: reviewDocumentDefs,
       migrated: true,
     },
@@ -184,19 +184,20 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
     {
       file: "effort-envelope",
       id: SCHEMA_IDS.effortEnvelope,
-      root: effortEnvelopeV1Schema,
+      root: effortEnvelopeV2Schema,
       migrated: true,
     },
     {
       file: "effort-review",
       id: SCHEMA_IDS.effortReview,
-      root: rawEffortReviewV1Schema,
+      root: rawEffortSelectionV2Schema,
+      defs: effortDocumentDefs,
       migrated: true,
     },
     {
       file: "effort-assessment",
       id: SCHEMA_IDS.effortAssessment,
-      root: effortAssessmentV1Schema,
+      root: effortEvidenceSchema,
       migrated: true,
     },
     {

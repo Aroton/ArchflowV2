@@ -4,10 +4,14 @@ import type {
   TaskStateV1,
   WaiverRef,
 } from "../contracts/durable-state.js";
-import type { Sha256Digest } from "../contracts/evidence.js";
-import type { EffortAssessmentV1 } from "../contracts/effort-review.js";
-import type { WaiverScope } from "../contracts/gates.js";
-import type { ReviewEvidence } from "../contracts/review.js";
+import { parseSafeInteger, type SafeInteger, type Sha256Digest } from "../contracts/evidence.js";
+import {
+  REVIEW_PUSH_THROUGH_MIN_ATTEMPT,
+  type ReviewAcceptedOccurrenceV1,
+  type ReviewPushThroughContextV1,
+  type WaiverScope,
+} from "../contracts/gates.js";
+import { isSubstantiveClaim, type ReviewEvidence } from "../contracts/review.js";
 import type { TriageCandidate } from "../contracts/triage.js";
 import type { PipelineStep } from "../contracts/vocabulary.js";
 import { computeGateContextDigest } from "../contracts/fingerprints.js";
@@ -30,8 +34,10 @@ import {
   selectAdjudicationGates,
   gateDeclaredByReviewTrigger,
 } from "./adjudication.js";
+import { decodePhaseInstance } from "../contracts/phase-instance.js";
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
+export { REVIEW_PUSH_THROUGH_MIN_ATTEMPT };
 
 const EVIDENCE_STEPS = Object.freeze([
   "counter_review",
@@ -65,7 +71,38 @@ export type EvidenceSubject = Readonly<{
   review_predecessor?: EditorialPredecessorPair;
   approved_upstream_digests?: readonly Sha256Digest[];
   authenticated_gate_approvals?: readonly AuthenticatedGateApproval[];
+  /**
+   * Opaque values minted by the durable review-push-through loader. The fixed point never reads a
+   * plain state record: the loader-owned callback must authenticate and project each value before
+   * it can participate in the exact-current match below.
+   */
+  review_push_through_authority?: ReviewPushThroughAuthoritySource;
   max_attempts?: number;
+}>;
+
+/** Exact authority facts exposed only after a dedicated loader authenticates state and archive. */
+export type AuthenticatedReviewPushThroughFacts = Readonly<{
+  task_id: TaskStateV1["task_id"];
+  phase_instance: TaskStateV1["phase_instance"];
+  attempt: SafeInteger;
+  subject_digest: Sha256Digest;
+  current_evidence_set_digest: Sha256Digest;
+  triage_result_digest: Sha256Digest;
+  accepted_occurrences: readonly ReviewAcceptedOccurrenceV1[];
+}>;
+
+/** Adapter implemented by the future branded loader; opaque values are unusable without it. */
+export type ReviewPushThroughAuthoritySource = Readonly<{
+  values: readonly unknown[];
+  authenticate: (value: unknown) => AuthenticatedReviewPushThroughFacts;
+}>;
+
+/** Exact live review/triage tuple a gate request may bind after exhaustion is established. */
+export type ReviewPushThroughCandidate = Readonly<{
+  attempt: SafeInteger;
+  review_round_count: SafeInteger;
+  subject_digest: Sha256Digest;
+  context: ReviewPushThroughContextV1;
 }>;
 
 export type EvidenceAssessment = Readonly<{
@@ -80,6 +117,7 @@ export type EvidenceAssessment = Readonly<{
    * revision intents without invalidating review evidence or requiring a full re-entry.
    */
   editorial_revision_required: boolean;
+  escalated_human_findings?: boolean;
   /**
    * The retained constitution review left agent-resolvable findings — a rule the artifact does
    * not demonstrably meet, or material drift from an approved upstream — and attempts remain:
@@ -87,12 +125,6 @@ export type EvidenceAssessment = Readonly<{
    * once when a rule's own `review_trigger` matched (the repository asked for a human).
    */
   policy_reentry_required?: boolean;
-  /** A current phase-design effort assessment found specification/decomposition blockers. */
-  effort_reentry_required?: boolean;
-  /** Exact authenticated questions/boundaries the phase-design producer must resolve. */
-  effort_blockers?: EffortAssessmentV1["recommendation"]["blockers"];
-  /** Explicit classification keeps archived exact-byte authority distinct from fresh evidence. */
-  effort_currency?: "not-required" | "missing-current" | "legacy-exact" | "ready" | "blocked";
   exhausted: boolean;
   adjudication_gate_pending: boolean;
   next:
@@ -317,7 +349,9 @@ function evidenceBindingFailure(
 ): GateApprovalBindingFailure | undefined {
   // A baseline-adoption approval cites the drift observation, not a review set; it can never
   // satisfy an adjudication gate's evidence binding.
-  if (request.kind === "baseline-adoption") return "request-gate-kind";
+  if (request.kind === "baseline-adoption" || request.kind === "validation-override") {
+    return "request-gate-kind";
+  }
   const { counter_review_digest: counterDigest, triage, adjudication } = evidence;
   if (counterDigest === undefined) return "counter-review-evidence-missing";
   if (triage === undefined) return "triage-evidence-missing";
@@ -389,39 +423,49 @@ function adjudicationGateSatisfied(
 ): boolean {
   const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
   if (gate.kind === "constitution-review") {
-    const ordinaryKind = state.phase_instance === "prd"
-      ? "artifact-approval"
-      : designPhase
-        ? "design-approval"
-        : state.phase_instance.startsWith("phase-impl-")
-          ? "commit-authorization"
-          : undefined;
-    const evidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
-    const ordinaryApproval = ordinaryKind !== undefined &&
-      (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
-      assertAuthenticatedGateApproval(authenticated);
-      const decision = authenticated.decision.envelope.payload.decision;
-      return authenticated.approval.gate_kind === ordinaryKind &&
-        authenticated.approval.subject_digest === subject.subject_digest &&
-        authenticated.request.kind === ordinaryKind &&
-        authenticated.request.phase_instance === state.phase_instance &&
-        authenticated.request.subject_digest === subject.subject_digest &&
-        authenticated.request.current_evidence.set_digest === evidenceSetDigest &&
-        (decision === "approve" || decision === "authorize-commit");
-    });
-    // A migration-audit acceptance is the combined approval for imported design phases:
-    // it replaces the separate PRD and design-approval gates and satisfies this gate alike.
-    const migrationApproval = designPhase && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
-      assertAuthenticatedGateApproval(authenticated);
-      return authenticated.approval.gate_kind === "migration-audit" &&
-        authenticated.approval.subject_digest === subject.subject_digest &&
-        authenticated.request.kind === "migration-audit" &&
-        authenticated.request.phase_instance === state.phase_instance &&
-        authenticated.request.subject_digest === subject.subject_digest &&
-        authenticated.request.current_evidence.set_digest === evidenceSetDigest &&
-        authenticated.decision.envelope.payload.decision === "accept-import-audit";
-    });
-    if (ordinaryApproval || migrationApproval) return true;
+    const hasActivePolicyIssues = !("policy_findings" in gate.context) ||
+      (gate.context as Record<string, unknown>).constitution !== "pass" ||
+      ((gate.context as Record<string, unknown>).policy_findings as readonly any[]).some((f) => f.compliance !== "pass" || f.trigger !== "not-matched");
+    if (hasActivePolicyIssues) {
+      const ordinaryKind = state.phase_instance === "prd"
+        ? "artifact-approval"
+        : designPhase
+          ? "design-approval"
+          : state.phase_instance.startsWith("phase-impl-")
+            ? "commit-authorization"
+            : undefined;
+      let evidenceSetDigest: string;
+      try {
+        evidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
+      } catch {
+        evidenceSetDigest = "";
+      }
+      const ordinaryApproval = ordinaryKind !== undefined && evidenceSetDigest !== "" &&
+        (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+        assertAuthenticatedGateApproval(authenticated);
+        const decision = authenticated.decision.envelope.payload.decision;
+        return authenticated.approval.gate_kind === ordinaryKind &&
+          authenticated.approval.subject_digest === subject.subject_digest &&
+          authenticated.request.kind === ordinaryKind &&
+          authenticated.request.phase_instance === state.phase_instance &&
+          authenticated.request.subject_digest === subject.subject_digest &&
+          authenticated.request.current_evidence.set_digest === evidenceSetDigest &&
+          (decision === "approve" || decision === "authorize-commit");
+      });
+      // A migration-audit acceptance is the combined approval for imported design phases:
+      // it replaces the separate PRD and design-approval gates and satisfies this gate alike.
+      const migrationApproval = designPhase && evidenceSetDigest !== "" && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+        assertAuthenticatedGateApproval(authenticated);
+        return authenticated.approval.gate_kind === "migration-audit" &&
+          authenticated.approval.subject_digest === subject.subject_digest &&
+          authenticated.request.kind === "migration-audit" &&
+          authenticated.request.phase_instance === state.phase_instance &&
+          authenticated.request.subject_digest === subject.subject_digest &&
+          authenticated.request.current_evidence.set_digest === evidenceSetDigest &&
+          authenticated.decision.envelope.payload.decision === "accept-import-audit";
+      });
+      if (ordinaryApproval || migrationApproval) return true;
+    }
   }
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence: RetainedGateEvidence = Object.freeze({
@@ -448,10 +492,47 @@ function adjudicationGatePending(
     open.context_digest === computeGateContextDigest(gate.kind, gate.context);
 }
 
+function escalationSettled(
+  state: TaskStateV1,
+  retained: RetainedEvidenceSet,
+  subject: EvidenceSubject,
+): boolean {
+  const phase = decodePhaseInstance(state.phase_instance);
+  const ordinaryKind = phase.kind === "prd"
+    ? "artifact-approval"
+    : phase.kind === "design" || phase.kind === "phase-design"
+      ? "design-approval"
+      : phase.kind === "phase-impl"
+        ? "commit-authorization"
+        : undefined;
+  if (ordinaryKind === undefined) return false;
+  let evidenceSetDigest: string;
+  try {
+    evidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
+  } catch {
+    return false;
+  }
+
+  return (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+    assertAuthenticatedGateApproval(authenticated);
+    const decision = authenticated.decision.envelope.payload.decision;
+    const isMatchingDecision = decision === "approve" || decision === "authorize-commit";
+    const isMatchingScope = authenticated.approval.gate_kind === ordinaryKind &&
+      authenticated.approval.subject_digest === subject.subject_digest &&
+      authenticated.request.kind === ordinaryKind &&
+      authenticated.request.phase_instance === state.phase_instance &&
+      authenticated.request.subject_digest === subject.subject_digest &&
+      authenticated.request.current_evidence.set_digest === evidenceSetDigest;
+    return isMatchingDecision && isMatchingScope;
+  });
+}
+
 type TriageDispositionState = Readonly<{
   complete: boolean;
   blocker: boolean;
   accepted: boolean;
+  escalated_human: boolean;
+  deferred: boolean;
 }>;
 
 function dispositionState(
@@ -459,14 +540,17 @@ function dispositionState(
   reviews: DerivedCurrentEvidenceSet | undefined,
   triage: TriageCandidate | undefined,
 ): TriageDispositionState {
-  const counter = reviews?.reviews[0]?.evidence;
-  if (reviews === undefined || counter === undefined || triage === undefined) {
-    return Object.freeze({ complete: false, blocker: false, accepted: false });
+  if (reviews === undefined || triage === undefined) {
+    return Object.freeze({ complete: false, blocker: false, accepted: false, escalated_human: false, deferred: false });
   }
-  const counterDigest = reviews.current_evidence_set.slots[0].evidence_digest;
   const expected = new Map<string, boolean>();
-  for (const finding of counter.findings) {
-    expected.set(`${counterDigest}:${finding.finding_id}`, finding.blocking);
+  for (const review of reviews.reviews) {
+    for (const finding of review.evidence.findings) {
+      expected.set(`${review.evidence_digest}:${finding.finding_id}`, isSubstantiveClaim(finding));
+    }
+  }
+  if (expected.size === 0) {
+    return Object.freeze({ complete: true, blocker: false, accepted: false, escalated_human: false, deferred: false });
   }
   const actual = new Map(triage.dispositions.map((item) => [
     `${item.review_evidence_digest}:${item.finding_id}`,
@@ -474,13 +558,131 @@ function dispositionState(
   ]));
   const complete = actual.size === expected.size &&
     [...expected.keys()].every((key) => actual.has(key));
-  const blocker = [...expected].some(([key, blocking]) =>
-    blocking && actual.get(key) !== "rejected");
+  const blocker = [...expected].some(([key, substantive]) => {
+    const disp = actual.get(key);
+    return substantive && disp !== "rejected" && disp !== "deferred";
+  });
+  const accepted = (triage.accepted_count ?? 0) > 0;
+  const escalatedHuman = (triage.escalated_human_count ?? 0) > 0 ||
+    [...actual.values()].some((disp) => disp === "escalated-human");
+  const deferred = (triage.deferred_count ?? 0) > 0 ||
+    [...actual.values()].some((disp) => disp === "deferred");
   return Object.freeze({
     complete,
     blocker,
-    accepted: triage.accepted_count > 0,
+    accepted,
+    escalated_human: escalatedHuman,
+    deferred,
   });
+}
+
+const acceptedOccurrenceKey = (occurrence: ReviewAcceptedOccurrenceV1): string =>
+  `${occurrence.review_evidence_digest}:${occurrence.finding_id}`;
+
+const compareAcceptedOccurrencesForGate = (
+  left: ReviewAcceptedOccurrenceV1,
+  right: ReviewAcceptedOccurrenceV1,
+): number => left.review_evidence_digest.localeCompare(right.review_evidence_digest) ||
+  left.finding_id.localeCompare(right.finding_id);
+
+/**
+ * Derives the exact current accepted-finding tuple independently of the durable attempt counter.
+ * The caller still establishes that the attempts-exhausted boundary was reached; this helper owns
+ * the stronger eligibility facts that only completed server-recorded review rounds can supply.
+ */
+export function deriveReviewPushThroughCandidate(
+  state: TaskStateV1,
+  retained: RetainedEvidenceSet,
+  subject: EvidenceSubject,
+): ReviewPushThroughCandidate | undefined {
+  assertSubjectMatchesDurableState(state, retained, subject);
+  if (state.step !== "triage" || state.status !== "succeeded") return undefined;
+  const reviews = currentReviewSet(state, retained, subject);
+  const triage = triageAt(retained);
+  if (reviews === undefined || triage === undefined ||
+      !currentFor(retained, "triage", subject, reviews)) return undefined;
+  const disposition = dispositionState(retained, reviews, triage);
+  if (!disposition.complete || !disposition.accepted) return undefined;
+
+  const currentOccurrences = new Set<string>();
+  for (const review of reviews.reviews) {
+    for (const finding of review.evidence.findings) {
+      currentOccurrences.add(acceptedOccurrenceKey({
+        review_evidence_digest: review.evidence_digest,
+        finding_id: finding.finding_id,
+      }));
+    }
+  }
+  const accepted = triage.dispositions
+    .filter((item) => item.disposition === "accepted")
+    .map((item) => Object.freeze({
+      review_evidence_digest: item.review_evidence_digest,
+      finding_id: item.finding_id,
+    }));
+  if (accepted.length === 0 || accepted.some((item) =>
+    !currentOccurrences.has(acceptedOccurrenceKey(item)))) return undefined;
+  accepted.sort(compareAcceptedOccurrencesForGate);
+
+  const history = triage.review_round_history;
+  const currentReviewDigest = reviews.reviews[0]?.evidence_digest;
+  if (history === undefined || currentReviewDigest === undefined ||
+      history.length < REVIEW_PUSH_THROUGH_MIN_ATTEMPT ||
+      history.some((entry, index) =>
+        entry.attempt > state.attempt ||
+        (index > 0 && history[index - 1]!.attempt >= entry.attempt)) ||
+      !history.some((entry) =>
+        entry.attempt === state.attempt && entry.review_evidence_digest === currentReviewDigest)) {
+    return undefined;
+  }
+
+  return Object.freeze({
+    attempt: state.attempt,
+    review_round_count: parseSafeInteger(history.length),
+    subject_digest: subject.subject_digest,
+    context: Object.freeze({
+      minimum_attempt: REVIEW_PUSH_THROUGH_MIN_ATTEMPT,
+      current_evidence_set_digest: reviews.current_evidence_set.set_digest,
+      triage_result_digest: retained.get("triage")!.reference.result_digest,
+      accepted_occurrences: Object.freeze(accepted),
+    }),
+  });
+}
+
+function exactOccurrenceSet(
+  left: readonly ReviewAcceptedOccurrenceV1[],
+  right: readonly ReviewAcceptedOccurrenceV1[],
+): boolean {
+  if (left.length !== right.length) return false;
+  const leftKeys = new Set(left.map(acceptedOccurrenceKey));
+  if (leftKeys.size !== left.length) return false;
+  const rightKeys = new Set(right.map(acceptedOccurrenceKey));
+  return rightKeys.size === right.length && [...leftKeys].every((key) => rightKeys.has(key));
+}
+
+/** Exact current-tuple match used after, and only after, the caller authenticates durable authority. */
+export function reviewPushThroughAuthorityMatchesCandidate(
+  state: TaskStateV1,
+  candidate: ReviewPushThroughCandidate,
+  authority: AuthenticatedReviewPushThroughFacts,
+): boolean {
+  return authority.task_id === state.task_id &&
+    authority.phase_instance === state.phase_instance &&
+    authority.attempt === candidate.attempt &&
+    authority.subject_digest === candidate.subject_digest &&
+    authority.current_evidence_set_digest === candidate.context.current_evidence_set_digest &&
+    authority.triage_result_digest === candidate.context.triage_result_digest &&
+    exactOccurrenceSet(authority.accepted_occurrences, candidate.context.accepted_occurrences);
+}
+
+/** Plain state records are intentionally insufficient; every value crosses the loader's assert. */
+export function authenticatedReviewPushThroughSettlesCandidate(
+  state: TaskStateV1,
+  candidate: ReviewPushThroughCandidate,
+  source: ReviewPushThroughAuthoritySource | undefined,
+): boolean {
+  if (source === undefined) return false;
+  return source.values.some((value) =>
+    reviewPushThroughAuthorityMatchesCandidate(state, candidate, source.authenticate(value)));
 }
 
 /** The pinned constitution and any retained adjudication must match durable state's digests. */
@@ -533,11 +735,13 @@ function editorialRevisionPending(
   triageCurrent: TriageCandidate | undefined,
   disposition: TriageDispositionState,
   subject: EvidenceSubject,
+  acceptedSettled: boolean,
 ): boolean {
   return triageCurrent !== undefined &&
     disposition.complete &&
-    triageCurrent.accepted_count === 0 &&
+    (triageCurrent.accepted_count === 0 || acceptedSettled) &&
     (triageCurrent.accepted_editorial_count ?? 0) > 0 &&
+    (triageCurrent.escalated_human_count ?? 0) === 0 &&
     boundToSubjectExactly(triageCurrent, subject);
 }
 
@@ -546,9 +750,8 @@ type NextActionDecision = Readonly<{
   next: Exclude<EvidenceAssessment["next"], "attempts-exhausted">;
   reentry_required: boolean;
   editorial_revision_required: boolean;
+  escalated_human_findings?: boolean;
   policy_reentry_required?: boolean;
-  effort_reentry_required?: boolean;
-  effort_blockers?: EffortAssessmentV1["recommendation"]["blockers"];
   adjudication_gate_pending: boolean;
 }>;
 
@@ -560,9 +763,8 @@ function decision(
     next,
     reentry_required: flags?.reentry_required ?? false,
     editorial_revision_required: flags?.editorial_revision_required ?? false,
+    ...(flags?.escalated_human_findings === true ? { escalated_human_findings: true } : {}),
     ...(flags?.policy_reentry_required === true ? { policy_reentry_required: true } : {}),
-    ...(flags?.effort_reentry_required === true ? { effort_reentry_required: true } : {}),
-    ...(flags?.effort_blockers === undefined ? {} : { effort_blockers: flags.effort_blockers }),
     adjudication_gate_pending: flags?.adjudication_gate_pending ?? false,
   });
 }
@@ -603,18 +805,41 @@ function decideNextAction(
   current: readonly PipelineStep[],
   disposition: TriageDispositionState,
   triageCurrent: TriageCandidate | undefined,
-  effort: EffortAssessmentV1 | undefined,
   maximum: number,
+  acceptedSettled: boolean,
 ): NextActionDecision {
-  if (acceptedFindingsForceReentry(state, disposition)) {
-    return effort?.recommendation.status === "blocked"
-      ? decision("produce", {
-          reentry_required: true,
-          effort_reentry_required: true,
-          effort_blockers: effort.recommendation.blockers,
-        })
-      : decision("produce", { reentry_required: true });
+  let currentEvidenceSetDigest: string | undefined;
+  try {
+    currentEvidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
+  } catch {
+    currentEvidenceSetDigest = undefined;
   }
+  const isTriageFreshForRound =
+    current.includes("triage") &&
+    triageCurrent !== undefined &&
+    boundToSubjectExactly(triageCurrent, subject) &&
+    currentEvidenceSetDigest !== undefined &&
+    triageCurrent.current_evidence_set_digest === currentEvidenceSetDigest;
+
+  if (isTriageFreshForRound && disposition.escalated_human && !escalationSettled(state, retained, subject)) {
+    const adjudicationStep = resolveAdjudicationGateStep(state, retained, subject, maximum);
+    if (adjudicationStep.next !== "advance") {
+      return decision("adjudication-gate", {
+        escalated_human_findings: true,
+        adjudication_gate_pending: true,
+      });
+    }
+    return decision("advance", { escalated_human_findings: true });
+  }
+
+  if (
+    isTriageFreshForRound &&
+    ((acceptedFindingsForceReentry(state, disposition) && !acceptedSettled) ||
+     (escalationSettled(state, retained, subject) && (triageCurrent.accepted_editorial_count ?? 0) > 0))
+  ) {
+    return decision("produce", { reentry_required: true });
+  }
+
   if (!current.includes("counter_review")) return decision("counter_review");
   if (constitutionReviewRequired(subject.constitution) && !current.includes("adjudicate")) {
     // The merged counter-review call installs review and constitution evidence atomically, so a
@@ -627,18 +852,10 @@ function decideNextAction(
   // erase an accepted material finding from the retained review, even when its one-hop
   // predecessor proof is exact. Material findings require a significant revision and fresh
   // review; otherwise triage remains the fail-closed action.
-  if (disposition.accepted) return decision("triage");
-  if (effort?.recommendation.status === "blocked") {
-    return decision("produce", {
-      reentry_required: true,
-      effort_reentry_required: true,
-      effort_blockers: effort.recommendation.blockers,
-    });
-  }
-  if (editorialRevisionPending(triageCurrent, disposition, subject)) {
-    if (state.phase_instance.startsWith("phase-design-")) {
-      // Component-wide effort scoring must be repeated after every phase-design byte change.
-      // Editorial acceptance therefore consumes the next ordinary attempt for this phase kind.
+  if (disposition.accepted && !acceptedSettled) return decision("triage");
+  if (editorialRevisionPending(triageCurrent, disposition, subject, acceptedSettled)) {
+    if (state.phase_instance !== "prd" && state.phase_instance !== "design") {
+      // Non-document positions stay bound to exact bytes and force full re-entry.
       return decision("produce", { reentry_required: true });
     }
     // Not a re-entry: the attempt budget and the retained review evidence both survive.
@@ -668,32 +885,26 @@ export function assessCurrentEvidence(
   const stale = EVIDENCE_STEPS.filter((step) =>
     retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
-  const counter = reviews?.reviews[0]?.evidence;
-  const effort = state.phase_instance.startsWith("phase-design-") &&
-      counter?.assurance === "server-attested"
-    ? counter.effort_review
-    : undefined;
+  const pushThroughCandidate = deriveReviewPushThroughCandidate(state, retained, subject);
+  const acceptedSettled = pushThroughCandidate !== undefined &&
+    authenticatedReviewPushThroughSettlesCandidate(
+      state,
+      pushThroughCandidate,
+      subject.review_push_through_authority,
+    );
   const action = decideNextAction(
-    state, retained, subject, current, disposition, triageCurrent, effort, maximum,
+    state, retained, subject, current, disposition, triageCurrent, maximum, acceptedSettled,
   );
   const exhausted = action.reentry_required && state.attempt >= maximum;
   return Object.freeze({
     current: Object.freeze([...current]),
     stale: Object.freeze([...stale]),
     every_finding_dispositioned: disposition.complete,
-    blocker_remains: disposition.blocker,
+    blocker_remains: disposition.blocker && (!acceptedSettled || disposition.escalated_human),
     reentry_required: action.reentry_required,
     editorial_revision_required: action.editorial_revision_required,
+    ...(action.escalated_human_findings === true ? { escalated_human_findings: true } : {}),
     ...(action.policy_reentry_required === true ? { policy_reentry_required: true } : {}),
-    ...(action.effort_reentry_required === true ? { effort_reentry_required: true } : {}),
-    ...(action.effort_blockers === undefined ? {} : { effort_blockers: action.effort_blockers }),
-    effort_currency: !state.phase_instance.startsWith("phase-design-")
-      ? "not-required"
-      : reviews === undefined
-        ? "missing-current"
-        : effort === undefined
-          ? "legacy-exact"
-          : effort.recommendation.status,
     exhausted,
     adjudication_gate_pending: action.adjudication_gate_pending,
     next: exhausted ? "attempts-exhausted" : action.next,

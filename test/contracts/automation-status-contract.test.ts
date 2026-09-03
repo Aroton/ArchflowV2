@@ -48,7 +48,6 @@ const unavailable = {
   phase: 2,
   reason: "not-produced" as const,
   explanation: "No authenticated implementation recommendation has been produced.",
-  actual_implementation_route: { status: "not-recorded" as const },
 };
 
 const readyV2 = (): AutomationStatusWithoutIdV2 => ({

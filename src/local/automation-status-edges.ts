@@ -19,7 +19,6 @@ const NOT_APPLICABLE_RECOMMENDATION = Object.freeze({
   status: "unavailable" as const,
   reason: "not-applicable" as const,
   explanation: "Implementation recommendation is not applicable without readable phase-design workflow authority.",
-  actual_implementation_route: Object.freeze({ status: "not-recorded" as const }),
 });
 
 function identityDigest(value: PlainJsonValue): ReturnType<typeof canonicalJsonDigest> {

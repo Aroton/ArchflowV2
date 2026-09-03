@@ -61,13 +61,13 @@ components:
       validationError = error;
     }
     const error = effortInputContractError(
-      "phase-design-component-manifest-invalid",
+      "phase-design-artifact-invalid",
       validationError,
     );
     expect(error).toMatchObject({
       code: "CONTRACT_INVALID",
       diagnostic: { parameters: {
-        issue_code: "phase-design-component-manifest-invalid",
+        issue_code: "phase-design-artifact-invalid",
         issues: ["component grouped-effort-dispatch repositories primary paths must be ordinal-sorted with no duplicates"],
       } },
     });

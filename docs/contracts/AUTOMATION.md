@@ -1,6 +1,6 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
 
 `archflow-local automation-status` is the stable read-only handoff between ArchFlow and an external controller. It answers three questions from one reconciled observation: what condition is the task in, who is responsible now, and which canonical skill—if any—owns the next producer session.
 
@@ -31,7 +31,9 @@ state_revision  non-negative durable revision, or null when no readable canonica
 condition       awaiting-client | awaiting-human | ready | blocked | complete
 position        prd | design | phase-design N | phase-impl N, or null only where authority is unreadable/staged
 next_action     exactly one condition-specific discriminated action
-implementation_recommendation  authenticated ready | blocked | unavailable advice
+implementation_recommendation  authenticated ready | unavailable agent advice
+validation_overrides           optional authenticated/safe validation-exception audit (v2 only)
+review_push_throughs            optional authenticated/safe review-exception audit (v2 only)
 ```
 
 The closed union permits `human_boundary` only on `awaiting-human`, and `blocked` only on `blocked`.
@@ -68,7 +70,7 @@ Every `awaiting-human` arm carries one shape:
 }
 ```
 
-`source` is `presentation` for a durable gate and `dispatch-failure` for the current disposable reviewer diagnostic. `class` is `configured-approval` only when every structured reason is an ordinary configured approval; any safety, recovery, unavailable-reviewer, inconclusive-policy, missing-evidence, or exhausted-attempt reason makes it `exception`. The boundary never contains a decision token. Return the human's natural-language response to the owning interactive session; that skill presents the authenticated choices and submits the selected opaque decision.
+`source` is `presentation` for a durable gate and `dispatch-failure` for the current disposable reviewer diagnostic. `class` is `configured-approval` only when every structured reason is an ordinary configured approval; any safety, recovery, unavailable-reviewer, inconclusive-policy, missing-evidence, exhausted-attempt, validation-override, or review-push-through reason makes it `exception`. The boundary never contains a decision token. Return the human's natural-language response to the owning interactive session; that skill presents the authenticated choices and submits the selected opaque decision.
 
 An exact-current reviewer dispatch failure temporarily takes precedence over the ordinary pending-review projection. It appears as an exceptional human boundary naming the failed role and safe repair-or-substitute conversation. This disposable observation says the last current dispatch failed; it is not durable proof that the outage persists, does not consume a review attempt, and does not authorize fallback. A repaired producer must retry using the same declared invocation route, or obtain the human's reason-bearing one-dispatch substitute through the owning skill.
 
@@ -148,8 +150,16 @@ An MCP-based controller may expose an equivalent read-only observation, but it m
 
 ## Implementation recommendation
 
-V2 requires the same `implementation_recommendation` union published by semantic status on every condition arm. `ready` carries the policy and exact subject/component/hazard bindings, the actual effort-reviewer provenance, per-component A-E judgments, totals, profiles and caveats, the phase profile and determining component IDs. `blocked` carries the same evidence plus blockers and no phase profile. `unavailable` distinguishes `not-applicable`, `not-produced`, `subject-stale`, and `legacy-evidence`; positionless edge documents use `not-applicable` without inventing a phase. All arms keep `actual_implementation_route: {"status":"not-recorded"}` because recommendation, reviewer provenance, and the producer route are different facts.
+V2 requires the same `implementation_recommendation` union published by semantic status on every condition arm. `ready` carries only the selected implementation `model` and `effort`; private scores, component breakdown, selector provenance, and fallback diagnostics are not exposed. `unavailable` distinguishes `not-applicable`, `not-produced`, `subject-stale`, and `legacy-evidence`; positionless edge documents use `not-applicable` without inventing a phase.
 
 The recommendation is observational. Projection copies it after action selection and never branches on it to select an actor, action, owner, successor, repair, or launch. Registry-created/removed/changed/unreadable caveats likewise do not change currency or action. V2 observation identity binds the complete recommendation bytes under the `archflow-automation-observation-v2` domain, so advice changes are visible to polling without becoming authority.
 
-V2 dispatch failures truthfully permit `effort-reviewer` in `failed_role`. V1 retains its original closed `counter-reviewer | test-reviewer | adjudicator` vocabulary and compatibility projection; `parseAutomationStatus` remains the documented v1 alias. Controllers that need advice must consume v2 and still must not infer or launch an implementation route from it.
+The V2 parser retains `effort-reviewer` in its historical `failed_role` vocabulary, but fresh effort-selector failures are absorbed into the Sol-medium default and never emit that boundary. V1 retains its original closed vocabulary and compatibility projection; `parseAutomationStatus` remains the documented v1 alias. Controllers may display the returned agent but must not infer authority from it.
+
+## Validation and review-exception audit
+
+Automation v2 may include `validation_overrides` and `review_push_throughs`. The projector copies both only after the ordinary semantic condition, actor, owner, and next action have been selected. Adding, removing, corrupting, or reclassifying an audit entry can change `observation_id`, but it cannot turn `awaiting-client` into `ready`, choose a successor, change a gate, or authorize a commit. V1 remains unchanged and strict: it has neither field and rejects v2 bytes.
+
+An authenticated validation entry identifies the phase and gate, says `granted`, distinguishes whether it is current, and exposes the archived human reason/time, governing input fingerprint and phase-design digest, and exact displaced validation descriptions. Those descriptions mean **not run**, never passed. An authenticated review push-through entry identifies the phase, gate, attempt, current-versus-historical status, human reason/time, and exact accepted `{review_evidence_digest, finding_id}` occurrences.
+
+Archive failures are fail-quiet, not fabricated. An `invalid` or `unavailable` validation entry exposes only phase, gate, and status. Its push-through counterpart exposes only phase, gate, attempt, and status. Reason, timestamp, input, governing design, validations, and finding occurrences appear only after the underlying request and decision archives authenticate. Controllers may display this audit but must not treat it as an instruction or re-evaluate its authority.

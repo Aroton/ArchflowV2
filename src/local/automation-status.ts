@@ -325,6 +325,12 @@ export function projectAutomationStatusV2(
     ...v1Document,
     schema_version: "2" as const,
     implementation_recommendation: view.implementation_recommendation,
+    ...(view.validation_overrides === undefined ? {} : {
+      validation_overrides: view.validation_overrides,
+    }),
+    ...(view.review_push_throughs === undefined ? {} : {
+      review_push_throughs: view.review_push_throughs,
+    }),
   } as AutomationStatusWithoutIdV2;
 
   if (view.dispatch_failure?.role === "effort-reviewer" && document.condition === "awaiting-human") {

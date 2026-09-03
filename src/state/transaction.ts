@@ -323,6 +323,7 @@ function operationFor(call: ParsedToolCall): IntentReceiptV1["operation"] {
           recover_approval_trigger_authority: "recover-approval-trigger-authority",
           refresh_stale_baseline: "refresh-stale-baseline",
           set_commit_authority: "set-commit-authority",
+          request_validation_override: "request-validation-override",
         } as const)[call.input.operation] as IntentReceiptV1["operation"];
       }
       const artifact = call.input.artifact;
@@ -702,11 +703,16 @@ function expectedInstallationSource(
       if (call.input.artifact === undefined) {
         throw new TypeError("evidence result installation requires an archflow_state artifact");
       }
-      // The server appends its computed disposition ledger to the prepared triage evidence after
+      // The server appends its computed disposition ledger and completed review-round history to
+      // the prepared triage evidence after
       // validating the producer's candidate; the installed source must match the declared
-      // artifact everywhere except that one server-computed field. A declared ledger still fails
-      // the comparison — only the prepared side is stripped.
-      const { disposition_ledger: _ledger, ...preparedEvidence } = source.evidence;
+      // artifact everywhere except those server-computed fields. A declared field still fails the
+      // comparison — only the prepared side is stripped.
+      const {
+        disposition_ledger: _ledger,
+        review_round_history: _roundHistory,
+        ...preparedEvidence
+      } = source.evidence;
       if (canonicalJsonDigest(call.input.artifact) !== canonicalJsonDigest({ ...source, evidence: preparedEvidence })) {
         throw new TypeError("evidence result installation source does not match the archflow_state artifact");
       }

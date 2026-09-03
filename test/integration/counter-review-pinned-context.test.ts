@@ -234,11 +234,10 @@ else {
   let output;
   if (subject.role === "counter-review") {
     output = {
-      schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+      task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings: [], matched_rule_versions: [],
-      verdict: "pass", blocking_count: 0
+      producer_family: subject.producer_family, findings: [], matched_rule_versions: []
     };
   } else {
     output = {

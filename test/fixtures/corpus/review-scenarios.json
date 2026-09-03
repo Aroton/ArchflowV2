@@ -4,9 +4,8 @@
     {
       "name": "claude-producer-seeded-defect",
       "producer_family": "claude",
-      "expected_verdict": "fail",
+      "expected_verdict": "review-raised",
       "output": {
-        "schema_version": "1",
         "task_id": "mcp-integration",
         "phase_instance": "phase-impl-14",
         "step": "counter_review",
@@ -18,16 +17,15 @@
         "findings": [
           {
             "finding_id": "seeded-defect",
-            "severity": "blocker",
-            "blocking": true,
+            "claim_type": "defect",
+            "confidence": "certain",
+            "falsifier": "Inspect the artifact for DEFECT-SEED and settle whether it remains.",
             "summary": "The seeded defect remains.",
             "evidence": "The artifact contains DEFECT-SEED.",
             "suggested_resolution": "Remove DEFECT-SEED."
           }
         ],
-        "matched_rule_versions": [],
-        "verdict": "fail",
-        "blocking_count": 1
+        "matched_rule_versions": []
       }
     },
     {
@@ -35,7 +33,6 @@
       "producer_family": "claude",
       "expected_verdict": "pass",
       "output": {
-        "schema_version": "1",
         "task_id": "mcp-integration",
         "phase_instance": "phase-impl-14",
         "step": "counter_review",
@@ -45,17 +42,14 @@
         "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "producer_family": "claude",
         "findings": [],
-        "matched_rule_versions": [],
-        "verdict": "pass",
-        "blocking_count": 0
+        "matched_rule_versions": []
       }
     },
     {
       "name": "codex-producer-seeded-defect",
       "producer_family": "codex",
-      "expected_verdict": "fail",
+      "expected_verdict": "review-raised",
       "output": {
-        "schema_version": "1",
         "task_id": "mcp-integration",
         "phase_instance": "phase-impl-14",
         "step": "counter_review",
@@ -67,16 +61,15 @@
         "findings": [
           {
             "finding_id": "seeded-defect",
-            "severity": "blocker",
-            "blocking": true,
+            "claim_type": "defect",
+            "confidence": "certain",
+            "falsifier": "Inspect the artifact for DEFECT-SEED and settle whether it remains.",
             "summary": "The seeded defect remains.",
             "evidence": "The artifact contains DEFECT-SEED.",
             "suggested_resolution": "Remove DEFECT-SEED."
           }
         ],
-        "matched_rule_versions": [],
-        "verdict": "fail",
-        "blocking_count": 1
+        "matched_rule_versions": []
       }
     },
     {
@@ -84,7 +77,6 @@
       "producer_family": "codex",
       "expected_verdict": "pass",
       "output": {
-        "schema_version": "1",
         "task_id": "mcp-integration",
         "phase_instance": "phase-impl-14",
         "step": "counter_review",
@@ -94,9 +86,7 @@
         "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "producer_family": "codex",
         "findings": [],
-        "matched_rule_versions": [],
-        "verdict": "pass",
-        "blocking_count": 0
+        "matched_rule_versions": []
       }
     }
   ]

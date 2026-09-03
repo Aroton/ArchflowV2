@@ -29,7 +29,7 @@ import type { AdjudicationSubject, DispatchEnvelope, DispatchSubject } from "../
 type ReviewScenario = Readonly<{
   name: string;
   producer_family: "claude" | "codex";
-  expected_verdict: "pass" | "fail";
+  expected_verdict: "pass" | "review-raised";
   output: Record<string, unknown>;
 }>;
 
@@ -215,7 +215,7 @@ describe("deterministic fake-CLI review corpus", () => {
       expect(result.evidence.model_family).toBe(reviewer);
       expect(result.evidence.producer_family).toBe(scenario.producer_family);
       expect(result.evidence.findings.map((finding) => finding.finding_id)).toEqual(
-        scenario.expected_verdict === "fail" ? ["seeded-defect"] : [],
+        scenario.expected_verdict === "review-raised" ? ["seeded-defect"] : [],
       );
     }
   });

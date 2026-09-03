@@ -23,25 +23,12 @@ import type { TaskWorkspace } from "./task-workspace.js";
 /** Shared child-process source so specialized semantic stubs answer phase-design effort dispatches identically. */
 export const SEMANTIC_EFFORT_STUB_SOURCE = `
 function generateEffortOutput(envelope) {
-  if (envelope.policy_id !== "implementation-effort-v1") return undefined;
-  return { schema_version: "1", task_id: envelope.task_id, phase_instance: envelope.phase_instance,
+  if (envelope.policy_id !== "implementation-agent-selector-v2") return undefined;
+  return { schema_version: "2", task_id: envelope.task_id, phase_instance: envelope.phase_instance,
     step: "effort_review", role: "effort-reviewer", subject_digest: envelope.subject_digest,
     input_fingerprint: envelope.input_fingerprint,
-    component_manifest_digest: envelope.component_manifest_digest,
-    hazard_registry_digest: envelope.hazard_registry.registry_digest,
     policy_id: envelope.policy_id,
-    decomposition: { status: "adequate", rationale: "The declared components have distinct boundaries." },
-    components: envelope.component_manifest.components.map((component) => ({
-      component_id: component.id,
-      axes: Object.fromEntries(["A", "B", "C", "D", "E"].map((axis) => [axis, {
-        score: axis === "E" && typeof envelope.hazard_registry.components
-          .find((entry) => entry.component_id === component.id)?.e_floor === "number"
-          ? envelope.hazard_registry.components.find((entry) => entry.component_id === component.id).e_floor : 0,
-        rationale: axis === "E" ? "Honors the captured hazard floor." : "The fixture is bounded.",
-      }])),
-      long_tool_loop: { value: "no", rationale: "The fixture has a bounded feedback loop." },
-      short_component: { value: "yes", rationale: "The fixture is intentionally small." },
-    })) };
+    profile_id: "gemini-3-7-flash-max" };
 }
 `;
 
@@ -132,7 +119,7 @@ export function installSemanticReviewStub(
      * implementation subjects: one waivable exception that, once granted, leaves a clean review.
      */
     implementationFailingRule?: boolean;
-    /** Fail only the fixed Luna effort route; a human-authorized substitute can then succeed. */
+    /** Fail only the fixed Luna effort route so the server-owned default can be observed. */
     failFixedEffortRoute?: boolean;
   }> = {},
 ): () => void {
@@ -154,13 +141,16 @@ function generateOutput(envelope, countPath, findingsByReview, adjudicationCompl
   if (subject.role === "counter-review") {
     let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
     const all = findingsByReview; const findings = all[Math.min(count, all.length - 1)] ?? [];
+    const v2Findings = findings.map((finding) => "claim_type" in finding ? finding : ({
+      finding_id: finding.finding_id, claim_type: finding.blocking === true ? "defect" : "preference",
+      confidence: "certain", falsifier: "Inspect the cited fixture evidence to settle this finding.",
+      summary: finding.summary, evidence: finding.evidence, suggested_resolution: finding.suggested_resolution,
+    }));
     writeFileSync(countPath, String(count + 1));
-    return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    return { task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings, matched_rule_versions: [],
-      verdict: findings.some((finding) => finding.blocking === true) ? "fail" : findings.length === 0 ? "pass" : "advisory",
-      blocking_count: findings.filter((finding) => finding.blocking === true).length };
+      producer_family: subject.producer_family, findings: v2Findings, matched_rule_versions: [] };
   } else {
     return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
@@ -192,7 +182,7 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-effort-v1" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
+  if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-agent-selector-v2" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)});
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');

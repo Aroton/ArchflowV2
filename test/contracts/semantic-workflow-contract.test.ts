@@ -9,6 +9,9 @@ import {
   parseArchFlowStatusInputV1,
   parseSemanticResultV1,
   parseWorkflowInvocationV1,
+  publicFindingV1Schema,
+  publicReviewRoundV1Schema,
+  taxonomyDenialRatesV1Schema,
   unavailableImplementationRecommendation,
 } from "../../src/contracts/semantic-workflow.js";
 import {
@@ -30,6 +33,49 @@ const baseApply = () => ({
 });
 
 describe("semantic workflow contracts", () => {
+  it("keeps V2 and archived V1 findings and review rounds strictly separate", () => {
+    const common = {
+      finding_id: "boundary-gap",
+      summary: "A boundary is not handled.",
+      evidence: "The branch has no fallback.",
+      suggested_resolution: "Handle the boundary explicitly.",
+    } as const;
+    const v2 = {
+      ...common,
+      claim_type: "gap",
+      confidence: "likely",
+      falsifier: "Run the boundary fixture and observe the missing fallback.",
+    } as const;
+    const v1 = { ...common, severity: "blocker", blocking: true } as const;
+    expect(publicFindingV1Schema.parse(v2)).toEqual(v2);
+    expect(publicFindingV1Schema.parse(v1)).toEqual(v1);
+    expect(() => publicFindingV1Schema.parse({ ...v2, severity: "major" })).toThrow();
+    expect(() => publicFindingV1Schema.parse({ ...v1, confidence: "certain" })).toThrow();
+
+    const partitions = Object.fromEntries([
+      "defect", "risk", "gap", "preference",
+    ].flatMap((claim) => ["certain", "likely", "suspicion"].map((confidence) => [`${claim}:${confidence}`, 0])));
+    const roundV2 = { attempt: 2, findings: 1, partition_counts: { ...partitions, "gap:likely": 1 }, accepted: 1 };
+    const roundV1 = { attempt: 1, findings: 1, blocking: 1, accepted: 1 };
+    expect(publicReviewRoundV1Schema.parse(roundV2)).toEqual(roundV2);
+    expect(publicReviewRoundV1Schema.parse(roundV1)).toEqual(roundV1);
+    expect(() => publicReviewRoundV1Schema.parse({ ...roundV2, blocking: 1 })).toThrow();
+    expect(() => publicReviewRoundV1Schema.parse({ ...roundV1, partition_counts: partitions })).toThrow();
+  });
+
+  it("requires exactly twelve finite bounded taxonomy denial rates", () => {
+    const rates = Object.fromEntries([
+      "defect", "risk", "gap", "preference",
+    ].flatMap((claim) => ["certain", "likely", "suspicion"].map((confidence) => [`${claim}:${confidence}`, 0])));
+    rates["risk:suspicion"] = 0.75;
+    expect(taxonomyDenialRatesV1Schema.parse(rates)).toEqual(rates);
+    expect(() => taxonomyDenialRatesV1Schema.parse({ ...rates, "risk:suspicion": 1.01 })).toThrow();
+    expect(() => taxonomyDenialRatesV1Schema.parse({ ...rates, extra: 0 })).toThrow();
+    const missing = { ...rates };
+    delete missing["gap:certain"];
+    expect(() => taxonomyDenialRatesV1Schema.parse(missing)).toThrow();
+  });
+
   it("strictly materializes the compact semantic result union", () => {
     const view = {
       schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],

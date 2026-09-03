@@ -61,12 +61,15 @@ export type DerivedImplementationEffortV1 =
       readonly determining_component_ids: readonly string[];
     };
 
-const PROFILES: Readonly<Record<ImplementationProfileIdV1, ImplementationProfileV1>> = Object.freeze({
+export const IMPLEMENTATION_PROFILES: Readonly<Record<ImplementationProfileIdV1, ImplementationProfileV1>> = Object.freeze({
   "gemini-3-7-flash-max": Object.freeze({ profile_id: "gemini-3-7-flash-max", model: "gemini-3.7-flash", effort: "max" }),
   "glm-5-3-flash-max": Object.freeze({ profile_id: "glm-5-3-flash-max", model: "glm-5.3-flash", effort: "max" }),
   "gpt-5-6-sol-medium": Object.freeze({ profile_id: "gpt-5-6-sol-medium", model: "gpt-5.6-sol", effort: "medium" }),
   "gpt-5-6-sol-xhigh": Object.freeze({ profile_id: "gpt-5-6-sol-xhigh", model: "gpt-5.6-sol", effort: "xhigh" }),
 });
+
+export const DEFAULT_IMPLEMENTATION_PROFILE: ImplementationProfileV1 =
+  IMPLEMENTATION_PROFILES["gpt-5-6-sol-medium"];
 
 const PROFILE_RANK: Readonly<Record<ImplementationProfileIdV1, number>> = Object.freeze({
   "gemini-3-7-flash-max": 0,
@@ -79,39 +82,39 @@ function profileFor(judgment: RawEffortReviewV1["components"][number], total: nu
   profile: ImplementationProfileV1;
   caveats: readonly EffortCaveatV1[];
 }> {
-  if (total <= 2) return { profile: PROFILES["gemini-3-7-flash-max"], caveats: [] };
+  if (total <= 2) return { profile: IMPLEMENTATION_PROFILES["gemini-3-7-flash-max"], caveats: [] };
   if (total <= 5) {
     if (judgment.axes.E.score >= 2 || judgment.long_tool_loop.value === "yes") {
-      return { profile: PROFILES["glm-5-3-flash-max"], caveats: [] };
+      return { profile: IMPLEMENTATION_PROFILES["glm-5-3-flash-max"], caveats: [] };
     }
     if (judgment.long_tool_loop.value === "unknown") {
       return {
-        profile: PROFILES["glm-5-3-flash-max"],
+        profile: IMPLEMENTATION_PROFILES["glm-5-3-flash-max"],
         caveats: [{
           code: "long-loop-unknown-conservative-glm",
           message: "Long-loop behavior is unknown, so the conservative GLM profile applies.",
         }],
       };
     }
-    return { profile: PROFILES["gemini-3-7-flash-max"], caveats: [] };
+    return { profile: IMPLEMENTATION_PROFILES["gemini-3-7-flash-max"], caveats: [] };
   }
   if (total <= 7) {
     if (judgment.axes.B.score <= 1 && judgment.short_component.value === "yes") {
-      return { profile: PROFILES["gemini-3-7-flash-max"], caveats: [] };
+      return { profile: IMPLEMENTATION_PROFILES["gemini-3-7-flash-max"], caveats: [] };
     }
     if (judgment.axes.B.score <= 1 && judgment.short_component.value === "unknown") {
       return {
-        profile: PROFILES["glm-5-3-flash-max"],
+        profile: IMPLEMENTATION_PROFILES["glm-5-3-flash-max"],
         caveats: [{
           code: "short-component-unknown-conservative-glm",
           message: "Short-component suitability is unknown, so the conservative GLM profile applies.",
         }],
       };
     }
-    return { profile: PROFILES["glm-5-3-flash-max"], caveats: [] };
+    return { profile: IMPLEMENTATION_PROFILES["glm-5-3-flash-max"], caveats: [] };
   }
-  if (total <= 11) return { profile: PROFILES["gpt-5-6-sol-medium"], caveats: [] };
-  return { profile: PROFILES["gpt-5-6-sol-xhigh"], caveats: [] };
+  if (total <= 11) return { profile: IMPLEMENTATION_PROFILES["gpt-5-6-sol-medium"], caveats: [] };
+  return { profile: IMPLEMENTATION_PROFILES["gpt-5-6-sol-xhigh"], caveats: [] };
 }
 
 /**

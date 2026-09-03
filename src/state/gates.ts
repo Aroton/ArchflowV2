@@ -21,7 +21,9 @@ import {
   type AuthoritativeResultRef,
   type BaselineAdoptionRecord,
   type LastTransition,
+  type ReviewPushThroughRecordV1,
   type TaskStateV1,
+  type ValidationOverrideRecordV1,
   type WaiverRef,
 } from "../contracts/durable-state.js";
 import { intentOutcomeDigest, parseIntentReceipt, type IntentReceiptV1 } from "../contracts/durable-intent.js";
@@ -32,6 +34,7 @@ import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import { parseToolCall } from "../contracts/mcp-tools.js";
 import { baselineAdoptionDriftDigest, computeGateContextDigest, computeGateId } from "../contracts/fingerprints.js";
 import { gateDecisionEffect, type BaselineObservationRef } from "../contracts/gates.js";
+import { validationOverrideSubjectDigest, type ValidationOverrideRequestRefV1 } from "../contracts/gates.js";
 import type { HumanDecisionProvenance } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { RepositoryName, TaskConfigSnapshot } from "../contracts/config.js";
@@ -51,6 +54,7 @@ import { validateRepositorySetContinuity, withLastSeenConfig } from "./config-ch
 import {
   DECISIONS,
   activeProjection,
+  decisionsForGate,
   desiredGenerationDigest,
   fail,
   io,
@@ -88,7 +92,11 @@ import { currentProjectionDigest, discoverNewestProjections, discoverReconciliat
 import { applyProjectionPlan, applyRepositoryProjectionPlans, captureProjectionTarget, prepareProjectionPlan, projectionGenerationDigest, repositoryPathKey, type ProjectionSource } from "./snapshots.js";
 import { readRetainedRepositoryOutput } from "./production.js";
 import { cleanTaskWorkspace } from "./workspace-cleanup.js";
-import { assessCurrentEvidence } from "../review/fixed-point.js";
+import {
+  assessCurrentEvidence,
+  DEFAULT_MAX_ATTEMPTS,
+  deriveReviewPushThroughCandidate,
+} from "../review/fixed-point.js";
 import { resolvePinnedConstitution } from "./constitution.js";
 import { loadRetainedEvidence } from "./evidence-results.js";
 import {
@@ -96,7 +104,12 @@ import {
   evaluateApprovalRules,
   approvalRuleContext,
 } from "./approval-rules.js";
-import { buildSecondaryCommitAuthorizationFacts, SecondaryCommitObservationError } from "./status.js";
+import {
+  buildSecondaryCommitAuthorizationFacts,
+  currentApprovedUpstreams,
+  currentReviewPredecessor,
+  SecondaryCommitObservationError,
+} from "./status.js";
 import {
   approvalIsEligibleAfterLatestRestart,
   authenticatedApprovalIsEligibleAfterLatestRestart,
@@ -106,6 +119,10 @@ import {
   loadAuthenticatedGateApproval,
   type AuthenticatedGateApproval,
 } from "./gate-approvals.js";
+import {
+  loadAuthenticatedReviewPushThrough,
+  reviewPushThroughAuthoritySource,
+} from "./review-push-throughs.js";
 
 export { loadAuthenticatedGateApproval } from "./gate-approvals.js";
 export {
@@ -315,6 +332,96 @@ export async function openDurableGate(
         return ok({ gate_id: gateId, state: current, request: activeRequest });
       }
       if (current.value.revision !== input.expected_revision) return fail(createProjectError("STATE_CONFLICT", { expected_revision: input.expected_revision, observed_revision: current.value.revision }));
+      if (input.kind === "validation-override") {
+        const pending = current.value.pending_validation_override;
+        const transition = current.value.last_transition;
+        if (
+          pending === undefined || decodePhaseInstance(current.value.phase_instance).kind !== "phase-impl" ||
+          current.value.step !== "produce" || current.value.status !== "failed" ||
+          pending.phase_instance !== current.value.phase_instance ||
+          pending.input_fingerprint !== current.value.input_fingerprint ||
+          pending.request_revision !== current.value.revision ||
+          transition?.tool !== "archflow_state" || transition.operation !== "request-validation-override" ||
+          transition.request_digest !== pending.request_digest ||
+          transition.input_fingerprint !== pending.input_fingerprint ||
+          transition.resulting_revision !== pending.request_revision
+        ) return issue("STATE_INVALID", current.value, "validation-override-pending-authority-invalid");
+        const subjectDigest = validationOverrideSubjectDigest({
+          task_id: current.value.task_id,
+          phase_instance: pending.phase_instance,
+          input_fingerprint: pending.input_fingerprint,
+          governing_phase_design_digest: pending.governing_phase_design_digest,
+          displaced_validations: pending.displaced_validations,
+        });
+        const expectedContext = {
+          request_revision: pending.request_revision,
+          input_fingerprint: pending.input_fingerprint,
+          governing_phase_design_digest: pending.governing_phase_design_digest,
+          displaced_validations: pending.displaced_validations,
+          producer_reason: pending.producer_reason,
+        } as const;
+        const expectedEvidence: ValidationOverrideRequestRefV1 = {
+          schema_version: "1",
+          evidence_kind: "validation-override-request",
+          task_id: current.value.task_id,
+          phase_instance: pending.phase_instance,
+          input_fingerprint: pending.input_fingerprint,
+          governing_phase_design_digest: pending.governing_phase_design_digest,
+          request_revision: pending.request_revision,
+          validation_request_subject_digest: subjectDigest,
+        };
+        if (
+          input.phase_instance !== pending.phase_instance || input.subject_digest !== subjectDigest ||
+          !isDeepStrictEqual(input.context, expectedContext) ||
+          !isDeepStrictEqual(input.current_evidence, expectedEvidence)
+        ) return issue("STATE_INVALID", current.value, "validation-override-request-stale");
+      }
+      const attemptsContext = input.kind === "attempts-exhausted"
+        ? input.context as Extract<GateRequestV1, { kind: "attempts-exhausted" }>["context"]
+        : undefined;
+      if (attemptsContext?.review_push_through !== undefined) {
+        if (current.value.step !== "triage" || current.value.status !== "succeeded" ||
+            dependencies.load_retained_manifest === undefined) {
+          return issue("STATE_INVALID", current.value, "review-push-through-boundary-invalid");
+        }
+        const retained = await loadRetainedEvidence(
+          { load_retained_manifest: dependencies.load_retained_manifest },
+          current.value,
+          current.value.phase_instance,
+        );
+        if (!retained.ok) return retained;
+        const produce = await loadCurrentProduceSubject(dependencies, current.value);
+        if (!produce.ok) return produce;
+        const constitution = await resolvePinnedConstitution(
+          dependencies.runner,
+          current.value.policy_base_commit,
+          input.authority.context,
+        );
+        if (!constitution.ok) return constitution;
+        const predecessor = currentReviewPredecessor(current.value, produce.value);
+        const subject = {
+          subject_digest: produce.value.artifact_digest,
+          input_fingerprint: current.value.input_fingerprint,
+          constitution: constitution.value,
+          ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
+          ...(live.value.config.max_attempts === undefined ? {} : {
+            max_attempts: live.value.config.max_attempts,
+          }),
+        };
+        const candidate = deriveReviewPushThroughCandidate(current.value, retained.value, subject);
+        const expectedMaximum = live.value.config.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
+        if (
+          candidate === undefined || current.value.attempt < expectedMaximum ||
+          input.phase_instance !== current.value.phase_instance ||
+          input.subject_digest !== candidate.subject_digest ||
+          attemptsContext.step !== current.value.step ||
+          attemptsContext.attempts !== current.value.attempt ||
+          attemptsContext.maximum_attempts !== expectedMaximum ||
+          !isDeepStrictEqual(attemptsContext.review_push_through, candidate.context) ||
+          !("set_digest" in input.current_evidence) ||
+          input.current_evidence.set_digest !== candidate.context.current_evidence_set_digest
+        ) return issue("STATE_INVALID", current.value, "review-push-through-context-stale");
+      }
       if (input.kind === "commit-authorization") {
         const reference = [...current.value.authoritative_results].reverse().find((item) => item.phase_instance === input.phase_instance && item.step === "produce");
         if (reference === undefined || dependencies.load_retained_result === undefined) return issue("STATE_INVALID", current.value, "commit-authorization-result-missing");
@@ -507,7 +614,7 @@ export async function openDurableGate(
         schema_version: "1", gate_id: gateId, intent_id: input.intent_id, request_digest: input.request_digest,
         task_id: input.authority.task_id, phase_instance: input.phase_instance, summary: input.summary,
         subject_digest: input.subject_digest, context_digest: contextDigest, current_evidence: input.current_evidence,
-        kind: input.kind, context: input.context, allowed_decisions: waiver === undefined ? DECISIONS[input.kind] : ["grant", "deny", "cancel"], opened_at_revision: current.value.revision + 1,
+        kind: input.kind, context: input.context, allowed_decisions: waiver === undefined ? decisionsForGate(input.kind, input.context) : ["grant", "deny", "cancel"], opened_at_revision: current.value.revision + 1,
       });
       let requestDocument = canonicalDocument(request);
       const created = await dependencies.atomic.createExclusive(requestPath.value, requestDocument.bytes);
@@ -654,6 +761,11 @@ async function stateAfterPolicyWaiverSettlement(
     assertAuthenticatedGateApproval(loaded.value);
     authenticated.push(loaded.value);
   }
+  const authenticatedPushThroughs = [];
+  for (const pushThrough of current.value.review_push_throughs ?? []) {
+    const loaded = await loadAuthenticatedReviewPushThrough(dependencies, authority, pushThrough);
+    if (loaded.ok) authenticatedPushThroughs.push(loaded.value);
+  }
   const upstreamDigests = new Set<Sha256Digest>();
   for (const binding of produceUpstreamBindingsForSubject(current.value, produce.value.artifact)) {
     const upstream = await loadProduceUpstreamSubject(dependencies, authority, current.value, binding);
@@ -689,6 +801,9 @@ async function stateAfterPolicyWaiverSettlement(
       constitution: constitution.value,
       approved_upstream_digests: Object.freeze([...upstreamDigests].sort()),
       authenticated_gate_approvals: authenticated,
+      ...(authenticatedPushThroughs.length === 0 ? {} : {
+        review_push_through_authority: reviewPushThroughAuthoritySource(authenticatedPushThroughs),
+      }),
       ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
       ...(config.snapshot.parsed.max_attempts === undefined
         ? {}
@@ -697,7 +812,7 @@ async function stateAfterPolicyWaiverSettlement(
   } catch {
     return issue("STATE_INVALID", current.value, "policy-waiver-settlement-fixed-point-invalid");
   }
-  if (assessment.next !== "advance") return ok(prospective);
+  if (assessment.escalated_human_findings === true || assessment.next !== "advance") return ok(prospective);
 
   const changedDocuments = await changedCoProducedDocumentPaths(dependencies, current.value, produce.value);
   if (!changedDocuments.ok) return changedDocuments;
@@ -1054,6 +1169,288 @@ async function closedStateForRecord(
   digest: Sha256Digest,
   repositorySet?: RepositorySet,
 ): Promise<ProjectResult<CanonicalDocument<TaskStateV1>>> {
+  if (
+    request.kind === "attempts-exhausted" && record.outcome === "decided" &&
+    record.kind === "attempts-exhausted" &&
+    record.envelope.payload.decision === "push-through-review"
+  ) {
+    if (
+      !exactOpenGateMatches(current.value, request) ||
+      current.value.step !== "triage" || current.value.status !== "succeeded" ||
+      request.context.review_push_through === undefined ||
+      request.context.attempts !== current.value.attempt ||
+      request.context.maximum_attempts > request.context.attempts ||
+      record.envelope.human_provenance.actor_class !== "human" ||
+      record.envelope.human_provenance.channel !== "connected-host" ||
+      dependencies.load_retained_manifest === undefined
+    ) return issue("STATE_INVALID", current.value, "review-push-through-settlement-boundary-invalid");
+    const retained = await loadRetainedEvidence(
+      { load_retained_manifest: dependencies.load_retained_manifest },
+      current.value,
+      current.value.phase_instance,
+    );
+    if (!retained.ok) return retained;
+    const produce = await loadCurrentProduceSubject(dependencies, current.value);
+    if (!produce.ok) return produce;
+    const constitution = await resolvePinnedConstitution(
+      dependencies.runner,
+      current.value.policy_base_commit,
+      authority.context,
+    );
+    if (!constitution.ok) return constitution;
+    const predecessor = currentReviewPredecessor(current.value, produce.value);
+    const candidate = deriveReviewPushThroughCandidate(current.value, retained.value, {
+      subject_digest: produce.value.artifact_digest,
+      input_fingerprint: current.value.input_fingerprint,
+      constitution: constitution.value,
+      ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
+    });
+    if (
+      candidate === undefined || request.subject_digest !== candidate.subject_digest ||
+      !("set_digest" in request.current_evidence) ||
+      request.current_evidence.set_digest !== candidate.context.current_evidence_set_digest ||
+      !isDeepStrictEqual(request.context.review_push_through, candidate.context)
+    ) return issue("STATE_INVALID", current.value, "review-push-through-settlement-stale");
+    const settled = nextStateForRecord(current.value, record, digest);
+    if ((settled.value.review_push_throughs ?? []).some((entry) => entry.gate_id === record.gate_id)) {
+      return issue("STATE_INVALID", current.value, "review-push-through-gate-duplicate");
+    }
+    const ordinalOccurrences = [...candidate.context.accepted_occurrences].sort((left, right) =>
+      left.review_evidence_digest < right.review_evidence_digest ? -1 :
+        left.review_evidence_digest > right.review_evidence_digest ? 1 :
+          left.finding_id < right.finding_id ? -1 : left.finding_id > right.finding_id ? 1 : 0);
+    const pushThrough: ReviewPushThroughRecordV1 = Object.freeze({
+      gate_id: record.gate_id,
+      decision_digest: digest,
+      phase_instance: current.value.phase_instance,
+      subject_digest: candidate.subject_digest,
+      current_evidence_set_digest: candidate.context.current_evidence_set_digest,
+      triage_result_digest: candidate.context.triage_result_digest,
+      accepted_occurrences: Object.freeze(ordinalOccurrences),
+      attempt: current.value.attempt,
+      human_reason: record.envelope.payload.reason,
+      decided_at: record.envelope.human_provenance.recorded_at,
+      resolved_at_revision: settled.value.revision,
+    });
+    const reviewPushThroughs = Object.freeze([
+      ...(settled.value.review_push_throughs ?? []),
+      pushThrough,
+    ].sort((left, right) => left.phase_instance < right.phase_instance ? -1 :
+      left.phase_instance > right.phase_instance ? 1 :
+        left.gate_id < right.gate_id ? -1 : left.gate_id > right.gate_id ? 1 : 0));
+    let prospective = canonicalDocument({
+      ...settled.value,
+      review_push_throughs: reviewPushThroughs,
+    } as TaskStateV1);
+
+    const authenticatedApprovals: AuthenticatedGateApproval[] = [];
+    for (const approval of current.value.approvals) {
+      const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+      if (!loaded.ok) return loaded;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+      authenticatedApprovals.push(loaded.value);
+    }
+    const approvedUpstreams = await currentApprovedUpstreams(
+      dependencies,
+      authority,
+      current.value,
+      authenticatedApprovals,
+      produce.value,
+    );
+    const config = await dependencies.read_config(authority.config);
+    if (config.kind !== "valid") {
+      return issue("STATE_INVALID", current.value, "review-push-through-settlement-config-unavailable");
+    }
+    const localAuthority = Object.freeze({
+      values: Object.freeze([pushThrough] as const),
+      authenticate(value: unknown) {
+        if (value !== pushThrough) throw new TypeError("unknown settling review push-through authority");
+        return Object.freeze({
+          task_id: current.value.task_id,
+          phase_instance: pushThrough.phase_instance,
+          attempt: pushThrough.attempt,
+          subject_digest: pushThrough.subject_digest,
+          current_evidence_set_digest: pushThrough.current_evidence_set_digest,
+          triage_result_digest: pushThrough.triage_result_digest,
+          accepted_occurrences: pushThrough.accepted_occurrences,
+        });
+      },
+    });
+    let postPushAssessment;
+    try {
+      postPushAssessment = assessCurrentEvidence(prospective.value, retained.value, {
+        subject_digest: produce.value.artifact_digest,
+        input_fingerprint: prospective.value.input_fingerprint,
+        constitution: constitution.value,
+        approved_upstream_digests: approvedUpstreams,
+        authenticated_gate_approvals: authenticatedApprovals,
+        review_push_through_authority: localAuthority,
+        ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
+        ...(config.snapshot.parsed.max_attempts === undefined ? {} : {
+          max_attempts: config.snapshot.parsed.max_attempts,
+        }),
+      });
+    } catch {
+      return issue("STATE_INVALID", current.value, "review-push-through-settlement-fixed-point-invalid");
+    }
+    if (postPushAssessment.escalated_human_findings === true || postPushAssessment.next !== "advance") {
+      return ok(prospective);
+    }
+    const changedDocuments = await changedCoProducedDocumentPaths(
+      dependencies,
+      current.value,
+      produce.value,
+    );
+    if (!changedDocuments.ok) return changedDocuments;
+    const ruleContext = approvalRuleContext(
+      current.value,
+      produce.value,
+      config.snapshot.parsed,
+      changedDocuments.value,
+    );
+    const conclusion = evaluateApprovalRules(
+      ruleContext.config,
+      ruleContext.subject,
+      ruleContext.changedPaths,
+      ruleContext.secondaryChangedPaths,
+    );
+    const phaseKind = decodePhaseInstance(current.value.phase_instance).kind;
+    const milestoneBearing = !conclusion.wait &&
+      (phaseKind === "design" || phaseKind === "phase-design" || phaseKind === "phase-impl");
+    const symbolicTarget = milestoneBearing
+      ? await dependencies.runner.runText({
+          argv: ["symbolic-ref", "--quiet", "HEAD"],
+          operation: parseSafeCode("git-push-through-settlement-target"),
+          expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+        })
+      : undefined;
+    const milestoneTargetRef = symbolicTarget === undefined
+      ? undefined
+      : symbolicTarget === "" ? "HEAD" : symbolicTarget;
+    const milestoneTargetHead = milestoneTargetRef === undefined
+      ? undefined
+      : await resolveCommit(dependencies.runner, milestoneTargetRef);
+    const milestoneBaseline = milestoneTargetRef === undefined
+      ? undefined
+      : produce.value.artifact.artifact_kind === "implementation-output"
+        ? produce.value.artifact.base_commit
+        : milestoneTargetHead;
+    let secondaryMilestones = Object.freeze([]) as Awaited<ReturnType<typeof buildSecondaryCommitAuthorizationFacts>>;
+    if (!conclusion.wait && produce.value.artifact.artifact_kind === "implementation-output") {
+      const resolvedRepositories = await resolveRepositorySet(
+        { runner: dependencies.runner, environment: dependencies.environment },
+        config.snapshot.parsed,
+        authority.context,
+      );
+      if (!resolvedRepositories.ok) return resolvedRepositories;
+      const continuity = validateRepositorySetContinuity(current.value, resolvedRepositories.value);
+      if (!continuity.ok) return continuity;
+      try {
+        secondaryMilestones = await buildSecondaryCommitAuthorizationFacts(
+          produce.value.artifact,
+          resolvedRepositories.value,
+        );
+      } catch (error) {
+        if (!(error instanceof SecondaryCommitObservationError)) throw error;
+        return issue("STATE_INVALID", current.value,
+          `review-push-through-settlement-secondary-${error.repository}-${error.reason}`);
+      }
+    }
+    const ruleSettlement = buildRuleSettlement(
+      current.value,
+      produce.value.artifact_digest,
+      config.snapshot.digest,
+      conclusion,
+      milestoneBaseline,
+      milestoneTargetRef === undefined || milestoneTargetHead === undefined
+        ? undefined
+        : { ref: milestoneTargetRef, head: milestoneTargetHead },
+      secondaryMilestones,
+    );
+    const ruleSettlements = Object.freeze([
+      ...(prospective.value.rule_settlements ?? []),
+      ruleSettlement,
+    ].sort(compareRuleSettlements));
+    prospective = canonicalDocument({
+      ...prospective.value,
+      rule_settlements: ruleSettlements,
+    } as TaskStateV1);
+    return ok(prospective);
+  }
+  if (request.kind === "validation-override" && record.kind === "validation-override") {
+    const pending = current.value.pending_validation_override;
+    const provenance = record.outcome === "decided"
+      ? record.envelope.human_provenance
+      : record.human_provenance;
+    const subjectDigest = pending === undefined ? undefined : validationOverrideSubjectDigest({
+      task_id: current.value.task_id,
+      phase_instance: pending.phase_instance,
+      input_fingerprint: pending.input_fingerprint,
+      governing_phase_design_digest: pending.governing_phase_design_digest,
+      displaced_validations: pending.displaced_validations,
+    });
+    const evidence = request.current_evidence as ValidationOverrideRequestRefV1;
+    if (
+      !exactOpenGateMatches(current.value, request) || pending === undefined ||
+      current.value.step !== "produce" || current.value.status !== "failed" ||
+      current.value.phase_instance !== pending.phase_instance ||
+      current.value.input_fingerprint !== pending.input_fingerprint ||
+      pending.request_revision + 1 !== current.value.revision ||
+      request.context.request_revision !== pending.request_revision ||
+      request.context.input_fingerprint !== pending.input_fingerprint ||
+      request.context.governing_phase_design_digest !== pending.governing_phase_design_digest ||
+      !isDeepStrictEqual(request.context.displaced_validations, pending.displaced_validations) ||
+      request.context.producer_reason !== pending.producer_reason ||
+      request.subject_digest !== subjectDigest ||
+      evidence.evidence_kind !== "validation-override-request" ||
+      evidence.task_id !== current.value.task_id || evidence.phase_instance !== pending.phase_instance ||
+      evidence.input_fingerprint !== pending.input_fingerprint ||
+      evidence.governing_phase_design_digest !== pending.governing_phase_design_digest ||
+      evidence.request_revision !== pending.request_revision ||
+      evidence.validation_request_subject_digest !== subjectDigest ||
+      provenance.actor_class !== "human" || provenance.channel !== "connected-host"
+    ) return issue("STATE_INVALID", current.value, "validation-override-settlement-binding-invalid");
+    if (record.outcome === "decided" &&
+        record.envelope.payload.decision !== "grant-validation-override" &&
+        record.envelope.payload.decision !== "deny-validation-override") {
+      return issue("STATE_INVALID", current.value, "validation-override-decision-invalid");
+    }
+    const revision = parseSafeInteger(current.value.revision + 1);
+    const {
+      open_gate: _open,
+      last_transition: _transition,
+      pending_validation_override: _pending,
+      ...preserved
+    } = current.value;
+    let validationOverrides = preserved.validation_overrides;
+    if (record.outcome === "decided" &&
+        record.envelope.payload.decision === "grant-validation-override") {
+      if ((validationOverrides ?? []).some((entry) => entry.gate_id === record.gate_id)) {
+        return issue("STATE_INVALID", current.value, "validation-override-gate-duplicate");
+      }
+      const override: ValidationOverrideRecordV1 = Object.freeze({
+        gate_id: record.gate_id,
+        decision_digest: digest,
+        phase_instance: pending.phase_instance,
+        input_fingerprint: pending.input_fingerprint,
+        governing_phase_design_digest: pending.governing_phase_design_digest,
+        subject_digest: subjectDigest!,
+        displaced_validations: Object.freeze([...pending.displaced_validations].sort((left, right) =>
+          left < right ? -1 : left > right ? 1 : 0)),
+        human_reason: record.envelope.payload.reason,
+        decided_at: provenance.recorded_at,
+        granted_at_revision: revision,
+      });
+      validationOverrides = Object.freeze([...(validationOverrides ?? []), override].sort((left, right) =>
+        left.phase_instance < right.phase_instance ? -1 : left.phase_instance > right.phase_instance ? 1 :
+          left.gate_id < right.gate_id ? -1 : left.gate_id > right.gate_id ? 1 : 0));
+    }
+    return ok(canonicalDocument({
+      ...preserved,
+      revision,
+      ...(validationOverrides === undefined ? {} : { validation_overrides: validationOverrides }),
+    } as TaskStateV1));
+  }
   if (
     record.outcome === "decided" && record.kind === "material-drift" &&
     record.envelope.payload.decision === "amend-upstream" && request.kind === "material-drift"

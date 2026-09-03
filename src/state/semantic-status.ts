@@ -1,18 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 import { canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
 import { parseArchivedGateDecisionRecord, parseArchivedGateRequest, type ArchivedGateDecisionRecordV1, type ArchivedGateRequestV1 } from "../contracts/durable-gate.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
-import {
-  extractPhaseDesignComponentManifest,
-  phaseDesignComponentManifestDigest,
-} from "../contracts/component-manifest.js";
-import {
-  captureHazardRegistryInput,
-  compareHazardRegistryInput,
-} from "../contracts/hazard-registry.js";
 import { validateDurableSemantics } from "../contracts/durable.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import { parsePathSafeId, parseSha256Digest, type PathSafeId, type Sha256Digest } from "../contracts/evidence.js";
@@ -24,19 +14,34 @@ import {
   type SemanticStatusSnapshotV1,
   type WorkflowReopenImpactV1,
   type PublicReviewRoundV1,
+  type TaxonomyDenialRates,
   publicReviewRoundV1Schema,
+  defaultImplementationRecommendation,
   implementationRecommendationFromAssessment,
   implementationRecommendationV1Schema,
   unavailableImplementationRecommendation,
   type ImplementationRecommendationV1,
+  publicReviewPushThroughAuditV1Schema,
+  publicValidationOverrideAuditV1Schema,
+  type PublicReviewPushThroughAuditV1,
+  type PublicValidationOverrideAuditV1,
 } from "../contracts/semantic-workflow.js";
+import {
+  CLAIM_TYPES,
+  CONFIDENCE_LEVELS,
+  type ClaimType,
+  type ConfidenceLevel,
+} from "../contracts/review.js";
+import {
+  triageDispositionLedgerEntrySchema,
+  type TriageDispositionLedgerEntry,
+} from "../contracts/triage.js";
 import { gateDecisionClaim, gateRequestClaim, resolveTaskPath } from "../repository/paths.js";
 import type { TransactionAuthority } from "./authority.js";
 import { deriveCurrentEvidenceSet, loadGoverningPhaseDesignEffortEvidence } from "./evidence-results.js";
 import { readCanonical, type GateLifecycleDependencies } from "./gate-core.js";
 import { computeTaskStatusDetailed, type DetailedTaskStatusV1, type TaskStatusV1 } from "./status.js";
 import { isWaiverOriginRequest } from "./waiver-origin.js";
-import { readProduceProjection } from "./produce-subject.js";
 
 /**
  * Enrichments that detailed status obtains while it still owns the canonical read. They are
@@ -51,7 +56,10 @@ export type SemanticStatusEnrichmentsV1 = Readonly<{
   legacy_import_initialization?: true;
   full_findings: readonly PublicFindingV1[];
   review_rounds?: readonly PublicReviewRoundV1[];
+  taxonomy_denial_rates: TaxonomyDenialRates;
   implementation_recommendation: ImplementationRecommendationV1;
+  validation_overrides?: readonly PublicValidationOverrideAuditV1[];
+  review_push_throughs?: readonly PublicReviewPushThroughAuditV1[];
   pending_waiver_origin?: PlainJsonValue;
   archived_decision?: PlainJsonValue;
   revision_checkpoint?: PlainJsonValue;
@@ -70,13 +78,6 @@ export function governingRecommendationPhase(state: TaskStateV1 | undefined): nu
   }
   return undefined;
 }
-
-const registryDriftExplanation = (kind: "registry-created" | "registry-removed" | "registry-changed" | "registry-unreadable"): string => ({
-  "registry-created": "The hazard registry was created after this recommendation was reviewed.",
-  "registry-removed": "The hazard registry was removed after this recommendation was reviewed.",
-  "registry-changed": "The hazard registry changed after this recommendation was reviewed.",
-  "registry-unreadable": "The current hazard registry could not be read or parsed; the authenticated recommendation remains available.",
-})[kind];
 
 /** Internal semantic-status enrichment seam; exported for direct authority/read-path verification. */
 export async function currentImplementationRecommendation(
@@ -130,60 +131,8 @@ export async function currentImplementationRecommendation(
       phase,
     );
   }
-  if (review.assurance !== "server-attested" || assessment === undefined) {
-    return unavailableImplementationRecommendation(
-      "legacy-evidence",
-      "The exact authenticated review predates structured implementation-effort evidence.",
-      phase,
-    );
-  }
-  if (produce.artifact.artifact_kind !== "document") {
-    throw new TypeError("governing phase-design produce artifact is not a document");
-  }
-  const projection = await readProduceProjection(
-    dependencies.runner,
-    authority,
-    produce,
-    produce.artifact.document_path,
-  );
-  if (!projection.ok) {
-    const issue = (projection.error.diagnostic.parameters as Readonly<Record<string, unknown>>).issue_code;
-    if (issue === "produce-projection-not-current" || issue === "produce-projection-unavailable") {
-      return unavailableImplementationRecommendation(
-        "subject-stale",
-        "The retained effort assessment describes earlier phase-design bytes and is not current.",
-        phase,
-      );
-    }
-    throw new TypeError("governing phase-design projection is unavailable");
-  }
-  const repositoryNames = assessment.reviewer.repositories.map((repository) => repository.name);
-  const manifest = extractPhaseDesignComponentManifest(
-    new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes),
-    repositoryNames,
-  );
-  if (phaseDesignComponentManifestDigest(manifest) !== assessment.component_manifest_digest) {
-    throw new TypeError("governing effort assessment component manifest binding disagrees");
-  }
-  let drift: "registry-created" | "registry-removed" | "registry-changed" | "registry-unreadable" | undefined;
-  try {
-    const live = await captureHazardRegistryInput(async () => {
-      try {
-        return new Uint8Array(await readFile(join(dependencies.runner.location.worktreeRoot, ".archflow", "hazards.yaml")));
-      } catch (error) {
-        if ((error as { code?: unknown }).code === "ENOENT") return undefined;
-        throw error;
-      }
-    }, repositoryNames, manifest);
-    drift = compareHazardRegistryInput(assessment.hazard_registry_digest, live, manifest);
-  } catch {
-    drift = "registry-unreadable";
-  }
-  return implementationRecommendationFromAssessment(
-    assessment,
-    phase,
-    drift === undefined ? undefined : { kind: drift, explanation: registryDriftExplanation(drift) },
-  );
+  if (review.assurance !== "server-attested" || assessment === undefined) return defaultImplementationRecommendation();
+  return implementationRecommendationFromAssessment(assessment, phase);
 }
 
 function workflowPosition(phase: PhaseInstanceId): WorkflowReopenImpactV1["target"] {
@@ -263,24 +212,85 @@ function materializeJson<T>(value: T, label: string): T {
  * the round); the current attempt is read from the current review evidence itself, joined to the
  * current triage when one is installed, so a round whose triage has not yet landed still counts.
  */
+export type TaxonomyDenialRateKey = `${ClaimType}:${ConfidenceLevel}`;
+
+/** Rejected / dispositioned occurrences for every native V2 taxonomy cell. */
+export function computeTaxonomyDenialRates(
+  ledger: readonly TriageDispositionLedgerEntry[],
+): TaxonomyDenialRates {
+  const occurrences = new Map<string, TriageDispositionLedgerEntry>();
+  for (const candidate of ledger) {
+    const entry = triageDispositionLedgerEntrySchema.parse(candidate);
+    occurrences.set(`${entry.review_evidence_digest}:${entry.finding_id}`, entry);
+  }
+  const rates: Record<string, number> = {};
+  for (const claimType of CLAIM_TYPES) {
+    for (const confidence of CONFIDENCE_LEVELS) {
+      const key: TaxonomyDenialRateKey = `${claimType}:${confidence}`;
+      const cell = [...occurrences.values()].filter((entry) =>
+        "claim_type" in entry && entry.claim_type === claimType && entry.confidence === confidence);
+      rates[key] = cell.length === 0
+        ? 0
+        : cell.filter((entry) => entry.disposition === "rejected").length / cell.length;
+    }
+  }
+  return Object.freeze(rates as TaxonomyDenialRates);
+}
+
 function reviewRounds(details: DetailedTaskStatusV1): readonly PublicReviewRoundV1[] {
   if (details.status.evidence?.available !== true) return Object.freeze([]);
   const current = deriveCurrentEvidenceSet(details.retained);
   const triage = details.retained.get("triage")?.manifest.source_artifact;
-  const rounds = new Map<number, { findings: number; blocking: number; accepted: number }>();
-  const bump = (attempt: number, blocking: boolean, accepted: boolean): void => {
-    const round = rounds.get(attempt) ?? { findings: 0, blocking: 0, accepted: 0 };
-    round.findings += 1;
-    if (blocking) round.blocking += 1;
-    if (accepted) round.accepted += 1;
-    rounds.set(attempt, round);
+  type RoundAccumulator = {
+    version?: "1" | "2";
+    findings: number;
+    blocking: number;
+    accepted: number;
+    partitions: Record<string, number>;
   };
-  const isAccepted = (disposition: string): boolean => disposition === "accepted" || disposition === "accepted-editorial";
+  const emptyPartitions = (): Record<string, number> => Object.fromEntries(
+    CLAIM_TYPES.flatMap((claimType) => CONFIDENCE_LEVELS.map((confidence) =>
+      [`${claimType}:${confidence}`, 0])),
+  );
+  const rounds = new Map<number, RoundAccumulator>();
+  const roundAt = (attempt: number): RoundAccumulator => {
+    const round = rounds.get(attempt) ?? {
+      findings: 0, blocking: 0, accepted: 0, partitions: emptyPartitions(),
+    };
+    rounds.set(attempt, round);
+    return round;
+  };
+  const setVersion = (round: RoundAccumulator, version: "1" | "2", label: string): void => {
+    if (round.version !== undefined && round.version !== version) {
+      throw new TypeError(`${label} mixes V1 and V2 review findings`);
+    }
+    round.version = version;
+  };
+  const isAccepted = (disposition: string): boolean =>
+    disposition === "accepted" || disposition === "accepted-editorial";
   const currentAttempt = details.status.attempt;
   if (triage?.artifact_kind === "triage") {
+    // Seed every completed round before counting its findings. The separate history is what keeps
+    // finding-free rounds and byte-identical recurring feedback visible after older result
+    // manifests leave the active authority set.
+    for (const entry of triage.evidence.review_round_history ?? []) {
+      roundAt(entry.attempt);
+    }
     for (const entry of triage.evidence.disposition_ledger ?? []) {
       if (currentAttempt !== undefined && entry.attempt === currentAttempt) continue;
-      bump(entry.attempt, entry.blocking === true, isAccepted(entry.disposition));
+      const round = roundAt(entry.attempt);
+      round.findings += 1;
+      if (isAccepted(entry.disposition)) round.accepted += 1;
+      if ("claim_type" in entry) {
+        setVersion(round, "2", `review attempt ${entry.attempt}`);
+        const key = `${entry.claim_type}:${entry.confidence}`;
+        round.partitions[key] = (round.partitions[key] ?? 0) + 1;
+      } else {
+        // Detail-less archived occurrences retain their known finding/disposition facts without
+        // inventing a lost severity classification.
+        setVersion(round, "1", `review attempt ${entry.attempt}`);
+        if ("blocking" in entry && entry.blocking) round.blocking += 1;
+      }
     }
   }
   if (currentAttempt !== undefined) {
@@ -290,17 +300,31 @@ function reviewRounds(details: DetailedTaskStatusV1): readonly PublicReviewRound
         dispositions.set(`${disposition.review_evidence_digest}:${disposition.finding_id}`, disposition.disposition);
       }
     }
-    rounds.set(currentAttempt, { findings: 0, blocking: 0, accepted: 0 });
+    const versions = new Set(current.reviews.map((review) => review.evidence.schema_version));
+    if (versions.size !== 1) throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 evidence`);
+    const round = roundAt(currentAttempt);
+    setVersion(round, current.reviews[0]!.evidence.schema_version, `active review attempt ${currentAttempt}`);
     for (const review of current.reviews) {
       for (const finding of review.evidence.findings) {
         const disposition = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
-        bump(currentAttempt, finding.blocking, disposition !== undefined && isAccepted(disposition));
+        round.findings += 1;
+        if (disposition !== undefined && isAccepted(disposition)) round.accepted += 1;
+        if ("claim_type" in finding) {
+          if (round.version !== "2") throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 findings`);
+          const key = `${finding.claim_type}:${finding.confidence}`;
+          round.partitions[key] = (round.partitions[key] ?? 0) + 1;
+        } else {
+          if (round.version !== "1") throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 findings`);
+          if (finding.blocking) round.blocking += 1;
+        }
       }
     }
   }
   return Object.freeze([...rounds.entries()]
     .sort(([left], [right]) => left - right)
-    .map(([attempt, round]) => Object.freeze({ attempt, ...round })));
+    .map(([attempt, round]) => Object.freeze(round.version === "2"
+      ? { attempt, findings: round.findings, partition_counts: Object.freeze(round.partitions), accepted: round.accepted }
+      : { attempt, findings: round.findings, blocking: round.blocking, accepted: round.accepted }) as PublicReviewRoundV1));
 }
 
 function fullFindings(details: DetailedTaskStatusV1): readonly PublicFindingV1[] {
@@ -311,9 +335,14 @@ function fullFindings(details: DetailedTaskStatusV1): readonly PublicFindingV1[]
   if (triage?.artifact_kind === "triage") {
     for (const disposition of triage.evidence.dispositions) {
       const key = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
-      dispositions.set(key, disposition.disposition === "rejected"
-        ? Object.freeze({ disposition: "rejected", rationale: disposition.rationale, evidence: disposition.evidence })
-        : Object.freeze({ disposition: disposition.disposition, rationale: disposition.rationale, revision_intent: disposition.revision_intent }));
+      dispositions.set(key,
+        disposition.disposition === "rejected"
+          ? Object.freeze({ disposition: "rejected", rationale: disposition.rationale, evidence: disposition.evidence })
+          : disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial"
+            ? Object.freeze({ disposition: disposition.disposition, rationale: disposition.rationale, revision_intent: disposition.revision_intent })
+            : disposition.disposition === "deferred" && disposition.evidence !== undefined
+              ? Object.freeze({ disposition: "deferred", rationale: disposition.rationale, evidence: disposition.evidence })
+              : Object.freeze({ disposition: disposition.disposition, rationale: disposition.rationale }));
     }
   }
   return Object.freeze(current.reviews.flatMap((review) => review.evidence.findings.map((finding) =>
@@ -534,6 +563,10 @@ export async function computeAuthoritativeSemanticStatus(
   const implementationRecommendation = await currentImplementationRecommendation(
     dependencies, authority, detailed.value,
   );
+  const triageArtifact = detailed.value.retained.get("triage")?.manifest.source_artifact;
+  const ledger = triageArtifact?.artifact_kind === "triage"
+    ? triageArtifact.evidence.disposition_ledger ?? []
+    : [];
   return ok(computeSemanticStatusSnapshot(status, {
     repository_identity_digest: authority.repository_identity_digest,
     ...(state === undefined ? {} : { state }),
@@ -548,7 +581,10 @@ export async function computeAuthoritativeSemanticStatus(
     }),
     full_findings: fullFindings(detailed.value),
     review_rounds: reviewRounds(detailed.value),
+    taxonomy_denial_rates: computeTaxonomyDenialRates(ledger),
     implementation_recommendation: implementationRecommendation,
+    ...(status.validation_overrides === undefined ? {} : { validation_overrides: status.validation_overrides }),
+    ...(status.review_push_throughs === undefined ? {} : { review_push_throughs: status.review_push_throughs }),
     ...archives,
     reopen_impacts: state === undefined ? Object.freeze([]) : reopenImpacts(state, status),
   }));
@@ -612,9 +648,22 @@ export function computeSemanticStatusSnapshot(
     full_findings: Object.freeze(findings),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) =>
       Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))) as PublicReviewRoundV1)),
+    taxonomy_denial_rates: Object.freeze({ ...enrichments.taxonomy_denial_rates }),
     implementation_recommendation: Object.freeze(implementationRecommendationV1Schema.parse(
       materializeJson(enrichments.implementation_recommendation, "implementation recommendation"),
     )),
+    ...(enrichments.validation_overrides === undefined ? {} : {
+      validation_overrides: Object.freeze(enrichments.validation_overrides.map((entry) =>
+        Object.freeze(publicValidationOverrideAuditV1Schema.parse(
+          materializeJson(entry, "validation override audit"),
+        )) as PublicValidationOverrideAuditV1)),
+    }),
+    ...(enrichments.review_push_throughs === undefined ? {} : {
+      review_push_throughs: Object.freeze(enrichments.review_push_throughs.map((entry) =>
+        Object.freeze(publicReviewPushThroughAuditV1Schema.parse(
+          materializeJson(entry, "review push-through audit"),
+        )) as PublicReviewPushThroughAuditV1)),
+    }),
     ...(enrichments.pending_waiver_origin === undefined ? {} : {
       pending_waiver_origin: materializeJson(enrichments.pending_waiver_origin, "pending waiver origin"),
     }),

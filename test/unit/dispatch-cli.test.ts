@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
 import { parseAndDeriveAdjudication } from "../../src/contracts/adjudication.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { parseAndDeriveReview } from "../../src/contracts/review.js";
+import { childReviewOutputV2Schema } from "../../src/contracts/review.js";
 import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import effortReviewSchema from "../../src/contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
@@ -302,14 +302,16 @@ describe("CLI invocation construction", () => {
     });
     expect(definitions.id).toMatchObject({ pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" });
     const finding = definitions.finding!;
-    expect(finding).toMatchObject({ type: "object", anyOf: expect.any(Array) });
-    for (const branch of finding.anyOf as Array<Record<string, unknown>>) {
-      expect(branch).toMatchObject({ type: "object", additionalProperties: false });
-      expect(branch.required).toEqual(Object.keys(branch.properties as Record<string, unknown>));
-    }
+    expect(finding).toMatchObject({ type: "object", additionalProperties: false });
+    expect(finding.required).toEqual(Object.keys(finding.properties as Record<string, unknown>));
+    expect(finding.properties).toMatchObject({
+      claim_type: { enum: ["defect", "risk", "gap", "preference"] },
+      confidence: { enum: ["certain", "likely", "suspicion"] },
+      falsifier: { maxLength: 4096 },
+    });
     expect(JSON.stringify(projected)).toMatch(/"pattern"/u);
-    expect(JSON.stringify(projected)).toMatch(/"minimum"/u);
     expect(JSON.stringify(projected)).toMatch(/"maximum"/u);
+    expect(JSON.stringify(projected)).toMatch(/"maxLength":4096/u);
   });
 
   it("binds host-visible review identity fields to the server-derived envelope subject", () => {
@@ -323,28 +325,21 @@ describe("CLI invocation construction", () => {
   });
 
   it.each(["claude-cli", "codex-cli"] as const)(
-    "binds all seven effort output identities for %s, including the nested hazard digest",
+    "binds the effort selector output identities for %s",
     (adapter) => {
       const values = {
         task_id: "effort-review",
         phase_instance: "phase-design-1",
         subject_digest: "1".repeat(64),
         input_fingerprint: "2".repeat(64),
-        component_manifest_digest: "3".repeat(64),
-        hazard_registry_digest: "4".repeat(64),
-        policy_id: "implementation-effort-v1",
+        policy_id: "implementation-agent-selector-v2",
       } as const;
       const subject: Record<string, PlainJsonValue> = {
         task_id: values.task_id,
         phase_instance: values.phase_instance,
         subject_digest: values.subject_digest,
         input_fingerprint: values.input_fingerprint,
-        component_manifest_digest: values.component_manifest_digest,
         policy_id: values.policy_id,
-        hazard_registry: {
-          schema_version: "1", state: "present", registry_digest: values.hazard_registry_digest,
-          hazards: [], components: [],
-        },
       };
       const projected = projectCliOutputSchema(
         effortReviewSchema as PlainJsonValue,
@@ -358,6 +353,38 @@ describe("CLI invocation construction", () => {
       }
     },
   );
+
+  it("projects a strict profile-only effort selector schema for Codex", () => {
+    const projected = projectCliOutputSchema(
+      effortReviewSchema as PlainJsonValue,
+      "effort-review",
+      "codex-cli",
+    ) as Record<string, unknown>;
+
+    // Must not contain oneOf anywhere (OpenAI Structured Outputs restriction)
+    expect(JSON.stringify(projected)).not.toContain('"oneOf"');
+    // Must not contain any external URN references
+    expect(JSON.stringify(projected)).not.toContain("urn:archflow:");
+    // Definitions must include simplified taskSlug
+    const definitions = projected.$defs as Record<string, Record<string, unknown>>;
+    expect(definitions.taskSlug).toMatchObject({ pattern: "^[a-z0-9][a-z0-9._-]{0,63}$" });
+
+    const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
+    const sampleOutput = {
+      schema_version: "2",
+      task_id: "test-task",
+      phase_instance: "phase-design-1",
+      step: "effort_review",
+      role: "effort-reviewer",
+      subject_digest: "a".repeat(64),
+      input_fingerprint: "b".repeat(64),
+      policy_id: "implementation-agent-selector-v2",
+      profile_id: "gpt-5-6-sol-medium",
+    };
+    expect(() => validateProjected.assert(sampleOutput, "sample effort review")).not.toThrow();
+
+    expect(() => validateProjected.assert({ ...sampleOutput, rationale: "not allowed" }, "extra selector work")).toThrow();
+  });
 
   it("binds the adjudication subject to Codex without an array-valued const", () => {
     const projected = projectCliOutputSchema(
@@ -436,11 +463,13 @@ describe("CLI invocation construction", () => {
     expect(definitions.taskSlug).toMatchObject({ pattern: "^[a-z0-9][a-z0-9._-]{0,63}$" });
     expect(JSON.stringify(projected)).not.toContain("(?!");
     const finding = definitions.finding!;
-    expect(finding).toMatchObject({ type: "object", anyOf: expect.any(Array) });
-    for (const branch of finding.anyOf as Array<Record<string, unknown>>) {
-      expect(branch).toMatchObject({ type: "object", additionalProperties: false });
-      expect(branch.required).toEqual(Object.keys(branch.properties as Record<string, unknown>));
-    }
+    expect(finding).toMatchObject({ type: "object", additionalProperties: false });
+    expect(finding.required).toEqual(Object.keys(finding.properties as Record<string, unknown>));
+    expect(finding.properties).toMatchObject({
+      claim_type: { enum: ["defect", "risk", "gap", "preference"] },
+      confidence: { enum: ["certain", "likely", "suspicion"] },
+      falsifier: expect.not.objectContaining({ maxLength: expect.anything() }),
+    });
 
     const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
     const invalid = structuredClone(validReview) as Record<string, unknown>;
@@ -448,8 +477,8 @@ describe("CLI invocation construction", () => {
     findings[0]!.finding_id = "Invalid Finding Id";
     expect(() => validateProjected.assert(invalid, "Claude projected finding id")).toThrow();
     findings[0]!.finding_id = "valid-finding-id";
-    findings[0]!.blocking = false;
-    expect(() => validateProjected.assert(invalid, "Claude projected finding severity")).toThrow();
+    findings[0]!.severity = "major";
+    expect(() => validateProjected.assert(invalid, "Claude projected legacy finding field")).toThrow();
   });
 
   it("keeps normative semantic rejection after the host transport projection", () => {
@@ -459,14 +488,16 @@ describe("CLI invocation construction", () => {
     const invalidFindingItems = invalidFinding.findings as Array<Record<string, unknown>>;
     invalidFindingItems[0]!.blocking = false;
     expect(() => validateProjectedReview.assert(invalidFinding, "projected review finding")).toThrow();
-    invalidFindingItems[0]!.blocking = true;
+    delete invalidFindingItems[0]!.blocking;
     invalidFindingItems[0]!.finding_id = "Invalid Finding Id";
     expect(() => validateProjectedReview.assert(invalidFinding, "projected review finding id")).toThrow();
 
     const invalidReview = structuredClone(validReview) as Record<string, unknown>;
-    invalidReview.verdict = "pass";
-    expect(() => validateProjectedReview.assert(invalidReview, "projected review")).not.toThrow();
-    expect(() => parseAndDeriveReview(invalidReview)).toThrow();
+    (invalidReview.findings as Array<Record<string, unknown>>)[0]!.falsifier = "x".repeat(4097);
+    const projectedClaudeReview = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "claude-cli");
+    const validateProjectedClaudeReview = createJsonSchemaValidator<Record<string, unknown>>(projectedClaudeReview as Record<string, unknown>);
+    expect(() => validateProjectedClaudeReview.assert(invalidReview, "projected review")).not.toThrow();
+    expect(() => childReviewOutputV2Schema.parse(invalidReview)).toThrow();
 
     const projectedAdjudication = projectCliOutputSchema(adjudicationSchema as PlainJsonValue, "adjudication", "claude-cli");
     const validateProjectedAdjudication = createJsonSchemaValidator<Record<string, unknown>>(projectedAdjudication as Record<string, unknown>);

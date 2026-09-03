@@ -30,7 +30,16 @@ const repositories = [{
 }] as const;
 
 async function rawReview(): Promise<Record<string, unknown>> {
-  return JSON.parse(await readFile(new URL("../fixtures/contracts/review/valid.json", import.meta.url), "utf8")) as Record<string, unknown>;
+  const archived = JSON.parse(await readFile(new URL("../fixtures/contracts/review/valid.json", import.meta.url), "utf8")) as Record<string, unknown>;
+  const { schema_version: _version, verdict: _verdict, blocking_count: _blockingCount, findings: _findings, ...subject } = archived;
+  return {
+    ...subject,
+    findings: [{
+      finding_id: "unsafe-path", claim_type: "defect", confidence: "certain",
+      falsifier: "Inspect the path normalization and prove traversal cannot escape the task root.",
+      summary: "Path is unsafe.", evidence: "The path escapes its task.", suggested_resolution: "Reject traversal.",
+    }],
+  };
 }
 
 const degradedReview = (): DegradedReview => ({
@@ -83,6 +92,19 @@ describe("invocation-scoped observation trust", () => {
     const raw = await rawReview();
     const capability = createTestObservationCapability<"review">({ kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: parseSha256Digest(raw.subject_digest), input_fingerprint: parseSha256Digest(raw.input_fingerprint), invocation_id: "invocation-1", envelope_input_digest: digest("d"), result_id: "result-1", adapter: "claude-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5", effort: "high", route_source: { provenance: "configured" }, repositories, rubric_digest: parseSha256Digest(raw.rubric_digest), producer_family: "claude" });
     expect(() => observationSource.observeReview(capability, new TextEncoder().encode(JSON.stringify(raw)))).toThrow(/adapter and model family/);
+  });
+
+  it("derives the V2 summary while rejecting child-supplied summary claims", async () => {
+    const raw = await rawReview();
+    const capability = createTestObservationCapability<"review">({ kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: parseSha256Digest(raw.subject_digest), input_fingerprint: parseSha256Digest(raw.input_fingerprint), invocation_id: "invocation-1", envelope_input_digest: digest("d"), result_id: "result-1", adapter: "codex-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5", effort: "high", route_source: { provenance: "configured" }, repositories, rubric_digest: parseSha256Digest(raw.rubric_digest), producer_family: "claude" });
+    const evidence = observationSource.observeReview(capability, new TextEncoder().encode(JSON.stringify(raw))).evidence;
+    expect(evidence).toMatchObject({ schema_version: "2", verdict: "review-raised", total_findings: 1 });
+    if (evidence.schema_version !== "2") throw new Error("expected V2 evidence");
+    expect(Object.keys(evidence.partition_counts)).toHaveLength(12);
+    expect(evidence.partition_counts["defect:certain"]).toBe(1);
+    for (const extra of [{ verdict: "pass" }, { total_findings: 0 }, { partition_counts: evidence.partition_counts }]) {
+      expect(() => observationSource.observeReview(capability, new TextEncoder().encode(JSON.stringify({ ...raw, ...extra })))).toThrow();
+    }
   });
 });
 

@@ -98,13 +98,16 @@ function generateOutput(envelope, countPath, findingsByReview, script) {
   if (subject.role === "counter-review") {
     let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
     const all = findingsByReview; const findings = all[Math.min(count, all.length - 1)] ?? [];
+    const v2Findings = findings.map((finding) => "claim_type" in finding ? finding : ({
+      finding_id: finding.finding_id, claim_type: finding.blocking === true ? "defect" : "preference",
+      confidence: "certain", falsifier: "Inspect the cited fixture evidence to settle this finding.",
+      summary: finding.summary, evidence: finding.evidence, suggested_resolution: finding.suggested_resolution,
+    }));
     writeFileSync(countPath, String(count + 1));
-    return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    return { task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings, matched_rule_versions: [],
-      verdict: findings.some((finding) => finding.blocking === true) ? "fail" : findings.length === 0 ? "pass" : "advisory",
-      blocking_count: findings.filter((finding) => finding.blocking === true).length };
+      producer_family: subject.producer_family, findings: v2Findings, matched_rule_versions: [] };
   } else {
     const adjCountPath = countPath + "-adjudicate";
     let reviews = 0; try { reviews = Number(readFileSync(adjCountPath, "utf8")); } catch {}
@@ -894,6 +897,155 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(view.next_action.commit).not.toHaveProperty("requires_human_confirmation");
     expect(view.findings).toBeUndefined();
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision + 1);
+  });
+
+  scenario("pushes through the exact exhausted review and preserves configured commit authorization", async () => {
+    const repeated = [{
+      finding_id: "repeated-verification-gap", severity: "blocker", blocking: true,
+      summary: "The verification remains disputed.", evidence: "The reviewer repeats the same exact evidence.",
+      suggested_resolution: "Rewrite the observable verification again.",
+    }];
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-impl-review-push-through",
+      label: "semantic-impl-review-push-through",
+    });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], repeated, repeated, repeated, []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+
+    let view = await applied(h, invocation, handoff);
+    writeApprovalRulesConfig(workspace, ["**/*.ts"]);
+    for (let round = 1; round <= 3; round += 1) {
+      const work = writeClientImplementation(workspace, view, `push-through-round-${round}`);
+      view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+      view = await applied(h, invocation, view);
+      expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
+      view = await applied(h, invocation, view, { kind: "triage", dispositions: [{
+        finding_id: "repeated-verification-gap",
+        disposition: "accepted",
+        rationale: "The reviewer identified a material gap.",
+        revision_intent: "Rework the verification.",
+      }] });
+      if (round < 3) {
+        expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
+        view = await applied(h, invocation, view);
+        expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
+      }
+    }
+
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    const reviewsAtExhaustion = reviewCountAt(workspace);
+    view = await applied(h, invocation, view, {
+      kind: "gate-summary",
+      summary: "Three completed review rounds retained the same exact accepted finding.",
+    });
+    expect(view.presentation).toMatchObject({ class: "exception" });
+    expect(view.presentation?.options.map((option) => option.token)).toContain("continue-despite-review");
+    expect(view.presentation?.details).toEqual(expect.arrayContaining([
+      expect.stringMatching(/Accepted finding repeated-verification-gap \(defect\/certain\)/u),
+      expect.stringMatching(/Falsifier:/u),
+    ]));
+
+    const prePushStateBytes = readFileSync(workspace.services.authority.state.absolute);
+    const pushDecision = {
+      kind: "decision",
+      choice: "continue-despite-review",
+      reason: "The exact repeated finding has had sufficient human review; retain all policy and commit checks.",
+    } as const;
+    view = await applied(h, invocation, view, pushDecision);
+    expect(reviewCountAt(workspace)).toBe(reviewsAtExhaustion);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(view.review_push_throughs).toEqual([expect.objectContaining({
+      phase_instance: "phase-impl-1",
+      attempt: 3,
+      status: "current",
+      reason: "The exact repeated finding has had sufficient human review; retain all policy and commit checks.",
+      accepted_occurrences: [expect.objectContaining({ finding_id: "repeated-verification-gap" })],
+    })]);
+
+    const durable = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
+    expect(durable.review_push_throughs).toHaveLength(1);
+    expect(durable.approvals.filter((approval: { gate_kind: string }) =>
+      approval.gate_kind === "attempts-exhausted")).toHaveLength(1);
+    expect(durable.waivers).toEqual([]);
+
+    // Simulate the receipt-before-state crash cut: the immutable archive and receipt survive, but
+    // durable state still names the open gate and therefore carries no push-through authority.
+    writeFileSync(workspace.services.authority.state.absolute, prePushStateBytes);
+    const partial = await h.status(invocation);
+    expect(partial.review_push_throughs).toBeUndefined();
+    expect(partial.next_action).toMatchObject({ kind: "decide", expected_submission: "none" });
+    view = await applied(h, invocation, partial);
+    const replayedDurable = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
+    expect(replayedDurable.review_push_throughs).toHaveLength(1);
+    expect(replayedDurable.approvals.filter((approval: { gate_kind: string }) =>
+      approval.gate_kind === "attempts-exhausted")).toHaveLength(1);
+
+    view = await applied(h, invocation, view, {
+      kind: "gate-summary",
+      summary: "The push-through settled only the repeated rubric finding; configured commit authorization remains.",
+    });
+    expect(view.presentation).toMatchObject({ class: "configured-approval" });
+    expect(view.presentation?.options.map((option) => option.token)).toContain("authorize-commit");
+    view = await applied(h, invocation, view, {
+      kind: "decision",
+      choice: "request-changes",
+      reason: "Exercise a later review generation before final commit authorization.",
+    });
+    expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
+    view = await applied(h, invocation, view);
+    const laterWork = writeClientImplementation(workspace, view, "post-push-through-generation");
+    view = await applied(h, invocation, view, {
+      ...implementationSubmission(workspace, laterWork.outputs),
+      human_revision: {
+        classification: "significant",
+        rationale: "The human-requested implementation change requires fresh review.",
+      },
+    });
+    expect(view.next_action).toMatchObject({ kind: "review" });
+    view = await applied(h, invocation, view);
+    expect(view.review_push_throughs).toEqual([
+      expect.objectContaining({ status: "historical" }),
+    ]);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    view = await applied(h, invocation, view, {
+      kind: "gate-summary",
+      summary: "The later generation passed fresh review and still requires configured commit authorization.",
+    });
+    view = await applied(h, invocation, view, {
+      kind: "decision",
+      choice: "authorize-commit",
+      reason: "Authorize the exact freshly reviewed implementation.",
+    });
+    expect(view.next_action).toMatchObject({ kind: "commit" });
+    expect(reviewCountAt(workspace)).toBe(reviewsAtExhaustion + 1);
+
+    const pushGateId = replayedDurable.review_push_throughs[0].gate_id as string;
+    const pushDecisionPath = join(
+      workspace.services.authority.task_root,
+      "authority", "decisions", pushGateId, "decision.json",
+    );
+    const authenticDecisionBytes = readFileSync(pushDecisionPath);
+    const tamperedDecision = JSON.parse(authenticDecisionBytes.toString("utf8"));
+    tamperedDecision.subject_digest = "f".repeat(64);
+    writeFileSync(pushDecisionPath, canonicalJsonBytes(tamperedDecision));
+    const invalidAudit = await h.status(invocation);
+    expect(invalidAudit.review_push_throughs).toEqual([
+      expect.objectContaining({ gate_id: pushGateId, status: "invalid" }),
+    ]);
+    // The invalid historical exception is not treated as a grant; the independent later review
+    // and its exact commit authorization remain sufficient on their own.
+    expect(invalidAudit.next_action.kind).toBe("commit");
+
+    writeFileSync(pushDecisionPath, authenticDecisionBytes);
+    rmSync(pushDecisionPath);
+    const unavailableAudit = await h.status(invocation);
+    expect(unavailableAudit.review_push_throughs).toEqual([
+      expect.objectContaining({ gate_id: pushGateId, status: "unavailable" }),
+    ]);
+    expect(unavailableAudit.next_action.kind).toBe("commit");
   });
 
   scenario("re-enters production without a human gate on material upstream drift and commits autonomously once the phase design is co-produced", async () => {

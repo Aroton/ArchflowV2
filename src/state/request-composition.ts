@@ -5,7 +5,14 @@ import { canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
 import { parsePathSafeId, type PathSafeId } from "../contracts/evidence.js";
 import { parseConfigYaml } from "../contracts/config.js";
-import type { ApprovalTrigger, DesignPolicyFinding, EligibleWaiver, GateContext } from "../contracts/gates.js";
+import {
+  validationOverrideSubjectDigest,
+  type ApprovalTrigger,
+  type DesignPolicyFinding,
+  type EligibleWaiver,
+  type GateContext,
+  type ValidationOverrideRequestRefV1,
+} from "../contracts/gates.js";
 import {
   parseRepositoryPathClaim,
   parseTaskPathClaim,
@@ -16,6 +23,7 @@ import { decodePhaseInstance, isStrictlyEarlierPlanningPhase } from "../contract
 import { parseWorkflowInvocationV1 } from "../contracts/semantic-workflow.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { parseTriageCandidate, type TriageDisposition } from "../contracts/triage.js";
+import { isSubstantiveClaim } from "../contracts/review.js";
 import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
 import { parseDocumentArtifact } from "../contracts/durable-document.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
@@ -65,7 +73,13 @@ import {
   latestEligibleRuleSettlement,
   matchingOrdinaryApproval,
 } from "./restart-authority.js";
-import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
+import {
+  assessCurrentEvidence,
+  DEFAULT_MAX_ATTEMPTS,
+  deriveReviewPushThroughCandidate,
+  type EvidenceAssessment,
+  type EvidenceSubject,
+} from "../review/fixed-point.js";
 import { designApprovalPolicyContext } from "../review/adjudication.js";
 import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
@@ -73,6 +87,10 @@ import { resolveTaskPath } from "../repository/paths.js";
 import { derivePendingWaiverRequest } from "./pending-waiver.js";
 import { approvalRuleContext, approvalRuleGateSummary, evaluateApprovalRules } from "./approval-rules.js";
 import type { ConfigV1, RepositoryName } from "../contracts/config.js";
+import {
+  loadAuthenticatedReviewPushThrough,
+  reviewPushThroughAuthoritySource,
+} from "./review-push-throughs.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
@@ -94,7 +112,7 @@ const PAYLOAD_SHAPE =
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
   '"summary"?:<gate summary text>,' +
   '"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},' +
-  '"route_override"?:{"reason":<why the selected reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"test-reviewer"?:{...},"effort-reviewer"?:{...},"adjudicator"?:{...}},' +
+  '"route_override"?:{"reason":<why the selected reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"test-reviewer"?:{...},"adjudicator"?:{...}},' +
   '"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}';
 
 function record(value: unknown, name: string): Record<string, unknown> {
@@ -426,10 +444,19 @@ function composeFailedProduce(
   services: ProductionServices,
   state: TaskStateV1,
   intentId: string,
+  snapshot: Record<string, unknown>,
 ): Promise<ProjectResult<CallEnvelope>> | ProjectResult<never> {
   if (state.terminal !== undefined || state.open_gate !== undefined ||
       state.step !== "produce" || state.status !== "running") {
     return transitionInvalid(state, "produce-failed");
+  }
+  const validationRequest = snapshot.validation_override_request;
+  if (validationRequest !== undefined && decodePhaseInstance(state.phase_instance).kind !== "phase-impl") {
+    throw new TypeError("validation override requests are available only for phase implementation");
+  }
+  const reason = validationRequest === undefined ? undefined : String(snapshot.reason ?? "");
+  if (validationRequest !== undefined && reason!.trim() === "") {
+    throw new TypeError("validation override request requires the failed work-result reason");
   }
   return computeCallEnvelope(services, {
     tool: "archflow_state",
@@ -438,6 +465,13 @@ function composeFailedProduce(
       phase_instance: state.phase_instance,
       step: "produce",
       status: "failed",
+      ...(validationRequest === undefined ? {} : {
+        operation: "request_validation_override",
+        reason: reason!,
+        validation_override_request: structuredClone(
+          record(validationRequest, "validation override request"),
+        ) as PlainJsonValue,
+      }),
     },
   });
 }
@@ -488,14 +522,43 @@ async function composeTriage(
   if (!loaded.ok) return loaded;
   const derived = deriveCurrentEvidenceSet(loaded.value);
 
+  const phase = decodePhaseInstance(state.phase_instance);
+  const ordinaryKind = phase.kind === "prd"
+    ? "artifact-approval"
+    : phase.kind === "design" || phase.kind === "phase-design"
+      ? "design-approval"
+      : phase.kind === "phase-impl"
+        ? "commit-authorization"
+        : undefined;
+  if (ordinaryKind !== undefined) {
+    for (const approval of state.approvals) {
+      const loadedApproval = await loadAuthenticatedGateApproval(
+        services.dependencies, services.authority, approval,
+      );
+      if (!loadedApproval.ok) return loadedApproval;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loadedApproval.value)) continue;
+      const auth = loadedApproval.value;
+      if (
+        auth.approval.gate_kind === ordinaryKind &&
+        auth.approval.subject_digest === derived.subject_digest &&
+        auth.request.kind === ordinaryKind &&
+        auth.request.phase_instance === state.phase_instance &&
+        auth.request.subject_digest === derived.subject_digest &&
+        auth.request.current_evidence.set_digest === derived.current_evidence_set.set_digest
+      ) {
+        return transitionInvalid(state, "triage-resubmission-refused-after-approval");
+      }
+    }
+  }
+
   const digestsByFindingId = new Map<string, string[]>();
   const expected = new Set<string>();
-  const blocking = new Set<string>();
+  const substantive = new Set<string>();
   for (const reviewRef of derived.reviews) {
     for (const finding of reviewRef.evidence.findings) {
       const key = `${reviewRef.evidence_digest}:${finding.finding_id}`;
       expected.add(key);
-      if (finding.blocking) blocking.add(key);
+      if (isSubstantiveClaim(finding)) substantive.add(key);
       const digests = digestsByFindingId.get(finding.finding_id) ?? [];
       digests.push(reviewRef.evidence_digest);
       digestsByFindingId.set(finding.finding_id, digests);
@@ -522,8 +585,8 @@ async function composeTriage(
     }
     const base = { review_evidence_digest: evidenceDigest, finding_id: findingId } as const;
     if (item.disposition === "accepted" || item.disposition === "accepted-editorial") {
-      if (item.disposition === "accepted-editorial" && blocking.has(`${evidenceDigest}:${findingId}`)) {
-        throw new TypeError(`finding ${findingId} is blocking; "accepted-editorial" is only for non-blocking wording or formatting fixes — use "accepted" or "rejected"`);
+      if (item.disposition === "accepted-editorial" && substantive.has(`${evidenceDigest}:${findingId}`)) {
+        throw new TypeError(`finding ${findingId} is substantive; "accepted-editorial" is only for wording or formatting fixes without substantive meaning — use "accepted", "rejected", "escalated-human", or "deferred"`);
       }
       return {
         ...base,
@@ -540,7 +603,22 @@ async function composeTriage(
         evidence: String(item.evidence ?? ""),
       } as TriageDisposition;
     }
-    throw new TypeError(`triage disposition for ${findingId} must set disposition "accepted", "accepted-editorial", or "rejected"`);
+    if (item.disposition === "escalated-human") {
+      return {
+        ...base,
+        disposition: "escalated-human",
+        rationale: String(item.rationale ?? ""),
+      } as TriageDisposition;
+    }
+    if (item.disposition === "deferred") {
+      return {
+        ...base,
+        disposition: "deferred",
+        rationale: String(item.rationale ?? ""),
+        ...(item.evidence !== undefined ? { evidence: String(item.evidence) } : {}),
+      } as TriageDisposition;
+    }
+    throw new TypeError(`triage disposition for ${findingId} must set disposition "accepted", "accepted-editorial", "rejected", "escalated-human", or "deferred"`);
   });
 
   const actual = new Set(dispositions.map((item) => `${item.review_evidence_digest}:${item.finding_id}`));
@@ -553,6 +631,9 @@ async function composeTriage(
   }
   const acceptedCount = dispositions.filter((item) => item.disposition === "accepted").length;
   const acceptedEditorialCount = dispositions.filter((item) => item.disposition === "accepted-editorial").length;
+  const rejectedCount = dispositions.filter((item) => item.disposition === "rejected").length;
+  const escalatedHumanCount = dispositions.filter((item) => item.disposition === "escalated-human").length;
+  const deferredCount = dispositions.filter((item) => item.disposition === "deferred").length;
   const candidate = parseTriageCandidate({
     schema_version: "1",
     task_id: services.authority.task_id,
@@ -564,8 +645,10 @@ async function composeTriage(
     source_evidence_digests: derived.current_evidence_set.slots.map((slot) => slot.evidence_digest),
     dispositions,
     accepted_count: acceptedCount,
-    rejected_count: dispositions.length - acceptedCount - acceptedEditorialCount,
+    rejected_count: rejectedCount,
     accepted_editorial_count: acceptedEditorialCount,
+    escalated_human_count: escalatedHumanCount,
+    deferred_count: deferredCount,
   });
 
   return computeCallEnvelope(services, {
@@ -699,6 +782,56 @@ async function composeGate(
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
+  const pendingValidation = state.pending_validation_override;
+  if (pendingValidation !== undefined) {
+    const transition = state.last_transition;
+    const phase = decodePhaseInstance(state.phase_instance);
+    if (
+      phase.kind !== "phase-impl" || state.step !== "produce" || state.status !== "failed" ||
+      state.open_gate !== undefined || pendingValidation.phase_instance !== state.phase_instance ||
+      pendingValidation.input_fingerprint !== state.input_fingerprint ||
+      pendingValidation.request_revision !== state.revision ||
+      transition?.tool !== "archflow_state" || transition.operation !== "request-validation-override" ||
+      transition.request_digest !== pendingValidation.request_digest ||
+      transition.input_fingerprint !== pendingValidation.input_fingerprint ||
+      transition.resulting_revision !== pendingValidation.request_revision
+    ) return transitionInvalid(state, "validation-override-gate");
+    const subjectDigest = validationOverrideSubjectDigest({
+      task_id: state.task_id,
+      phase_instance: state.phase_instance,
+      input_fingerprint: pendingValidation.input_fingerprint,
+      governing_phase_design_digest: pendingValidation.governing_phase_design_digest,
+      displaced_validations: pendingValidation.displaced_validations,
+    });
+    const evidence: ValidationOverrideRequestRefV1 = Object.freeze({
+      schema_version: "1",
+      evidence_kind: "validation-override-request",
+      task_id: state.task_id,
+      phase_instance: state.phase_instance,
+      input_fingerprint: pendingValidation.input_fingerprint,
+      governing_phase_design_digest: pendingValidation.governing_phase_design_digest,
+      request_revision: pendingValidation.request_revision,
+      validation_request_subject_digest: subjectDigest,
+    });
+    return computeCallEnvelope(services, {
+      tool: "archflow_gate",
+      input: {
+        ...mechanicalInput(services, state, intentId),
+        phase_instance: state.phase_instance,
+        summary,
+        subject_digest: subjectDigest,
+        current_evidence: evidence as unknown as PlainJsonValue,
+        kind: "validation-override",
+        context: {
+          request_revision: pendingValidation.request_revision,
+          input_fingerprint: pendingValidation.input_fingerprint,
+          governing_phase_design_digest: pendingValidation.governing_phase_design_digest,
+          displaced_validations: pendingValidation.displaced_validations,
+          producer_reason: pendingValidation.producer_reason,
+        },
+      },
+    });
+  }
   // Baseline adoption composes ahead of the phase's own approval gates: reconciliation blocking is
   // ahead of them in status routing too, so an approval composed past unresolved drift could never
   // resolve honestly. Mid-produce drift is expected producer work and never composes this gate.
@@ -803,6 +936,17 @@ async function composeGate(
     if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loadedApproval.value)) continue;
     authenticated.push(loadedApproval.value);
   }
+  const authenticatedPushThroughs = [];
+  for (const record of state.review_push_throughs ?? []) {
+    const loadedPushThrough = await loadAuthenticatedReviewPushThrough(
+      services.dependencies,
+      services.authority,
+      record,
+    );
+    if (loadedPushThrough.ok) authenticatedPushThroughs.push(loadedPushThrough.value);
+  }
+  let assessment: EvidenceAssessment | undefined;
+  let reviewPushThroughContext: GateContext<"attempts-exhausted">["review_push_through"];
   if (constitution.ok) {
     pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
     // The attempts-exhausted gate composes exactly when the fixed point says the budget is spent;
@@ -819,17 +963,26 @@ async function composeGate(
         services.dependencies, services.authority, state, authenticated, subject.value,
       );
       const predecessor = currentReviewPredecessor(state, subject.value);
-      const assessment = assessCurrentEvidence(state, loaded.value, {
+      const evidenceSubject: EvidenceSubject = {
         subject_digest: subject.value.artifact_digest,
         input_fingerprint: state.input_fingerprint,
         constitution: constitution.value,
         approved_upstream_digests: approvedUpstreams,
         authenticated_gate_approvals: authenticated,
+        ...(authenticatedPushThroughs.length === 0 ? {} : {
+          review_push_through_authority: reviewPushThroughAuthoritySource(authenticatedPushThroughs),
+        }),
         ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
         ...(configured === undefined ? {} : { max_attempts: configured }),
-      });
+      };
+      assessment = assessCurrentEvidence(state, loaded.value, evidenceSubject);
       if (assessment.next === "attempts-exhausted") {
         exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS });
+        reviewPushThroughContext = deriveReviewPushThroughCandidate(
+          state,
+          loaded.value,
+          evidenceSubject,
+        )?.context;
       }
     } catch {
       return transitionInvalid(state, "gate-fixed-point-disagreement");
@@ -911,7 +1064,13 @@ async function composeGate(
       subject_digest: subject.value.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "attempts-exhausted",
-      context: { ...exhaustion, step: state.step },
+      context: {
+        ...exhaustion,
+        step: state.step,
+        ...(reviewPushThroughContext === undefined ? {} : {
+          review_push_through: reviewPushThroughContext,
+        }),
+      },
     };
   } else if (pendingGate !== undefined && pendingGate.kind !== "constitution-review") {
     input = {
@@ -935,7 +1094,8 @@ async function composeGate(
     };
   } else if (
     acceptedSettlement !== undefined && !ordinaryApproved &&
-    simpleTrigger === undefined && editorialPredecessorDigest === undefined && pendingGate === undefined
+    simpleTrigger === undefined && editorialPredecessorDigest === undefined && pendingGate === undefined &&
+    assessment?.escalated_human_findings !== true
   ) {
     // Every exception gate above remains human-only. Only the now-unnecessary ordinary phase gate
     // is refused when the exact reviewed no-wait settlement already supplies advancement authority.
@@ -1205,7 +1365,7 @@ export async function composeRequest(
       return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "failed": {
-      const composed = await composeFailedProduce(services, state, intentId);
+      const composed = await composeFailedProduce(services, state, intentId, snapshot);
       return composed.ok ? ok(Object.freeze({ envelope: composed.value, intent_id: intentId })) : composed;
     }
     case "running": {

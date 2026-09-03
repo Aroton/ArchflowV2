@@ -6,10 +6,12 @@ import { gitOidV1Schema } from "./canonical.js";
 import { REPOSITORY_NAME_MESSAGE, REPOSITORY_NAME_PATTERN } from "./config.js";
 import type { HazardRegistryInputV1 } from "./hazard-registry.js";
 import {
+  hazardRegistryEntryV1Schema,
   hazardRegistryInputV1Schema,
 } from "./hazard-registry.js";
 import type { SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import {
+  createTaskSlugV1Schema,
   safeIdV1Schema,
   safeIntegerV1Schema,
   sha256DigestV1Schema,
@@ -26,7 +28,9 @@ import {
 } from "./review.js";
 import {
   EFFORT_CAVEAT_CODES,
+  DEFAULT_IMPLEMENTATION_PROFILE,
   IMPLEMENTATION_EFFORT_POLICY_ID,
+  IMPLEMENTATION_PROFILES,
   IMPLEMENTATION_PROFILE_IDS,
   deriveImplementationEffortV1,
   type DerivedImplementationEffortV1,
@@ -205,16 +209,32 @@ const decomposition = z.discriminatedUnion("status", [
   z.object({ status: z.literal("undifferentiated"), rationale: nonblank, missing_boundaries: z.array(nonblank).min(1) }).strict(),
 ]);
 
+const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;
+const taskSlug = createTaskSlugV1Schema();
+const phaseInstance = z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
+
+/**
+ * The generated `effort-review.schema.json` `$defs` layout. The def names are load-bearing:
+ * `projectCliOutputSchema` rewrites `taskSlug` (lookahead simplification) by name before handing
+ * the document to a child host, and the document must stay self-contained because hosts cannot
+ * resolve cross-document references.
+ */
+export const effortDocumentDefs = {
+  taskSlug,
+  phaseInstance,
+  digest,
+} as const;
+
 export const rawEffortReviewV1Schema = z.object({
   schema_version: z.literal("1"),
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only"),
+  task_id: taskSlug,
+  phase_instance: phaseInstance.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only") as unknown as z.ZodType<PhaseInstanceId>,
   step: z.literal("effort_review"),
   role: z.literal("effort-reviewer"),
-  subject_digest: sha256DigestV1Schema,
-  input_fingerprint: sha256DigestV1Schema,
-  component_manifest_digest: sha256DigestV1Schema,
-  hazard_registry_digest: sha256DigestV1Schema,
+  subject_digest: digest,
+  input_fingerprint: digest,
+  component_manifest_digest: digest,
+  hazard_registry_digest: digest,
   policy_id: z.literal(IMPLEMENTATION_EFFORT_POLICY_ID),
   decomposition,
   components: z.array(componentEffortJudgmentV1Schema).min(1),
@@ -407,5 +427,161 @@ export function createEffortAssessmentV1(
     judgments: derived.raw.components,
     reviewer,
     recommendation: derived.recommendation,
+  });
+}
+
+export const IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v2" as const;
+
+export const EFFORT_SELECTOR_INSTRUCTIONS =
+  "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-max; totals 3-5 select glm-5-3-flash-max when E is at least 2 or a long tool loop is yes or unknown, otherwise gemini-3-7-flash-max; totals 6-7 select gemini-3-7-flash-max only when B is at most 1 and the component is confidently short, otherwise glm-5-3-flash-max; totals 8-11 select gpt-5-6-sol-medium; totals 12-15 select gpt-5-6-sol-xhigh. Return the highest-ranked selected profile across all components in that same order. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis." as const;
+
+export type RawEffortSelectionV2 = {
+  readonly schema_version: "2";
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: "effort_review";
+  readonly role: "effort-reviewer";
+  readonly subject_digest: Sha256Digest;
+  readonly input_fingerprint: Sha256Digest;
+  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly profile_id: (typeof IMPLEMENTATION_PROFILE_IDS)[number];
+};
+
+export type EffortEnvelopeV2 = {
+  readonly schema_version: "2";
+  readonly instructions: typeof EFFORT_SELECTOR_INSTRUCTIONS;
+  readonly artifact: string;
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  readonly attempt: SafeInteger;
+  readonly subject_digest: Sha256Digest;
+  readonly input_fingerprint: Sha256Digest;
+  readonly invocation_id: string;
+  readonly result_id: string;
+  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly hazard_registry: Omit<HazardRegistryInputV1, "components">;
+  readonly repositories: readonly ReviewedRepositoryV1[];
+};
+
+export type EffortSelectionV2 = {
+  readonly schema_version: "2";
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  readonly attempt: SafeInteger;
+  readonly subject_digest: Sha256Digest;
+  readonly input_fingerprint: Sha256Digest;
+  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly profile: ImplementationProfileV1;
+  readonly source:
+    | { readonly kind: "reviewer"; readonly reviewer: EffortReviewerProvenanceV1 }
+    | { readonly kind: "default" };
+};
+
+export type EffortEvidence = EffortAssessmentV1 | EffortSelectionV2;
+
+const selectorHazardInputSchema = z.object({
+  schema_version: z.literal("1"),
+  state: z.enum(["absent", "present"]),
+  registry_digest: sha256DigestV1Schema,
+  hazards: z.array(hazardRegistryEntryV1Schema),
+}).strict();
+
+export const rawEffortSelectionV2Schema = z.object({
+  schema_version: z.literal("2"),
+  task_id: taskSlug,
+  phase_instance: phaseInstance.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only") as unknown as z.ZodType<PhaseInstanceId>,
+  step: z.literal("effort_review"),
+  role: z.literal("effort-reviewer"),
+  subject_digest: digest,
+  input_fingerprint: digest,
+  policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  profile_id: z.enum(IMPLEMENTATION_PROFILE_IDS),
+}).strict() as unknown as z.ZodType<RawEffortSelectionV2>;
+
+export const effortEnvelopeV2Schema = z.object({
+  schema_version: z.literal("2"),
+  instructions: z.literal(EFFORT_SELECTOR_INSTRUCTIONS),
+  artifact: z.string(),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
+  attempt: safeIntegerV1Schema.refine((value) => value >= 1, "attempt must be at least 1"),
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  invocation_id: safeIdV1Schema,
+  result_id: safeIdV1Schema,
+  policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  hazard_registry: selectorHazardInputSchema,
+  repositories: reviewedRepositoriesV1Schema,
+}).strict() as unknown as z.ZodType<EffortEnvelopeV2>;
+
+export const effortSelectionV2Schema = z.object({
+  schema_version: z.literal("2"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
+  attempt: safeIntegerV1Schema.refine((value) => value >= 1, "attempt must be at least 1"),
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  profile: effortProfileV1Schema,
+  source: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("reviewer"), reviewer: effortReviewerProvenanceV1Schema }).strict(),
+    z.object({ kind: z.literal("default") }).strict(),
+  ]),
+}).strict() as unknown as z.ZodType<EffortSelectionV2>;
+
+export const effortEvidenceSchema = z.union([
+  effortAssessmentV1Schema,
+  effortSelectionV2Schema,
+]) as unknown as z.ZodType<EffortEvidence>;
+
+export function parseEffortEnvelopeV2(value: unknown): EffortEnvelopeV2 {
+  assertPlainJson(value, "effort selector envelope");
+  return effortEnvelopeV2Schema.parse(structuredClone(value));
+}
+
+function selectionCommon(envelope: EffortEnvelopeV2) {
+  return {
+    schema_version: "2" as const,
+    task_id: envelope.task_id,
+    phase_instance: envelope.phase_instance,
+    attempt: envelope.attempt,
+    subject_digest: envelope.subject_digest,
+    input_fingerprint: envelope.input_fingerprint,
+    policy_id: envelope.policy_id,
+  };
+}
+
+export function createEffortSelectionV2(
+  value: unknown,
+  envelope: EffortEnvelopeV2,
+  reviewer: EffortReviewerProvenanceV1,
+): EffortSelectionV2 {
+  assertPlainJson(value, "raw effort selection");
+  const raw = rawEffortSelectionV2Schema.parse(structuredClone(value));
+  for (const key of ["task_id", "phase_instance", "subject_digest", "input_fingerprint", "policy_id"] as const) {
+    if (raw[key] !== envelope[key]) throw new TypeError(`effort selection ${key} does not match its envelope`);
+  }
+  if (reviewer.invocation_id !== envelope.invocation_id || reviewer.result_id !== envelope.result_id) {
+    throw new TypeError("effort selector provenance does not match envelope result identity");
+  }
+  if (reviewer.repositories.length !== envelope.repositories.length || reviewer.repositories.some((repository, index) => {
+    const expected = envelope.repositories[index];
+    return expected === undefined || repository.name !== expected.name ||
+      repository.repository_identity_digest !== expected.repository_identity_digest || repository.commit !== expected.commit;
+  })) {
+    throw new TypeError("effort selector repository provenance does not match envelope repositories");
+  }
+  return effortSelectionV2Schema.parse({
+    ...selectionCommon(envelope),
+    profile: IMPLEMENTATION_PROFILES[raw.profile_id],
+    source: { kind: "reviewer", reviewer },
+  });
+}
+
+export function createDefaultEffortSelectionV2(envelope: EffortEnvelopeV2): EffortSelectionV2 {
+  return effortSelectionV2Schema.parse({
+    ...selectionCommon(envelope),
+    profile: DEFAULT_IMPLEMENTATION_PROFILE,
+    source: { kind: "default" },
   });
 }

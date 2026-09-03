@@ -13,7 +13,7 @@ import { parsePhaseInstanceId, type PhaseInstanceId } from "../contracts/phase-i
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { MODEL_FAMILIES, type ModelFamily } from "../contracts/review.js";
 import { parseRubricV1, type RubricV1 } from "../contracts/rubric.js";
-import { parseEffortEnvelopeV1, type EffortEnvelopeV1 } from "../contracts/effort-review.js";
+import { parseEffortEnvelopeV2, type EffortEnvelopeV2 } from "../contracts/effort-review.js";
 
 export const REVIEW_ENVELOPE_BYTE_CAP = 1_048_576;
 
@@ -49,7 +49,7 @@ export type DispatchSubject = {
  * every field restates durable triage/review authority.
  */
 export const PINNED_CONTEXT_KINDS = [
-  "user-ask", "approved-upstream", "imported-reference", "verification-transcript",
+  "user-ask", "approved-upstream", "imported-reference", "validation-override", "verification-transcript",
   "prior-triage", "interface-excerpt", "conventions", "repo-map",
 ] as const;
 export type PinnedContextKind = (typeof PINNED_CONTEXT_KINDS)[number];
@@ -174,14 +174,18 @@ export type ReviewEnvelopeSeed = Readonly<
  * Both are server-owned so caller prose cannot enter the instruction channel.
  */
 export const REVIEW_INSTRUCTION =
-  "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Then work through the artifact section by section: trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
+  "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Be contentious: actively seek counterexamples across stated assumptions, edge conditions, lifecycle transitions, ordering, recovery, resource and latency bounds, and cross-section arithmetic. Trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A suspicion is welcome only when it names a plausible material consequence and a concrete settling observation; 'cost-free' means it is not suppressed for low confidence, not that speculative noise bypasses materiality. A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
 
 export const REVIEW_ASSIGNMENT_INSTRUCTION =
   "Assess only the rubric criteria named by assignment.criterion_ids, using assignment.focus as the boundary of your review. Do not report findings owned by another assignment. You may cite evidence outside your focus when it proves an assigned finding, but do not turn that evidence into an additional out-of-scope finding.";
 
+/** The active finding vocabulary shared by document and implementation reviews. */
+export const REVIEW_TAXONOMY_INSTRUCTION =
+  "For every finding, set claim_type to exactly one of defect, risk, gap, or preference; set confidence to exactly one of certain, likely, or suspicion; and supply a concrete falsifier of at most 4096 UTF-16 code units. A falsifier names the test command, code inspection, or other observation that would disprove the claim. If the condition is not observable from available evidence, the falsifier names the missing evidence and the outcome it would settle. Suspicion is cost-free and encouraged when that is the honest confidence. Preference is descriptive and advisory; do not force a quota or ceremonial preference when the artifact is sound. An empty findings array is the normal successful response when no reportable claim survives. Do not emit severity, critical, major, minor, blocker, or a finding-level blocking field.";
+
 /** Review framing used only for implementation outputs. */
 export const IMPLEMENTATION_REVIEW_INSTRUCTION =
-  "Review only the implementation output declared by this phase: its added, modified, deleted, and renamed paths; its co-produced documents; and the current post-change behavior of those outputs. Use unchanged files, repository snapshots, pinned context, and dependencies only to verify how a declared output behaves or connects to an existing interface. They are evidence, not additional review subjects. Do not report a pre-existing or unrelated defect. Every finding must name the declared output that introduced, exposed, or materially worsened the defect and explain the current concrete consequence. This is a phase-change review, not a general code review. Apply the rubric's materiality bar and return only the structured result the output schema describes.";
+  "Review only the implementation output declared by this phase: its added, modified, deleted, and renamed paths; its co-produced documents; and the current post-change behavior of those outputs. Use unchanged files, repository snapshots, pinned context, and dependencies only to verify how a declared output behaves or connects to an existing interface. They are evidence, not additional review subjects. Be contentious: actively seek counterexamples, boundary failures, latency or resource cliffs, and invalid assumptions introduced by the declared outputs. Do not report a pre-existing or unrelated defect. Every finding must name the declared output that introduced, exposed, or materially worsened the defect and explain the current concrete consequence. This is a phase-change review, not a general code review. Apply the rubric's materiality bar and return only the structured result the output schema describes.";
 
 /**
  * The fixed remediation instruction the envelope adds as `instructions.prior_triage` when a
@@ -189,7 +193,7 @@ export const IMPLEMENTATION_REVIEW_INSTRUCTION =
  * between initial and later rounds.
  */
 export const PRIOR_TRIAGE_INSTRUCTION =
-  "This is a remediation review, not a new full review. The pinned prior-triage record contains only the latest accepted findings assigned to you. Verify each revision intent against the current artifact. Report an accepted finding only when its intent was not carried out. Report a new finding only when the remediation change itself introduced, exposed, or materially worsened a blocker in the changed content or a directly dependent section. Do not revisit completed findings, inspect unrelated unchanged content, or apply the full rubric as a new sweep. If evidence needed for this confirmation is missing, one scoped unverifiable- or escalate- finding is allowed. Otherwise, when every intent is satisfied and no remediation regression exists, return no findings.";
+  "This is a remediation review, not a new full review. The pinned prior-triage record contains only the latest accepted findings assigned to you. Verify each revision intent against the current artifact. Report an accepted finding only when its intent was not carried out. Report a new finding only when the remediation change itself introduced, exposed, or materially worsened a substantive defect, risk, or gap in the changed content or a directly dependent section. Do not revisit completed findings, inspect unrelated unchanged content, or apply the full rubric as a new sweep. If evidence needed for this confirmation is missing, one scoped unverifiable- or escalate- finding is allowed. Otherwise, when every intent is satisfied and no remediation regression exists, return no findings.";
 
 /** Additional constitution-review scope when the artifact is an implementation output. */
 export const CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION =
@@ -203,8 +207,8 @@ export type DispatchEnvelope = Readonly<{
 }>;
 
 /** Seals the already server-derived, phase-design-only effort input for dispatch. */
-export function buildEffortEnvelope(value: EffortEnvelopeV1): DispatchEnvelope {
-  const envelope = parseEffortEnvelopeV1(value);
+export function buildEffortEnvelope(value: EffortEnvelopeV2): DispatchEnvelope {
+  const envelope = parseEffortEnvelopeV2(value);
   return finishEnvelope("effort-review", envelope as PlainJsonValue, "dispatch-envelope");
 }
 
@@ -630,6 +634,7 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     // from validated context, never a caller switch.
     instructions: {
       review: parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
+      taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
       ...(assignment === undefined ? {} : { assignment: REVIEW_ASSIGNMENT_INSTRUCTION }),
       ...(context.some((entry) => entry.kind === "prior-triage")
         ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION }

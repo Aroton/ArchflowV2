@@ -23,34 +23,19 @@ import {
   REVIEW_BENCHMARK_TEST_TIMEOUT_MS,
 } from "../helpers/real-host.js";
 import { createTaskWorkspace } from "../helpers/task-workspace.js";
-
-type CorpusCase = Readonly<{
-  id: string;
-  artifact: string;
-  artifact_sha256: string;
-  kind: "seeded" | "control";
-  expected_outcome: "blocking-finding" | "pass";
-  seeded_defect: string | null;
-}>;
-
-type CorpusManifest = Readonly<{
-  schema_version: "1";
-  disposition_vocabulary: Readonly<{
-    seeded: readonly ["seed-detected", "unrelated-blocker", "missed"];
-    control: readonly ["clean-pass", "false-blocker"];
-  }>;
-  cases: readonly CorpusCase[];
-}>;
+import {
+  BENCHMARK_DIRECTIONS as directions,
+  BENCHMARK_REPEAT_COUNT as repeatCount,
+  buildBenchmarkDocument,
+  loadCorpusManifest,
+  validateBenchmarkStageAndOutput,
+  type CorpusCaseV2,
+} from "../helpers/review-benchmark.js";
 
 const utf8 = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const corpusRoot = new URL("../fixtures/corpus/artifacts/", import.meta.url);
 const resultPath = join(process.cwd(), "docs", "validation", "review-benchmark.json");
-const repeatCount = 1;
-const directions = Object.freeze([
-  Object.freeze({ id: "claude-to-codex", producer_family: "claude" as const, reviewer_family: "codex" as const }),
-  Object.freeze({ id: "codex-to-claude", producer_family: "codex" as const, reviewer_family: "claude" as const }),
-]);
 
 const claudeProducerConfig = `schema_version: "1"
 roles:
@@ -83,30 +68,6 @@ const validateReviewOutput = createJsonSchemaValidator<Record<string, unknown>>(
   reviewOutputSchema,
 );
 
-function buildBenchmarkDocument(
-  observationPayload: PlainJsonValue,
-  runIds: readonly string[],
-) {
-  // thresholds.json binds this digest. Human dispositions and the metrics derived from them live
-  // beside, rather than inside, the immutable payload so recording them cannot move that binding.
-  const benchmarkResultDigest = canonicalJsonDigest(observationPayload);
-  return {
-    schema_version: "1",
-    benchmark_result_digest: benchmarkResultDigest,
-    observation_payload: observationPayload,
-    human_scoring: {
-      observation_digest: benchmarkResultDigest,
-      dispositions: runIds.map((runId) => ({ run_id: runId, disposition: null })),
-      primary_metrics: {
-        approval_detection_rate: null,
-        false_blocker_rate: null,
-        triage_completeness: { status: "pending-human-disposition", value: null },
-        defects_found_after_pass: { status: "pending-human-disposition", value: null },
-      },
-    },
-  } as const satisfies PlainJsonValue;
-}
-
 // Both checks are intentionally captured once at module scope. The short circuit means an ordinary
 // test run never probes a CLI, while the second opt-in still requires the real-host opt-in.
 const benchmarkAvailable = benchmarkEnabled() && realHostsAvailable();
@@ -115,7 +76,7 @@ requireRealHostsAvailable(!benchmarkEnabled() || benchmarkAvailable);
 describe("benchmark digest contract", () => {
   it("pins the production design rubric and the twenty-six-run matrix without real model calls", async () => {
     expect(designRubric.rubric_id).toBe("design-v3");
-    expect(rubricDigest).toBe("1de3ef4ed22d5698493eb7a6376ebdf493763c1ba39e821fa8e875f9095a8c8e");
+    expect(rubricDigest).toBe("bb840e3ec194160c05b0ff21eb46fe4ef2ab7bd689c6cc0c883d97b1fc4b0dd8");
     expect(rubric.criteria.map((criterion) => criterion.id)).toEqual([
       "substantive-correctness",
       "upstream-coverage",
@@ -125,12 +86,13 @@ describe("benchmark digest contract", () => {
       "evidence-completeness",
       "proportionality",
       "phase-plan-soundness",
+      "test-strategy",
       "unverifiable-claims",
       "reviewer-confidence",
       "advisory-observations",
     ]);
 
-    const manifest = await loadManifest();
+    const manifest = await loadCorpusManifest();
     expect(directions).toEqual([
       { id: "claude-to-codex", producer_family: "claude", reviewer_family: "codex" },
       { id: "codex-to-claude", producer_family: "codex", reviewer_family: "claude" },
@@ -209,21 +171,10 @@ describe("benchmark digest contract", () => {
   });
 });
 
-async function loadManifest(): Promise<Readonly<{ bytes: Uint8Array; value: CorpusManifest }>> {
-  const bytes = await readFile(new URL("manifest.json", corpusRoot));
-  const value = JSON.parse(decoder.decode(bytes)) as CorpusManifest;
-  expect(value.schema_version).toBe("1");
-  expect(value.disposition_vocabulary).toEqual({
-    seeded: ["seed-detected", "unrelated-blocker", "missed"],
-    control: ["clean-pass", "false-blocker"],
-  });
-  expect(value.cases).toHaveLength(13);
-  return { bytes, value };
-}
-
 describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () => {
   it("records both opposite-family directions without asserting a quality threshold", async () => {
-    const manifest = await loadManifest();
+    const { stage: _stage, output: stagedOutputPath } = await validateBenchmarkStageAndOutput(process.env);
+    const manifest = await loadCorpusManifest();
     const plannedTurns = manifest.value.cases.length * directions.length * repeatCount;
     expect(plannedTurns).toBe(26);
 
@@ -326,7 +277,8 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
               run_id: runId,
               case_id: corpusCase.id,
               case_kind: corpusCase.kind,
-              seeded_defect: corpusCase.seeded_defect,
+              expectation_id: corpusCase.kind === "seeded" ? corpusCase.expectation_id : null,
+              seeded_claim: corpusCase.kind === "seeded" ? corpusCase.seeded_claim : null,
               direction: direction.id,
               repeat,
               artifact_sha256: artifactDigest,
@@ -340,7 +292,9 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
                 cli_version: evidence.cli_version,
               },
               verdict: evidence.verdict,
-              blocking_count: evidence.blocking_count,
+              ...(evidence.schema_version === "2"
+                ? { total_findings: evidence.total_findings, partition_counts: evidence.partition_counts }
+                : { blocking_count: evidence.blocking_count }),
               findings: evidence.findings,
             });
             runIds.push(runId);
@@ -356,10 +310,32 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
       typeof entry === "object" && entry !== null && !Array.isArray(entry)
         ? entry as Readonly<Record<string, PlainJsonValue>>
         : undefined;
-    const failedRuns = observations.filter((entry) => observationRecord(entry)?.verdict === "fail").length;
-    const blockingRuns = observations.filter((entry) => {
-      const count = observationRecord(entry)?.blocking_count;
-      return typeof count === "number" && count > 0;
+    const failedRuns = observations.filter((entry) => {
+      const verdict = observationRecord(entry)?.verdict;
+      return verdict === "fail" || verdict === "review-raised";
+    }).length;
+    const substantiveRuns = observations.filter((entry) => {
+      const observation = observationRecord(entry);
+      const partitions = observationRecord(observation?.partition_counts as PlainJsonValue);
+      if (partitions === undefined) {
+        const verdict = observation?.verdict;
+        return verdict === "fail" || verdict === "review-raised";
+      }
+      return Object.entries(partitions).some(([key, value]) =>
+        !key.startsWith("preference:") && typeof value === "number" && value > 0,
+      );
+    }).length;
+    const advisoryRuns = observations.filter((entry) => {
+      const observation = observationRecord(entry);
+      const partitions = observationRecord(observation?.partition_counts as PlainJsonValue);
+      if (partitions === undefined) return false;
+      const hasSubstantive = Object.entries(partitions).some(([key, value]) =>
+        !key.startsWith("preference:") && typeof value === "number" && value > 0,
+      );
+      if (hasSubstantive) return false;
+      return Object.entries(partitions).some(([key, value]) =>
+        key.startsWith("preference:") && typeof value === "number" && value > 0,
+      );
     }).length;
     const observationPayload = {
       schema_version: "1",
@@ -369,20 +345,21 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
         serialized_model_turn_count: plannedTurns,
         repeat_count_per_direction: repeatCount,
         wall_clock_seconds: elapsedSeconds,
-        sample_size_note: "Ten corpus cases, two producer directions, one real model turn per case and direction; all twenty turns were serialized by the production dispatch FIFO.",
+        sample_size_note: "Thirteen corpus cases, two producer directions, one real model turn per case and direction; all twenty-six turns were serialized by the production dispatch FIFO.",
       },
       runs: observations,
       secondary_raw_telemetry: {
         fail_verdict_count: failedRuns,
         fail_verdict_rate: failedRuns / plannedTurns,
-        blocking_run_count: blockingRuns,
-        blocking_run_rate: blockingRuns / plannedTurns,
+        substantive_run_count: substantiveRuns,
+        substantive_run_rate: substantiveRuns / plannedTurns,
+        advisory_run_count: advisoryRuns,
+        advisory_run_rate: advisoryRuns / plannedTurns,
       },
     } as const satisfies PlainJsonValue;
     const document = buildBenchmarkDocument(observationPayload, runIds);
 
-    await mkdir(dirname(resultPath), { recursive: true });
-    await writeFile(resultPath, canonicalJsonBytes(document), { mode: 0o644 });
+    await writeFile(stagedOutputPath, canonicalJsonBytes(document), { flag: "wx", mode: 0o644 });
     expect(observations).toHaveLength(plannedTurns);
     expect(runIds).toHaveLength(plannedTurns);
     expect(new Set(runIds).size).toBe(plannedTurns);

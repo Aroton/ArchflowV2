@@ -8,10 +8,11 @@ import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ConfigV1 } from "../contracts/config.js";
 import type { DispatchFailureRoleV1 } from "../contracts/dispatch-failure.js";
 import {
-  createEffortAssessmentV1,
-  parseEffortEnvelopeV1,
-  type EffortAssessmentV1,
-  type EffortEnvelopeV1,
+  createDefaultEffortSelectionV2,
+  createEffortSelectionV2,
+  parseEffortEnvelopeV2,
+  type EffortEnvelopeV2,
+  type EffortSelectionV2,
 } from "../contracts/effort-review.js";
 import type { ConstitutionRegistry } from "../contracts/constitution.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
@@ -30,12 +31,13 @@ import type {
   ModelFamily,
   ReviewedRepositoryV1,
   ReviewEvidence,
-  ReviewFinding,
-  ReviewVerdict,
+  ReviewFindingV2,
+  LegacyReviewFinding,
   ReviewerRunV1,
   RouteOverrideRecord,
   RuleVersionRef,
 } from "../contracts/review.js";
+import { expectedReviewSummaryV2 } from "../contracts/review.js";
 import {
   mintAdjudicationObservation,
   mintReviewObservation,
@@ -94,6 +96,53 @@ export type CounterReviewDispatchResult = Readonly<{
   extracted_output_bytes: Uint8Array;
 }>;
 
+export type ActiveReviewerFindingSet = Readonly<{
+  tag: string;
+  schema_version: "1" | "2";
+  findings: readonly (ReviewFindingV2 | LegacyReviewFinding)[];
+}>;
+
+/**
+ * Merges one active round in configured reviewer order. Fresh dispatch is V2-only; the explicit
+ * guard prevents an accidentally retained or replayed V1 child from being normalized into active
+ * evidence. Finding IDs keep the historical tag/disambiguation behavior.
+ */
+export function aggregateActiveReviewerFindings(
+  reviewers: readonly ActiveReviewerFindingSet[],
+  totalReviewers = reviewers.length,
+): Readonly<{
+  findings: readonly ReviewFindingV2[];
+  finding_ids_by_reviewer: readonly (readonly string[])[];
+  summary: ReturnType<typeof expectedReviewSummaryV2>;
+}> {
+  const findings: ReviewFindingV2[] = [];
+  const findingIdsByReviewer: string[][] = reviewers.map(() => []);
+  const seenIds = new Set<string>();
+  reviewers.forEach((reviewer, reviewerIndex) => {
+    if (reviewer.schema_version !== "2" || reviewer.findings.some((finding) => !("claim_type" in finding))) {
+      throw new TypeError("fresh counter-review observations must all use active review schema version 2");
+    }
+    for (const finding of reviewer.findings as readonly ReviewFindingV2[]) {
+      const rawId = taggedFindingId(reviewer.tag, totalReviewers, finding.finding_id);
+      let uniqueId = rawId;
+      let disambiguator = 2;
+      while (seenIds.has(uniqueId)) {
+        uniqueId = `${rawId}-${String(disambiguator)}`;
+        disambiguator += 1;
+      }
+      seenIds.add(uniqueId);
+      findingIdsByReviewer[reviewerIndex]!.push(uniqueId);
+      findings.push({ ...finding, finding_id: uniqueId });
+    }
+  });
+  const frozenFindings = Object.freeze(findings.map((finding) => Object.freeze(finding)));
+  return Object.freeze({
+    findings: frozenFindings,
+    finding_ids_by_reviewer: Object.freeze(findingIdsByReviewer.map((ids) => Object.freeze(ids))),
+    summary: expectedReviewSummaryV2(frozenFindings),
+  });
+}
+
 /** Reduces parser detail to a stable, non-content-bearing diagnostic safe for project errors. */
 export function adjudicationOutputIssueCode(error: unknown): string {
   if (error instanceof SyntaxError) return "adjudication-json-invalid";
@@ -149,9 +198,11 @@ export type RunCounterReviewDependencies = Readonly<{
   ) => void | Promise<void>;
 }>;
 
-/** Required only for phase design; its route is fixed policy, never task/invocation routing. */
+/** Phase-design-only selector plan; configuration/invocation chooses the selector, never the implementation agent. */
 export type EffortReviewPlan = Readonly<{
-  envelope: EffortEnvelopeV1;
+  envelope: EffortEnvelopeV2;
+  /** Selector setup failed before dispatch; emit the fixed default without retrying. */
+  force_default?: true;
 }>;
 
 /**
@@ -261,14 +312,24 @@ async function planCounterReviewCommit(
         ...constitutionEvidence.uncertain_rule_versions,
       ]),
     });
-  const success = Object.freeze({
+  const commonSuccess = {
     path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${counterReviewClaim(current.value.phase_instance)}`),
-    verdict: inputs.review_evidence.verdict,
-    blocking_count: inputs.review_evidence.blocking_count,
     constitution: constitutionOutcome,
     revision,
     request_digest: inputs.request_digest,
-  });
+  } as const;
+  const success = inputs.review_evidence.schema_version === "2"
+    ? Object.freeze({
+      ...commonSuccess,
+      verdict: inputs.review_evidence.verdict,
+      total_findings: inputs.review_evidence.total_findings,
+      partition_counts: inputs.review_evidence.partition_counts,
+    })
+    : Object.freeze({
+      ...commonSuccess,
+      verdict: inputs.review_evidence.verdict,
+      blocking_count: inputs.review_evidence.blocking_count,
+    });
   const expectation = createInternalResultExpectation({
     schema_version: "1",
     tool: "archflow_counter_review",
@@ -354,8 +415,9 @@ export async function runCounterReview(
       // Best effort by contract.
     }
   };
+  type OverrideableRoutingRole = Exclude<RoutingRole, "effort-reviewer">;
   const selectRoutes = async (
-    role: RoutingRole,
+    role: OverrideableRoutingRole,
   ): Promise<readonly Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }>[]> => {
     let currentCandidate: SelectedRouteCandidate | undefined;
     try {
@@ -390,7 +452,7 @@ export async function runCounterReview(
   };
   // Recorded on the evidence only when the dispatched route actually displaced the pinned one,
   // so the deviation and the human's reason for it are legible at the gate that reads it.
-  const overrideRecordFor = (role: RoutingRole): RouteOverrideRecord | undefined => {
+  const overrideRecordFor = (role: OverrideableRoutingRole): RouteOverrideRecord | undefined => {
     const declared = input.call.input.route_override;
     if (declared?.[role] === undefined) return undefined;
     // Read rather than resolve: the displaced route is reported as configured, and a role with no
@@ -409,7 +471,6 @@ export async function runCounterReview(
   };
   const reviewOverride = overrideRecordFor("counter-reviewer");
   const testReviewOverride = overrideRecordFor("test-reviewer");
-  const effortOverride = overrideRecordFor("effort-reviewer");
   // The server stamps the durable attempt counter into the child-visible subject from the same
   // transaction authority the dispatch runs under, so the round number is never a caller claim.
   const subject: DispatchSubject = Object.freeze({
@@ -436,7 +497,7 @@ export async function runCounterReview(
   if ((input.phase_kind === "phase-design") !== (effortPlan !== undefined)) {
     throw new TypeError("fresh phase-design review requires exactly one effort plan");
   }
-  const parsedEffortEnvelope = effortPlan === undefined ? undefined : parseEffortEnvelopeV1(effortPlan.envelope);
+  const parsedEffortEnvelope = effortPlan === undefined ? undefined : parseEffortEnvelopeV2(effortPlan.envelope);
   if (parsedEffortEnvelope !== undefined && (
     parsedEffortEnvelope.task_id !== subject.task_id ||
     parsedEffortEnvelope.phase_instance !== subject.phase_instance ||
@@ -445,8 +506,24 @@ export async function runCounterReview(
     parsedEffortEnvelope.input_fingerprint !== subject.input_fingerprint ||
     canonicalJsonDigest(parsedEffortEnvelope.repositories as never) !== canonicalJsonDigest(input.repositories as never)
   )) throw new TypeError("effort plan is not bound to the counter-review subject and repository pins");
-  const effortRoutes = parsedEffortEnvelope === undefined ? undefined : await selectRoutes("effort-reviewer");
-  const effortRoute = effortRoutes?.[0];
+  // Effort selection is advisory and best-effort. Its route is isolated from ordinary route
+  // prevalidation so any selector-only problem collapses to the fixed default profile.
+  let effortRoute: Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }> | undefined;
+  if (parsedEffortEnvelope !== undefined && effortPlan?.force_default !== true) {
+    try {
+      const candidate = selectDispatchRouteCandidates(
+        input.config,
+        input.phase_kind,
+        "effort-reviewer",
+        input.call.input.invocation_routes?.["effort-reviewer"],
+        undefined,
+        input.host,
+      )[0];
+      if (candidate !== undefined) effortRoute = Object.freeze({ candidate, selection: validateSelectedDispatchRoute(candidate) });
+    } catch {
+      effortRoute = undefined;
+    }
+  }
 
   // Reviewer identity is the tag stamped on its findings, fixed by position in the configured
   // route list so it survives rounds that dispatch only a subset of reviewers.
@@ -546,7 +623,7 @@ export async function runCounterReview(
   type ReviewObservation = ReturnType<typeof mintReviewObservation>;
   type ChildValue =
     | Readonly<{ kind: "review"; observation: ReviewObservation }>
-    | Readonly<{ kind: "effort"; assessment: EffortAssessmentV1 }>
+    | Readonly<{ kind: "effort"; assessment: EffortSelectionV2 }>
     | Readonly<{ kind: "adjudication"; evidence: AdjudicationEvidence }>;
   type ChildOutcome =
     | Readonly<{ ok: true; value: ChildValue }>
@@ -615,7 +692,7 @@ export async function runCounterReview(
   const ops: (() => Promise<ChildOutcome>)[] = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]!));
   if (effortPlan !== undefined && parsedEffortEnvelope !== undefined && effortEnvelope !== undefined && effortRoute !== undefined) {
     const route = effortRoute.selection.route;
-    const mint = (dispatched: CounterReviewDispatchResult): EffortAssessmentV1 => createEffortAssessmentV1(
+    const mint = (dispatched: CounterReviewDispatchResult): EffortSelectionV2 => createEffortSelectionV2(
       JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(dispatched.extracted_output_bytes)),
       parsedEffortEnvelope,
       {
@@ -630,7 +707,6 @@ export async function runCounterReview(
         observed_output_digest: sha256Bytes(dispatched.extracted_output_bytes),
         ...(route.provider === undefined ? {} : { provider: route.provider }),
         route_source: effortRoute.selection.source,
-        ...(effortOverride === undefined ? {} : { route_override: effortOverride }),
         repositories: input.repositories,
       },
     );
@@ -646,24 +722,15 @@ export async function runCounterReview(
       }
       let dispatched: CounterReviewDispatchResult;
       try {
-        dispatched = await dispatchObserved("effort-reviewer", effortRoute, (selectedRoute) =>
-          dependencies.dispatch(selectedRoute, effortEnvelope, effortReviewOutputSchema as PlainJsonValue));
-      } catch (error) {
-        return { ok: false, error };
+        dispatched = await dependencies.dispatch(route, effortEnvelope, effortReviewOutputSchema as PlainJsonValue);
+      } catch {
+        return { ok: true, value: { kind: "effort", assessment: createDefaultEffortSelectionV2(parsedEffortEnvelope) } };
       }
-      let assessment: EffortAssessmentV1;
+      let assessment: EffortSelectionV2;
       try {
         assessment = mint(dispatched);
-      } catch (error) {
-        return {
-          ok: false,
-          error,
-          project_error: createProjectError("MODEL_OUTPUT_INVALID", {
-            adapter: route.adapter,
-            attempt: 1,
-            issue_code: "effort-review-schema-or-binding-invalid",
-          }),
-        };
+      } catch {
+        return { ok: true, value: { kind: "effort", assessment: createDefaultEffortSelectionV2(parsedEffortEnvelope) } };
       }
       await retained?.write(binding, dispatched);
       return { ok: true, value: { kind: "effort", assessment } };
@@ -741,7 +808,9 @@ export async function runCounterReview(
   }
   const singleObservations: ReviewObservation[] = [];
   let constitutionEvidence: AdjudicationEvidence | undefined;
-  let effortAssessment: EffortAssessmentV1 | undefined;
+  let effortAssessment: EffortSelectionV2 | undefined = parsedEffortEnvelope === undefined
+    ? undefined
+    : createDefaultEffortSelectionV2(parsedEffortEnvelope);
   for (const outcome of settled) {
     if (!outcome.ok) continue;
     if (outcome.value.kind === "review") singleObservations.push(outcome.value.observation);
@@ -751,32 +820,20 @@ export async function runCounterReview(
   if (singleObservations.length !== reviewRoutes.length) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
   }
+  if (singleObservations.some((observation) => observation.evidence.schema_version !== "2")) {
+    throw new TypeError("fresh counter-review observations must all use active review schema version 2");
+  }
   if (effortPlan !== undefined && effortAssessment === undefined) {
     throw new TypeError("phase-design counter-review settled without an effort assessment");
   }
 
-  const allFindings: ReviewFinding[] = [];
-  const ownedFindingIds = singleObservations.map((): string[] => []);
-  const seenIds = new Set<string>();
-  for (let i = 0; i < singleObservations.length; i += 1) {
-    const obs = singleObservations[i]!;
-    const tag = reviewRoutes[i]!.tag;
-    for (const f of obs.evidence.findings) {
-      const rawId = taggedFindingId(tag, totalReviewers, f.finding_id);
-      let uniqueId = rawId;
-      let disambig = 2;
-      while (seenIds.has(uniqueId)) {
-        uniqueId = `${rawId}-${disambig}`;
-        disambig += 1;
-      }
-      seenIds.add(uniqueId);
-      ownedFindingIds[i]!.push(uniqueId);
-      allFindings.push({
-        ...f,
-        finding_id: uniqueId,
-      });
-    }
-  }
+  const aggregated = aggregateActiveReviewerFindings(singleObservations.map((observation, index) => ({
+    tag: reviewRoutes[index]!.tag,
+    schema_version: observation.evidence.schema_version,
+    findings: observation.evidence.findings,
+  })), totalReviewers);
+  const allFindings = aggregated.findings;
+  const ownedFindingIds = aggregated.finding_ids_by_reviewer;
 
   const matchedMap = new Map<string, RuleVersionRef>();
   for (const obs of singleObservations) {
@@ -786,10 +843,7 @@ export async function runCounterReview(
   }
   const mergedMatchedRules = [...matchedMap.values()].sort((a, b) => a.rule_id.localeCompare(b.rule_id));
 
-  const anyFail = singleObservations.some((obs) => obs.evidence.verdict === "fail");
-  const anyAdvisory = singleObservations.some((obs) => obs.evidence.verdict === "advisory");
-  const mergedVerdict: ReviewVerdict = anyFail ? "fail" : anyAdvisory ? "advisory" : "pass";
-  const mergedBlockingCount = allFindings.filter((f) => f.blocking).length;
+  const mergedSummary = aggregated.summary;
 
   const primaryObs = singleObservations[0]!;
   const reviewerRuns: ReviewerRunV1[] = singleObservations.map((obs, index) => {
@@ -821,9 +875,9 @@ export async function runCounterReview(
   });
   const mergedReviewEvidence: ReviewEvidence = Object.freeze({
     ...primaryObs.evidence,
+    schema_version: "2",
     findings: Object.freeze(allFindings),
-    verdict: mergedVerdict,
-    blocking_count: mergedBlockingCount,
+    ...mergedSummary,
     matched_rule_versions: Object.freeze(mergedMatchedRules),
     reviewer_runs: Object.freeze(reviewerRuns),
     ...(effortAssessment === undefined ? {} : { effort_review: effortAssessment }),

@@ -11,11 +11,12 @@ import type { DurableArtifact } from "./durable.js";
 import { HUMAN_REVISION_CLASSIFICATIONS, type HumanRevisionClassification, type HumanRevisionOverride } from "./durable-state.js";
 import { parseProjectError, type ProjectResult } from "./errors.js";
 import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type Sha256Digest, type TaskSlug } from "./evidence.js";
-import { GATE_KINDS, gateDecisionEnvelopeV1Schema, humanDecisionProvenanceV1Schema, parseBaselineObservationRef, parseGateContext, parseGateDecisionEnvelope, validateGateDecision, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type WaiverOriginRef, type WaiverScope } from "./gates.js";
+import { GATE_KINDS, gateDecisionEnvelopeV1Schema, humanDecisionProvenanceV1Schema, parseBaselineObservationRef, parseGateContext, parseGateDecisionEnvelope, parseValidationOverrideRequestRef, validateGateDecision, validationOverrideSubjectDigest, type GateContext, type GateDecisionEnvelope, type GateKind, type HumanDecisionProvenance, type RuleVersionRef, type ValidationOverrideRequestV1, type WaiverOriginRef, type WaiverScope } from "./gates.js";
 import type { GateEvidenceByKind } from "./durable-gate.js";
 import { assertPlainJson } from "./plain-json.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { repositoryPathClaimV1Schema, taskPathClaimV1Schema, type RepositoryPathClaim, type TaskPathClaim } from "./path-claims.js";
+import { findingPartitionCountsSchema, type FindingPartitionCounts } from "./review.js";
 import { TOOL_NAMES, type ToolName } from "./tool-names.js";
 import { parseCurrentEvidenceSetRef, type CurrentEvidenceSetRef } from "./trust.js";
 import { triageCandidateSchema } from "./triage.js";
@@ -39,6 +40,10 @@ const scope = z.object({ operation: z.enum(["review-trigger", "adjudication-fail
 // union body (two gate-decision refs) rather than a cross-document reference to it.
 const provenance = humanDecisionProvenanceV1Schema.clone(humanDecisionProvenanceV1Schema.def) as z.ZodType<HumanDecisionProvenance>;
 const common = { schema_version: z.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger, input_fingerprint: digest } as const;
+const stateValidationOverrideRequestV1Schema = z.object({
+  displaced_validations: z.array(z.string().min(1).max(1024).regex(/\S/u)).min(1).max(32)
+    .refine((items) => items.every((item, index) => index === 0 || items[index - 1]!.localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates"),
+}).strict() as unknown as z.ZodType<ValidationOverrideRequestV1>;
 
 export type CommonToolInput = { readonly schema_version: "1"; readonly task_id: TaskSlug; readonly intent_id: PathSafeId; readonly expected_revision: number; readonly input_fingerprint: Sha256Digest };
 export type HumanRevisionDeclaration = {
@@ -46,7 +51,7 @@ export type HumanRevisionDeclaration = {
   readonly rationale: string;
   readonly user_override?: HumanRevisionOverride;
 };
-export type StateBoundaryInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration; readonly operation?: never; readonly target_phase_instance?: never; readonly reason?: never; readonly ask_base_digest?: never; readonly target_commit?: never; readonly scope?: never };
+export type StateBoundaryInput = CommonToolInput & { readonly phase_instance: PhaseInstanceId; readonly step: "produce" | "counter_review" | "triage"; readonly status: "running" | "succeeded" | "failed"; readonly artifact?: DurableArtifact; readonly human_revision?: HumanRevisionDeclaration; readonly operation?: never; readonly target_phase_instance?: never; readonly reason?: never; readonly validation_override_request?: never; readonly ask_base_digest?: never; readonly target_commit?: never; readonly scope?: never };
 /** Additive migration adapter for the bounded planning-restart kernel. */
 export type PlanningRestartInput = CommonToolInput & {
   readonly operation: "planning_restart";
@@ -102,8 +107,23 @@ export type SetCommitAuthorityInput = CommonToolInput & {
   readonly human_revision?: never;
   readonly target_phase_instance?: never;
   readonly ask_base_digest?: never;
+  readonly validation_override_request?: never;
 };
-export type StateInput = StateBoundaryInput | PlanningRestartInput | RefreshMilestoneBaselineInput | AuthorityRecoveryInput | SetCommitAuthorityInput;
+export type ValidationOverrideInput = CommonToolInput & {
+  readonly operation: "request_validation_override";
+  readonly phase_instance: PhaseInstanceId;
+  readonly step: "produce";
+  readonly status: "failed";
+  readonly reason: string;
+  readonly validation_override_request: ValidationOverrideRequestV1;
+  readonly artifact?: never;
+  readonly human_revision?: never;
+  readonly target_phase_instance?: never;
+  readonly ask_base_digest?: never;
+  readonly target_commit?: never;
+  readonly scope?: never;
+};
+export type StateInput = StateBoundaryInput | PlanningRestartInput | RefreshMilestoneBaselineInput | AuthorityRecoveryInput | SetCommitAuthorityInput | ValidationOverrideInput;
 // Every success value optionally echoes the request_digest the server recorded for the call, so
 // a client can compare one string against its envelope output to prove the arguments arrived
 // untranscribed. Optional in the contract because receipts recorded before the echo existed must
@@ -119,7 +139,6 @@ export type RouteOverrideDeclaration = {
   readonly reason: string;
   readonly "counter-reviewer"?: ModelRouteV1;
   readonly "test-reviewer"?: ModelRouteV1;
-  readonly "effort-reviewer"?: ModelRouteV1;
   readonly adjudicator?: ModelRouteV1;
 };
 /** Normal per-invocation reviewer routing, distinct from a human outage substitution. */
@@ -147,7 +166,24 @@ export interface CounterReviewInput extends CommonToolInput {
 export type CounterReviewConstitutionOutcome =
   | Readonly<{ status: "evaluated"; path: RepositoryPathClaim; constitution: ConstitutionResult; drift: DriftResult; triggers: readonly RuleVersionRef[] }>
   | Readonly<{ status: "not-run"; reason: "no-active-constitution-rules" }>;
-export interface CounterReviewSuccess { readonly path: RepositoryPathClaim; readonly verdict: "pass" | "advisory" | "fail"; readonly blocking_count: number; readonly constitution: CounterReviewConstitutionOutcome; readonly revision: number; readonly request_digest?: Sha256Digest }
+export type CounterReviewV2Success = {
+  readonly path: RepositoryPathClaim;
+  readonly verdict: "pass" | "advisory" | "review-raised";
+  readonly total_findings: number;
+  readonly partition_counts: FindingPartitionCounts;
+  readonly constitution: CounterReviewConstitutionOutcome;
+  readonly revision: number;
+  readonly request_digest?: Sha256Digest;
+};
+export type LegacyCounterReviewV1Success = {
+  readonly path: RepositoryPathClaim;
+  readonly verdict: "pass" | "advisory" | "fail";
+  readonly blocking_count: number;
+  readonly constitution: CounterReviewConstitutionOutcome;
+  readonly revision: number;
+  readonly request_digest?: Sha256Digest;
+};
+export type CounterReviewSuccess = CounterReviewV2Success | LegacyCounterReviewV1Success;
 export type HumanGateChoice = { readonly choice: string; readonly reason: string };
 /**
  * The bounded-decision pair is optional and all-or-nothing: supply `preview_digest` + `decision`
@@ -219,13 +255,24 @@ export const stateInputSchema = z.object({
   status: z.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: z.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline", "set_commit_authority"]).optional(),
+  operation: z.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline", "set_commit_authority", "request_validation_override"]).optional(),
   target_commit: z.string().min(1).max(256).optional(),
   scope: z.array(z.enum(["milestone", "policy"])).optional(),
   target_phase_instance: phase.optional(),
   reason: text.optional(),
+  validation_override_request: stateValidationOverrideRequestV1Schema.optional(),
   ask_base_digest: digest.optional(),
 }).strict().superRefine((input, context) => {
+  if (input.operation === "request_validation_override") {
+    if (!input.phase_instance.startsWith("phase-impl-")) context.addIssue({ code: "custom", path: ["phase_instance"], message: "request_validation_override is phase implementation only" });
+    if (input.step !== "produce" || input.status !== "failed") context.addIssue({ code: "custom", path: ["status"], message: "request_validation_override requires produce/failed" });
+    if (input.reason === undefined) context.addIssue({ code: "custom", path: ["reason"], message: "request_validation_override requires reason" });
+    if (input.validation_override_request === undefined) context.addIssue({ code: "custom", path: ["validation_override_request"], message: "request_validation_override requires validation_override_request" });
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.ask_base_digest !== undefined || input.target_commit !== undefined || input.scope !== undefined) {
+      context.addIssue({ code: "custom", path: ["operation"], message: "request_validation_override carries only its reason and bounded validation request" });
+    }
+    return;
+  }
   if (input.operation === "planning_restart") {
     if (input.target_phase_instance === undefined) context.addIssue({ code: "custom", path: ["target_phase_instance"], message: "planning_restart requires target_phase_instance" });
     if (input.reason === undefined) context.addIssue({ code: "custom", path: ["reason"], message: "planning_restart requires reason" });
@@ -233,32 +280,33 @@ export const stateInputSchema = z.object({
     if (input.artifact !== undefined || input.human_revision !== undefined) context.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
     if (input.target_phase_instance === "prd" && input.ask_base_digest === undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
     if (input.target_phase_instance !== "prd" && input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
-    if (input.target_commit !== undefined || input.scope !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "planning_restart cannot carry commit authority fields" });
+    if (input.target_commit !== undefined || input.scope !== undefined || input.validation_override_request !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "planning_restart cannot carry commit authority or validation override fields" });
     return;
   }
   if (input.operation === "set_commit_authority") {
     if (input.target_commit === undefined) context.addIssue({ code: "custom", path: ["target_commit"], message: "set_commit_authority requires target_commit" });
     if (input.reason === undefined) context.addIssue({ code: "custom", path: ["reason"], message: "set_commit_authority requires reason" });
-    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.ask_base_digest !== undefined) {
-      context.addIssue({ code: "custom", path: ["operation"], message: "set_commit_authority carries no artifact, human revision, restart target, or ask digest" });
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.ask_base_digest !== undefined || input.validation_override_request !== undefined) {
+      context.addIssue({ code: "custom", path: ["operation"], message: "set_commit_authority carries no artifact, human revision, restart target, ask digest, or validation override request" });
     }
     return;
   }
   if (input.operation === "refresh_milestone_baseline") {
     if (input.step !== "triage" || input.status !== "succeeded") context.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
-    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined || input.target_commit !== undefined || input.scope !== undefined) {
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.validation_override_request !== undefined || input.ask_base_digest !== undefined || input.target_commit !== undefined || input.scope !== undefined) {
       context.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, ask digest, or commit authority fields" });
     }
     return;
   }
   if (input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" || input.operation === "refresh_stale_baseline") {
-    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined || input.target_commit !== undefined || input.scope !== undefined) {
+    if (input.artifact !== undefined || input.human_revision !== undefined || input.target_phase_instance !== undefined || input.reason !== undefined || input.validation_override_request !== undefined || input.ask_base_digest !== undefined || input.target_commit !== undefined || input.scope !== undefined) {
       context.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, ask digest, or commit authority fields` });
     }
     return;
   }
   if (input.target_commit !== undefined || input.scope !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "commit authority fields require set_commit_authority" });
   if (input.target_phase_instance !== undefined || input.reason !== undefined || input.ask_base_digest !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
+  if (input.validation_override_request !== undefined) context.addIssue({ code: "custom", path: ["operation"], message: "validation_override_request requires request_validation_override" });
   if (input.human_revision !== undefined && (input.step !== "produce" || input.status !== "succeeded")) context.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
 }) as unknown as z.ZodType<StateInput>;
 /**
@@ -284,11 +332,10 @@ export const routeOverrideSchema = z.object({
   reason: text,
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
   "test-reviewer": reviewModelRouteV1Schema.optional(),
-  "effort-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional(),
 }).strict().superRefine((override, context) => {
-  if (override["counter-reviewer"] === undefined && override["test-reviewer"] === undefined && override["effort-reviewer"] === undefined && override.adjudicator === undefined) {
-    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
+  if (override["counter-reviewer"] === undefined && override["test-reviewer"] === undefined && override.adjudicator === undefined) {
+    context.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 export const counterReviewInputSchema = z.object({
@@ -303,8 +350,43 @@ export const gateInputSchema = z.object({ ...common, phase_instance: phase, summ
   try {
     // Baseline adoption opens pre-review: its evidence is the drift observation, not a review set.
     if (input.kind === "baseline-adoption") parseBaselineObservationRef(input.current_evidence);
+    else if (input.kind === "validation-override") parseValidationOverrideRequestRef(input.current_evidence);
     else parseCurrentEvidenceSetRef(input.current_evidence);
   } catch (error) { context.addIssue({ code: "custom", path: ["current_evidence"], message: error instanceof Error ? error.message : "invalid current evidence" }); }
+  if (input.kind === "validation-override") {
+    if (!input.phase_instance.startsWith("phase-impl-")) context.addIssue({ code: "custom", path: ["phase_instance"], message: "validation override gates are phase implementation only" });
+    try {
+      const gateContext = parseGateContext("validation-override", input.context);
+      const evidence = parseValidationOverrideRequestRef(input.current_evidence);
+      const expectedSubject = validationOverrideSubjectDigest({
+        task_id: input.task_id,
+        phase_instance: input.phase_instance,
+        input_fingerprint: gateContext.input_fingerprint,
+        governing_phase_design_digest: gateContext.governing_phase_design_digest,
+        displaced_validations: gateContext.displaced_validations,
+      });
+      if (input.input_fingerprint !== gateContext.input_fingerprint || input.subject_digest !== expectedSubject ||
+          evidence.task_id !== input.task_id || evidence.phase_instance !== input.phase_instance ||
+          evidence.input_fingerprint !== gateContext.input_fingerprint ||
+          evidence.governing_phase_design_digest !== gateContext.governing_phase_design_digest ||
+          evidence.request_revision !== gateContext.request_revision ||
+          evidence.validation_request_subject_digest !== input.subject_digest) {
+        context.addIssue({ code: "custom", path: ["current_evidence"], message: "validation override evidence must exactly bind the request subject" });
+      }
+    } catch {
+      // Shape diagnostics above already report malformed context or evidence.
+    }
+  }
+  if (input.kind === "attempts-exhausted") {
+    try {
+      const gateContext = parseGateContext("attempts-exhausted", input.context);
+      if (gateContext.review_push_through !== undefined && parseCurrentEvidenceSetRef(input.current_evidence).set_digest !== gateContext.review_push_through.current_evidence_set_digest) {
+        context.addIssue({ code: "custom", path: ["context", "review_push_through", "current_evidence_set_digest"], message: "review push-through must bind the gate current evidence set" });
+      }
+    } catch {
+      // Shape diagnostics above already report malformed context or evidence.
+    }
+  }
   if ((input.preview_digest === undefined) !== (input.decision === undefined)) {
     context.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call decision) or both omitted (gate opens and awaits the human decision)" });
   }
@@ -319,7 +401,7 @@ export const waiverInputSchema = z.object({ ...common, origin: waiverOrigin, rat
 
 function inputFor<K extends ToolName>(name: K, value: unknown): ToolInput<K> {
   const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
-  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInputSchema>; return { ...v, current_evidence: v.kind === "baseline-adoption" ? parseBaselineObservationRef(v.current_evidence) : parseCurrentEvidenceSetRef(v.current_evidence) } as ToolInput<K>; }
+  if (name === "archflow_gate") { const v = parsed as z.infer<typeof gateInputSchema>; return { ...v, current_evidence: v.kind === "baseline-adoption" ? parseBaselineObservationRef(v.current_evidence) : v.kind === "validation-override" ? parseValidationOverrideRequestRef(v.current_evidence) : parseCurrentEvidenceSetRef(v.current_evidence) } as ToolInput<K>; }
   return parsed as ToolInput<K>;
 }
 function deepFreeze<T>(value: T): T {
@@ -355,7 +437,18 @@ export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<Pars
 
 export const toolSuccessSchemas = {
   archflow_state: z.object({ path: taskPathClaimV1Schema, revision: safeInteger, status: z.enum(["running", "succeeded", "failed"]), request_digest: digest.optional() }).strict(),
-  archflow_counter_review: z.object({
+  archflow_counter_review: z.union([z.object({
+    path: repositoryPathClaimV1Schema,
+    verdict: z.enum(["pass", "advisory", "review-raised"]),
+    total_findings: safeInteger,
+    partition_counts: findingPartitionCountsSchema,
+    constitution: z.union([
+      z.object({ status: z.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: z.enum(CONSTITUTION_RESULTS), drift: z.enum(DRIFT_RESULTS), triggers: z.array(rule) }).strict(),
+      z.object({ status: z.literal("not-run"), reason: z.literal("no-active-constitution-rules") }).strict(),
+    ]),
+    revision: safeInteger,
+    request_digest: digest.optional(),
+  }).strict(), z.object({
     path: repositoryPathClaimV1Schema,
     verdict: z.enum(["pass", "advisory", "fail"]),
     blocking_count: safeInteger,
@@ -365,7 +458,7 @@ export const toolSuccessSchemas = {
     ]),
     revision: safeInteger,
     request_digest: digest.optional(),
-  }).strict(),
+  }).strict()]),
   archflow_gate: z.object({ kind: z.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text, revision: safeInteger, request_digest: digest.optional() }).strict(),
   archflow_waiver: z.union([z.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId, rule_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest, current_evidence_set_digest: digest, scope, human_provenance: provenance, granted: z.literal(true), expires: z.literal("task-complete"), notes: text, revision: safeInteger, request_digest: digest.optional() }).strict(), z.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId, rule_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest, current_evidence_set_digest: digest, scope, human_provenance: provenance, granted: z.literal(false), notes: text, revision: safeInteger, request_digest: digest.optional() }).strict()])
 } as const;

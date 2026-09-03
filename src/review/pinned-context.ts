@@ -19,11 +19,17 @@ import type { RootBoundGitRunner } from "../repository/identity.js";
 import { openResolved, resolveTaskPath, resolveTaskWorkspacePath, verificationTranscriptClaim } from "../repository/paths.js";
 import type { TransactionAuthority } from "../state/authority.js";
 import {
+  expectedProduceUpstreamBindings,
   loadProduceUpstreamSubject,
+  produceOwnedTaskDocumentPaths,
   produceUpstreamBindingsForSubject,
   readProduceProjection,
   type CurrentProduceSubject,
 } from "../state/produce-subject.js";
+import {
+  authenticatedValidationOverrideIsCurrent,
+  loadAuthenticatedValidationOverride,
+} from "../state/validation-overrides.js";
 import type { ProjectionPlan } from "../state/snapshots.js";
 import type { TransactionDependencies } from "../state/transaction.js";
 import { loadLegacyImportInitialization } from "../state/legacy-import-resume.js";
@@ -42,7 +48,7 @@ import {
  * that cannot fit the artifact plus every non-droppable entry fails closed exactly as before.
  */
 const CAP_PRIORITY: readonly PinnedContextKind[] = [
-  "approved-upstream", "imported-reference", "user-ask", "verification-transcript",
+  "approved-upstream", "imported-reference", "user-ask", "validation-override", "verification-transcript",
   "prior-triage", "interface-excerpt", "conventions", "repo-map",
 ];
 
@@ -184,7 +190,10 @@ const fail = <T>(phase: PhaseInstanceId, issue_code: string): ProjectResult<T> =
 export async function assembleReviewContext(input: {
   readonly runner: RootBoundGitRunner;
   readonly authority: TransactionAuthority;
-  readonly dependencies: Pick<TransactionDependencies, "load_retained_result" | "load_retained_manifest" | "runner">;
+  readonly dependencies: Pick<
+    TransactionDependencies,
+    "load_retained_result" | "load_retained_manifest" | "runner" | "environment" | "read_state"
+  >;
   readonly state: TaskStateV1;
   readonly subject: CurrentProduceSubject;
   readonly projection_bytes: Uint8Array;
@@ -205,7 +214,10 @@ export async function assembleReviewContext(input: {
     if (!upstreams.ok) return upstreams;
     let mechanical: readonly PinnedContextEntry[];
     if (input.subject.artifact.artifact_kind === "implementation-output") {
+      const validationOverrides = await validationOverrideEvidence(input);
+      if (!validationOverrides.ok) return validationOverrides;
       mechanical = [
+        ...validationOverrides.value,
         ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject),
         ...await implementationMechanicalEvidence(input.runner, input.subject, input.projection_plan),
       ];
@@ -253,6 +265,84 @@ export async function assembleReviewContext(input: {
     return fail(input.state.phase_instance, "user-ask-not-current");
   }
   return ok(Object.freeze([pinnedContextEntry("user-ask", "ask.md", bytes), ...priorTriage.value]));
+}
+
+async function validationOverrideEvidence(input: {
+  readonly authority: TransactionAuthority;
+  readonly dependencies: Pick<
+    TransactionDependencies,
+    "load_retained_manifest" | "runner" | "environment" | "read_state"
+  >;
+  readonly state: TaskStateV1;
+  readonly subject: CurrentProduceSubject;
+}): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
+  const phase = decodePhaseInstance(input.state.phase_instance);
+  if (phase.kind !== "phase-impl" || input.subject.artifact.artifact_kind !== "implementation-output") {
+    return ok(Object.freeze([]));
+  }
+  const binding = expectedProduceUpstreamBindings(input.state)
+    .find((candidate) => candidate.artifact_kind === "phase-design");
+  if (binding === undefined) return fail(input.state.phase_instance, "validation-override-governing-phase-design-missing");
+  // If this result rewrites its governing phase design, every grant bound to the predecessor is
+  // historical. The replacement has not yet acquired approval authority at review time.
+  if (produceOwnedTaskDocumentPaths(input.subject.artifact).includes(binding.path)) {
+    return ok(Object.freeze([]));
+  }
+  const governing = await loadProduceUpstreamSubject(
+    input.dependencies, input.authority, input.state, binding,
+  );
+  if (!governing.ok) return governing;
+
+  const productionInput = Object.freeze({
+    phase_instance: input.state.phase_instance,
+    input_fingerprint: input.subject.artifact.input_fingerprint,
+  });
+
+  const grants = [];
+  let unavailable = false;
+  for (const record of input.state.validation_overrides ?? []) {
+    if (record.phase_instance !== input.state.phase_instance ||
+        record.input_fingerprint !== input.subject.artifact.input_fingerprint ||
+        record.governing_phase_design_digest !== governing.value.artifact_digest) continue;
+    const authenticated = await loadAuthenticatedValidationOverride(
+      input.dependencies, input.authority, record,
+    );
+    if (!authenticated.ok) {
+      unavailable = true;
+      continue;
+    }
+    if (!authenticatedValidationOverrideIsCurrent(
+      authenticated.value, productionInput, governing.value.artifact_digest,
+    )) continue;
+    grants.push(Object.freeze({
+      status: "not-run" as const,
+      gate_id: authenticated.value.record.gate_id,
+      human_reason: authenticated.value.record.human_reason,
+      decided_at: authenticated.value.record.decided_at,
+      displaced_validations: authenticated.value.request.context.displaced_validations,
+    }));
+  }
+  const entries: PinnedContextEntry[] = [];
+  if (grants.length > 0) {
+    entries.push(pinnedContextEntry(
+      "validation-override",
+      "human-granted validation overrides",
+      canonicalJsonBytes({
+        schema_version: "1",
+        evidence_kind: "validation-overrides",
+        interpretation: "The named validations were not run; this records a human exception and is not passing evidence.",
+        overrides: grants,
+      }),
+    ));
+  }
+  if (unavailable) {
+    entries.push(unavailableContextEntry(
+      "validation-override",
+      "validation override authority",
+      "a matching recorded validation override could not be authenticated and is not treated as granted",
+    ));
+  }
+  return ok(Object.freeze(entries));
 }
 
 async function assembleUpstreamContext(input: {
@@ -582,12 +672,13 @@ export async function loadPriorTriageRecord(
     return fail(state.phase_instance, "prior-triage-artifact-invalid");
   }
   const findingsByRef = new Map<string, Readonly<{
-    severity: string;
-    blocking: boolean;
     summary: string;
     evidence: string;
     suggested_resolution: string;
-  }>>();
+  } & (
+    | { claim_type: string; confidence: string; falsifier: string }
+    | { severity: string; blocking: boolean }
+  )>>();
   const reviewRef = state.authoritative_results.find((candidate) =>
     candidate.phase_instance === state.phase_instance && candidate.step === "counter_review");
   if (reviewRef !== undefined) {
@@ -597,8 +688,11 @@ export async function loadPriorTriageRecord(
     if (manifest.source_artifact.artifact_kind === "review-evidence") {
       for (const finding of manifest.source_artifact.evidence.findings) {
         findingsByRef.set(`${manifest.artifact_digest}:${finding.finding_id}`, {
-          severity: finding.severity,
-          blocking: finding.blocking,
+          ...(manifest.source_artifact.evidence.schema_version === "2" && "claim_type" in finding
+            ? { claim_type: finding.claim_type, confidence: finding.confidence, falsifier: finding.falsifier }
+            : "severity" in finding
+              ? { severity: finding.severity, blocking: finding.blocking }
+              : (() => { throw new TypeError("review finding does not match its native schema version"); })()),
           summary: finding.summary,
           evidence: finding.evidence,
           suggested_resolution: finding.suggested_resolution,

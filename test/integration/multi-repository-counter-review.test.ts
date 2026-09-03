@@ -164,11 +164,11 @@ else {
     api: existsSync(join(target, "api", "api.ts")), apiAuthority: existsSync(join(target, "api", ".archflow")) }));
   ${options.remove === true && secondary !== undefined ? `rmSync(${JSON.stringify(secondary.path)}, { recursive: true, force: true });` : ""}
   ${options.drift === true && secondary !== undefined ? `writeFileSync(${JSON.stringify(join(secondary.path, "drift.txt"))}, "drift\\n"); execFileSync("git", ["add", "."], { cwd: ${JSON.stringify(secondary.path)} }); execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "drift"], { cwd: ${JSON.stringify(secondary.path)} });` : ""}
-  const subject = envelope.subject; const output = { schema_version: "1", task_id: subject.task_id,
+  const subject = envelope.subject; const output = { task_id: subject.task_id,
     phase_instance: subject.phase_instance, step: "counter_review", role: "counter-review",
     subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
     rubric_digest: subject.rubric_digest, producer_family: subject.producer_family,
-    findings: [], matched_rule_versions: [], verdict: "pass", blocking_count: 0 };
+    findings: [], matched_rule_versions: [] };
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }

@@ -5,6 +5,7 @@ import { parsePathSafeId, parseSafeId, parseSafeInteger, parseSha256Digest, pars
 import { encodePhaseInstance, parsePhaseInstanceId, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
 import { legalRunStepStatus, planApprovalTriggerAuthorityRecovery, planMilestoneRecovery, planPlanningRestart, planStateTransition } from "../../src/state/transitions.js";
+import { isExactMilestoneRecoveryDraft } from "../../src/state/restart-authority.js";
 
 const D = (value: string) => parseSha256Digest(value.repeat(64));
 const phase = (kind: "phase-design" | "phase-impl", number: number) => encodePhaseInstance({ kind, phase: parsePositiveSafePhaseNumber(number) });
@@ -40,6 +41,46 @@ function state(overrides: Partial<TaskStateV1> = {}): TaskStateV1 {
 }
 
 describe("planStateTransition", () => {
+  it("atomically records a validation request on failed implementation produce without spending an attempt", () => {
+    const current = state({
+      phase_instance: phase("phase-impl", 2), step: "produce", status: "running",
+      attempt: parseSafeInteger(3), input_fingerprint: D("8"),
+    });
+    const pending = {
+      phase_instance: current.phase_instance,
+      input_fingerprint: current.input_fingerprint,
+      governing_phase_design_digest: D("9"),
+      displaced_validations: ["hardware suite"],
+      producer_reason: "runner unavailable",
+      request_digest: D("a"),
+      request_revision: parseSafeInteger(current.revision + 1),
+    } as const;
+    const result = planStateTransition({
+      current,
+      target: {
+        phase_instance: current.phase_instance, step: "produce", status: "failed",
+        attempt: current.attempt, input_fingerprint: current.input_fingerprint,
+      },
+      recomputed_input_fingerprint: current.input_fingerprint,
+      pending_validation_override: pending,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({
+      step: "produce", status: "failed", attempt: 3, pending_validation_override: pending,
+    });
+
+    const waiting = taskStateV1Schema.parse({ ...result.value, revision: current.revision + 1 });
+    expect(planStateTransition({
+      current: waiting,
+      target: {
+        phase_instance: waiting.phase_instance, step: "produce", status: "running",
+        attempt: parseSafeInteger(waiting.attempt + 1), input_fingerprint: waiting.input_fingerprint,
+      },
+      recomputed_input_fingerprint: waiting.input_fingerprint,
+    })).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
+  });
+
   it("re-enters unchanged production once when a legacy fixed point lacks approval-trigger authority", () => {
     const currentPhase = phase("phase-design", 2);
     const upstreamPhase = encodePhaseInstance({ kind: "design" });
@@ -116,6 +157,66 @@ describe("planStateTransition", () => {
         superseded_results: current.authoritative_results,
       });
     }
+  });
+
+  it("supports multiple distinct milestone recoveries in the same phase instance", () => {
+    const current = state({
+      step: "triage", status: "succeeded", attempt: parseSafeInteger(3),
+      authoritative_results: [{
+        phase_instance: phase("phase-design", 2), step: "produce", result_digest: D("7"),
+        result_id: parseSafeId("produce-result"), input_fingerprint: D("2"),
+      }],
+    });
+    const recovery1 = planMilestoneRecovery({
+      current,
+      recovery_id: parsePathSafeId("milestone-recovery-1"),
+      cause: "milestone-proof-missing",
+      target_ref: "refs/heads/main",
+      target_head: "abcdef0123456789abcdef0123456789abcdef02" as TaskStateV1["policy_base_commit"],
+      subject_digest: D("7"),
+      recomputed_input_fingerprint: D("2"),
+    });
+    expect(recovery1.ok).toBe(true);
+    if (!recovery1.ok) return;
+
+    const stateAfterRecovery1 = taskStateV1Schema.parse({
+      ...recovery1.value,
+      revision: parseSafeInteger(current.revision + 1),
+    });
+    expect(isExactMilestoneRecoveryDraft(current, recovery1.value)).toBe(true);
+
+    // Second recovery with the same recovery_id is rejected
+    const colliding = planMilestoneRecovery({
+      current: stateAfterRecovery1,
+      recovery_id: parsePathSafeId("milestone-recovery-1"),
+      cause: "milestone-proof-missing",
+      target_ref: "refs/heads/main",
+      target_head: "abcdef0123456789abcdef0123456789abcdef02" as TaskStateV1["policy_base_commit"],
+      subject_digest: D("7"),
+      recomputed_input_fingerprint: D("2"),
+    });
+    expect(colliding.ok).toBe(false);
+    expect(colliding).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
+
+    // Second recovery with a distinct recovery_id succeeds
+    const recovery2 = planMilestoneRecovery({
+      current: stateAfterRecovery1,
+      recovery_id: parsePathSafeId("milestone-recovery-2"),
+      cause: "milestone-proof-missing",
+      target_ref: "refs/heads/main",
+      target_head: "abcdef0123456789abcdef0123456789abcdef02" as TaskStateV1["policy_base_commit"],
+      subject_digest: D("7"),
+      recomputed_input_fingerprint: D("2"),
+    });
+    expect(recovery2.ok).toBe(true);
+    if (!recovery2.ok) return;
+
+    expect(recovery2.value.milestone_recovery_history).toHaveLength(2);
+    expect(recovery2.value.milestone_recovery_history?.map((r) => r.recovery_id)).toEqual([
+      "milestone-recovery-1",
+      "milestone-recovery-2",
+    ]);
+    expect(isExactMilestoneRecoveryDraft(stateAfterRecovery1, recovery2.value)).toBe(true);
   });
 
   it("plans the exact running-to-succeeded lifecycle move", () => {

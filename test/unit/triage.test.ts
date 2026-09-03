@@ -10,11 +10,11 @@ const digest = (character: string) => parseSha256Digest(character.repeat(64));
 const phase = encodePhaseInstance({ kind: "phase-impl", phase: 2 as never });
 const TASK = parseTaskSlug("task");
 
-function qualify(evidenceDigest: ReturnType<typeof digest>, blocking = false): QualifiedReviewEvidence {
-  const evidence = { schema_version: "1", task_id: TASK, phase_instance: phase, step: "counter_review", role: "counter-review", subject_digest: digest("a"), input_fingerprint: digest("b"), rubric_digest: digest("c"), producer_family: "claude", findings: [{ finding_id: "same-id", severity: blocking ? "blocker" : "minor", blocking, summary: "summary", evidence: "evidence", suggested_resolution: "resolution" }], matched_rule_versions: [], verdict: blocking ? "fail" : "advisory", blocking_count: blocking ? 1 : 0, assurance: "degraded", model_family: "codex", model: "model", effort: "unknown", reason: "manual" } as const;
+function qualify(evidenceDigest: ReturnType<typeof digest>, blocking = false, phaseInstance: string = phase): QualifiedReviewEvidence {
+  const evidence = { schema_version: "1", task_id: TASK, phase_instance: phaseInstance, step: "counter_review", role: "counter-review", subject_digest: digest("a"), input_fingerprint: digest("b"), rubric_digest: digest("c"), producer_family: "claude", findings: [{ finding_id: "same-id", severity: blocking ? "blocker" : "minor", blocking, summary: "summary", evidence: "evidence", suggested_resolution: "resolution" }], matched_rule_versions: [], verdict: blocking ? "fail" : "advisory", blocking_count: blocking ? 1 : 0, assurance: "degraded", model_family: "codex", model: "model", effort: "unknown", reason: "manual" } as const;
   const verified = createTestVerifiedReferencedEvidence<"review", "degraded">("review", { evidence_digest: evidenceDigest, evidence } as never);
   const authority = { kind: "degraded", checkpoint_digest: digest("f"), checkpoint_revision: 1 } as const;
-  const link = createTestAuthorityLink({ schema_version: "1", evidence_kind: "review", assurance: evidence.assurance, role: evidence.role, task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), evidence_digest: evidenceDigest, authority } as never);
+  const link = createTestAuthorityLink({ schema_version: "1", evidence_kind: "review", assurance: evidence.assurance, role: evidence.role, task_id: TASK, phase_instance: phaseInstance, subject_digest: digest("a"), input_fingerprint: digest("b"), evidence_digest: evidenceDigest, authority } as never);
   return authorityQualifier.qualifyReview(link as never, verified as never);
 }
 
@@ -24,7 +24,7 @@ const slots = [
 ] as const;
 const current = authorityQualifier.currentReviews(createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots }), reviews);
 const disposition = (reviewDigest: ReturnType<typeof digest>) => ({ review_evidence_digest: reviewDigest, finding_id: "same-id", disposition: "rejected", rationale: "not applicable", evidence: "source confirms" });
-const candidate = { schema_version: "1", task_id: TASK, phase_instance: phase, step: "triage", subject_digest: digest("a"), input_fingerprint: digest("b"), current_evidence_set_digest: current.current_evidence_set.set_digest, source_evidence_digests: [digest("1")], dispositions: [disposition(digest("1"))], accepted_count: 0, rejected_count: 1, accepted_editorial_count: 0 };
+const candidate = { schema_version: "1", task_id: TASK, phase_instance: phase, step: "triage", subject_digest: digest("a"), input_fingerprint: digest("b"), current_evidence_set_digest: current.current_evidence_set.set_digest, source_evidence_digests: [digest("1")], dispositions: [disposition(digest("1"))], accepted_count: 0, rejected_count: 1, accepted_editorial_count: 0, escalated_human_count: 0, deferred_count: 0 };
 
 describe("exact-set triage", () => {
   it("parses structure without claiming current-set coverage", () => {
@@ -43,27 +43,30 @@ describe("exact-set triage", () => {
   });
 });
 
+const designPhase = encodePhaseInstance({ kind: "design" });
+const designReviews = [qualify(digest("1"), false, designPhase)] as const;
+const designCurrent = authorityQualifier.currentReviews(createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: designPhase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots }), designReviews);
 const editorialDisposition = (reviewDigest: ReturnType<typeof digest>) => ({ review_evidence_digest: reviewDigest, finding_id: "same-id", disposition: "accepted-editorial", rationale: "wording only", revision_intent: "polish wording" });
 
 describe("accepted-editorial triage", () => {
-  const editorialCandidate = { ...candidate, dispositions: [editorialDisposition(digest("1"))], accepted_count: 0, rejected_count: 0, accepted_editorial_count: 1 };
+  const editorialCandidate = { ...candidate, phase_instance: designPhase, current_evidence_set_digest: designCurrent.current_evidence_set.set_digest, dispositions: [editorialDisposition(digest("1"))], accepted_count: 0, rejected_count: 0, accepted_editorial_count: 1, escalated_human_count: 0, deferred_count: 0 };
   it("validates editorial-only acceptance with its own count", () => {
-    const validated = validateTriage(current, editorialCandidate);
+    const validated = validateTriage(designCurrent, editorialCandidate);
     expect(validated.accepted_count).toBe(0);
     expect(validated.accepted_editorial_count).toBe(1);
   });
   it("refuses a missing or contradictory accepted_editorial_count", () => {
     const { accepted_editorial_count: _omitted, ...withoutCount } = editorialCandidate;
     expect(parseTriageCandidate(withoutCount).dispositions).toHaveLength(1);
-    expect(() => validateTriage(current, withoutCount)).toThrow(/requires accepted_editorial_count/);
-    expect(() => validateTriage(current, { ...editorialCandidate, accepted_editorial_count: 0, rejected_count: 1 })).toThrow(/contradictory/);
-    expect(() => validateTriage(current, { ...candidate, accepted_editorial_count: 1, rejected_count: 1 })).toThrow(/contradictory/);
+    expect(() => validateTriage(designCurrent, withoutCount)).toThrow(/requires accepted_editorial_count/);
+    expect(() => validateTriage(designCurrent, { ...editorialCandidate, accepted_editorial_count: 0, rejected_count: 1 })).toThrow(/contradictory/);
+    expect(() => validateTriage(designCurrent, { ...candidate, phase_instance: designPhase, current_evidence_set_digest: designCurrent.current_evidence_set.set_digest, accepted_editorial_count: 1, rejected_count: 1 })).toThrow(/contradictory/);
   });
-  it("refuses accepted-editorial on any blocking finding", () => {
-    const blockingReviews = [qualify(digest("1"), true)] as const;
-    const blockingCurrent = authorityQualifier.currentReviews(createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: phase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots }), blockingReviews);
+  it("refuses accepted-editorial on any substantive finding", () => {
+    const blockingReviews = [qualify(digest("1"), true, designPhase)] as const;
+    const blockingCurrent = authorityQualifier.currentReviews(createTestCurrentReviewSetAuthority({ task_id: TASK, phase_instance: designPhase, subject_digest: digest("a"), input_fingerprint: digest("b"), slots }), blockingReviews);
     const mixed = { ...editorialCandidate, current_evidence_set_digest: blockingCurrent.current_evidence_set.set_digest };
-    expect(() => validateTriage(blockingCurrent, mixed)).toThrow(/blocking finding/);
+    expect(() => validateTriage(blockingCurrent, mixed)).toThrow(/substantive finding/);
   });
 });
 
@@ -86,5 +89,24 @@ describe("disposition ledger boundary", () => {
   it("keeps parsing retained candidates that carry a ledger", () => {
     const parsed = parseTriageCandidate({ ...candidate, disposition_ledger: ledger });
     expect(parsed.disposition_ledger).toHaveLength(1);
+  });
+});
+
+describe("review round history boundary", () => {
+  const history = [
+    { attempt: 1, review_evidence_digest: digest("8") },
+    { attempt: 2, review_evidence_digest: digest("1") },
+  ] as const;
+
+  it("keeps retained history readable but refuses producer-supplied history", () => {
+    expect(parseTriageCandidate({ ...candidate, review_round_history: history }).review_round_history).toEqual(history);
+    expect(() => validateTriage(current, { ...candidate, review_round_history: history })).toThrow(/server-computed/u);
+  });
+
+  it("validates and freezes server-computed history in strict attempt order", () => {
+    const validated = validateTriage(current, candidate, undefined, history as never);
+    expect(validated.review_round_history).toEqual(history);
+    expect(Object.isFrozen(validated.review_round_history)).toBe(true);
+    expect(() => validateTriage(current, candidate, undefined, [...history].reverse() as never)).toThrow(/sorted by attempt/u);
   });
 });

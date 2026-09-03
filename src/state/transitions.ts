@@ -5,6 +5,7 @@ import type {
   AuthoritativeResultRef,
   HumanRevisionRecord,
   MilestoneRecoveryRecord,
+  PendingValidationOverrideV1,
   PlanningRestartRecord,
   TaskStateV1,
   RuleSettlementV1,
@@ -83,6 +84,8 @@ export type TransitionPlanInput = Readonly<{
    * the revision this plan produces.
    */
   rule_settlement?: RuleSettlementV1;
+  /** Atomic failed-result request for a human validation exception. */
+  pending_validation_override?: PendingValidationOverrideV1;
 }>;
 
 export type PlanningRestartPlanInput = Readonly<{
@@ -133,7 +136,8 @@ export function planPlanningRestart(value: PlanningRestartPlanInput): ProjectRes
   const input = structuredClone(value);
   const current = input.current;
   if (
-    current.terminal !== undefined || current.open_gate !== undefined || input.reason.trim() === "" ||
+    current.terminal !== undefined || current.open_gate !== undefined ||
+    current.pending_validation_override !== undefined || input.reason.trim() === "" ||
     !isStrictlyEarlierPlanningPhase(input.target_phase_instance, current.phase_instance)
   ) return restartInvalid(input, "target-not-strictly-earlier-planning-phase");
   if ((current.restart_history ?? []).some((record) => record.restart_id === input.restart_id)) {
@@ -584,6 +588,25 @@ function pendingHumanRevisionMatches(input: TransitionPlanInput): boolean {
     isDeepStrictEqual(expected, observed)));
 }
 
+function pendingValidationOverrideMatches(input: TransitionPlanInput): boolean {
+  const requested = input.pending_validation_override;
+  // A pending request is gate-owned authority: ordinary state movement cannot retain, replace, or
+  // clear it. The validation gate settlement owns the only legal resolution path.
+  if (input.current.pending_validation_override !== undefined) return false;
+  if (requested === undefined) return true;
+  const phase = decodePhaseInstance(input.current.phase_instance);
+  return phase.kind === "phase-impl" &&
+    input.current.terminal === undefined && input.current.open_gate === undefined &&
+    input.current.step === "produce" && input.current.status === "running" &&
+    input.target.phase_instance === input.current.phase_instance &&
+    input.target.step === "produce" && input.target.status === "failed" &&
+    input.target.attempt === input.current.attempt &&
+    input.target.input_fingerprint === input.current.input_fingerprint &&
+    requested.phase_instance === input.current.phase_instance &&
+    requested.input_fingerprint === input.current.input_fingerprint &&
+    requested.request_revision === input.current.revision + 1;
+}
+
 function withResultReference(
   current: readonly AuthoritativeResultRef[],
   reference: AuthoritativeResultRef | undefined,
@@ -717,7 +740,8 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     !artifactMatches(input) ||
     !resultReferenceMatches(input) ||
     !constitutionReferenceMatches(input) ||
-    !pendingHumanRevisionMatches(input)
+    !pendingHumanRevisionMatches(input) ||
+    !pendingValidationOverrideMatches(input)
   ) {
     return invalid(input, from, to);
   }
@@ -790,6 +814,9 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
       ? {}
       : { planned_final_phase: parseSafeInteger(plannedFinalPhase) }),
     ...(ruleSettlements === undefined ? {} : { rule_settlements: ruleSettlements }),
+    ...(input.pending_validation_override === undefined
+      ? {}
+      : { pending_validation_override: Object.freeze(input.pending_validation_override) }),
   });
   if (
     input.result_reference === undefined &&

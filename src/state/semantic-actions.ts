@@ -98,16 +98,26 @@ function assertSubmissionMatches(expected: ApplySubmissionKindV1, submission: Ap
 }
 
 /**
- * A succeeded work-result must match its position's produce kind before composition: a phase-impl
- * position requires the client-owned implementation facts, and a document position refuses them.
- * This turns both mismatch directions into semantic failures instead of composer crashes.
+ * A work-result must match its position's produce kind before composition: a phase-impl position
+ * requires implementation facts on success and is the only position allowed to request a
+ * validation override on failure. This turns mismatches into semantic failures instead of
+ * composer crashes or invocation-only authorization.
  */
 function assertWorkResultFactsMatchPosition(
   offer: SemanticActionOfferV1,
   submission: ApplySubmissionV1 | undefined,
 ): void {
-  if (offer.action_kind !== "submit-work" || submission?.kind !== "work-result" || submission.outcome !== "succeeded") return;
+  if (offer.action_kind !== "submit-work" || submission?.kind !== "work-result") return;
   const position = offer.phase_instance === undefined ? undefined : decodePhaseInstance(offer.phase_instance).kind;
+  if (submission.outcome === "failed") {
+    if (submission.validation_override_request !== undefined && position !== "phase-impl") {
+      throw new SemanticActionPlanError(
+        "SEMANTIC_SUBMISSION_MISMATCH",
+        "semantic action permits a validation override request only at a phase-impl position",
+      );
+    }
+    return;
+  }
   if (position === "phase-impl") {
     if (submission.implementation === undefined) {
       throw new SemanticActionPlanError(
@@ -359,7 +369,14 @@ function requestFacts(
       if (submission?.kind !== "work-result") throw new TypeError("validated work result is unavailable");
       if (submission.outcome === "failed") return {
         execution: "compose-request",
-        facts: { kind: "failed", intent_id: intentId },
+        facts: submission.validation_override_request === undefined
+          ? { kind: "failed", intent_id: intentId }
+          : {
+              kind: "failed",
+              intent_id: intentId,
+              reason: submission.reason,
+              validation_override_request: submission.validation_override_request,
+            },
       };
       return { execution: "compose-request", facts: {
         kind: "produce",
@@ -424,16 +441,6 @@ export function planSemanticAction(
   const offer = projection.internal_offer;
   if (offer === undefined) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
-  }
-  if (
-    input.action.submission?.kind === "review-dispatch" &&
-    input.action.submission.route_override["effort-reviewer"] !== undefined &&
-    projection.view.dispatch_failure?.role !== "effort-reviewer"
-  ) {
-    throw new SemanticActionPlanError(
-      "SEMANTIC_SUBMISSION_MISMATCH",
-      "an effort-reviewer substitution is permitted only for the exact current effort-review dispatch failure",
-    );
   }
   assertWorkResultFactsMatchPosition(offer, input.action.submission);
   const expectedToken = semanticOfferToken(offer);

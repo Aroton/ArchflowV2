@@ -11,13 +11,13 @@ kind: artifact
 mode: adversarial
 criteria:
   - id: substantive-correctness
-    text: "Report a finding only for a material defect: leaving the artifact unchanged is reasonably likely to change a downstream design, implementation, verification, or approval decision, or create an important product, reliability, security, or workflow risk. A blocking finding must cite the exact artifact, pinned, or repository evidence; name the concrete downstream consequence; and explain why it survives the stated non-goals and priority order. Wording is blocking only when it permits materially different reasonable interpretations. Do not report optional polish, harmless wording refinements, stylistic preferences, true-but-inconsequential observations, or other items that would not materially change an outcome."
+    text: "Report a finding only for a material defect: leaving the artifact unchanged is reasonably likely to change a downstream design, implementation, verification, or approval decision, or create an important product, reliability, security, or workflow risk. The finding must cite the exact artifact, pinned, or repository evidence; name the concrete downstream consequence; and explain why it survives the stated non-goals and priority order. Wording is material only when it permits materially different reasonable interpretations. Do not report optional polish, harmless wording refinements, stylistic preferences, true-but-inconsequential observations, or other items that would not materially change an outcome."
     blocking: true
   - id: ask-fidelity
     text: "Compare the PRD against the pinned ask record: the verbatim original request and every recorded clarification question and answer. Report only an omitted need, unexplained exclusion, or contradiction reasonably likely to materially change what is designed, implemented, or accepted. If the ask is not pinned, do not infer it; use unverifiable-claims only when the gap prevents a material judgment."
     blocking: true
   - id: proportionality
-    text: "Report only substantial scope, machinery, or process that the pinned ask does not justify and that would materially change cost, architecture, delivery, or user outcome. Do not report minor simplifications or preferred alternatives."
+    text: "Report only substantial scope, machinery, or process that the pinned ask does not justify and that would materially change cost, architecture, delivery, or user outcome. Do not report small simplifications or preferred alternatives."
     blocking: true
   - id: testable-requirements
     text: "Report a defect only when a requirement permits materially different reasonable interpretations or prevents meaningful verification of an important outcome. Do not request extra specificity when a reasonable implementer and verifier would reach the same result."
@@ -26,10 +26,10 @@ criteria:
     text: "Report only an unstated assumption or unresolved human choice that could materially change scope, behavior, acceptance, or risk; harmless implementation latitude is not a finding."
     blocking: true
   - id: unverifiable-claims
-    text: "When missing envelope or read-only repository evidence prevents a material judgment, record one non-blocking finding naming the claim and missing evidence, with a finding_id beginning unverifiable-. Never guess. An explicit assumption is handled under stated-assumptions. Omit gaps that cannot materially affect the review and report each material gap once."
+    text: "When missing envelope or read-only repository evidence prevents a material judgment, record one gap finding naming the claim and missing evidence, with a finding_id beginning unverifiable-. Never guess. An explicit assumption is handled under stated-assumptions. Omit gaps that cannot materially affect the review and report each material gap once."
     blocking: false
   - id: reviewer-confidence
-    text: "When a material judgment cannot be made with confidence from the artifact, the pinned ask record, and the supplied repository snapshot, record one non-blocking finding with a finding_id beginning escalate-, citing the exact judgment that could not be made and what evidence or clarification would settle it. Report escalate- only for a question that could materially change the verdict; a missing document or evidence gap belongs to unverifiable-claims, and never guess in either place."
+    text: "When a material judgment cannot be made with confidence from the artifact, the pinned ask record, and the supplied repository snapshot, record one suspicion finding with a finding_id beginning escalate-, citing the exact judgment that could not be made and what evidence or clarification would settle it. Report escalate- only for a question that could materially change the verdict; a missing document or evidence gap belongs to unverifiable-claims, and never guess in either place."
     blocking: false
   - id: advisory-observations
     text: "Do not report non-material observations, optional improvements, completeness suggestions, stylistic preferences, or harmless prose refinements. A true observation that would not change what is designed, built, or verified is not a defect. A sound, decision-ready artifact should return no findings rather than a list of possible enhancements. Formatting, lint, type-checking, naming, and import-order findings belong to the deterministic tools that own them; never report them."

@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  EFFORT_SELECTOR_INSTRUCTIONS,
+  IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
+  createDefaultEffortSelectionV2,
+  createEffortSelectionV2,
   deriveBoundImplementationEffortV1,
+  rawEffortSelectionV2Schema,
   parseRawEffortReviewV1,
+  type EffortEnvelopeV2,
   type EffortReviewExpectedBindingsV1,
 } from "../../src/contracts/effort-review.js";
 
@@ -60,6 +66,50 @@ const expected = {
 } as unknown as EffortReviewExpectedBindingsV1;
 
 describe("effort review contracts", () => {
+  const selectorEnvelope = {
+    schema_version: "2",
+    instructions: EFFORT_SELECTOR_INSTRUCTIONS,
+    artifact: "# Phase design\n",
+    task_id: "effort-review",
+    phase_instance: "phase-design-1",
+    attempt: 1,
+    subject_digest: digest("a"),
+    input_fingerprint: digest("b"),
+    invocation_id: "selector-invocation",
+    result_id: "selector-result",
+    policy_id: IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
+    hazard_registry: { schema_version: "1", state: "absent", registry_digest: digest("d"), hazards: [] },
+    repositories: [{ name: "primary", repository_identity_digest: digest("e"), commit: "f".repeat(40) }],
+  } as unknown as EffortEnvelopeV2;
+
+  it("accepts only a bound profile from the fresh selector", () => {
+    const rawSelection = {
+      schema_version: "2", task_id: "effort-review", phase_instance: "phase-design-1",
+      step: "effort_review", role: "effort-reviewer", subject_digest: digest("a"),
+      input_fingerprint: digest("b"), policy_id: IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
+      profile_id: "gpt-5-6-sol-xhigh",
+    };
+    expect(rawEffortSelectionV2Schema.parse(rawSelection)).toEqual(rawSelection);
+    for (const forbidden of ["components", "scores", "rationale", "findings", "questions", "blockers", "total"]) {
+      expect(() => rawEffortSelectionV2Schema.parse({ ...rawSelection, [forbidden]: [] })).toThrow();
+    }
+    const selected = createEffortSelectionV2(rawSelection, selectorEnvelope, {
+      adapter: "codex-cli", cli_version: "1.0.0", model_family: "codex", model: "gpt-5.6-luna",
+      effort: "xhigh", invocation_id: "selector-invocation", result_id: "selector-result",
+      envelope_input_digest: digest("1") as never, observed_output_digest: digest("2") as never, route_source: { provenance: "configured" },
+      repositories: selectorEnvelope.repositories,
+    });
+    expect(selected.profile).toMatchObject({ model: "gpt-5.6-sol", effort: "xhigh" });
+  });
+
+  it("mints the fixed Sol-medium default without selector work", () => {
+    expect(createDefaultEffortSelectionV2(selectorEnvelope)).toMatchObject({
+      schema_version: "2",
+      profile: { model: "gpt-5.6-sol", effort: "medium" },
+      source: { kind: "default" },
+    });
+  });
+
   it("accepts exact ordered coverage and enforces captured hazard floors", () => {
     const result = deriveBoundImplementationEffortV1(raw([judgment("one"), judgment("two", 2)]), expected);
     expect(result.recommendation.status).toBe("ready");

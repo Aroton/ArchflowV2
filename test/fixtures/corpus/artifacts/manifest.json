@@ -3,12 +3,13 @@
   "disposition_vocabulary": {
     "seeded": [
       "seed-detected",
-      "unrelated-blocker",
+      "unrelated-substantive",
       "missed"
     ],
     "control": [
       "clean-pass",
-      "false-blocker"
+      "false-substantive",
+      "advisory-preference"
     ]
   },
   "cases": [
@@ -17,104 +18,109 @@
       "artifact": "seeded-retention-contradiction.md",
       "artifact_sha256": "9f57633bc7b1beb8bb6222fefc33c0d52e7c10fa273b88e67e82b0676daa1809",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "The audit-record example persists the raw bearer token even though the requirements prohibit durable storage of the token or any reversible representation."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "retention-contradiction",
+      "seeded_claim": "The audit-record example persists the raw bearer token even though the requirements prohibit durable storage of the token or any reversible representation."
     },
     {
       "id": "unhandled-error-path",
       "artifact": "seeded-unhandled-error-path.md",
       "artifact_sha256": "e77248bbbdf48179b2aa88cfdfe58e4c51e530205e840a35d8ac392244917871",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "The contract requires a worker receiving LEASE_EXPIRED to stop uploading and preserve resumability, but the worker flow and error-handling design never handle that named result."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "unhandled-error-path",
+      "seeded_claim": "The contract requires a worker receiving LEASE_EXPIRED to stop uploading and preserve resumability, but the worker flow and error-handling design never handle that named result."
     },
     {
       "id": "offline-constraint",
       "artifact": "seeded-offline-constraint.md",
       "artifact_sha256": "24e95656898e6953d0e71a6f91e06fa5506bee44429a74e76f531a89a379a313",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "The validator assumes it can download its schema at startup even though every command is required to work on an air-gapped workstation."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "offline-constraint",
+      "seeded_claim": "The validator assumes it can download its schema at startup even though every command is required to work on an air-gapped workstation."
     },
     {
       "id": "atomic-profile-update",
       "artifact": "control-atomic-profile-update.md",
       "artifact_sha256": "fac5c039904c07220b88dbe1ed327075c10fd4b93d091beb7a7ba1e55ee989a8",
       "kind": "control",
-      "expected_outcome": "pass",
-      "seeded_defect": null
+      "expected_outcome": "pass"
     },
     {
       "id": "bounded-upload",
       "artifact": "control-bounded-upload.md",
       "artifact_sha256": "ff98aa804d1f1bed521d64440093aff518b8793d8e4a5e6cd0f2d47cd0f47bbf",
       "kind": "control",
-      "expected_outcome": "pass",
-      "seeded_defect": null
+      "expected_outcome": "pass"
     },
     {
       "id": "offline-schema-bundle",
       "artifact": "control-offline-schema-bundle.md",
       "artifact_sha256": "68be571173d7e194fdde2f19e71c0d236d3c21e2a0b959d16ec8cfb122c9f770",
       "kind": "control",
-      "expected_outcome": "pass",
-      "seeded_defect": null
+      "expected_outcome": "pass"
     },
     {
       "id": "hardcoded-verification-value",
       "artifact": "seeded-hardcoded-verification-value.md",
       "artifact_sha256": "89b2485a3321f58601f1d147612066445e1e6fb62d18e93c5c2d58493fd731f2",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "Verification compares the computed total against a hardcoded value captured from the implementation's own output instead of independently recomputing it from the declared inputs, so a regression in the calculation cannot fail the check."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "hardcoded-verification-value",
+      "seeded_claim": "Verification compares the computed total against a hardcoded value captured from the implementation's own output instead of independently recomputing it from the declared inputs, so a regression in the calculation cannot fail the check."
     },
     {
       "id": "tautological-test",
       "artifact": "seeded-tautological-test.md",
       "artifact_sha256": "92a89f54d66c2ad049d62e19408a13f55ea16d2163877b0a7b5ac515735e6af1",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "The planned test re-uses the implementation's own formula as its oracle, so it detects only simultaneous edits, not a behavioral regression."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "tautological-test",
+      "seeded_claim": "The planned test re-uses the implementation's own formula as its oracle, so it detects only simultaneous edits, not a behavioral regression."
     },
     {
       "id": "swallowed-failure",
       "artifact": "seeded-swallowed-failure.md",
       "artifact_sha256": "ba1bce0344f70f2fc958324e71f3f48a67a07b651a2d9ca36942417119ce8cad",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "The contract requires signature verification failure to reject the webhook and surface the error, but the design catches the named failure and continues processing as though the message were valid."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "swallowed-failure",
+      "seeded_claim": "The contract requires signature verification failure to reject the webhook and surface the error, but the design catches the named failure and continues processing as though the message were valid."
     },
     {
       "id": "todo-stub",
       "artifact": "seeded-todo-stub.md",
       "artifact_sha256": "77ef3457b2ce52e0100c0177764935ee93be1724dc5d87f703bafc611bbc2959",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "A required deliverable on the change path is replaced by a stub that returns an empty success result, while the acceptance criteria still require the working behavior in this phase."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "todo-stub",
+      "seeded_claim": "A required deliverable on the change path is replaced by a stub that returns an empty success result, while the acceptance criteria still require the working behavior in this phase."
     },
     {
       "id": "budget-arithmetic-gap",
       "artifact": "seeded-budget-arithmetic-gap.md",
       "artifact_sha256": "c3dfda8794d4d94b94b631e765f7c815f7543dc8ba5f83a3a0a372e97c544d9c",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "The 4 MiB RECONCILE_RESERVE is stated to cover the snapshot while all twelve attachments are stalled, but the design's own measured largest snapshot is 7.5 MiB, so a large-project reconnect cannot reach Current under the isolation requirement; the arithmetic contradiction spans the Background and Constants sections and the verification plan never sizes the snapshot."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "budget-arithmetic-gap",
+      "seeded_claim": "The 4 MiB RECONCILE_RESERVE is stated to cover the snapshot while all twelve attachments are stalled, but the design's own measured largest snapshot is 7.5 MiB, so a large-project reconnect cannot reach Current under the isolation requirement; the arithmetic contradiction spans the Background and Constants sections and the verification plan never sizes the snapshot."
     },
     {
       "id": "contradictory-constants",
       "artifact": "seeded-contradictory-constants.md",
       "artifact_sha256": "9161c77cc04bea387e2d00004c80315bf9da65edabdcf210b66ca947a05d84d6",
       "kind": "seeded",
-      "expected_outcome": "blocking-finding",
-      "seeded_defect": "OUTPUT_RECORD may be 32 KiB while no transport unit may exceed the 16 KiB DATA_CHUNK, one record is sent per turn, and one unit is in flight per stream: those rules cannot jointly hold, and whichever one yields doubles the derived CONTROL_LATENCY_BOUND or breaks the byte-identical retention record contract."
+      "expected_outcome": "substantive-finding",
+      "expectation_id": "contradictory-constants",
+      "seeded_claim": "OUTPUT_RECORD may be 32 KiB while no transport unit may exceed the 16 KiB DATA_CHUNK, one record is sent per turn, and one unit is in flight per stream: those rules cannot jointly hold, and whichever one yields doubles the derived CONTROL_LATENCY_BOUND or breaks the byte-identical retention record contract."
     },
     {
       "id": "sized-credit-budget",
       "artifact": "control-sized-credit-budget.md",
       "artifact_sha256": "85a13bfde0543d5bffdeb421ebf214d53820014b7531d18c7530f10433a63807",
       "kind": "control",
-      "expected_outcome": "pass",
-      "seeded_defect": null
+      "expected_outcome": "pass"
     }
   ]
 }

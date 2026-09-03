@@ -55,6 +55,50 @@
       ],
       "additionalProperties": false
     },
+    "validationOverrideRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "evidence_kind": {
+          "type": "string",
+          "const": "validation-override-request"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "governing_phase_design_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        },
+        "request_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "validation_request_subject_digest": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+        }
+      },
+      "required": [
+        "schema_version",
+        "evidence_kind",
+        "task_id",
+        "phase_instance",
+        "input_fingerprint",
+        "governing_phase_design_digest",
+        "request_revision",
+        "validation_request_subject_digest"
+      ],
+      "additionalProperties": false
+    },
     "origin": {
       "type": "object",
       "properties": {
@@ -154,6 +198,22 @@
         "retry-once",
         "revise",
         "abort",
+        "cancel"
+      ]
+    },
+    "reviewPushThroughDecisions": {
+      "const": [
+        "retry-once",
+        "revise",
+        "abort",
+        "push-through-review",
+        "cancel"
+      ]
+    },
+    "validationOverrideDecisions": {
+      "const": [
+        "grant-validation-override",
+        "deny-validation-override",
         "cancel"
       ]
     },
@@ -482,10 +542,250 @@
           "const": "attempts-exhausted"
         },
         "context": {
-          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/attemptsExhaustedContext"
+          "type": "object",
+          "properties": {
+            "step": {
+              "type": "string",
+              "enum": [
+                "produce",
+                "counter_review",
+                "triage",
+                "adjudicate"
+              ]
+            },
+            "attempts": {
+              "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
+            },
+            "maximum_attempts": {
+              "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
+            }
+          },
+          "required": [
+            "step",
+            "attempts",
+            "maximum_attempts"
+          ],
+          "additionalProperties": false
         },
         "allowed_decisions": {
           "$ref": "#/$defs/attemptsExhaustedDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    "attemptsExhaustedPushThrough": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "#/$defs/currentEvidence"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "kind": {
+          "type": "string",
+          "const": "attempts-exhausted"
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "step": {
+              "type": "string",
+              "enum": [
+                "produce",
+                "counter_review",
+                "triage",
+                "adjudicate"
+              ]
+            },
+            "attempts": {
+              "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
+            },
+            "maximum_attempts": {
+              "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
+            },
+            "review_push_through": {
+              "type": "object",
+              "properties": {
+                "minimum_attempt": {
+                  "type": "number",
+                  "const": 2
+                },
+                "current_evidence_set_digest": {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+                },
+                "triage_result_digest": {
+                  "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+                },
+                "accepted_occurrences": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "review_evidence_digest": {
+                        "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/digest"
+                      },
+                      "finding_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                      }
+                    },
+                    "required": [
+                      "review_evidence_digest",
+                      "finding_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "minimum_attempt",
+                "current_evidence_set_digest",
+                "triage_result_digest",
+                "accepted_occurrences"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "step",
+            "attempts",
+            "maximum_attempts",
+            "review_push_through"
+          ],
+          "additionalProperties": false
+        },
+        "allowed_decisions": {
+          "$ref": "#/$defs/reviewPushThroughDecisions"
+        }
+      },
+      "required": [
+        "schema_version",
+        "gate_id",
+        "intent_id",
+        "request_digest",
+        "task_id",
+        "phase_instance",
+        "summary",
+        "subject_digest",
+        "context_digest",
+        "current_evidence",
+        "opened_at_revision",
+        "kind",
+        "context",
+        "allowed_decisions"
+      ],
+      "additionalProperties": false
+    },
+    "validationOverride": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "1"
+        },
+        "gate_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "intent_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/pathSafeId"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "type": "string",
+          "pattern": "^phase-impl-[1-9][0-9]*$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "\\S"
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "context_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "current_evidence": {
+          "$ref": "#/$defs/validationOverrideRequest"
+        },
+        "opened_at_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "kind": {
+          "type": "string",
+          "const": "validation-override"
+        },
+        "context": {
+          "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/validationOverrideContext"
+        },
+        "allowed_decisions": {
+          "$ref": "#/$defs/validationOverrideDecisions"
         }
       },
       "required": [
@@ -969,6 +1269,12 @@
     },
     {
       "$ref": "#/$defs/attemptsExhausted"
+    },
+    {
+      "$ref": "#/$defs/attemptsExhaustedPushThrough"
+    },
+    {
+      "$ref": "#/$defs/validationOverride"
     },
     {
       "$ref": "#/$defs/constitutionEdit"

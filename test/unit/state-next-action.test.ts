@@ -531,6 +531,16 @@ describe("deriveNextAction", () => {
     });
   });
 
+  it("routes a pending validation request before the ordinary failed-produce retry", () => {
+    expect(deriveNextAction(input({
+      state: state({ step: "produce", status: "failed", authoritative_results: [] }),
+      pending_validation_override: true,
+      evidence_available: false,
+    }))).toMatchObject({
+      code: "open-gate", gate_kind: "validation-override", human_required: true,
+    });
+  });
+
   it("always prescribes finishing produce while a produce re-entry is mid-flight", () => {
     // After a produce re-entry running entry is recorded (accepted, editorial, or the
     // author-initiated door), the prior cycle's retained produce result and evidence still

@@ -208,6 +208,8 @@ function initialState(
     authoritative_results: [],
     approvals: [],
     waivers: [],
+    validation_overrides: [],
+    review_push_throughs: [],
   };
   // Revision-zero seeding (pinned interface 4): the first recorded `last_seen_config`, so the
   // committed revision-1 state and the shared identification derivation agree byte for byte.

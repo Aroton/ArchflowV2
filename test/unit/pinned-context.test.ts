@@ -291,6 +291,44 @@ describe("priorTriageEvidence", () => {
     ]);
   });
 
+  it("preserves native V2 taxonomy details in remediation history", async () => {
+    const result = await priorTriageEvidence(
+      loader({
+        triage: installation(triageManifest([
+          { review_evidence_digest: REVIEW_DIGEST, finding_id: "digest-risk", disposition: "accepted", rationale: "Material risk.", revision_intent: "Bind the slot before hashing." },
+        ])),
+        counter_review: installation({
+          artifact_digest: REVIEW_DIGEST,
+          source_artifact: {
+            artifact_kind: "review-evidence",
+            evidence: {
+              schema_version: "2",
+              findings: [{
+                finding_id: "digest-risk", claim_type: "risk", confidence: "likely",
+                falsifier: "Run the slot-race test and observe a stable digest.",
+                summary: "The digest can race the slot read.", evidence: "The slot is read after hashing.",
+                suggested_resolution: "Bind the slot before hashing.",
+              }],
+            },
+          },
+        }),
+      }),
+      state([reference("counter_review", "3".repeat(64)), reference("triage", "2".repeat(64))]),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const entry = result.value[0]!;
+    if (entry.status !== "pinned") throw new Error("expected pinned prior triage");
+    const record = JSON.parse(entry.content) as { dispositions: readonly Record<string, unknown>[] };
+    expect(record.dispositions).toEqual([{
+      finding_id: "digest-risk", attempt: 2, claim_type: "risk", confidence: "likely",
+      falsifier: "Run the slot-race test and observe a stable digest.",
+      summary: "The digest can race the slot read.", evidence: "The slot is read after hashing.",
+      suggested_resolution: "Bind the slot before hashing.", disposition: "accepted",
+      rationale: "Material risk.", revision_intent: "Bind the slot before hashing.",
+    }]);
+  });
+
   it("does not expose the cumulative disposition ledger to a remediation child", async () => {
     const result = await priorTriageEvidence(
       loader({

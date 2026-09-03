@@ -76,11 +76,12 @@ function retained(
   accepted = 0,
   adjudicationFingerprint = fingerprint,
   approvedUpstreamDigests: readonly Sha256Digest[] = [],
+  phaseInstance = "phase-impl-14",
 ): RetainedEvidenceSet {
   const base = {
     schema_version: "1",
     task_id: "task",
-    phase_instance: "phase-impl-14",
+    phase_instance: phaseInstance,
     subject_digest: subject,
     input_fingerprint: fingerprint,
   } as const;
@@ -354,15 +355,11 @@ describe("review services", () => {
     expect(significant).toMatchObject({ next: "counter_review", exhausted: false });
   });
 
-  it("requires exact-current ready effort evidence for changed phase designs", () => {
+  it("requires exact-current review evidence for changed phase designs", () => {
     const phaseState = state({ phase_instance: "phase-design-14" });
     const subject = { subject_digest: D("8"), input_fingerprint: D("2"), constitution, max_attempts: 3 };
-    expect(assessCurrentEvidence(phaseState, phaseDesignRetained("ready"), subject)).toMatchObject({
-      next: "advance", effort_currency: "ready",
-    });
-    expect(assessCurrentEvidence(phaseState, phaseDesignRetained(), subject)).toMatchObject({
-      next: "advance", effort_currency: "legacy-exact",
-    });
+    expect(assessCurrentEvidence(phaseState, phaseDesignRetained("ready"), subject)).toMatchObject({ next: "advance" });
+    expect(assessCurrentEvidence(phaseState, phaseDesignRetained(), subject)).toMatchObject({ next: "advance" });
     expect(assessCurrentEvidence(phaseState, phaseDesignRetained("ready"), {
       ...subject,
       subject_digest: D("a"),
@@ -370,20 +367,14 @@ describe("review services", () => {
     })).toMatchObject({ next: "counter_review" });
   });
 
-  it("keeps effort blockers independent of triage and exhausts their retry budget", () => {
+  it("never lets archived effort blockers affect the fixed point", () => {
     const subject = { subject_digest: D("8"), input_fingerprint: D("2"), constitution, max_attempts: 3 };
     expect(assessCurrentEvidence(
       state({ phase_instance: "phase-design-14", attempt: 1 }), phaseDesignRetained("blocked"), subject,
-    )).toMatchObject({
-      next: "produce",
-      reentry_required: true,
-      effort_reentry_required: true,
-      effort_currency: "blocked",
-      effort_blockers: [{ kind: "specification-gap", question: "Which API owns retries?" }],
-    });
+    )).toMatchObject({ next: "advance", reentry_required: false, exhausted: false });
     expect(assessCurrentEvidence(
       state({ phase_instance: "phase-design-14", attempt: 3 }), phaseDesignRetained("blocked", 3), subject,
-    )).toMatchObject({ next: "attempts-exhausted", exhausted: true });
+    )).toMatchObject({ next: "advance", exhausted: false });
   });
 
   it("never lets a simple human revision clear an accepted material finding", () => {
@@ -456,7 +447,7 @@ describe("review services", () => {
     // The shared movement rule makes the editorial produce re-entry consume a durable attempt
     // slot (attempt + 1); the fixed point stays honest by evaluating exhaustion only at demanded
     // re-entries, so the editorial pass itself can never open the attempts-exhausted gate.
-    const editorial = new Map(retained());
+    const editorial = new Map(retained(D("8"), D("2"), 0, D("2"), [], "design"));
     const triageEntry = editorial.get("triage")!;
     const triageSource = triageEntry.manifest.source_artifact;
     if (triageSource.artifact_kind !== "triage") throw new Error("expected triage evidence");
@@ -479,11 +470,13 @@ describe("review services", () => {
             accepted_count: 0,
             rejected_count: 0,
             accepted_editorial_count: 1,
+            escalated_human_count: 0,
+            deferred_count: 0,
           } as never,
         },
       },
     });
-    const assessment = assessCurrentEvidence(state({ attempt: 3 }), editorial, {
+    const assessment = assessCurrentEvidence(state({ attempt: 3, phase_instance: "design" }), editorial, {
       subject_digest: D("8"), input_fingerprint: D("2"), constitution, max_attempts: 3,
     });
     expect(assessment).toMatchObject({

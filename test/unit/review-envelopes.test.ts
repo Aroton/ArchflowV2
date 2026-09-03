@@ -6,6 +6,7 @@ import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/co
 import {
   PRIOR_TRIAGE_INSTRUCTION,
   IMPLEMENTATION_REVIEW_INSTRUCTION,
+  REVIEW_TAXONOMY_INSTRUCTION,
   CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION,
   REVIEW_INSTRUCTION,
   REVIEW_ASSIGNMENT_INSTRUCTION,
@@ -143,6 +144,7 @@ describe("review dispatch envelopes", () => {
     expect(visible.assignment).toEqual({ reviewer_id: "test", focus: "tests", criterion_ids: ["contract-match"] });
     expect(visible.instructions).toEqual({
       review: IMPLEMENTATION_REVIEW_INSTRUCTION,
+      taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
       assignment: REVIEW_ASSIGNMENT_INSTRUCTION,
     });
     expect(assigned.digest).not.toBe(bare.digest);
@@ -281,12 +283,19 @@ describe("review dispatch envelopes", () => {
     const visible = json(bound.bytes);
 
     // The framing literal is always present; the remediation literal only when prior triage is pinned.
-    expect(json(bare.bytes).instructions).toEqual({ review: IMPLEMENTATION_REVIEW_INSTRUCTION });
+    expect(json(bare.bytes).instructions).toEqual({
+      review: IMPLEMENTATION_REVIEW_INSTRUCTION,
+      taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
+    });
     expect(Object.keys(visible)).toEqual([
       "schema_version", "artifact", "rubric", "context", "instructions", "subject",
     ]);
     expect(visible.context).toEqual([priorTriage]);
-    expect(visible.instructions).toEqual({ review: IMPLEMENTATION_REVIEW_INSTRUCTION, prior_triage: PRIOR_TRIAGE_INSTRUCTION });
+    expect(visible.instructions).toEqual({
+      review: IMPLEMENTATION_REVIEW_INSTRUCTION,
+      taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
+      prior_triage: PRIOR_TRIAGE_INSTRUCTION,
+    });
     expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("declared by this phase");
     expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("unchanged files");
     expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("introduced, exposed, or materially worsened");
@@ -294,7 +303,7 @@ describe("review dispatch envelopes", () => {
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("This is a remediation review");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("not a new full review");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("only the latest accepted findings");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("introduced, exposed, or materially worsened a blocker");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("introduced, exposed, or materially worsened a substantive defect, risk, or gap");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("unverifiable- or escalate- finding");
     // Remediation rounds are scoped to the revision: no fresh sweep of unchanged sections, and
     // an empty finding list is the intended terminal state.
@@ -302,6 +311,23 @@ describe("review dispatch envelopes", () => {
     expect(PRIOR_TRIAGE_INSTRUCTION).not.toContain("anywhere in the artifact");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("return no findings");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("apply the full rubric as a new sweep");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("claim_type");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("confidence");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("falsifier");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("4096 UTF-16 code units");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("Suspicion is cost-free and encouraged");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("Preference is descriptive and advisory");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("do not force a quota or ceremonial preference");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("An empty findings array is the normal successful response");
+    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("Do not emit severity");
+    expect(REVIEW_INSTRUCTION).toContain("Be contentious");
+    expect(REVIEW_INSTRUCTION).toContain("actively seek counterexamples");
+    expect(REVIEW_INSTRUCTION).toContain("plausible material consequence");
+    expect(REVIEW_INSTRUCTION).toContain("'cost-free' means it is not suppressed for low confidence");
+    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("Be contentious");
+    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("actively seek counterexamples");
+    // Initial envelope does not carry remediation instructions
+    expect(json(bare.bytes).instructions).not.toHaveProperty("prior_triage");
     // The instruction literal and the entry participate in the recorded envelope digest.
     expect(bound.digest).not.toBe(bare.digest);
     expect(bound.digest).toBe(canonicalJsonDigest({

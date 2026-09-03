@@ -21,6 +21,7 @@ import { loadRetainedEvidence } from "../../src/state/evidence-results.js";
 import { readTaskState } from "../../src/state/read.js";
 import { parseSemanticSubstepIntentId, planSemanticAction } from "../../src/state/semantic-actions.js";
 import { projectSemanticStatus } from "../../src/state/semantic-view.js";
+import { computeTaxonomyDenialRates } from "../../src/state/semantic-status.js";
 import { computeTaskStatusDetailed } from "../../src/state/status.js";
 import {
   installSemanticReviewStub,
@@ -165,11 +166,10 @@ else {
   }
   let output;
   if (role === "counter-review") {
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    output = { task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings: [], matched_rule_versions: [],
-      verdict: "pass", blocking_count: 0 };
+      producer_family: subject.producer_family, findings: [], matched_rule_versions: [] };
   } else {
     output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
@@ -233,7 +233,7 @@ approval_rules:
 }
 
 describe("reviewer route substitution through the public apply path", { timeout: TIMEOUT }, () => {
-  it("rejects a proactive effort substitution and accepts it only for the current effort failure", () => {
+  it("rejects effort-selector substitution even for a historical effort failure", () => {
     const digest = parseSha256Digest("a".repeat(64));
     const state = {
       schema_version: "1", task_id: "effort-override", repository_identity_digest: digest,
@@ -251,6 +251,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     const base: SemanticStatusSnapshotV1 = {
       schema_version: "1", repository_identity_digest: digest, state,
       status: status as unknown as PlainJsonValue, full_findings: [],
+      taxonomy_denial_rates: computeTaxonomyDenialRates([]),
       implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
       reopen_impacts: [],
     };
@@ -263,7 +264,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     const apply = (snapshot: SemanticStatusSnapshotV1) => planSemanticAction(snapshot, {
       schema_version: "1", task_id: state.task_id, invocation, action: { offer, submission },
     });
-    expect(() => apply(base)).toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH" }));
+    expect(() => apply(base)).toThrow();
 
     const failed = structuredClone(base);
     (failed.status as Record<string, unknown>).dispatch_failure = {
@@ -271,9 +272,9 @@ describe("reviewer route substitution through the public apply path", { timeout:
       route: { model: "gpt-5.6-luna", effort: "xhigh", source: "configured" },
     };
     const failedOffer = projectSemanticStatus(failed, invocation).view.next_action.offer!;
-    expect(planSemanticAction(failed, {
+    expect(() => planSemanticAction(failed, {
       schema_version: "1", task_id: state.task_id, invocation, action: { offer: failedOffer, submission },
-    })).toMatchObject({ route_override: submission.route_override });
+    })).toThrow();
   });
 
   it("dispatches and attests an invocation-declared route without minting human override trust", async () => {

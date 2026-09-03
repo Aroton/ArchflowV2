@@ -38,7 +38,7 @@ import {
   renderTriage,
 } from "../contracts/renderers.js";
 import type { ReviewEvidence } from "../contracts/review.js";
-import type { EffortAssessmentV1 } from "../contracts/effort-review.js";
+import type { EffortEvidence } from "../contracts/effort-review.js";
 import {
   parseSecretScanResult,
   type SecretScanner,
@@ -54,6 +54,7 @@ import {
 } from "../contracts/trust.js";
 import {
   validateTriage,
+  type ReviewRoundHistoryEntryV1,
   type TriageCandidate,
   type TriageDisposition,
   type TriageDispositionLedgerEntry,
@@ -142,7 +143,7 @@ export type GoverningPhaseDesignEffortEvidence = Readonly<{
   phase_instance: PhaseInstanceId;
   produce: CurrentProduceSubject;
   review?: ReviewEvidence;
-  assessment?: EffortAssessmentV1;
+  assessment?: EffortEvidence;
 }>;
 
 type RetainedEvidenceDependencies = Pick<TransactionDependencies, "load_retained_manifest">;
@@ -168,6 +169,7 @@ const ok = <T>(value: T): ProjectResult<T> =>
 function qualifyAndRender(
   value: EvidenceResultValue,
   dispositionLedger?: readonly TriageDispositionLedgerEntry[],
+  reviewRoundHistory?: readonly ReviewRoundHistoryEntryV1[],
 ): Readonly<{
   artifact: EvidenceArtifactV1;
   bytes: Uint8Array;
@@ -209,7 +211,12 @@ function qualifyAndRender(
       input_fingerprint: verified.evidence.input_fingerprint,
     });
   }
-  const triage = validateTriage(value.current_reviews, value.evidence, dispositionLedger);
+  const triage = validateTriage(
+    value.current_reviews,
+    value.evidence,
+    dispositionLedger,
+    reviewRoundHistory,
+  );
   return Object.freeze({
     artifact: Object.freeze({
       schema_version: "1",
@@ -230,8 +237,8 @@ function qualifyAndRender(
  * dispositions are embedded with the reviewer-authored finding details of the round they answer
  * — resolvable now because that evidence is still the retained counter-review result — and the
  * predecessor's ledger is carried forward, so each entry's details survive the supersession of
- * its round. The newest disposition of a finding_id wins. Reviewer memory is best-effort
- * context, not authority: a predecessor installed without a ledger (before this field existed)
+ * its round. The newest disposition of an exact review occurrence wins. Reviewer memory is
+ * best-effort context, not authority: a predecessor installed without a ledger (before this field existed)
  * contributes nothing — its dispositions' review evidence is already superseded, so absence is
  * the accurate record — and an unloadable predecessor or review manifest degrades the same way
  * rather than failing the triage.
@@ -251,7 +258,9 @@ export async function computeDispositionLedger(
     if (previous.ok) {
       const source = previous.value.prepared.manifest.value.source_artifact;
       if (source.artifact_kind === "triage" && source.evidence.disposition_ledger !== undefined) {
-        for (const entry of source.evidence.disposition_ledger) merged.set(entry.finding_id, entry);
+        for (const entry of source.evidence.disposition_ledger) {
+          merged.set(`${entry.review_evidence_digest}:${entry.finding_id}`, entry);
+        }
       }
     }
   }
@@ -269,7 +278,8 @@ export async function computeDispositionLedger(
   }
   for (const disposition of dispositions) {
     const finding = findingDetails.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
-    merged.set(disposition.finding_id, Object.freeze({
+    const occurrenceKey = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
+    merged.set(occurrenceKey, Object.freeze({
       review_evidence_digest: disposition.review_evidence_digest,
       finding_id: disposition.finding_id,
       disposition: disposition.disposition,
@@ -277,13 +287,31 @@ export async function computeDispositionLedger(
       rationale: disposition.rationale,
       ...(disposition.disposition === "rejected"
         ? { evidence: disposition.evidence }
-        : {
-          revision_intent: disposition.revision_intent,
-          ...(finding === undefined ? {} : { evidence: finding.evidence }),
-        }),
+        : disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial"
+          ? {
+            revision_intent: disposition.revision_intent,
+            ...(finding === undefined ? {} : { evidence: finding.evidence }),
+          }
+          : disposition.disposition === "escalated-human"
+            ? (finding === undefined ? {} : { evidence: finding.evidence })
+            : {
+              ...(disposition.evidence !== undefined
+                ? { evidence: disposition.evidence }
+                : finding !== undefined
+                  ? { evidence: finding.evidence }
+                  : {}),
+            }),
       ...(finding === undefined ? {} : {
-        severity: finding.severity,
-        blocking: finding.blocking,
+        ...("claim_type" in finding
+          ? {
+            claim_type: finding.claim_type,
+            confidence: finding.confidence,
+            falsifier: finding.falsifier,
+          }
+          : {
+            severity: finding.severity,
+            blocking: finding.blocking,
+          }),
         summary: finding.summary,
         suggested_resolution: finding.suggested_resolution,
       }),
@@ -308,6 +336,80 @@ async function triageLedgerFrom(
 }
 
 /**
+ * Carries one identity per completed review attempt. Unlike the disposition ledger this does not
+ * key by finding occurrence, so repeated feedback and finding-free rounds remain observable.
+ */
+export async function computeReviewRoundHistory(
+  sources: Readonly<{
+    attempt: SafeInteger;
+    previous_triage_ref?: AuthoritativeResultRef;
+    review_ref?: AuthoritativeResultRef;
+  }>,
+  loadRetainedResult: NonNullable<TransactionDependencies["load_retained_result"]>,
+): Promise<readonly ReviewRoundHistoryEntryV1[]> {
+  const rounds = new Map<number, ReviewRoundHistoryEntryV1>();
+  const ambiguousAttempts = new Set<number>();
+  const remember = (entry: ReviewRoundHistoryEntryV1): void => {
+    if (ambiguousAttempts.has(entry.attempt)) return;
+    const existing = rounds.get(entry.attempt);
+    if (existing !== undefined && existing.review_evidence_digest !== entry.review_evidence_digest) {
+      // Historical schemas could represent multiple occurrence-ledger digests for one attempt
+      // without enforcing their shared review identity. That attempt proves no completed round:
+      // remove it permanently from this reconstruction so ambiguity can only reduce, never
+      // inflate, push-through eligibility while ordinary triage remains available.
+      rounds.delete(entry.attempt);
+      ambiguousAttempts.add(entry.attempt);
+      return;
+    }
+    rounds.set(entry.attempt, Object.freeze({ ...entry }));
+  };
+  if (sources.previous_triage_ref !== undefined) {
+    const previous = await loadRetainedResult(sources.previous_triage_ref);
+    if (previous.ok) {
+      const source = previous.value.prepared.manifest.value.source_artifact;
+      if (source.artifact_kind === "triage") {
+        for (const entry of source.evidence.review_round_history ?? []) {
+          remember(entry);
+        }
+        // A pre-history triage can still prove prior completed rounds through its server-computed
+        // disposition ledger. One counter-review digest per attempt is the only unambiguous
+        // reconstruction; ambiguity fails closed instead of inflating eligibility.
+        for (const entry of source.evidence.disposition_ledger ?? []) {
+          remember({
+            attempt: entry.attempt,
+            review_evidence_digest: entry.review_evidence_digest,
+          });
+        }
+      }
+    }
+  }
+  if (sources.review_ref !== undefined) {
+    const review = await loadRetainedResult(sources.review_ref);
+    if (review.ok) {
+      const manifest = review.value.prepared.manifest.value;
+      if (manifest.source_artifact.artifact_kind === "review-evidence") {
+        const entry = Object.freeze({
+          attempt: sources.attempt,
+          review_evidence_digest: manifest.artifact_digest,
+        });
+        remember(entry);
+      }
+    }
+  }
+  return Object.freeze([...rounds.values()].sort((left, right) => left.attempt - right.attempt));
+}
+
+async function triageRoundHistoryFrom(
+  input: PrepareEvidenceResultInput,
+): Promise<readonly ReviewRoundHistoryEntryV1[] | undefined> {
+  if (input.value.kind !== "triage" || input.disposition_ledger === undefined) return undefined;
+  if (input.load_retained_result === undefined) {
+    throw new TypeError("review round history sources require a retained-result loader");
+  }
+  return computeReviewRoundHistory(input.disposition_ledger, input.load_retained_result);
+}
+
+/**
  * Prepares one evidence manifest and canonical review projection. Evidence identity is the
  * canonical payload digest; rendered-byte identity is confined to snapshot/projection fields.
  */
@@ -318,7 +420,10 @@ export async function prepareEvidenceResult(
   const dispositionLedger = input.value.kind === "triage"
     ? await triageLedgerFrom(input)
     : undefined;
-  const qualified = qualifyAndRender(input.value, dispositionLedger);
+  const reviewRoundHistory = input.value.kind === "triage"
+    ? await triageRoundHistoryFrom(input)
+    : undefined;
+  const qualified = qualifyAndRender(input.value, dispositionLedger, reviewRoundHistory);
   if (
     qualified.task_id !== input.authority.task_id ||
     qualified.phase_instance !== input.authority.context.phase_instance
@@ -565,7 +670,7 @@ export async function loadGoverningPhaseDesignEffortEvidence(
   ) {
     throw new TypeError("governing counter review scope disagrees");
   }
-  let assessment: EffortAssessmentV1 | undefined;
+  let assessment: EffortEvidence | undefined;
   if (review.assurance === "server-attested") {
     assessment = review.effort_review;
     if (assessment !== undefined && (
@@ -680,7 +785,11 @@ function retainedEditorialTriage(retained: RetainedEvidenceSet): RetainedEditori
   const source = entry?.manifest.source_artifact;
   if (entry === undefined || source?.artifact_kind !== "triage") return undefined;
   const triage = source.evidence;
-  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0) return undefined;
+  if (
+    triage.accepted_count !== 0 ||
+    (triage.accepted_editorial_count ?? 0) === 0 ||
+    (triage.escalated_human_count ?? 0) !== 0
+  ) return undefined;
   let derived: DerivedCurrentEvidenceSet;
   try {
     derived = deriveCurrentEvidenceSet(retained);

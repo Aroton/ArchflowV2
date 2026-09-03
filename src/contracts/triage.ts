@@ -3,17 +3,41 @@ import { z } from "zod";
 import type { SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { taskSlugV1Schema } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
-import { REVIEW_FINDING_SEVERITIES, type ReviewFindingSeverity } from "./review.js";
+import {
+  CLAIM_TYPES,
+  CONFIDENCE_LEVELS,
+  REVIEW_FINDING_SEVERITIES,
+  isSubstantiveClaim,
+  type ClaimType,
+  type ConfidenceLevel,
+  type ReviewEvidence,
+  type ReviewFindingSeverity,
+} from "./review.js";
 import type { CurrentReviewSet } from "./trust.js";
 import { authenticCurrentReviewSet, registerValidatedTriage, validatedTriageBrand } from "./internal/trust-brands.js";
 
+export const TRIAGE_DISPOSITIONS = [
+  "accepted",
+  "accepted-editorial",
+  "rejected",
+  "escalated-human",
+  "deferred",
+] as const;
+export type TriageDispositionKind = (typeof TRIAGE_DISPOSITIONS)[number];
 
 export type FindingRef = { readonly review_evidence_digest: Sha256Digest; readonly finding_id: string };
 export type AcceptedDisposition = FindingRef & { readonly disposition: "accepted"; readonly rationale: string; readonly revision_intent: string };
 /** Non-blocking wording/formatting acceptance: the fix changes bytes but no meaning, so it re-enters produce without invalidating review evidence. */
 export type AcceptedEditorialDisposition = FindingRef & { readonly disposition: "accepted-editorial"; readonly rationale: string; readonly revision_intent: string };
 export type RejectedDisposition = FindingRef & { readonly disposition: "rejected"; readonly rationale: string; readonly evidence: string };
-export type TriageDisposition = AcceptedDisposition | AcceptedEditorialDisposition | RejectedDisposition;
+export type EscalatedHumanDisposition = FindingRef & { readonly disposition: "escalated-human"; readonly rationale: string };
+export type DeferredDisposition = FindingRef & { readonly disposition: "deferred"; readonly rationale: string; readonly evidence?: string };
+export type TriageDisposition =
+  | AcceptedDisposition
+  | AcceptedEditorialDisposition
+  | RejectedDisposition
+  | EscalatedHumanDisposition
+  | DeferredDisposition;
 /**
  * One carried entry of the server-computed disposition ledger. At each triage install the
  * server embeds the round's dispositions with the reviewer-authored finding details of that
@@ -27,17 +51,39 @@ export type TriageDisposition = AcceptedDisposition | AcceptedEditorialDispositi
  * original evidence. The finding detail fields are optional so a predecessor triage installed
  * without resolvable details still carries its dispositions forward.
  */
-export type TriageDispositionLedgerEntry = FindingRef & {
-  readonly disposition: "accepted" | "accepted-editorial" | "rejected";
+type TriageDispositionLedgerEntryBase = FindingRef & {
+  readonly disposition: TriageDispositionKind;
   /** Durable attempt counter of the round whose review this disposition answered. */
   readonly attempt: SafeInteger;
   readonly rationale?: string;
   readonly revision_intent?: string;
   readonly evidence?: string;
-  readonly severity?: ReviewFindingSeverity;
-  readonly blocking?: boolean;
   readonly summary?: string;
   readonly suggested_resolution?: string;
+};
+export type TriageDispositionLedgerEntryV2 = TriageDispositionLedgerEntryBase & {
+  readonly claim_type: ClaimType;
+  readonly confidence: ConfidenceLevel;
+  readonly falsifier: string;
+};
+export type DetailedLegacyTriageDispositionLedgerEntry = TriageDispositionLedgerEntryBase & {
+  readonly severity: ReviewFindingSeverity;
+  readonly blocking: boolean;
+};
+export type DetailLessLegacyTriageDispositionLedgerEntry = TriageDispositionLedgerEntryBase;
+export type TriageDispositionLedgerEntry =
+  | TriageDispositionLedgerEntryV2
+  | DetailedLegacyTriageDispositionLedgerEntry
+  | DetailLessLegacyTriageDispositionLedgerEntry;
+/**
+ * Server-computed identity of one completed counter-review round. This history is distinct from
+ * the disposition ledger: a byte-identical recurring finding may replace the same occurrence key,
+ * and a finding-free round contributes no disposition at all, while both still count as completed
+ * rounds for review push-through eligibility.
+ */
+export type ReviewRoundHistoryEntryV1 = {
+  readonly attempt: SafeInteger;
+  readonly review_evidence_digest: Sha256Digest;
 };
 export type TriageCandidate = {
   readonly schema_version: "1";
@@ -54,10 +100,19 @@ export type TriageCandidate = {
   readonly rejected_count: number;
   /** Required in new artifacts ({@link validateTriage} refuses its absence); optional structurally so retained pre-editorial triage results keep loading. */
   readonly accepted_editorial_count?: number;
+  readonly escalated_human_count?: number;
+  readonly deferred_count?: number;
   /** Server-computed reviewer memory; never present on a producer-supplied candidate. */
   readonly disposition_ledger?: readonly TriageDispositionLedgerEntry[];
+  /** Server-computed completed-round memory; optional only for retained pre-change artifacts. */
+  readonly review_round_history?: readonly ReviewRoundHistoryEntryV1[];
 };
-export type ValidatedTriage = TriageCandidate & { readonly accepted_editorial_count: number; readonly [validatedTriageBrand]: true };
+export type ValidatedTriage = TriageCandidate & {
+  readonly accepted_editorial_count: number;
+  readonly escalated_human_count: number;
+  readonly deferred_count: number;
+  readonly [validatedTriageBrand]: true;
+};
 
 const id = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u) as unknown as z.ZodType<Sha256Digest>;
@@ -66,21 +121,58 @@ const findingRefShape = { review_evidence_digest: digest, finding_id: id };
 const acceptedDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("accepted"), rationale: nonBlank, revision_intent: nonBlank }).strict();
 const acceptedEditorialDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("accepted-editorial"), rationale: nonBlank, revision_intent: nonBlank }).strict();
 const rejectedDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("rejected"), rationale: nonBlank, evidence: nonBlank }).strict();
-export const triageDispositionSchema = z.discriminatedUnion("disposition", [acceptedDispositionSchema, acceptedEditorialDispositionSchema, rejectedDispositionSchema]);
-export const triageDispositionLedgerEntrySchema = z.object({
+const escalatedHumanDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("escalated-human"), rationale: nonBlank }).strict();
+const deferredDispositionSchema = z.object({ ...findingRefShape, disposition: z.literal("deferred"), rationale: nonBlank, evidence: nonBlank.optional() }).strict();
+export const triageDispositionSchema = z.discriminatedUnion("disposition", [
+  acceptedDispositionSchema,
+  acceptedEditorialDispositionSchema,
+  rejectedDispositionSchema,
+  escalatedHumanDispositionSchema,
+  deferredDispositionSchema,
+]);
+const ledgerEntryBaseShape = {
   ...findingRefShape,
-  disposition: z.enum(["accepted", "accepted-editorial", "rejected"]),
+  disposition: z.enum(TRIAGE_DISPOSITIONS),
   attempt: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   rationale: nonBlank.optional(),
   revision_intent: nonBlank.optional(),
   evidence: nonBlank.optional(),
-  severity: z.enum(REVIEW_FINDING_SEVERITIES).optional(),
-  blocking: z.boolean().optional(),
   summary: nonBlank.optional(),
   suggested_resolution: nonBlank.optional(),
-  // The branded cast mirrors the digest schema above: zod's `.optional()` emits `T | undefined`
-  // property types, which exactOptionalPropertyTypes rejects against the ledger entry type.
-}).strict() as unknown as z.ZodType<TriageDispositionLedgerEntry>;
+} as const;
+const triageDispositionLedgerEntryV2Schema = z.object({
+  ...ledgerEntryBaseShape,
+  claim_type: z.enum(CLAIM_TYPES),
+  confidence: z.enum(CONFIDENCE_LEVELS),
+  falsifier: nonBlank,
+}).strict();
+const detailedLegacyTriageDispositionLedgerEntrySchema = z.object({
+  ...ledgerEntryBaseShape,
+  severity: z.enum(REVIEW_FINDING_SEVERITIES),
+  blocking: z.boolean(),
+}).strict();
+const detailLessLegacyTriageDispositionLedgerEntrySchema = z.object(ledgerEntryBaseShape).strict();
+export const triageDispositionLedgerEntrySchema = z.union([
+  triageDispositionLedgerEntryV2Schema,
+  detailedLegacyTriageDispositionLedgerEntrySchema,
+  detailLessLegacyTriageDispositionLedgerEntrySchema,
+]) as unknown as z.ZodType<TriageDispositionLedgerEntry>;
+export const reviewRoundHistoryEntryV1Schema = z.object({
+  attempt: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  review_evidence_digest: digest,
+}).strict() as unknown as z.ZodType<ReviewRoundHistoryEntryV1>;
+export const reviewRoundHistoryV1Schema = z.array(reviewRoundHistoryEntryV1Schema)
+  .superRefine((history, context) => {
+    history.forEach((entry, index) => {
+      if (index > 0 && history[index - 1]!.attempt >= entry.attempt) {
+        context.addIssue({
+          code: "custom",
+          path: [index],
+          message: "review round history must be sorted by attempt with no duplicates",
+        });
+      }
+    });
+  });
 export const triageCandidateSchema = z.object({
   schema_version: z.literal("1"), task_id: taskSlugV1Schema,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
@@ -89,7 +181,10 @@ export const triageCandidateSchema = z.object({
   dispositions: z.array(triageDispositionSchema),
   accepted_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), rejected_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   accepted_editorial_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  escalated_human_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  deferred_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   disposition_ledger: z.array(triageDispositionLedgerEntrySchema).optional(),
+  review_round_history: reviewRoundHistoryV1Schema.optional(),
 }).strict().superRefine((triage, context) => {
   if (new Set(triage.source_evidence_digests).size !== triage.source_evidence_digests.length) {
     context.addIssue({ code: "custom", path: ["source_evidence_digests"], message: "source evidence digests must be unique" });
@@ -102,21 +197,47 @@ export const triageCandidateSchema = z.object({
   });
   const seenLedger = new Set<string>();
   triage.disposition_ledger?.forEach((entry, index) => {
-    if (seenLedger.has(entry.finding_id)) {
-      context.addIssue({ code: "custom", path: ["disposition_ledger", index], message: "duplicate ledger finding_id" });
+    const key = `${entry.review_evidence_digest}:${entry.finding_id}`;
+    if (seenLedger.has(key)) {
+      context.addIssue({ code: "custom", path: ["disposition_ledger", index], message: "duplicate ledger finding occurrence" });
     }
-    seenLedger.add(entry.finding_id);
+    seenLedger.add(key);
   });
 });
 
 /** Structural parse only; exact current-review coverage is established by {@link validateTriage}. */
 export function parseTriageCandidate(value: unknown): TriageCandidate {
   assertPlainJson(value, "review triage candidate");
-  const { accepted_editorial_count, disposition_ledger, ...rest } = triageCandidateSchema.parse(value);
+  const parsed = triageCandidateSchema.parse(value);
+  const dispositions: TriageDisposition[] = parsed.dispositions.map((d) => {
+    if (d.disposition === "deferred") {
+      const res: DeferredDisposition = {
+        review_evidence_digest: d.review_evidence_digest,
+        finding_id: d.finding_id,
+        disposition: "deferred",
+        rationale: d.rationale,
+        ...(d.evidence !== undefined ? { evidence: d.evidence } : {}),
+      };
+      return res;
+    }
+    return d;
+  });
+  const {
+    accepted_editorial_count,
+    escalated_human_count,
+    deferred_count,
+    disposition_ledger,
+    review_round_history,
+    ...rest
+  } = parsed;
   return {
     ...rest,
+    dispositions,
     ...(accepted_editorial_count === undefined ? {} : { accepted_editorial_count }),
+    ...(escalated_human_count === undefined ? {} : { escalated_human_count }),
+    ...(deferred_count === undefined ? {} : { deferred_count }),
     ...(disposition_ledger === undefined ? {} : { disposition_ledger }),
+    ...(review_round_history === undefined ? {} : { review_round_history }),
   };
 }
 
@@ -126,17 +247,24 @@ export function validateTriage(
   current: CurrentReviewSet,
   candidate: unknown,
   dispositionLedger?: readonly TriageDispositionLedgerEntry[],
+  reviewRoundHistory?: readonly ReviewRoundHistoryEntryV1[],
 ): ValidatedTriage {
   if (!authenticCurrentReviewSet(current)) throw new TypeError("an authenticated current review set is required");
   const parsed = parseTriageCandidate(candidate);
   if (parsed.disposition_ledger !== undefined) {
     throw new TypeError("disposition_ledger is server-computed; triage candidates must not carry one");
   }
+  if (parsed.review_round_history !== undefined) {
+    throw new TypeError("review_round_history is server-computed; triage candidates must not carry one");
+  }
+  const parsedReviewRoundHistory = reviewRoundHistory === undefined
+    ? undefined
+    : reviewRoundHistoryV1Schema.parse(structuredClone(reviewRoundHistory));
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
   const expected = new Set<string>();
-  const blocking = new Set<string>();
+  const findingsByKey = new Map<string, ReviewEvidence["findings"][number]>();
   for (const review of current.reviews) {
     const localIds = new Set<string>();
     for (const finding of review.evidence.findings) {
@@ -144,29 +272,81 @@ export function validateTriage(
       localIds.add(finding.finding_id);
       const key = refKey({ review_evidence_digest: review.evidence_digest, finding_id: finding.finding_id });
       expected.add(key);
-      if (finding.blocking) blocking.add(key);
+      findingsByKey.set(key, finding);
     }
   }
   const actual = new Set<string>();
+  const isEditorialAllowed = parsed.phase_instance === "prd" || parsed.phase_instance === "design";
   for (const disposition of parsed.dispositions) {
     const key = refKey(disposition);
     if (actual.has(key)) throw new TypeError(`duplicate triage disposition ${key}`);
     if (!expected.has(key)) throw new TypeError(`foreign or stale triage disposition ${key}`);
-    if (disposition.disposition === "accepted-editorial" && blocking.has(key)) throw new TypeError(`accepted-editorial is refused for blocking finding ${key}; a blocking finding's fix is never purely editorial`);
+    const finding = findingsByKey.get(key)!;
+    if (disposition.disposition === "accepted-editorial") {
+      if (isSubstantiveClaim(finding)) {
+        throw new TypeError(
+          `accepted-editorial is refused for substantive finding ${key}; a substantive finding's fix is never purely editorial — use "accepted", "rejected", "escalated-human", or "deferred"`
+        );
+      }
+      if (!isEditorialAllowed) {
+        throw new TypeError(
+          `accepted-editorial is refused for position ${parsed.phase_instance}; editorial produce is supported only for PRD and design — use "accepted"`
+        );
+      }
+    }
+    if (disposition.disposition === "deferred") {
+      const isDefectOrBlocking = ("claim_type" in finding && finding.claim_type === "defect") ||
+        (!("claim_type" in finding) && finding.blocking === true);
+      if (isDefectOrBlocking) {
+        throw new TypeError(
+          `deferred is refused for defect finding ${key}; a defect cannot be deferred without remediation or falsification — use "accepted", "rejected", or "escalated-human"`
+        );
+      }
+      if (isSubstantiveClaim(finding)) {
+        if (typeof disposition.evidence !== "string" || disposition.evidence.trim().length === 0) {
+          throw new TypeError(
+            `deferred requires non-blank evidence demonstrating non-material consequence for substantive finding ${key}`
+          );
+        }
+      } else {
+        if (typeof disposition.rationale !== "string" || disposition.rationale.trim().length === 0) {
+          throw new TypeError(
+            `deferred requires non-blank rationale for finding ${key}`
+          );
+        }
+      }
+    }
     actual.add(key);
   }
   if (actual.size !== expected.size || [...expected].some((key) => !actual.has(key))) throw new TypeError("triage dispositions must exactly cover every current finding");
   const accepted = parsed.dispositions.filter((value) => value.disposition === "accepted").length;
   const acceptedEditorial = parsed.dispositions.filter((value) => value.disposition === "accepted-editorial").length;
-  const rejected = parsed.dispositions.length - accepted - acceptedEditorial;
+  const rejected = parsed.dispositions.filter((value) => value.disposition === "rejected").length;
+  const escalatedHuman = parsed.dispositions.filter((value) => value.disposition === "escalated-human").length;
+  const deferred = parsed.dispositions.filter((value) => value.disposition === "deferred").length;
   if (parsed.accepted_editorial_count === undefined) throw new TypeError("triage requires accepted_editorial_count");
-  if (parsed.accepted_count !== accepted || parsed.rejected_count !== rejected || parsed.accepted_editorial_count !== acceptedEditorial) throw new TypeError("triage disposition counts are contradictory");
+  if (parsed.escalated_human_count === undefined) throw new TypeError("triage requires escalated_human_count");
+  if (parsed.deferred_count === undefined) throw new TypeError("triage requires deferred_count");
+  if (
+    parsed.accepted_count !== accepted ||
+    parsed.rejected_count !== rejected ||
+    parsed.accepted_editorial_count !== acceptedEditorial ||
+    parsed.escalated_human_count !== escalatedHuman ||
+    parsed.deferred_count !== deferred
+  ) {
+    throw new TypeError("triage disposition counts are contradictory");
+  }
   const validated = Object.freeze({
     ...parsed,
     accepted_editorial_count: parsed.accepted_editorial_count,
+    escalated_human_count: parsed.escalated_human_count,
+    deferred_count: parsed.deferred_count,
     ...(dispositionLedger === undefined
       ? {}
       : { disposition_ledger: Object.freeze(dispositionLedger.map((entry) => Object.freeze({ ...entry }))) }),
+    ...(parsedReviewRoundHistory === undefined
+      ? {}
+      : { review_round_history: Object.freeze(parsedReviewRoundHistory.map((entry) => Object.freeze({ ...entry }))) }),
     source_evidence_digests: Object.freeze([...parsed.source_evidence_digests]),
     dispositions: Object.freeze(parsed.dispositions.map((value) => Object.freeze({ ...value }))),
   }) as ValidatedTriage;

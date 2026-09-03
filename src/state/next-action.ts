@@ -83,11 +83,14 @@ export type PolicyReentryFindings = Readonly<{
 export type AuthenticatedApprovalFact = Readonly<{
   gate_kind: GateKind;
   subject_digest: Sha256Digest;
+  current_evidence_set_digest?: Sha256Digest;
 }>;
 
 export type NextActionInput = Readonly<{
   repository_initialized: boolean;
   state?: TaskStateV1;
+  /** Status-authenticated pending validation request; routed before ordinary failed-step retry. */
+  pending_validation_override?: boolean;
   config_verified?: boolean;
   /** Why the config failed to read (`config-invalid`/`config-missing`/`config-unreadable`/`config-unresolvable`). */
   config_issue?: string;
@@ -110,6 +113,8 @@ export type NextActionInput = Readonly<{
   /** Present with `assessment.policy_reentry_required`: what the produce re-entry has to resolve. */
   policy_findings?: PolicyReentryFindings;
   assessment?: EvidenceAssessment;
+  escalated_human_findings?: boolean;
+  current_evidence_set_digest?: Sha256Digest;
   evidence_available?: boolean;
   subject_digest?: Sha256Digest;
   authenticated_approvals?: readonly AuthenticatedApprovalFact[];
@@ -274,9 +279,20 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
     : phase.kind === "phase-impl"
       ? "commit-authorization"
       : undefined;
+  if (input.escalated_human_findings === true && requiredKind !== undefined) {
+    return action("open-gate", "A human escalation requires an explicit decision before advancement.", true, state, {
+      gate_kind: requiredKind,
+    });
+  }
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
-  const ordinaryApproved = requiredKind !== undefined && matchingApproval(input, requiredKind);
+  const ordinaryApproved = requiredKind !== undefined && (input.authenticated_approvals ?? []).some((approval) =>
+    approval.gate_kind === requiredKind &&
+    approval.subject_digest === input.subject_digest &&
+    (approval.current_evidence_set_digest === undefined ||
+     input.current_evidence_set_digest === undefined ||
+     approval.current_evidence_set_digest === input.current_evidence_set_digest)
+  );
   // An exact ordinary approval is the stronger authority for this subject. A coexisting no-wait
   // settlement may explain why no gate was originally required, but it must never replace the
   // human-bound Git facts after the human has approved this exact subject.
@@ -578,6 +594,15 @@ export function deriveNextAction(input: NextActionInput): NextAction {
       gate_kind: state.open_gate.gate_kind,
     });
   }
+  if (input.pending_validation_override === true) {
+    return action(
+      "open-gate",
+      "Open the requested validation override so a human can decide whether the named validations may be displaced.",
+      true,
+      state,
+      { gate_kind: "validation-override" },
+    );
+  }
   const currentProduce = state.authoritative_results.some((reference) =>
     reference.phase_instance === state.phase_instance && reference.step === "produce");
   if (!currentProduce) {
@@ -676,19 +701,6 @@ export function deriveNextAction(input: NextActionInput): NextAction {
         false,
         state,
         { step: "produce", editorial_revision: true },
-      );
-    }
-    if (next === "produce" && input.assessment?.effort_reentry_required === true) {
-      const blockers = input.assessment.effort_blockers ?? [];
-      const details = blockers.map((blocker) => blocker.kind === "specification-gap"
-        ? `${blocker.component_id}: ${blocker.question}`
-        : `Implementation components need a clearer boundary: ${blocker.rationale}`);
-      return action(
-        "run-step",
-        `Revise the phase design to resolve its authenticated effort-review blockers.${details.length === 0 ? "" : ` ${details.join(" ")}`}`,
-        false,
-        state,
-        { step: "produce", effort_reentry: true },
       );
     }
     if (next === "produce" && input.assessment?.policy_reentry_required === true) {

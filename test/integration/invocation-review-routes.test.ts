@@ -96,11 +96,10 @@ else {
     writeFileSync(${JSON.stringify(countPath)}, String(count + 1));
     appendFileSync(${JSON.stringify(modelPath)}, argv[argv.indexOf("-m") + 1] + "\\n");
     if (count < ${JSON.stringify(failFirst)}) process.exit(70);
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    output = { task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings: [], matched_rule_versions: [],
-      verdict: "pass", blocking_count: 0 };
+      producer_family: subject.producer_family, findings: [], matched_rule_versions: [] };
   } else {
     output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
@@ -128,11 +127,10 @@ else {
   let output;
   if (subject.role === "counter-review") {
     appendFileSync(${JSON.stringify(routePath)}, argv[argv.indexOf("--model") + 1] + "\\t" + argv[argv.indexOf("--effort") + 1] + "\\n");
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    output = { task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings: [], matched_rule_versions: [],
-      verdict: "pass", blocking_count: 0 };
+      producer_family: subject.producer_family, findings: [], matched_rule_versions: [] };
   } else {
     output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,

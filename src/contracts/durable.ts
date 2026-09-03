@@ -17,7 +17,7 @@ import type {
   WaiverGateContext,
 } from "./durable-gate.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "./errors.js";
-import { validateArchivedGateDecision, type GateContext, type GateKind } from "./gates.js";
+import { validateArchivedGateDecision, validationOverrideSubjectDigest, type GateContext, type GateKind } from "./gates.js";
 import type { Sha256Digest } from "./evidence.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonValue } from "./plain-json.js";
@@ -164,6 +164,9 @@ export const DURABLE_ISSUE_CODES = Object.freeze({
   /** gate */ gateDecisionContextMismatch: "gate-decision-context-mismatch",
   /** gate */ gateDecisionEnvelopeMismatch: "gate-decision-envelope-mismatch",
   /** gate */ gateDecisionPayloadInvalid: "gate-decision-payload-invalid",
+  /** gate */ gateValidationEvidenceMismatch: "gate-validation-evidence-mismatch",
+  /** gate */ gateReviewPushThroughEvidenceMismatch: "gate-review-push-through-evidence-mismatch",
+  /** state */ pendingValidationTransitionMismatch: "pending-validation-transition-mismatch",
   /** gate */ waiverDecisionOriginMismatch: "waiver-decision-origin-mismatch",
   /** gate */ openGateFrozenStateMismatch: "open-gate-frozen-state-mismatch",
 } as const);
@@ -434,6 +437,42 @@ export function validateDurableSemantics(subject: DurableSemanticSubject): Proje
   }
   if (gateDecision !== undefined && canonicalJsonDigest(gateDecision) !== gateDecisionSlot?.digest) {
     return fail(contractInvalid(DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+  if (gateRequest?.kind === "validation-override") {
+    const evidence = gateRequest.current_evidence;
+    const context = gateRequest.context;
+    const expectedSubject = validationOverrideSubjectDigest({
+      task_id: gateRequest.task_id,
+      phase_instance: gateRequest.phase_instance,
+      input_fingerprint: context.input_fingerprint,
+      governing_phase_design_digest: context.governing_phase_design_digest,
+      displaced_validations: context.displaced_validations,
+    });
+    if (evidence.task_id !== gateRequest.task_id || evidence.phase_instance !== gateRequest.phase_instance ||
+        evidence.input_fingerprint !== context.input_fingerprint ||
+        evidence.governing_phase_design_digest !== context.governing_phase_design_digest ||
+        evidence.request_revision !== context.request_revision ||
+        evidence.validation_request_subject_digest !== gateRequest.subject_digest || expectedSubject !== gateRequest.subject_digest) {
+      return fail(contractInvalid(DURABLE_ISSUE_CODES.gateValidationEvidenceMismatch));
+    }
+  }
+  if (gateRequest?.kind === "attempts-exhausted" && gateRequest.context.review_push_through !== undefined &&
+      gateRequest.current_evidence.set_digest !== gateRequest.context.review_push_through.current_evidence_set_digest) {
+    return fail(contractInvalid(DURABLE_ISSUE_CODES.gateReviewPushThroughEvidenceMismatch));
+  }
+  if (state?.pending_validation_override !== undefined) {
+    const pending = state.pending_validation_override;
+    const transition = state.last_transition;
+    const originMatches = transition !== undefined &&
+      transition.tool === "archflow_state" &&
+      transition.operation === "request-validation-override" &&
+      transition.request_digest === pending.request_digest &&
+      transition.input_fingerprint === pending.input_fingerprint &&
+      transition.resulting_revision === pending.request_revision;
+    if ((state.open_gate === undefined && !originMatches) ||
+        (state.open_gate?.gate_kind === "validation-override" && transition !== undefined)) {
+      return fail(stateInvalid(state, DURABLE_ISSUE_CODES.pendingValidationTransitionMismatch));
+    }
   }
   if (state?.open_gate !== undefined && openGateFrozenStateDigest(state) !== state.open_gate.frozen_state_digest) {
     return fail(stateInvalid(state, DURABLE_ISSUE_CODES.openGateFrozenStateMismatch));

@@ -162,6 +162,44 @@ describe("canonical skill contracts", () => {
     }
   });
 
+  it("triages review findings as falsifiable claims with consequential stopping", () => {
+    for (const name of producerSkills) {
+      const source = skill(name);
+      expect(source).toContain("finding as a claim");
+      expect(source).toContain("`claim_type`");
+      expect(source).toContain("`confidence`");
+      expect(source).toContain("`falsifier`");
+      expect(source).toContain("run every feasible falsifier");
+      expect(source).toContain("Suspicion does not lower the evidence bar");
+      for (const disposition of ["`accepted`", "`accepted-editorial`", "`rejected`", "`escalated-human`", "`deferred`"]) {
+        expect(source, `${name} omits disposition ${disposition}`).toContain(disposition);
+      }
+      for (const rejection of ["invalid", "falsified", "speculative", "inconsequential", "unrelated", "unaffected pre-existing", "optional cleanup", "preferred alternatives"]) {
+        expect(source, `${name} omits rejection class ${rejection}`).toContain(rejection);
+      }
+      expect(source).toContain("Consequential Stopping Rule");
+      expect(source).toMatch(/`escalated-human` only for a material judgment.*unresolved/su);
+      expect(source).toMatch(/`deferred` only for a real, non-defect, non-material concern owned by a named later boundary/su);
+      expect(source).toContain("never defer a V2 defect or anything that blocks legacy behavior");
+      expect(source).toContain("taxonomy and falsifier, not an ID prefix alone");
+      expect(source).toContain("Never edit an upstream, parent, or governing document, or create cosmetic churn, solely to pacify reviewer opinion");
+    }
+  });
+
+  it("separates editorial handling at document approval from phase review", () => {
+    for (const name of ["archflow-prd", "archflow-design"] as const) {
+      const source = skill(name);
+      expect(source).toMatch(/`accepted-editorial` change is meaning-preserving/su);
+      expect(source).toContain("may reuse the prior review for one hop");
+      expect(source).toContain("requires human approval of the final bytes");
+    }
+    for (const name of ["archflow-phase-design", "archflow-phase-impl"] as const) {
+      const source = skill(name);
+      expect(source).toMatch(/server refuses `accepted-editorial`/u);
+      expect(source).toContain("any accepted byte change uses `accepted` and the full production-and-review cycle");
+    }
+  });
+
   it("keeps human gates conversational and machine bindings diagnostic-only", () => {
     const all = skillNames.map(skill).join("\n");
     for (const name of producerSkills) {
@@ -204,15 +242,12 @@ describe("canonical skill contracts", () => {
     }
   });
 
-  it("requires phase designs to author one stable implementation-component manifest", () => {
+  it("keeps effort-selector bookkeeping out of phase designs", () => {
     const source = skill("archflow-phase-design");
-    expect(source).toContain("## Implementation Components");
-    expect(source).toContain("archflow-components-v1");
-    expect(source).toContain("independently scoreable");
-    expect(source).toContain("primary` first");
-    expect(source).toContain("ordinal-sorted secondaries");
-    expect(source).toContain("normalized literal `paths`");
-    expect(source).toContain("Never infer it");
+    expect(source).not.toContain("## Implementation Components");
+    expect(source).not.toContain("archflow-components-v1");
+    expect(source).toContain("implementation approach");
+    expect(source).toContain("silently applies its rubric");
   });
 
   it("keeps review triage on the submitted subject instead of the whole repository", () => {
@@ -396,20 +431,18 @@ describe("canonical skill contracts", () => {
     for (const name of ["archflow-phase-design", "archflow-phase-impl", "archflow-status"] as const) {
       const source = skill(name);
       expect(source).toContain("`implementation_recommendation`");
-      expect(source).toContain("For `ready`");
-      expect(source).toContain("For `blocked`");
-      expect(source).toContain("For `unavailable`");
-      expect(source).toContain("determining components");
-      expect(source).toContain("A-E judgments");
-      expect(source).toContain("actual implementation route is not recorded");
-      expect(source).toContain("substituted effort-review route conspicuous");
+      expect(source).toMatch(/for `ready`/iu);
+      expect(source).toMatch(/for `unavailable`/iu);
+      expect(source).not.toContain("For `blocked`");
+      expect(source).toContain("model and effort");
+      expect(source).toContain("scores");
       expect(source).toContain("`next_action`");
     }
     expect(skill("archflow-phase-design")).toContain("Every changed phase-design subject");
-    expect(skill("archflow-phase-design")).toContain("predecessor evidence can never supply");
+    expect(skill("archflow-phase-design")).toContain("predecessor evidence never supplies");
     expect(skill("archflow-phase-design")).toContain("`effort-reviewer`");
     expect(skill("archflow-phase-impl")).toContain("before reading implementation inputs or writing code");
-    expect(skill("archflow-phase-impl")).toContain("Model selection happens outside ArchFlow");
+    expect(skill("archflow-phase-impl")).toContain("recommendation is advice only");
     expect(skill("archflow-status")).toContain("Never parse Markdown or raw task state for advice");
   });
 

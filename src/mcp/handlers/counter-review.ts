@@ -15,15 +15,14 @@ import type { ParsedToolCall, ToolSuccess } from "../../contracts/mcp-tools.js";
 import type { TaskPathClaim } from "../../contracts/path-claims.js";
 import type { PlainJsonValue } from "../../contracts/plain-json.js";
 import type { GitOid } from "../../contracts/canonical.js";
-import {
-  extractPhaseDesignComponentManifest,
-  phaseDesignComponentManifestDigest,
-  type PhaseDesignComponentManifestV1,
-} from "../../contracts/component-manifest.js";
 import type { TaskStateV1 } from "../../contracts/durable-state.js";
-import { EFFORT_REVIEW_INSTRUCTIONS, IMPLEMENTATION_EFFORT_POLICY_ID, type EffortEnvelopeV1 } from "../../contracts/effort-review.js";
 import {
-  captureHazardRegistryInput,
+  EFFORT_SELECTOR_INSTRUCTIONS,
+  IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
+  type EffortEnvelopeV2,
+} from "../../contracts/effort-review.js";
+import {
+  captureHazardRegistrySnapshot,
   type HazardRegistryInputV1,
 } from "../../contracts/hazard-registry.js";
 import { decodePhaseInstance } from "../../contracts/phase-instance.js";
@@ -85,7 +84,7 @@ const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1
 
 /** Keeps a bounded actionable parser diagnostic at the public contract boundary. */
 export function effortInputContractError(
-  issueCode: "phase-design-component-manifest-invalid" | "hazard-registry-invalid-or-unreadable",
+  issueCode: "phase-design-artifact-invalid",
   error: unknown,
 ): ProjectError {
   const issues = describeValidationIssues(error);
@@ -458,29 +457,32 @@ export async function handleCounterReview(
       }));
     }
 
-    // Effort inputs are phase-design-only and are validated before any route selection or child
-    // launch. The registry is deliberately captured once from the authenticated primary live
-    // worktree; the post-dispatch freshness proof does not read this non-authoritative input again.
+    // Effort selection is phase-design-only. It consumes the plan and a one-read hazard snapshot;
+    // it never requires the producer to author a component manifest.
     let phaseDesignArtifact: string | undefined;
-    let componentManifest: PhaseDesignComponentManifestV1 | undefined;
-    let hazardRegistry: HazardRegistryInputV1 | undefined;
+    let hazardRegistry: Omit<HazardRegistryInputV1, "components"> | undefined;
+    let forceEffortDefault = false;
     if (session.value.phase_kind === "phase-design") {
       try {
         phaseDesignArtifact = new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes);
-        const repositoryNames = session.value.repository_set.members.map((member) => member.name);
-        componentManifest = extractPhaseDesignComponentManifest(phaseDesignArtifact, repositoryNames);
       } catch (error) {
-        return fail(effortInputContractError("phase-design-component-manifest-invalid", error));
+        return fail(effortInputContractError("phase-design-artifact-invalid", error));
       }
       try {
         const repositoryNames = session.value.repository_set.members.map((member) => member.name);
-        hazardRegistry = await captureHazardRegistryInput(
+        hazardRegistry = await captureHazardRegistrySnapshot(
           () => readHazardRegistryBytes(services.runner.location.worktreeRoot),
           repositoryNames,
-          componentManifest!,
         );
-      } catch (error) {
-        return fail(effortInputContractError("hazard-registry-invalid-or-unreadable", error));
+      } catch {
+        forceEffortDefault = true;
+        const registry = { schema_version: "1" as const, hazards: [] };
+        hazardRegistry = Object.freeze({
+          schema_version: "1",
+          state: "absent",
+          registry_digest: canonicalJsonDigest({ schema_version: "1", state: "absent", registry }),
+          hazards: Object.freeze([]),
+        });
       }
     }
 
@@ -544,12 +546,12 @@ export async function handleCounterReview(
     const reviewedRepositories = projectReviewedRepositories(repositoryViews);
     const workspaceBinding = projectRepositoryWorkspaceBinding(repositoryViews);
     let effortPlan: EffortReviewPlan | undefined;
-    if (phaseDesignArtifact !== undefined && componentManifest !== undefined && hazardRegistry !== undefined) {
+    if (phaseDesignArtifact !== undefined && hazardRegistry !== undefined) {
       const effortResultId = stableId("effort-result", call.input.intent_id);
-      const effortEnvelope: EffortEnvelopeV1 = Object.freeze({
-        schema_version: "1",
+      const effortEnvelope: EffortEnvelopeV2 = Object.freeze({
+        schema_version: "2",
         artifact: phaseDesignArtifact,
-        instructions: EFFORT_REVIEW_INSTRUCTIONS,
+        instructions: EFFORT_SELECTOR_INSTRUCTIONS,
         task_id: services.authority.task_id,
         phase_instance: state.value.phase_instance,
         attempt: state.value.attempt,
@@ -557,13 +559,11 @@ export async function handleCounterReview(
         input_fingerprint: call.input.input_fingerprint,
         invocation_id: stableId("effort-invocation", call.input.intent_id),
         result_id: effortResultId,
-        policy_id: IMPLEMENTATION_EFFORT_POLICY_ID,
-        component_manifest_digest: phaseDesignComponentManifestDigest(componentManifest),
-        component_manifest: componentManifest,
+        policy_id: IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
         hazard_registry: hazardRegistry,
         repositories: reviewedRepositories,
       });
-      effortPlan = Object.freeze({ envelope: effortEnvelope });
+      effortPlan = Object.freeze({ envelope: effortEnvelope, ...(forceEffortDefault ? { force_default: true } : {}) });
     }
     // The rubric and constitution children receive byte-identical repository views, so one
     // materialization serves both; the handle is disposed after runCounterReview settles.

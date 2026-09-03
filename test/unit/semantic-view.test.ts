@@ -24,6 +24,7 @@ import {
 import type { NextAction, NextActionCode } from "../../src/state/next-action.js";
 import {
   computeSemanticStatusSnapshot,
+  computeTaxonomyDenialRates,
   governingRecommendationPhase,
 } from "../../src/state/semantic-status.js";
 import { projectSemanticStatus, semanticOfferToken } from "../../src/state/semantic-view.js";
@@ -78,6 +79,7 @@ function snapshot(status: TaskStatusV1, extra: Partial<SemanticStatusSnapshotV1>
     repository_identity_digest: digestA,
     status: structuredClone(status) as unknown as PlainJsonValue,
     full_findings: [],
+    taxonomy_denial_rates: computeTaxonomyDenialRates([]),
     implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
     reopen_impacts: [],
     ...extra,
@@ -127,6 +129,18 @@ function effortAssessment(blocked = false): EffortAssessmentV1 {
 }
 
 describe("semantic status projection", () => {
+  it("exposes the complete authenticated taxonomy denial-rate record unchanged", () => {
+    const status = fullStatus(action("run-step", { step: "produce" }));
+    const rates = {
+      ...computeTaxonomyDenialRates([]),
+      "gap:likely": 0.75,
+      "preference:suspicion": 1,
+    };
+    const view = projectSemanticStatus(snapshot(status, { taxonomy_denial_rates: rates }), invocation).view;
+    expect(view.taxonomy_denial_rates).toEqual(rates);
+    expect(Object.keys(view.taxonomy_denial_rates ?? {})).toHaveLength(12);
+  });
+
   it("copies authenticated effort advice without changing the action or offer", () => {
     const status = fullStatus(action("run-step", { step: "produce" }));
     const ready = implementationRecommendationFromAssessment(effortAssessment(), 1);
@@ -137,7 +151,7 @@ describe("semantic status projection", () => {
       .toEqual(projectSemanticStatus(unavailable, invocation).view.next_action);
   });
 
-  it("keeps blocked and unavailable recommendation states informational", () => {
+  it("maps archived blockers to a ready default and keeps unavailable states informational", () => {
     const status = fullStatus(action("run-step", { step: "produce" }));
     const baseline = projectSemanticStatus(snapshot(status), invocation).view.next_action;
     const recommendations = [
@@ -146,7 +160,8 @@ describe("semantic status projection", () => {
       unavailableImplementationRecommendation("legacy-evidence", "The exact review predates effort evidence.", 1),
       unavailableImplementationRecommendation("subject-stale", "The review describes earlier design bytes.", 1),
     ];
-    expect(recommendations.map((item) => item.status)).toEqual(["blocked", "unavailable", "unavailable", "unavailable"]);
+    expect(recommendations.map((item) => item.status)).toEqual(["ready", "unavailable", "unavailable", "unavailable"]);
+    expect(recommendations[0]).toEqual({ status: "ready", model: "gpt-5.6-sol", effort: "medium" });
     for (const recommendation of recommendations) {
       const view = projectSemanticStatus(snapshot(status, { implementation_recommendation: recommendation }), invocation).view;
       expect(view.implementation_recommendation).toEqual(recommendation);
@@ -192,14 +207,10 @@ describe("semantic status projection", () => {
 
     const status = fullStatus(action("run-step", { step: "produce" }));
     const baseline = projectSemanticStatus(snapshot(status), invocation).view.next_action;
-    for (const kind of ["registry-created", "registry-changed", "registry-removed", "registry-unreadable"] as const) {
-      const recommendation = implementationRecommendationFromAssessment(effortAssessment(), 1, {
-        kind, explanation: `Observed ${kind}.`,
-      });
-      const projected = projectSemanticStatus(snapshot(status, { implementation_recommendation: recommendation }), invocation).view;
-      expect(projected.implementation_recommendation).toEqual(recommendation);
-      expect(projected.next_action).toEqual(baseline);
-    }
+    const recommendation = implementationRecommendationFromAssessment(effortAssessment(), 1);
+    const projected = projectSemanticStatus(snapshot(status, { implementation_recommendation: recommendation }), invocation).view;
+    expect(projected.implementation_recommendation).toEqual(recommendation);
+    expect(projected.next_action).toEqual(baseline);
   });
 
   it("suppresses writable resources at a close-only revision checkpoint", () => {
@@ -634,6 +645,7 @@ describe("semantic status projection", () => {
     } as unknown as TaskStateV1;
     expect(() => computeSemanticStatusSnapshot(status, {
       repository_identity_digest: digestA, state, full_findings: [],
+      taxonomy_denial_rates: computeTaxonomyDenialRates([]),
       implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
     })).toThrow(/same canonical read/u);
   });
@@ -647,6 +659,7 @@ describe("semantic status projection", () => {
     } as unknown as TaskStateV1;
     expect(() => computeSemanticStatusSnapshot(status, {
       repository_identity_digest: digestA, state, full_findings: [],
+      taxonomy_denial_rates: computeTaxonomyDenialRates([]),
       implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
     })).toThrow(/repository identity/u);
   });

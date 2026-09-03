@@ -610,12 +610,93 @@
         },
         "maximum_attempts": {
           "$ref": "#/$defs/safeInteger"
+        },
+        "review_push_through": {
+          "type": "object",
+          "properties": {
+            "minimum_attempt": {
+              "type": "number",
+              "const": 2
+            },
+            "current_evidence_set_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "triage_result_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "accepted_occurrences": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "review_evidence_digest": {
+                    "$ref": "#/$defs/digest"
+                  },
+                  "finding_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  }
+                },
+                "required": [
+                  "review_evidence_digest",
+                  "finding_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "minimum_attempt",
+            "current_evidence_set_digest",
+            "triage_result_digest",
+            "accepted_occurrences"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "step",
         "attempts",
         "maximum_attempts"
+      ],
+      "additionalProperties": false
+    },
+    "validationOverrideContext": {
+      "type": "object",
+      "properties": {
+        "request_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "input_fingerprint": {
+          "$ref": "#/$defs/digest"
+        },
+        "governing_phase_design_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "displaced_validations": {
+          "minItems": 1,
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "\\S"
+          }
+        },
+        "producer_reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "request_revision",
+        "input_fingerprint",
+        "governing_phase_design_digest",
+        "displaced_validations",
+        "producer_reason"
       ],
       "additionalProperties": false
     },
@@ -1232,7 +1313,28 @@
           "enum": [
             "retry-once",
             "revise",
-            "abort"
+            "abort",
+            "push-through-review"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "validationOverrideDecision": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": [
+            "grant-validation-override",
+            "deny-validation-override"
           ]
         },
         "reason": {
@@ -1521,6 +1623,27 @@
       ],
       "additionalProperties": false
     },
+    "validationOverride": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "validation-override"
+        },
+        "context": {
+          "$ref": "#/$defs/validationOverrideContext"
+        },
+        "payload": {
+          "$ref": "#/$defs/validationOverrideDecision"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
     "constitutionEdit": {
       "type": "object",
       "properties": {
@@ -1642,6 +1765,9 @@
     },
     {
       "$ref": "#/$defs/attemptsExhausted"
+    },
+    {
+      "$ref": "#/$defs/validationOverride"
     },
     {
       "$ref": "#/$defs/constitutionEdit"

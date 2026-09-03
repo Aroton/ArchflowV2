@@ -6,8 +6,8 @@ import type { RepositoryName, TaskConfigSnapshot, WorkflowSubject } from "./conf
 import { approvalRulesSchema, configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, producersSchema, repositoriesV1Schema, repositoryDeclarationV1Schema, repositoryModeV1Schema, repositoryNameV1Schema, workflowSubjectV1Schema } from "./config.js";
 import type { PathSafeId, SafeCode, SafeId, SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
 import { pathSafeIdV1Schema, safeCodeV1Schema, safeIdV1Schema, safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema } from "./evidence.js";
-import type { GateKind, WaiverScope } from "./gates.js";
-import { GATE_KINDS } from "./gates.js";
+import type { GateKind, ReviewAcceptedOccurrenceV1, WaiverScope } from "./gates.js";
+import { GATE_KINDS, validationOverrideSubjectDigest } from "./gates.js";
 import type { PlainJsonValue } from "./plain-json.js";
 import type { ProjectionDigestRef } from "./durable-primitives.js";
 import { repositoryPathClaimV1Schema } from "./path-claims.js";
@@ -219,6 +219,46 @@ export type BaselineAdoptionRecord = {
   readonly adopted_absences?: readonly (ProjectionDigestRef["path"] | RepositoryProjectionPathRefV1)[];
 };
 
+/** A failed implementation result awaiting a bounded human validation decision. */
+export type PendingValidationOverrideV1 = {
+  readonly phase_instance: PhaseInstanceId;
+  readonly input_fingerprint: Sha256Digest;
+  readonly governing_phase_design_digest: Sha256Digest;
+  readonly displaced_validations: readonly string[];
+  readonly producer_reason: string;
+  readonly request_digest: Sha256Digest;
+  readonly request_revision: SafeInteger;
+};
+
+/** Durable audit authority for one human-granted validation exception. */
+export type ValidationOverrideRecordV1 = {
+  readonly gate_id: PathSafeId;
+  readonly decision_digest: Sha256Digest;
+  readonly phase_instance: PhaseInstanceId;
+  readonly input_fingerprint: Sha256Digest;
+  readonly governing_phase_design_digest: Sha256Digest;
+  readonly subject_digest: Sha256Digest;
+  readonly displaced_validations: readonly string[];
+  readonly human_reason: string;
+  readonly decided_at: string;
+  readonly granted_at_revision: SafeInteger;
+};
+
+/** Durable audit authority for one human decision to continue despite accepted review findings. */
+export type ReviewPushThroughRecordV1 = {
+  readonly gate_id: PathSafeId;
+  readonly decision_digest: Sha256Digest;
+  readonly phase_instance: PhaseInstanceId;
+  readonly subject_digest: Sha256Digest;
+  readonly current_evidence_set_digest: Sha256Digest;
+  readonly triage_result_digest: Sha256Digest;
+  readonly accepted_occurrences: readonly ReviewAcceptedOccurrenceV1[];
+  readonly attempt: SafeInteger;
+  readonly human_reason: string;
+  readonly decided_at: string;
+  readonly resolved_at_revision: SafeInteger;
+};
+
 export type RepositoryProjectionPathRefV1 = {
   /** Omission denotes primary; fresh secondary records always carry it. */
   readonly repository?: RepositoryName;
@@ -388,6 +428,7 @@ export type TaskStateV1 = {
    */
   readonly open_gate?: OpenGateRef;
   readonly pending_human_revision?: PendingHumanRevision;
+  readonly pending_validation_override?: PendingValidationOverrideV1;
   readonly human_revision_history?: readonly HumanRevisionRecord[];
   /** Sorted by `restart_id`; absent means no planning restart has occurred. */
   readonly restart_history?: readonly PlanningRestartRecord[];
@@ -395,6 +436,10 @@ export type TaskStateV1 = {
   readonly milestone_recovery_history?: readonly MilestoneRecoveryRecord[];
   /** Human-approved re-baselines of drifted projections; see `BaselineAdoptionRecord`. */
   readonly baseline_adoptions?: readonly BaselineAdoptionRecord[];
+  /** Sorted by `(phase_instance, gate_id)`; optional only for pre-feature state compatibility. */
+  readonly validation_overrides?: readonly ValidationOverrideRecordV1[];
+  /** Sorted by `(phase_instance, gate_id)`; optional only for pre-feature state compatibility. */
+  readonly review_push_throughs?: readonly ReviewPushThroughRecordV1[];
   /**
    * Approval-rule settlements, written for both evaluated outcomes by the transaction
    * that first establishes the clean fixed point. SET — sorted by the tuple
@@ -615,6 +660,60 @@ export const baselineAdoptionRecordV1Schema = z.object({
     z.object({ repository: settlementRepositoryNameV1Schema, path: repositoryPathClaimV1Schema }).strict(),
   ])).optional().refine((items) => isSortedUniqueBy(items as readonly (string | { readonly repository?: string; readonly path: string })[], adoptedAbsenceKey), "adopted absences must be sorted by repository and path with no duplicates"),
 }).strict() as unknown as z.ZodType<BaselineAdoptionRecord>;
+
+const phaseImplInstanceV1Schema = z.string().regex(/^phase-impl-[1-9][0-9]*$/u) as unknown as z.ZodType<PhaseInstanceId>;
+const archivedHumanDecisionTimeV1Schema = z.string().datetime({ offset: false, local: false, precision: 3 });
+const boundedReasonV1Schema = z.string().min(1).max(4096).regex(/\S/u);
+const requestDisplacedValidationsV1Schema = z.array(z.string().min(1).max(1024).regex(/\S/u)).min(1).max(32)
+  .refine((items) => items.every((item, index) => index === 0 || items[index - 1]!.localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates");
+const durableDisplacedValidationsV1Schema = z.array(z.string().min(1).max(1024).regex(/\S/u)).min(1).max(32)
+  .refine((items) => items.every((item, index) => index === 0 || items[index - 1]! < item), "displaced validations must be ordinal-sorted with no duplicates");
+const durableAcceptedOccurrencesV1Schema = z.array(z.object({
+  review_evidence_digest: sha256Digest,
+  finding_id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+}).strict()).min(1).refine((items) => items.every((item, index) => {
+  if (index === 0) return true;
+  const previous = items[index - 1]!;
+  return previous.review_evidence_digest < item.review_evidence_digest ||
+    (previous.review_evidence_digest === item.review_evidence_digest && previous.finding_id < item.finding_id);
+}), "accepted occurrences must be ordinal-sorted with no duplicates");
+
+export const pendingValidationOverrideV1Schema = z.object({
+  phase_instance: phaseImplInstanceV1Schema,
+  input_fingerprint: sha256Digest,
+  governing_phase_design_digest: sha256Digest,
+  displaced_validations: requestDisplacedValidationsV1Schema,
+  producer_reason: boundedReasonV1Schema,
+  request_digest: sha256Digest,
+  request_revision: positiveSafeInteger,
+}).strict() as unknown as z.ZodType<PendingValidationOverrideV1>;
+
+export const validationOverrideRecordV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  decision_digest: sha256Digest,
+  phase_instance: phaseImplInstanceV1Schema,
+  input_fingerprint: sha256Digest,
+  governing_phase_design_digest: sha256Digest,
+  subject_digest: sha256Digest,
+  displaced_validations: durableDisplacedValidationsV1Schema,
+  human_reason: boundedReasonV1Schema,
+  decided_at: archivedHumanDecisionTimeV1Schema,
+  granted_at_revision: positiveSafeInteger,
+}).strict() as unknown as z.ZodType<ValidationOverrideRecordV1>;
+
+export const reviewPushThroughRecordV1Schema = z.object({
+  gate_id: pathSafeIdV1Schema,
+  decision_digest: sha256Digest,
+  phase_instance: phaseInstanceIdV1Schema,
+  subject_digest: sha256Digest,
+  current_evidence_set_digest: sha256Digest,
+  triage_result_digest: sha256Digest,
+  accepted_occurrences: durableAcceptedOccurrencesV1Schema,
+  attempt: positiveSafeInteger,
+  human_reason: boundedReasonV1Schema,
+  decided_at: archivedHumanDecisionTimeV1Schema,
+  resolved_at_revision: positiveSafeInteger,
+}).strict() as unknown as z.ZodType<ReviewPushThroughRecordV1>;
 
 const ruleSettlementMatchV1Schema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("subject"), subject: workflowSubjectV1Schema }).strict(),
@@ -845,6 +944,7 @@ export const taskStateV1Schema = z.object({
   planned_final_phase: positiveSafeInteger.optional(),
   open_gate: openGateRefV1Schema.optional(),
   pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  pending_validation_override: pendingValidationOverrideV1Schema.optional(),
   human_revision_history: z.array(humanRevisionRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates")
     .optional(),
@@ -856,6 +956,14 @@ export const taskStateV1Schema = z.object({
     .optional(),
   baseline_adoptions: z.array(baselineAdoptionRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates")
+    .optional(),
+  validation_overrides: z.array(validationOverrideRecordV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "gate_id"])), "validation_overrides must be sorted by (phase_instance, gate_id) with no duplicates")
+    .refine((items) => new Set(items.map((item) => item.gate_id)).size === items.length, "validation_overrides must contain unique gate IDs")
+    .optional(),
+  review_push_throughs: z.array(reviewPushThroughRecordV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "gate_id"])), "review_push_throughs must be sorted by (phase_instance, gate_id) with no duplicates")
+    .refine((items) => new Set(items.map((item) => item.gate_id)).size === items.length, "review_push_throughs must contain unique gate IDs")
     .optional(),
   rule_settlements: z.array(ruleSettlementV1Schema)
     .refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates")
@@ -885,17 +993,68 @@ export const taskStateV1Schema = z.object({
       context.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
     }
   });
+  state.validation_overrides?.forEach((record, index) => {
+    if (record.granted_at_revision > state.revision) {
+      context.addIssue({ code: "custom", path: ["validation_overrides", index, "granted_at_revision"], message: "validation override revision cannot exceed the current state revision" });
+    }
+  });
+  state.review_push_throughs?.forEach((record, index) => {
+    if (record.resolved_at_revision > state.revision) {
+      context.addIssue({ code: "custom", path: ["review_push_throughs", index, "resolved_at_revision"], message: "review push-through revision cannot exceed the current state revision" });
+    }
+    const approval = state.approvals.find((candidate) => candidate.gate_id === record.gate_id);
+    if (
+      approval === undefined || approval.gate_kind !== "attempts-exhausted" ||
+      approval.subject_digest !== record.subject_digest ||
+      approval.decision_digest !== record.decision_digest ||
+      approval.resolved_at_revision !== record.resolved_at_revision
+    ) {
+      context.addIssue({ code: "custom", path: ["review_push_throughs", index], message: "review push-through must match its attempts-exhausted approval" });
+    }
+  });
+  state.approvals.forEach((approval, index) => {
+    if (approval.gate_kind === "attempts-exhausted" &&
+        !(state.review_push_throughs ?? []).some((record) => record.gate_id === approval.gate_id)) {
+      context.addIssue({ code: "custom", path: ["approvals", index], message: "attempts-exhausted advance approval requires its review push-through record" });
+    }
+  });
   state.rule_settlements?.forEach((settlement, index) => {
     if (settlement.settled_at_revision > state.revision) {
       context.addIssue({ code: "custom", path: ["rule_settlements", index, "settled_at_revision"], message: "rule settlement revision cannot exceed the current state revision" });
     }
   });
   const pending = state.pending_human_revision;
-  if (pending === undefined) return;
-  if (state.open_gate !== undefined || state.terminal !== undefined || state.step !== "produce" ||
+  if (pending !== undefined && (state.open_gate !== undefined || state.terminal !== undefined || state.step !== "produce" ||
       state.status === "succeeded" || state.attempt !== pending.attempt ||
       pending.requested_at_revision > state.revision ||
-      pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance)) {
+      pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance))) {
     context.addIssue({ code: "custom", path: ["pending_human_revision"], message: "pending human revision does not match its active produce state" });
+  }
+  const pendingValidation = state.pending_validation_override;
+  let pendingValidationSubject: Sha256Digest | undefined;
+  if (pendingValidation !== undefined) {
+    try {
+      pendingValidationSubject = validationOverrideSubjectDigest({
+        task_id: state.task_id,
+        phase_instance: pendingValidation.phase_instance,
+        input_fingerprint: pendingValidation.input_fingerprint,
+        governing_phase_design_digest: pendingValidation.governing_phase_design_digest,
+        displaced_validations: pendingValidation.displaced_validations,
+      });
+    } catch {
+      // Nested validation reports the malformed pending request. Cross-field validation must not
+      // turn a safeParse rejection into an exception while inspecting those same invalid bytes.
+    }
+  }
+  if (pendingValidation !== undefined && (state.terminal !== undefined || state.step !== "produce" || state.status !== "failed" ||
+      pendingValidation.phase_instance !== state.phase_instance || pendingValidation.input_fingerprint !== state.input_fingerprint ||
+      pendingValidation.request_revision > state.revision ||
+      (state.open_gate === undefined && pendingValidation.request_revision !== state.revision) ||
+      (state.open_gate !== undefined && (state.open_gate.gate_kind !== "validation-override" || state.open_gate.subject_digest !== pendingValidationSubject ||
+        state.open_gate.opened_at_revision !== pendingValidation.request_revision + 1)))) {
+    context.addIssue({ code: "custom", path: ["pending_validation_override"], message: "pending validation override does not match its failed phase implementation state" });
+  }
+  if (state.open_gate?.gate_kind === "validation-override" && pendingValidation === undefined) {
+    context.addIssue({ code: "custom", path: ["open_gate"], message: "an open validation override gate requires its pending request" });
   }
 }) as unknown as z.ZodType<TaskStateV1>;

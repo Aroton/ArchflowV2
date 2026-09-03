@@ -2,7 +2,7 @@ import type { GitOid, GitTreeMode } from "./canonical.js";
 import { canonicalJsonDigest, sha256Bytes } from "./canonical.js";
 import type { PathSafeId, SafeId, Sha256Digest } from "./evidence.js";
 import type { GateContext, GateKind, WaiverOriginRef } from "./gates.js";
-import type { CommonToolInput, CounterReviewInput, GateInput, PlanningRestartInput, StateInput, ToolInput, WaiverInput } from "./mcp-tools.js";
+import type { CommonToolInput, CounterReviewInput, GateInput, PlanningRestartInput, StateInput, ToolInput, ValidationOverrideInput, WaiverInput } from "./mcp-tools.js";
 import type { RepositoryPathClaim } from "./path-claims.js";
 import type { PhaseInstanceId } from "./phase-instance.js";
 import { assertPlainJson, type PlainJsonObject, type PlainJsonValue } from "./plain-json.js";
@@ -71,6 +71,10 @@ export type StateArtifactOperationFields = Pick<StateInput, "phase_instance" | "
   readonly human_revision?: NonNullable<StateInput["human_revision"]>;
 };
 
+export type StateControlOperationFields = Pick<StateInput, "phase_instance" | "step" | "status"> & {
+  readonly intent_id: PathSafeId;
+};
+
 export type RequestDigestSubject = RequestDigestCommon & ({
   readonly tool: "archflow_state";
   readonly operation: "record-state-boundary";
@@ -89,8 +93,12 @@ export type RequestDigestSubject = RequestDigestCommon & ({
   readonly operation_fields: Pick<Extract<StateInput, { readonly operation: "set_commit_authority" }>, "phase_instance" | "step" | "status" | "target_commit" | "reason" | "scope">;
 } | {
   readonly tool: "archflow_state";
+  readonly operation: "request-validation-override";
+  readonly operation_fields: Pick<ValidationOverrideInput, "phase_instance" | "step" | "status" | "reason" | "validation_override_request">;
+} | {
+  readonly tool: "archflow_state";
   readonly operation: StateControlOperation;
-  readonly operation_fields: Pick<StateInput, "phase_instance" | "step" | "status">;
+  readonly operation_fields: StateControlOperationFields;
 } | {
   readonly tool: "archflow_counter_review";
   readonly operation: "counter-review";
@@ -106,7 +114,7 @@ export type RequestDigestSubject = RequestDigestCommon & ({
 });
 
 type SelectorKeys = {
-  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision" | "operation" | "target_phase_instance" | "reason" | "ask_base_digest";
+  readonly archflow_state: "phase_instance" | "step" | "status" | "artifact" | "human_revision" | "operation" | "target_phase_instance" | "reason" | "validation_override_request" | "ask_base_digest";
   readonly archflow_counter_review: "artifact_path" | "invocation_routes" | "route_override";
   readonly archflow_gate: "phase_instance" | "summary" | "subject_digest" | "current_evidence" | "kind" | "context" | "preview_digest" | "decision";
   readonly archflow_waiver: "origin" | "rationale" | "preview_digest" | "decision";
@@ -253,6 +261,17 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
           ...(restart.ask_base_digest === undefined ? {} : { ask_base_digest: restart.ask_base_digest }),
         };
       }
+      if (subject.operation === "request-validation-override") {
+        const request = fields as Pick<ValidationOverrideInput, "phase_instance" | "step" | "status" | "reason" | "validation_override_request">;
+        exactFields(fields, ["phase_instance", "step", "status", "reason", "validation_override_request"]);
+        return {
+          phase_instance: request.phase_instance,
+          step: request.step,
+          status: request.status,
+          reason: request.reason,
+          validation_override_request: request.validation_override_request,
+        };
+      }
       if (subject.operation === "set-commit-authority") {
         const commitAuth = fields as Pick<Extract<StateInput, { readonly operation: "set_commit_authority" }>, "phase_instance" | "step" | "status" | "target_commit" | "reason" | "scope">;
         exactFields(fields, commitAuth.scope === undefined
@@ -274,9 +293,9 @@ function closedOperationFields(subject: RequestDigestSubject): PlainJsonObject {
       }
       if (subject.operation === "refresh-milestone-baseline" || subject.operation === "recover-milestone-authority" ||
           subject.operation === "recover-approval-trigger-authority" || subject.operation === "refresh-stale-baseline") {
-        exactFields(fields, ["phase_instance", "step", "status"]);
-        const control = fields as Pick<StateInput, "phase_instance" | "step" | "status">;
-        return { phase_instance: control.phase_instance, step: control.step, status: control.status };
+        exactFields(fields, ["phase_instance", "step", "status", "intent_id"]);
+        const control = fields as StateControlOperationFields;
+        return { phase_instance: control.phase_instance, step: control.step, status: control.status, intent_id: control.intent_id };
       }
       const artifactFields = fields as StateArtifactOperationFields;
       const operationForKind: Readonly<Record<StateArtifactOperationFields["artifact_kind"], StateArtifactOperation>> = {

@@ -223,6 +223,8 @@ async function unreferencedAuthorityDecisions(
   const live = new Set<string>([
     ...state.approvals.map((entry) => entry.gate_id),
     ...state.waivers.map((entry) => entry.gate_id),
+    ...(state.validation_overrides ?? []).map((entry) => entry.gate_id),
+    ...(state.review_push_throughs ?? []).map((entry) => entry.gate_id),
     ...(state.restart_history ?? []).flatMap((restart) => [
       ...restart.cleared_waivers.map((entry) => entry.gate_id),
       ...(restart.cleared_pending_human_revision === undefined

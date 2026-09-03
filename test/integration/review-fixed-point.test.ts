@@ -14,7 +14,6 @@ import {
   sha256Bytes,
 } from "../../src/contracts/canonical.js";
 import type { AdjudicationEvidence } from "../../src/contracts/adjudication.js";
-import { phaseDesignComponentManifestDigest, type PhaseDesignComponentManifestV1 } from "../../src/contracts/component-manifest.js";
 import type { ConfigV1, TaskConfigSnapshot } from "../../src/contracts/config.js";
 import type { DocumentArtifactV1 } from "../../src/contracts/durable-document.js";
 import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
@@ -22,7 +21,9 @@ import type {
   AuthoritativeResultRef,
   TaskStateV1,
 } from "../../src/contracts/durable-state.js";
+import { deriveNextAction } from "../../src/state/next-action.js";
 import {
+  parsePathSafeId,
   parseSafeCode,
   parseSafeId,
   parseSafeInteger,
@@ -30,11 +31,11 @@ import {
   type Sha256Digest,
 } from "../../src/contracts/evidence.js";
 import {
-  EFFORT_REVIEW_INSTRUCTIONS,
-  IMPLEMENTATION_EFFORT_POLICY_ID,
-  type EffortEnvelopeV1,
+  EFFORT_SELECTOR_INSTRUCTIONS,
+  IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
+  type EffortEnvelopeV2,
 } from "../../src/contracts/effort-review.js";
-import { createHazardRegistryInput } from "../../src/contracts/hazard-registry.js";
+import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import {
   computeInputFingerprint,
   type InputFingerprintSubject,
@@ -54,11 +55,12 @@ import { REPOSITORY_VIEW_NOTE } from "../../src/review/envelopes.js";
 import type { HostIdentity } from "../../src/contracts/hosts.js";
 import type { ReviewEvidence, ModelFamily } from "../../src/contracts/review.js";
 import type { SecretScanner } from "../../src/contracts/secret-scan.js";
-import type { CurrentReviewSet } from "../../src/contracts/trust.js";
+import type { CurrentEvidenceSetRef, CurrentReviewSet } from "../../src/contracts/trust.js";
 import { validateTriage, type TriageCandidate } from "../../src/contracts/triage.js";
 import {
   createGitRunner,
   preflightGit,
+  resolveCommit,
   type GitEnvironment,
   type RepositoryOperationContext,
 } from "../../src/repository/git.js";
@@ -99,6 +101,7 @@ import {
   type TransactionAuthority,
 } from "../../src/state/authority.js";
 import {
+  deriveCurrentEvidenceSet,
   loadCurrentReviewSet,
   loadRetainedEvidence,
   prepareEvidenceResult,
@@ -106,6 +109,13 @@ import {
   type EvidenceResultValue,
   type PreparedEvidenceResult,
 } from "../../src/state/evidence-results.js";
+import {
+  loadAuthenticatedGateApproval,
+  type AuthenticatedGateApproval,
+} from "../../src/state/gate-approvals.js";
+import { openDurableGate } from "../../src/state/gates.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
+import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 import { createTaskLock } from "../../src/state/lock.js";
 import { readIntentReceipt, readTaskState } from "../../src/state/read.js";
 import { resolvedConstitutionFixture } from "../helpers/resolved-constitution.js";
@@ -123,7 +133,6 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) =>
     rm(root, { recursive: true, force: true })));
 });
-
 const task = parseTaskSlug("fixed-point-task");
 // One active rule (no enforcement declarations) so every counter-review call carries the merged
 // constitution review, plus one retired rule proving deprecated entries never demand coverage.
@@ -145,8 +154,7 @@ Tasks are isolated from one another.
 `,
 });
 const phase = encodePhaseInstance({
-  kind: "phase-impl",
-  phase: parsePositiveSafePhaseNumber(14),
+  kind: "design",
 });
 const gitEnvironment = {
   ...process.env,
@@ -207,7 +215,7 @@ type Harness = Readonly<{
 }>;
 type StateCall = Extract<ParsedToolCall, { name: "archflow_state" }>;
 
-function fingerprintSubject(version: number): InputFingerprintSubject {
+function fingerprintSubject(version: number, phaseInstance = phase): InputFingerprintSubject {
   return {
     schema_version: "1",
     workflow_digest: canonicalJsonDigest({ workflow: 1 }),
@@ -221,7 +229,7 @@ function fingerprintSubject(version: number): InputFingerprintSubject {
     }],
     upstream_identities: [],
     rubric_digest: rubricDigest,
-    phase_instance: phase,
+    phase_instance: phaseInstance,
     declared_inputs: [],
   };
 }
@@ -229,13 +237,14 @@ function fingerprintSubject(version: number): InputFingerprintSubject {
 function initialState(
   authority: TransactionAuthority,
   fingerprint: Sha256Digest,
+  phaseInstance = phase,
 ): TaskStateV1 {
   return {
     schema_version: "1",
     task_id: task,
     repository_identity_digest: authority.repository_identity_digest,
     revision: parseSafeInteger(7),
-    phase_instance: phase,
+    phase_instance: phaseInstance,
     step: "produce",
     status: "succeeded",
     attempt: parseSafeInteger(1),
@@ -358,7 +367,7 @@ async function createDependencies(
   };
 }
 
-async function fixture(): Promise<Harness> {
+async function fixture(phaseInstance = phase): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "archflow-fixed-point-"));
   roots.push(root);
   execFileSync("git", ["init", "-q", "-b", "main"], {
@@ -380,15 +389,16 @@ async function fixture(): Promise<Harness> {
     runner: discovered.value,
     environment: environment.value,
     task_id: task,
-    context,
+    context: { ...context, phase_instance: phaseInstance },
   });
   if (!authority.ok) throw new Error("authority creation failed");
-  const subject = fingerprintSubject(0);
+  const subject = fingerprintSubject(0, phaseInstance);
   await writeFile(
     authority.value.state.absolute,
     canonicalDocument(initialState(
       authority.value,
       computeInputFingerprint(subject),
+      phaseInstance,
     )).bytes,
   );
   return {
@@ -416,21 +426,42 @@ function reviewOutput(
   role: "counter-review",
   subject: Sha256Digest,
   fingerprint: Sha256Digest,
-  finding: "accepted" | "blocker" | "clean",
+  finding: "accepted" | "blocker" | "clean" | "multiple",
   producerFamily: ModelFamily = "claude",
 ) {
   const findings = finding === "clean"
     ? []
-    : [{
-        finding_id: `${role}-${finding}`,
-        severity: finding === "blocker" ? "blocker" as const : "major" as const,
-        blocking: finding === "blocker",
-        summary: `${finding} finding`,
-        evidence: "fixture evidence",
-        suggested_resolution: "rewrite the artifact",
-      }];
+    : finding === "multiple"
+      ? [
+          {
+            finding_id: `${role}-accepted`,
+            claim_type: "preference" as const,
+            confidence: "certain" as const,
+            falsifier: "Inspect the fixture evidence and verify whether the finding is present.",
+            summary: "accepted finding",
+            evidence: "fixture evidence",
+            suggested_resolution: "rewrite the artifact",
+          },
+          {
+            finding_id: `${role}-escalated`,
+            claim_type: "defect" as const,
+            confidence: "certain" as const,
+            falsifier: "Inspect the fixture evidence and verify whether the finding is present.",
+            summary: "escalated finding",
+            evidence: "fixture evidence",
+            suggested_resolution: "human decision required",
+          },
+        ]
+      : [{
+          finding_id: `${role}-${finding}`,
+          claim_type: finding === "blocker" ? "defect" as const : "preference" as const,
+          confidence: "certain" as const,
+          falsifier: "Inspect the fixture evidence and verify whether the finding is present.",
+          summary: `${finding} finding`,
+          evidence: "fixture evidence",
+          suggested_resolution: "rewrite the artifact",
+        }];
   return {
-    schema_version: "1" as const,
     task_id: task,
     phase_instance: phase,
     step: "counter_review" as const,
@@ -441,43 +472,77 @@ function reviewOutput(
     producer_family: producerFamily,
     findings,
     matched_rule_versions: [],
-    verdict: finding === "clean"
-      ? "pass" as const
-      : finding === "blocker" ? "fail" as const : "advisory" as const,
-    blocking_count: finding === "blocker" ? 1 : 0,
   };
 }
 
-type TriageMode = "accepted" | "rejected" | "editorial";
+type TriageMode = "accepted" | "rejected" | "editorial" | "escalated" | "deferred" | "mixed-accepted-escalated";
 
 function triageCandidate(
   current: CurrentReviewSet,
   mode: TriageMode,
 ): TriageCandidate {
   const dispositions = current.reviews.flatMap((review) =>
-    review.evidence.findings.map((finding) => mode === "accepted"
-      ? {
+    review.evidence.findings.map((finding, index) => {
+      if (mode === "mixed-accepted-escalated") {
+        if (index === 0) {
+          return {
+            review_evidence_digest: review.evidence_digest,
+            finding_id: finding.finding_id,
+            disposition: "accepted" as const,
+            rationale: "rewrite required",
+            revision_intent: "rewrite" as const,
+          };
+        }
+        return {
+          review_evidence_digest: review.evidence_digest,
+          finding_id: finding.finding_id,
+          disposition: "escalated-human" as const,
+          rationale: "human escalation required",
+        };
+      }
+      if (mode === "escalated") {
+        return {
+          review_evidence_digest: review.evidence_digest,
+          finding_id: finding.finding_id,
+          disposition: "escalated-human" as const,
+          rationale: "human escalation required",
+        };
+      }
+      if (mode === "deferred") {
+        return {
+          review_evidence_digest: review.evidence_digest,
+          finding_id: finding.finding_id,
+          disposition: "deferred" as const,
+          rationale: "deferring non-material finding",
+          evidence: "fixture evidence demonstrating no material consequence",
+        };
+      }
+      if (mode === "accepted") {
+        return {
           review_evidence_digest: review.evidence_digest,
           finding_id: finding.finding_id,
           disposition: "accepted" as const,
           rationale: "rewrite required",
           revision_intent: "rewrite" as const,
-        }
-      : mode === "editorial"
-        ? {
-            review_evidence_digest: review.evidence_digest,
-            finding_id: finding.finding_id,
-            disposition: "accepted-editorial" as const,
-            rationale: "wording only",
-            revision_intent: "polish the wording without changing meaning" as const,
-          }
-        : {
-            review_evidence_digest: review.evidence_digest,
-            finding_id: finding.finding_id,
-            disposition: "rejected" as const,
-            rationale: "not applicable",
-            evidence: "fixture rejection evidence",
-          }));
+        };
+      }
+      if (mode === "editorial") {
+        return {
+          review_evidence_digest: review.evidence_digest,
+          finding_id: finding.finding_id,
+          disposition: "accepted-editorial" as const,
+          rationale: "wording only",
+          revision_intent: "polish the wording without changing meaning" as const,
+        };
+      }
+      return {
+        review_evidence_digest: review.evidence_digest,
+        finding_id: finding.finding_id,
+        disposition: "rejected" as const,
+        rationale: "not applicable",
+        evidence: "fixture rejection evidence",
+      };
+    }));
   return {
     schema_version: "1",
     task_id: task,
@@ -488,9 +553,11 @@ function triageCandidate(
     current_evidence_set_digest: current.current_evidence_set.set_digest,
     source_evidence_digests: current.reviews.map((review) => review.evidence_digest),
     dispositions,
-    accepted_count: mode === "accepted" ? dispositions.length : 0,
-    rejected_count: mode === "rejected" ? dispositions.length : 0,
-    accepted_editorial_count: mode === "editorial" ? dispositions.length : 0,
+    accepted_count: dispositions.filter((d) => d.disposition === "accepted").length,
+    rejected_count: dispositions.filter((d) => d.disposition === "rejected").length,
+    accepted_editorial_count: dispositions.filter((d) => d.disposition === "accepted-editorial").length,
+    escalated_human_count: dispositions.filter((d) => d.disposition === "escalated-human").length,
+    deferred_count: dispositions.filter((d) => d.disposition === "deferred").length,
   };
 }
 
@@ -633,7 +700,7 @@ async function enterStep(
       const next = planStateTransition({
         current: document.value,
         target: {
-          phase_instance: phase,
+          phase_instance: document.value.phase_instance,
           step,
           status: "running",
           attempt: step === "produce"
@@ -796,7 +863,7 @@ async function commitCounter(
   version: number,
   subject: Sha256Digest,
   fingerprint: Sha256Digest,
-  finding: "accepted" | "blocker" | "clean",
+  finding: "accepted" | "blocker" | "clean" | "multiple",
   override?: Readonly<{ declaration: unknown; routes: DispatchRoute[]; config?: ConfigV1 }>,
   dispatchAlreadySerialized = false,
   host: HostIdentity = "claude",
@@ -1119,6 +1186,7 @@ async function assessment(
     subject_digest: Sha256Digest;
     input_fingerprint: Sha256Digest;
   }>,
+  authenticatedApprovals?: readonly AuthenticatedGateApproval[],
 ): Promise<EvidenceAssessment> {
   const state = await durableState(h.authority);
   const loaded = await loadRetainedEvidence({
@@ -1132,6 +1200,9 @@ async function assessment(
     ...(editorialPredecessor === undefined
       ? {}
       : { editorial_predecessor: editorialPredecessor }),
+    ...(authenticatedApprovals === undefined
+      ? {}
+      : { authenticated_gate_approvals: authenticatedApprovals }),
   });
 }
 
@@ -1522,8 +1593,10 @@ describe("editorial revision fixed point", () => {
       { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
     ]);
 
-    expect(merged.evidence.verdict).toBe("fail");
-    expect(merged.evidence.blocking_count).toBe(3);
+    expect(merged.evidence.schema_version).toBe("2");
+    if (merged.evidence.schema_version !== "2") return;
+    expect(merged.evidence.verdict).toBe("review-raised");
+    expect(merged.evidence.total_findings).toBe(3);
     expect(merged.evidence.findings).toHaveLength(3);
     expect(merged.evidence.assurance).toBe("server-attested");
     if (merged.evidence.assurance !== "server-attested") return;
@@ -1606,33 +1679,23 @@ describe("partial review round retry", () => {
     adapter: route.adapter, exit_class: "simulated-outage",
   }));
 
-  it("retains settled rubric siblings and retries only a failed effort child", async () => {
-    const h = await fixture();
+  it("settles ordinary review with the default profile when effort selection fails", async () => {
+    const designPhase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(14) });
+    const h = await fixture(designPhase);
     const subject = canonicalJsonDigest({ artifact: "effort-round" });
-    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0, designPhase));
     const { store, records } = memoryStore();
     await enterStep(h, h.dependencies, "effort-counter-running", "counter_review", fingerprint);
     const runningState = await durableState(h.authority);
-    const designPhase = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(14) });
     const repositories = Object.freeze([Object.freeze({
       name: "primary" as const,
       repository_identity_digest: "a".repeat(64) as Sha256Digest,
       commit: "b".repeat(40) as never,
     })]);
-    const manifest: PhaseDesignComponentManifestV1 = {
-      schema_version: "1",
-      components: [{
-        id: "effort-round",
-        name: "Effort round",
-        scope: "Exercise grouped dispatch retention.",
-        mechanism: "Reuse the existing all-settle transaction.",
-        repositories: [{ name: "primary", paths: [parseRepositoryPathClaim("src/review/counter-review.ts")] }],
-        verification: "Observe the exact child models dispatched across a retry.",
-      }],
-    };
-    const effortEnvelope: EffortEnvelopeV1 = {
-      schema_version: "1",
-      instructions: EFFORT_REVIEW_INSTRUCTIONS,
+    const registry = { schema_version: "1" as const, hazards: [] };
+    const effortEnvelope: EffortEnvelopeV2 = {
+      schema_version: "2",
+      instructions: EFFORT_SELECTOR_INSTRUCTIONS,
       artifact: "# Phase design\n",
       task_id: task,
       phase_instance: designPhase,
@@ -1641,10 +1704,12 @@ describe("partial review round retry", () => {
       input_fingerprint: fingerprint,
       invocation_id: "effort-invocation",
       result_id: "effort-result",
-      policy_id: IMPLEMENTATION_EFFORT_POLICY_ID,
-      component_manifest_digest: phaseDesignComponentManifestDigest(manifest),
-      component_manifest: manifest,
-      hazard_registry: createHazardRegistryInput("absent", { schema_version: "1", hazards: [] }, manifest),
+      policy_id: IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
+      hazard_registry: {
+        schema_version: "1", state: "absent",
+        registry_digest: canonicalJsonDigest({ schema_version: "1", state: "absent", registry }),
+        hazards: [],
+      },
       repositories,
     };
     const call = parseToolCall("archflow_counter_review", {
@@ -1658,7 +1723,7 @@ describe("partial review round retry", () => {
     const effort: EffortReviewPlan = { envelope: effortEnvelope };
     const attempt = async () => {
       const models: string[] = [];
-      const result = runCounterReview({
+      const result = await runCounterReview({
         transaction: h.dependencies,
         retained_outputs: store,
         reobserve_projection_digest: async () => ({ schema_version: "1", ok: true, value: subject }),
@@ -1673,7 +1738,23 @@ describe("partial review round retry", () => {
             }),
           };
         },
-        prepare_evidence: async () => { throw new Error("failed effort must prevent evidence preparation"); },
+        prepare_evidence: async (evidence, measuredAtRevision) => {
+          if (evidence.assurance !== "server-attested") throw new Error("expected server-attested evidence");
+          const prepared = await prepareEvidenceResult({
+            authority: h.authority,
+            runner: h.runner,
+            result_id: parseSafeId(evidence.result_id),
+            retained_task_bytes: await h.dependencies.read_retained_task_bytes!(),
+            measured_at_revision: measuredAtRevision,
+            scanner: cleanScanner,
+            value: { kind: "review", evidence },
+          });
+          if (prepared.ok) {
+            for (const payload of prepared.value.prepared.payloads) await mkdir(dirname(payload.target.absolute), { recursive: true });
+            await mkdir(dirname(prepared.value.manifest_target.absolute), { recursive: true });
+          }
+          return prepared;
+        },
         serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
         serialize_dispatch_all: async <T>(ops: readonly (() => Promise<T>)[]) => Promise.all(ops.map((op) => op())),
       }, {
@@ -1705,15 +1786,21 @@ describe("partial review round retry", () => {
         projection_digest: subject,
         effort,
       });
-      await expect(result).rejects.toBeInstanceOf(DispatchRoutingError);
+      expect(result.ok, JSON.stringify(result)).toBe(true);
+      if (!result.ok) throw new Error(result.error.code);
+      expect(result.value.evidence.assurance).toBe("server-attested");
+      if (result.value.evidence.assurance !== "server-attested") throw new Error("expected server-attested evidence");
+      expect(result.value.evidence.effort_review).toMatchObject({
+        schema_version: "2",
+        profile: { model: "gpt-5.6-sol", effort: "medium" },
+        source: { kind: "default" },
+      });
       return models.sort();
     };
 
     expect(await attempt()).toEqual([FABLE, LUNA, SOL].sort());
-    expect([...records.values()].map((record) => record.binding.role).sort())
-      .toEqual(["counter-reviewer", "counter-reviewer"]);
-    expect((await durableState(h.authority)).revision).toBe(runningState.revision);
-    expect(await attempt()).toEqual([LUNA]);
+    expect([...records.values()]).toHaveLength(0);
+    expect((await durableState(h.authority)).revision).toBe(runningState.revision + 1);
   });
 
   async function round(
@@ -1889,6 +1976,8 @@ describe("partial review round retry", () => {
       accepted_count: dispositions.filter((d) => d.disposition === "accepted").length,
       rejected_count: dispositions.filter((d) => d.disposition === "rejected").length,
       accepted_editorial_count: dispositions.filter((d) => d.disposition === "accepted-editorial").length,
+      escalated_human_count: 0,
+      deferred_count: 0,
     };
     validateTriage(current, candidate);
     const prepared = await prepareEvidence(h, `triage-v${version}`, { kind: "triage", current_reviews: current, evidence: candidate });
@@ -2184,8 +2273,10 @@ describe("partial review round retry", () => {
       "general-1-counter-review-blocker",
       "general-2-counter-review-blocker",
     ]);
-    expect(retried.result.value.evidence.blocking_count).toBe(2);
     const review = retried.result.value.evidence;
+    expect(review.schema_version).toBe("2");
+    if (review.schema_version !== "2") return;
+    expect(review.total_findings).toBe(2);
     expect(review.assurance).toBe("server-attested");
     if (review.assurance !== "server-attested") return;
     expect(retried.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
@@ -2351,5 +2442,461 @@ describe("partial review round retry", () => {
     expect(review.assurance).toBe("server-attested");
     if (review.assurance !== "server-attested") return;
     expect(review.route_override).toMatchObject({ pinned_model: SOL });
+  });
+});
+
+async function commitDesignProduce(
+  h: Harness,
+  version: number,
+  designText: string = "# Design\n\n### Phase 1: Foundation\n### Phase 2: Core\n### Phase 3: Integration\n",
+): Promise<{ subject: Sha256Digest; fingerprint: Sha256Digest }> {
+  const currentState = await durableState(h.authority);
+  const fingerprint = computeInputFingerprint(fingerprintSubject(version));
+  const bytes = new TextEncoder().encode(designText);
+  const outputPath = parseRepositoryPathClaim(`.archflow/tasks/${task}/design.md`);
+  const byteCount = parseSafeInteger(bytes.byteLength);
+  const contentDigest = sha256Bytes(bytes);
+  const output = {
+    path: outputPath,
+    path_class: "document" as const,
+    operation: "add" as const,
+    storage: "raw-payload" as const,
+    payload_bytes: byteCount,
+    payload_digest: contentDigest,
+    file_type: "regular" as const,
+    after: { oid: gitBlobOid(bytes), mode: "100644" as const, size_bytes: byteCount },
+  };
+  const projections = [{ path: outputPath, content_digest: contentDigest }];
+  const snapshotDigest = deriveDeclaredSnapshotDigest([output], projections);
+  const artifact: DocumentArtifactV1 = {
+    schema_version: "1",
+    artifact_kind: "document",
+    task_id: task,
+    phase_instance: phase,
+    step: "produce",
+    document_path: parseTaskPathClaim("design.md"),
+    path_class: "document",
+    byte_count: byteCount,
+    content_digest: contentDigest,
+    declared_inputs: [],
+    input_fingerprint: fingerprint,
+    snapshot_digest: snapshotDigest,
+    projection_target: outputPath,
+  };
+  const artifactDigest = canonicalJsonDigest(artifact);
+  const resultId = parseSafeId(`produce-design-v${version}`);
+  const manifestValue: ResultManifestV1 = {
+    schema_version: "1",
+    task_id: task,
+    repository_identity_digest: h.authority.repository_identity_digest,
+    result_id: resultId,
+    phase_instance: phase,
+    step: "produce",
+    artifact_digest: artifactDigest,
+    source_artifact: artifact,
+    input_fingerprint: fingerprint,
+    snapshot_digest: snapshotDigest,
+    outputs: [output],
+    projections,
+    accounting: {
+      schema_version: "1",
+      result_bytes: byteCount,
+      task_bytes: byteCount,
+      result_byte_cap: 26_214_400,
+      task_byte_cap: 262_144_000,
+      counted_entries: [{
+        path: outputPath,
+        storage: "raw-payload",
+        stored_bytes: byteCount,
+      }],
+      measured_at_revision: currentState.revision,
+    },
+    secret_scan: {
+      schema_version: "1",
+      outcome: "clean",
+      detector_set_id: parseSafeId("fixed-point-test"),
+      scanned_paths: [outputPath],
+    },
+  };
+  const manifestDoc = canonicalDocument(manifestValue);
+  const manifestPath = join(h.root, `.archflow/tasks/${task}/authority/results/${manifestDoc.digest}.json`);
+  const payloadPath = join(h.root, `.archflow/runtime/tasks/${task}/cache/results/${manifestDoc.digest}/payload/${outputPath}`);
+  const projectedPath = join(h.root, outputPath);
+
+  await mkdir(dirname(manifestPath), { recursive: true });
+  await mkdir(dirname(payloadPath), { recursive: true });
+  await mkdir(dirname(projectedPath), { recursive: true });
+
+  await writeFile(manifestPath, manifestDoc.bytes);
+  await writeFile(payloadPath, bytes);
+  await writeFile(projectedPath, bytes);
+
+  const produceRef: AuthoritativeResultRef = {
+    phase_instance: phase,
+    step: "produce",
+    result_digest: manifestDoc.digest,
+    result_id: resultId,
+    input_fingerprint: fingerprint,
+  };
+
+  const updatedState: TaskStateV1 = {
+    ...currentState,
+    input_fingerprint: fingerprint,
+    authoritative_results: [
+      ...currentState.authoritative_results.filter((r) => r.step !== "produce"),
+      produceRef,
+    ],
+  };
+  await writeFile(h.authority.state.absolute, canonicalDocument(updatedState).bytes);
+  return { subject: artifactDigest, fingerprint };
+}
+
+async function recordAuthenticatedApproval(
+  h: Harness,
+  gateId: string,
+  kind: "commit-authorization" | "design-approval" | "artifact-approval" = "design-approval",
+  subjectDigest: Sha256Digest = canonicalJsonDigest({}),
+  currentEvidence: CurrentEvidenceSetRef = { set_digest: canonicalJsonDigest({}), slots: [] as never },
+): Promise<AuthenticatedGateApproval> {
+  const currentState = await durableState(h.authority);
+  const symbolicRef = await h.dependencies.runner.runText({
+    argv: ["symbolic-ref", "--quiet", "HEAD"],
+    operation: parseSafeCode("git-design-approval-target"),
+    expectedAbsence: [{ code: 1, stderrIncludes: "" }],
+  });
+  const headCommit = await resolveCommit(h.dependencies.runner, "HEAD");
+  const targetRef = symbolicRef === "" ? "HEAD" : symbolicRef;
+  const baselineCommit = headCommit;
+
+  const context = kind === "commit-authorization"
+    ? {
+        target_ref: targetRef,
+        baseline_commit: baselineCommit,
+        commit_message: "Authorize commit",
+        paths: ["tracked.txt"],
+        diff_digest: subjectDigest,
+        current_artifact_digests: [subjectDigest],
+        parent_document_digests: [],
+        ...ordinaryApprovalFacts("phase-impl", subjectDigest),
+      }
+    : {
+        artifact_kind: "design" as const,
+        ...ordinaryApprovalFacts("design", subjectDigest),
+        target_ref: targetRef,
+        baseline_commit: baselineCommit,
+        commit_message: "Design approved",
+      };
+  const contextDigest = computeGateContextDigest(kind, context as never);
+  const gateInput = {
+    authority: h.authority,
+    expected_revision: currentState.revision,
+    intent_id: parsePathSafeId(`intent-${gateId}`),
+    request_digest: sha256Bytes(new TextEncoder().encode(`request-${gateId}`)),
+    input_fingerprint: currentState.input_fingerprint,
+    phase_instance: phase,
+    summary: `Authorize ${kind}`,
+    subject_digest: subjectDigest,
+    current_evidence: currentEvidence,
+    kind,
+    context: context as never,
+  };
+  const opened = await openDurableGate(h.dependencies, gateInput);
+  if (!opened.ok) throw new Error(`openDurableGate failed: ${JSON.stringify(opened.error)}`);
+
+  const decisionPayload = kind === "commit-authorization"
+    ? { decision: "authorize-commit" as const, reason: "Reviewed in fixture" }
+    : { decision: "approve" as const, reason: "Reviewed in fixture" };
+
+  await mkdir(join(h.authority.workspace_root, "cache", "gates"), { recursive: true });
+  await writeFile(join(h.authority.workspace_root, "cache", "gates", "gate.decision"), canonicalDocument({
+    schema_version: "1",
+    gate_id: opened.value.gate_id,
+    task_id: task,
+    phase_instance: phase,
+    kind,
+    subject_digest: subjectDigest,
+    context_digest: contextDigest,
+    human_provenance: {
+      schema_version: "1",
+      actor_class: "human",
+      assurance: "declared-local-trace",
+      channel: "archflow-local",
+      decision_event_id: `decision-${gateId}`,
+      helper_invocation_id: `helper-${gateId}`,
+      recorded_at: "2026-08-03T12:00:00.000Z",
+    },
+    payload: decisionPayload,
+  }).bytes);
+
+  const resolved = await resolveInterfaceGateDecision(h.dependencies, h.authority, opened.value.gate_id);
+  if (!resolved.ok) throw new Error(`resolveInterfaceGateDecision failed: ${JSON.stringify(resolved)}`);
+
+  const stateAfter = await durableState(h.authority);
+  const approvalRef = stateAfter.approvals.find((a) => a.gate_id === opened.value.gate_id);
+  if (approvalRef === undefined) throw new Error("approval not found in state");
+
+  const loaded = await loadAuthenticatedGateApproval(h.dependencies, h.authority, approvalRef);
+  if (!loaded.ok) throw new Error(`loadAuthenticatedGateApproval failed: ${JSON.stringify(loaded)}`);
+  return loaded.value;
+}
+
+describe("review fixed-point lifecycles", () => {
+  it("mixed accepted-plus-escalated lifecycle: presents human gate first, then advances through attempt-N+1 produce into counter-review upon approval", async () => {
+    const h = await fixture();
+    const dependencies = h.dependencies;
+    const { subject, fingerprint } = await commitDesignProduce(h, 0);
+
+    await commitCounter(h, dependencies, 0, subject, fingerprint, "multiple");
+    await commitTriage(h, dependencies, 0, "mixed-accepted-escalated");
+
+    const triageAssessment = await assessment(h, dependencies, subject, fingerprint);
+    expect(triageAssessment.escalated_human_findings).toBe(true);
+    expect(triageAssessment.every_finding_dispositioned).toBe(true);
+    expect(triageAssessment.next).toBe("advance");
+
+    const state = await durableState(h.authority);
+    const loaded = await loadRetainedEvidence({
+      load_retained_manifest: dependencies.load_retained_manifest!,
+    }, structuredClone(state), phase);
+    if (!loaded.ok) throw new Error(loaded.error.code);
+    const currentEvidence = deriveCurrentEvidenceSet(loaded.value).current_evidence_set;
+
+    const approval = await recordAuthenticatedApproval(
+      h, "approval-1", "design-approval", subject, currentEvidence,
+    );
+
+    const afterApproval = await assessment(h, dependencies, subject, fingerprint, undefined, [approval]);
+    expect(afterApproval.reentry_required).toBe(true);
+    expect(afterApproval.next).toBe("produce");
+  });
+
+  it("byte-identical re-production lifecycle: proceeds to counter-review rather than re-triggering produce", async () => {
+    const h = await fixture();
+    const dependencies = h.dependencies;
+    const { subject, fingerprint } = await commitDesignProduce(h, 0);
+
+    await commitCounter(h, dependencies, 0, subject, fingerprint, "accepted");
+    await commitTriage(h, dependencies, 0, "escalated");
+
+    const state = await durableState(h.authority);
+    const loaded = await loadRetainedEvidence({
+      load_retained_manifest: dependencies.load_retained_manifest!,
+    }, structuredClone(state), phase);
+    if (!loaded.ok) throw new Error(loaded.error.code);
+    const currentEvidence = deriveCurrentEvidenceSet(loaded.value).current_evidence_set;
+
+    const approval = await recordAuthenticatedApproval(
+      h, "approval-byte-identical", "design-approval", subject, currentEvidence,
+    );
+
+    // Fresh produce in attempt 2 with identical subject bytes drops prior attempt review evidence
+    const currentState = await durableState(h.authority);
+    const stateAttempt2: TaskStateV1 = {
+      ...currentState,
+      attempt: parseSafeInteger(2),
+      step: "produce",
+      status: "succeeded",
+      authoritative_results: currentState.authoritative_results.filter((r) => r.step === "produce"),
+    };
+    await writeFile(h.authority.state.absolute, canonicalDocument(stateAttempt2).bytes);
+
+    const loaded2 = await loadRetainedEvidence({
+      load_retained_manifest: dependencies.load_retained_manifest!,
+    }, structuredClone(stateAttempt2), phase);
+    if (!loaded2.ok) throw new Error(loaded2.error.code);
+
+    const check = assessCurrentEvidence(stateAttempt2, loaded2.value, {
+      subject_digest: subject,
+      input_fingerprint: fingerprint,
+      constitution,
+      authenticated_gate_approvals: [approval],
+    });
+    expect(check.current).not.toContain("counter_review");
+    expect(check.next).toBe("counter_review");
+  });
+
+  it("constitution-plus-escalation lifecycle: single ordinary approval satisfies folded gate without second gate", async () => {
+    const h = await fixture();
+    const dependencies = h.dependencies;
+    const { subject, fingerprint } = await commitDesignProduce(h, 0);
+
+    await commitCounter(h, dependencies, 0, subject, fingerprint, "accepted");
+    await commitTriage(h, dependencies, 0, "escalated");
+
+    const state = await durableState(h.authority);
+    const loaded = await loadRetainedEvidence({
+      load_retained_manifest: dependencies.load_retained_manifest!,
+    }, structuredClone(state), phase);
+    if (!loaded.ok) throw new Error(loaded.error.code);
+
+    const envelopeDigest = retainedReviewEnvelopeDigest(loaded.value);
+    if (envelopeDigest === undefined) throw new Error("review envelope missing");
+
+    const failingAdjudication: AdjudicationEvidence = {
+      schema_version: "1",
+      task_id: task,
+      phase_instance: phase,
+      step: "adjudicate",
+      subject_digest: subject,
+      input_fingerprint: fingerprint,
+      pinned_constitution_digest: constitution.digest,
+      approved_upstream_digests: [],
+      source_review_envelope_digest: envelopeDigest,
+      rule_findings: [{
+        rule_id: "task-isolation",
+        rule_version: 1,
+        compliance: "fail",
+        rationale: "failing rule in fixture",
+        trigger: "matched",
+        trigger_evidence: "trigger evidence",
+      }],
+      drift_findings: [],
+      constitution: "fail",
+      drift: "aligned",
+      matched_rule_versions: [{ rule_id: "task-isolation", rule_version: 1 }],
+      uncertain_rule_versions: [],
+      assurance: "server-attested",
+      adapter: "codex-cli",
+      cli_version: "1.0.0",
+      invocation_id: parseSafeId("inv-adj-1"),
+      envelope_input_digest: envelopeDigest,
+      observed_output_digest: canonicalJsonDigest({}),
+      result_id: parseSafeId("adjudication-failing"),
+      model_family: "codex",
+      model: "gpt-5.4",
+      effort: "high",
+    };
+
+    const preparedAdj = await prepareEvidence(h, "adjudication-failing", {
+      kind: "adjudication",
+      evidence: failingAdjudication,
+    });
+    const retainedWithAdj = new Map(loaded.value);
+    retainedWithAdj.set("adjudicate", Object.freeze({
+      reference: preparedAdj.reference,
+      manifest: preparedAdj.prepared.manifest.value,
+    }));
+
+    const foldedCheck = assessCurrentEvidence(state, retainedWithAdj, {
+      subject_digest: subject,
+      input_fingerprint: fingerprint,
+      constitution,
+    });
+    expect(foldedCheck.adjudication_gate_pending).toBe(true);
+    expect(foldedCheck.escalated_human_findings).toBe(true);
+    expect(foldedCheck.next).toBe("adjudication-gate");
+
+    const currentEvidence = deriveCurrentEvidenceSet(retainedWithAdj).current_evidence_set;
+    const approval = await recordAuthenticatedApproval(
+      h, "approval-const-esc", "design-approval", subject, currentEvidence,
+    );
+    const resolvedCheck = assessCurrentEvidence(state, retainedWithAdj, {
+      subject_digest: subject,
+      input_fingerprint: fingerprint,
+      constitution,
+      authenticated_gate_approvals: [approval],
+    });
+    expect(resolvedCheck.adjudication_gate_pending).toBe(false);
+    expect(resolvedCheck.reentry_required).toBe(false);
+    expect(resolvedCheck.next).toBe("advance");
+  });
+
+  it("unsettled escalations: assesses escalated findings and deriveNextAction routes to human gate", async () => {
+    const h = await fixture();
+    const dependencies = h.dependencies;
+    const { subject, fingerprint } = await commitDesignProduce(h, 0);
+
+    await commitCounter(h, dependencies, 0, subject, fingerprint, "accepted");
+    await commitTriage(h, dependencies, 0, "escalated");
+
+    const assessed = await assessment(h, dependencies, subject, fingerprint);
+    expect(assessed.escalated_human_findings).toBe(true);
+    expect(assessed.next).toBe("advance");
+
+    const state = await durableState(h.authority);
+    const loaded = await loadRetainedEvidence({
+      load_retained_manifest: dependencies.load_retained_manifest!,
+    }, structuredClone(state), phase);
+    if (!loaded.ok) throw new Error(loaded.error.code);
+    const evidenceSet = deriveCurrentEvidenceSet(loaded.value);
+
+    // Verify deriveNextAction routes to the human gate when escalated findings exist
+    const action = deriveNextAction({
+      repository_initialized: true,
+      config_verified: true,
+      state,
+      subject_digest: subject,
+      assessment: assessed,
+      escalated_human_findings: true,
+      current_evidence_set_digest: evidenceSet.current_evidence_set.set_digest,
+    });
+    expect(action.code).toBe("open-gate");
+    if (action.code === "open-gate") {
+      expect(action.gate_kind).toBe("design-approval");
+      expect(action.detail).toMatch(/human escalation requires an explicit decision/u);
+    }
+  });
+
+  it("post-settlement full produce re-entry: approving an escalation when accepted findings coexist routes to produce re-entry", async () => {
+    const h = await fixture();
+    const dependencies = h.dependencies;
+    const { subject, fingerprint } = await commitDesignProduce(h, 0);
+
+    await commitCounter(h, dependencies, 0, subject, fingerprint, "multiple");
+    await commitTriage(h, dependencies, 0, "mixed-accepted-escalated");
+
+    const state = await durableState(h.authority);
+    const loaded = await loadRetainedEvidence({
+      load_retained_manifest: dependencies.load_retained_manifest!,
+    }, structuredClone(state), phase);
+    if (!loaded.ok) throw new Error(loaded.error.code);
+    const currentEvidence = deriveCurrentEvidenceSet(loaded.value).current_evidence_set;
+
+    const approval = await recordAuthenticatedApproval(
+      h, "approval-post-settle", "design-approval", subject, currentEvidence,
+    );
+
+    const assessed = await assessment(h, dependencies, subject, fingerprint, undefined, [approval]);
+    expect(assessed.reentry_required).toBe(true);
+    expect(assessed.next).toBe("produce");
+  });
+
+  it("multi-attempt settlement persistence: settled escalations remain historical and do not reopen the gate in attempt N+1", async () => {
+    const h = await fixture();
+    const dependencies = h.dependencies;
+    const { subject, fingerprint } = await commitDesignProduce(h, 0);
+
+    await commitCounter(h, dependencies, 0, subject, fingerprint, "accepted");
+    await commitTriage(h, dependencies, 0, "escalated");
+
+    const state1 = await durableState(h.authority);
+    const loaded1 = await loadRetainedEvidence({
+      load_retained_manifest: dependencies.load_retained_manifest!,
+    }, structuredClone(state1), phase);
+    if (!loaded1.ok) throw new Error(loaded1.error.code);
+    const currentEvidence1 = deriveCurrentEvidenceSet(loaded1.value).current_evidence_set;
+
+    const approval = await recordAuthenticatedApproval(
+      h, "approval-persist", "design-approval", subject, currentEvidence1,
+    );
+
+    // Attempt 2 enters produce, clears prior-attempt review results, and runs clean
+    const currentState = await durableState(h.authority);
+    const stateAttempt2: TaskStateV1 = {
+      ...currentState,
+      attempt: parseSafeInteger(2),
+      step: "produce",
+      status: "succeeded",
+      authoritative_results: currentState.authoritative_results.filter((r) => r.step === "produce"),
+    };
+    await writeFile(h.authority.state.absolute, canonicalDocument(stateAttempt2).bytes);
+
+    await commitCounter(h, dependencies, 1, subject, fingerprint, "clean");
+    await commitTriage(h, dependencies, 1, "rejected");
+
+    const assessed2 = await assessment(h, dependencies, subject, fingerprint, undefined, [approval]);
+    expect(assessed2.escalated_human_findings).toBeUndefined();
+    expect(assessed2.reentry_required).toBe(false);
+    expect(assessed2.next).toBe("advance");
   });
 });

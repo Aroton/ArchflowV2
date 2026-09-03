@@ -30,17 +30,17 @@ const killAt = async (point, path) => {
 };
 
 try {
-  const [tools, fingerprints, git, identity, authorityModule, atomic, lock, read, initialization] = await Promise.all([
-    vite.ssrLoadModule("/src/contracts/mcp-tools.ts"),
-    vite.ssrLoadModule("/src/contracts/fingerprints.ts"),
-    vite.ssrLoadModule("/src/repository/git.ts"),
-    vite.ssrLoadModule("/src/repository/identity.ts"),
-    vite.ssrLoadModule("/src/state/authority.ts"),
-    vite.ssrLoadModule("/src/state/atomic.ts"),
-    vite.ssrLoadModule("/src/state/lock.ts"),
-    vite.ssrLoadModule("/src/state/read.ts"),
-    vite.ssrLoadModule("/src/state/initialization.ts"),
-  ]);
+  // Load the shared contract graph once before its consumers. Concurrent Vite SSR loads can
+  // observe a cycle's partially initialized exports and make an unrelated Zod enum undefined.
+  const tools = await vite.ssrLoadModule("/src/contracts/mcp-tools.ts");
+  const fingerprints = await vite.ssrLoadModule("/src/contracts/fingerprints.ts");
+  const git = await vite.ssrLoadModule("/src/repository/git.ts");
+  const identity = await vite.ssrLoadModule("/src/repository/identity.ts");
+  const authorityModule = await vite.ssrLoadModule("/src/state/authority.ts");
+  const atomic = await vite.ssrLoadModule("/src/state/atomic.ts");
+  const lock = await vite.ssrLoadModule("/src/state/lock.ts");
+  const read = await vite.ssrLoadModule("/src/state/read.ts");
+  const initialization = await vite.ssrLoadModule("/src/state/initialization.ts");
   const runner = git.createGitRunner({ cwd: repository });
   const discovered = await identity.discoverWorktree(runner, input.context);
   if (!discovered.ok) throw new Error("discovery failed");
@@ -92,7 +92,8 @@ try {
   process.send({ type: "result", ok: result.ok, code: result.ok ? undefined : result.error.code,
     revision: result.ok ? result.value.state.value.revision : undefined, replayed: result.ok ? result.value.replayed : undefined });
 } catch (error) {
-  process.send({ type: "failed", name: error instanceof Error ? error.name : "unknown", message: String(error) });
+  process.send({ type: "failed", name: error instanceof Error ? error.name : "unknown", message: String(error),
+    stack: error instanceof Error ? error.stack : undefined });
   process.exitCode = 1;
 } finally {
   await vite.close();

@@ -1,5 +1,7 @@
 # Effort Review
 
+> Runtime note: this document preserves the research behind the scoring ladder. The shipped selector applies the breakdown privately and returns only one phase-wide model/effort profile. Decomposition and specification observations are scoring inputs, not findings or blockers; selector failure defaults to GPT-5.6 Sol at medium effort without retry.
+
 A new reviewer in the **phase design** counter-review stage, alongside counter / constitution / test.
 
 Its job: assign an implementation **model + effort** per component, so phase impl stops defaulting to Sol max.

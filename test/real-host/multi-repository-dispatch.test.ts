@@ -19,6 +19,10 @@ import { parseConfigYaml } from "../../src/contracts/config.js";
 import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
+import {
+  childReviewOutputV2Schema,
+  expectedReviewSummaryV2,
+} from "../../src/contracts/review.js";
 import { parseRubricV1 } from "../../src/contracts/rubric.js";
 import { mintReviewObservation, serializeDispatch } from "../../src/dispatch/cli.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
@@ -78,10 +82,10 @@ repositories:
 `;
 }
 
-const CLAUDE_PRODUCER_ROLES = `  counter-reviewer: {model: gpt-5.6-sol, effort: xhigh}
-  adjudicator: {model: gpt-5.6-sol, effort: xhigh}`;
-const CODEX_PRODUCER_ROLES = `  counter-reviewer: {model: claude-opus-5, effort: high}
-  adjudicator: {model: claude-opus-5, effort: high}`;
+const CLAUDE_PRODUCER_ROLES = `  counter-reviewer: {model: gpt-5.6-sol, effort: medium}
+  adjudicator: {model: gpt-5.6-sol, effort: medium}`;
+const CODEX_PRODUCER_ROLES = `  counter-reviewer: {model: claude-fable-5, effort: medium}
+  adjudicator: {model: claude-fable-5, effort: medium}`;
 
 const rubric = parseRubricV1({
   schema_version: "1",
@@ -106,7 +110,7 @@ const directions = Object.freeze([
     roles: CLAUDE_PRODUCER_ROLES,
     adapter: "codex-cli" as const,
     model: "gpt-5.6-sol",
-    effort: "xhigh" as const,
+    effort: "medium" as const,
   }),
   Object.freeze({
     name: "Codex producer to Claude reviewer",
@@ -115,8 +119,8 @@ const directions = Object.freeze([
     reviewer: "claude" as const,
     roles: CODEX_PRODUCER_ROLES,
     adapter: "claude-cli" as const,
-    model: "claude-opus-5",
-    effort: "high" as const,
+    model: "claude-fable-5",
+    effort: "medium" as const,
   }),
 ]);
 
@@ -246,7 +250,8 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
 
         const rawOutput = JSON.parse(decoder.decode(succeeded.extracted_output_bytes)) as unknown;
         validateReview.assert(rawOutput, `${direction.name} output`);
-        const output = rawOutput as Record<string, unknown>;
+        const output = childReviewOutputV2Schema.parse(rawOutput);
+        const summary = expectedReviewSummaryV2(output.findings);
 
         const observed = mintReviewObservation({
           subject,
@@ -276,9 +281,9 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
         // `api` pin asserted above. Record which one happened instead of failing on wording.
         const texts = findingTexts(output);
         const citedSecondary = texts.some((text) => text.includes(SECONDARY_CITATION) || text.includes(SECONDARY_FUNCTION));
-        expect(["pass", "advisory", "fail"]).toContain(output.verdict);
+        expect(["pass", "advisory", "review-raised"]).toContain(summary.verdict);
         console.info(
-          `[real-host] ${direction.name}: verdict=${String(output.verdict)} findings=${String(Array.isArray(output.findings) ? output.findings.length : 0)} cited-secondary=${String(citedSecondary)}${citedSecondary ? "" : ` (no finding cited ${SECONDARY_CITATION}; api pin still attested)`}`,
+          `[real-host] ${direction.name}: verdict=${summary.verdict} findings=${String(output.findings.length)} cited-secondary=${String(citedSecondary)}${citedSecondary ? "" : ` (no finding cited ${SECONDARY_CITATION}; api pin still attested)`}`,
         );
       } finally {
         workspace.dispose();

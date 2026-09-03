@@ -32,7 +32,13 @@ import {
 } from "../../state/evidence-results.js";
 import { runStateInitialization } from "../../state/initialization.js";
 import { identifyTransactionRequest } from "../../state/request.js";
-import { changedCoProducedDocumentPaths, loadCurrentProduceSubject, type CurrentProduceSubject } from "../../state/produce-subject.js";
+import {
+  changedCoProducedDocumentPaths,
+  expectedProduceUpstreamBindings,
+  loadCurrentProduceSubject,
+  loadProduceUpstreamSubject,
+  type CurrentProduceSubject,
+} from "../../state/produce-subject.js";
 import {
   approvedDesignWorktreeMatchesRetainedArtifact,
   designArtifactCommittedAtCurrentTarget,
@@ -85,7 +91,12 @@ import {
   authenticatedApprovalIsEligibleAfterLatestRestart,
   matchingOrdinaryApproval,
 } from "../../state/restart-authority.js";
+import {
+  loadAuthenticatedReviewPushThrough,
+  reviewPushThroughAuthoritySource,
+} from "../../state/review-push-throughs.js";
 import { completedPlanningRestartMatches, planningRestartId } from "../../state/planning-restart.js";
+import { milestoneRecoveryId } from "../../state/milestone-recovery.js";
 import {
   derivedFinalPhaseBelowCurrentPhase,
   loadAutonomousDesignFinalPhase,
@@ -168,6 +179,15 @@ async function settleApprovalRules(
     const approvedUpstreams = await currentApprovedUpstreams(
       services.dependencies, services.authority, current, authenticated, produce,
     );
+    const authenticatedPushThroughs = [];
+    for (const pushThrough of current.review_push_throughs ?? []) {
+      const loaded = await loadAuthenticatedReviewPushThrough(
+        services.dependencies,
+        services.authority,
+        pushThrough,
+      );
+      if (loaded.ok) authenticatedPushThroughs.push(loaded.value);
+    }
     // A pending migration audit is a human gate this settlement must not stand in for: the settlement
     // is alternative authority to an approval, and an imported design's advance still requires the
     // audit decision — its phase bound comes from the import, never the legacy document's grammar.
@@ -194,10 +214,14 @@ async function settleApprovalRules(
         constitution: constitution.value,
         approved_upstream_digests: approvedUpstreams,
         authenticated_gate_approvals: authenticated,
+        ...(authenticatedPushThroughs.length === 0 ? {} : {
+          review_push_through_authority: reviewPushThroughAuthoritySource(authenticatedPushThroughs),
+        }),
         ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
         ...(config.parsed.max_attempts === undefined ? {} : { max_attempts: config.parsed.max_attempts }),
       },
     );
+    if (assessment.escalated_human_findings === true) return undefined;
     if (assessment.next !== "advance") {
       if (assessment.next !== "adjudication-gate") return undefined;
       const pending = pendingAdjudicationGates(
@@ -252,10 +276,14 @@ export async function handleState(
     const triggerRecoveryInput = call.input.operation === "recover_approval_trigger_authority" ? call.input : undefined;
     const staleBaselineInput = call.input.operation === "refresh_stale_baseline" ? call.input : undefined;
     const commitAuthorityInput = call.input.operation === "set_commit_authority" ? call.input : undefined;
+    const validationOverrideInput = call.input.operation === "request_validation_override" ? call.input : undefined;
     const artifact = restartInput === undefined && refreshInput === undefined &&
-      recoveryInput === undefined && triggerRecoveryInput === undefined && staleBaselineInput === undefined && commitAuthorityInput === undefined ? call.input.artifact : undefined;
+      recoveryInput === undefined && triggerRecoveryInput === undefined && staleBaselineInput === undefined &&
+      commitAuthorityInput === undefined && validationOverrideInput === undefined ? call.input.artifact : undefined;
     if (services.state === undefined) {
-      if (restartInput !== undefined || refreshInput !== undefined || recoveryInput !== undefined || triggerRecoveryInput !== undefined || staleBaselineInput !== undefined || commitAuthorityInput !== undefined) {
+      if (restartInput !== undefined || refreshInput !== undefined || recoveryInput !== undefined ||
+          triggerRecoveryInput !== undefined || staleBaselineInput !== undefined ||
+          commitAuthorityInput !== undefined || validationOverrideInput !== undefined) {
         return fail(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
@@ -392,7 +420,7 @@ export async function handleState(
               to: "milestone-recovery",
             }));
           }
-          const recoveryId = parsePathSafeId(`milestone-recovery-${identified.request_digest}`);
+          const recoveryId = milestoneRecoveryId(identified.request_digest, recoveryInput.intent_id);
           const planned = planMilestoneRecovery({
             current: current.value,
             recovery_id: recoveryId,
@@ -740,6 +768,71 @@ export async function handleState(
         let derivedPlannedFinalPhase: number | null | undefined;
         let settlementEvidence: RetainedEvidenceSet | undefined;
         let settlementProduce: CurrentProduceSubject | undefined;
+        let pendingValidationOverride: TaskStateV1["pending_validation_override"];
+        if (validationOverrideInput !== undefined) {
+          const state = current.value;
+          const phase = decodePhaseInstance(state.phase_instance);
+          if (
+            phase.kind !== "phase-impl" || state.phase_instance !== validationOverrideInput.phase_instance ||
+            state.step !== "produce" || state.status !== "running" || state.terminal !== undefined ||
+            state.open_gate !== undefined || state.pending_validation_override !== undefined ||
+            state.input_fingerprint !== validationOverrideInput.input_fingerprint
+          ) {
+            return fail(createProjectError("TRANSITION_INVALID", {
+              phase_instance: validationOverrideInput.phase_instance,
+              from: `${state.step}-${state.status}`,
+              to: "produce-failed-validation-override",
+            }));
+          }
+          const authenticated: AuthenticatedGateApproval[] = [];
+          for (const approval of state.approvals) {
+            const loaded = await loadAuthenticatedGateApproval(
+              services.dependencies, services.authority, approval,
+            );
+            if (!loaded.ok) return loaded;
+            if (authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) {
+              authenticated.push(loaded.value);
+            }
+          }
+          let approvedUpstreams: readonly Sha256Digest[];
+          try {
+            approvedUpstreams = await currentApprovedUpstreams(
+              services.dependencies, services.authority, state, authenticated, undefined,
+            );
+          } catch {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "validation-override-governing-authority-invalid",
+            }));
+          }
+          const binding = expectedProduceUpstreamBindings(state)
+            .find((candidate) => candidate.artifact_kind === "phase-design");
+          if (binding === undefined) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "validation-override-governing-phase-design-missing",
+            }));
+          }
+          const governing = await loadProduceUpstreamSubject(
+            services.dependencies, services.authority, state, binding,
+          );
+          if (!governing.ok) return governing;
+          if (!approvedUpstreams.includes(governing.value.artifact_digest)) {
+            return fail(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "validation-override-governing-phase-design-unapproved",
+            }));
+          }
+          pendingValidationOverride = Object.freeze({
+            phase_instance: state.phase_instance,
+            input_fingerprint: state.input_fingerprint,
+            governing_phase_design_digest: governing.value.artifact_digest,
+            displaced_validations: validationOverrideInput.validation_override_request.displaced_validations,
+            producer_reason: validationOverrideInput.reason,
+            request_digest: identified.request_digest,
+            request_revision: parseSafeInteger(state.revision + 1),
+          });
+        }
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === undefined || scanner === undefined) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
@@ -1261,6 +1354,9 @@ export async function handleState(
           }),
           ...(authenticatedRuleAcceptance === undefined ? {} : {
             authenticated_rule_acceptance: authenticatedRuleAcceptance,
+          }),
+          ...(pendingValidationOverride === undefined ? {} : {
+            pending_validation_override: pendingValidationOverride,
           }),
         } as const;
         let next = planStateTransition(transitionInput);

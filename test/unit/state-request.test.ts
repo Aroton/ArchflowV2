@@ -80,6 +80,15 @@ const rawInputs = () => ({
   archflow_milestone_recovery: { ...common, phase_instance: phase, step: "produce", status: "running", operation: "recover_milestone_authority" },
   archflow_stale_refresh: { ...common, phase_instance: phase, step: "triage", status: "succeeded", operation: "refresh_stale_baseline" },
   archflow_set_commit_authority: { ...common, phase_instance: phase, step: "produce", status: "running", operation: "set_commit_authority", target_commit: "HEAD", reason: "Rebase onto updated main branch", scope: ["milestone"] as const },
+  archflow_validation_override: {
+    ...common,
+    phase_instance: phase,
+    step: "produce",
+    status: "failed",
+    operation: "request_validation_override",
+    reason: "hardware runner unavailable",
+    validation_override_request: { displaced_validations: ["hardware integration suite"] },
+  },
   archflow_counter_review: { ...common, artifact_path: "phases/9/result.md" },
   archflow_gate: { ...common, phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: artifactApprovalContext, preview_digest: previewDigest, decision: gateDecision },
   archflow_waiver: { ...common, origin: waiverOrigin, rationale: "A bounded exception is required", preview_digest: previewDigest, decision: waiverDecision },
@@ -100,11 +109,12 @@ function selectorFixtures(): readonly SelectorFixture[] {
   const raw = rawInputs();
   return [
     { call: parseToolCall("archflow_state", raw.archflow_state), operation: "record-state-boundary", operation_fields: { phase_instance: phase, step: "produce", status: "succeeded" } },
-    { call: parseToolCall("archflow_state", raw.archflow_approval_trigger_recovery), operation: "recover-approval-trigger-authority", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
-    { call: parseToolCall("archflow_state", raw.archflow_milestone_refresh), operation: "refresh-milestone-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
-    { call: parseToolCall("archflow_state", raw.archflow_milestone_recovery), operation: "recover-milestone-authority", operation_fields: { phase_instance: phase, step: "produce", status: "running" } },
-    { call: parseToolCall("archflow_state", raw.archflow_stale_refresh), operation: "refresh-stale-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded" } },
+    { call: parseToolCall("archflow_state", raw.archflow_approval_trigger_recovery), operation: "recover-approval-trigger-authority", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded", intent_id: raw.archflow_approval_trigger_recovery.intent_id } },
+    { call: parseToolCall("archflow_state", raw.archflow_milestone_refresh), operation: "refresh-milestone-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded", intent_id: raw.archflow_milestone_refresh.intent_id } },
+    { call: parseToolCall("archflow_state", raw.archflow_milestone_recovery), operation: "recover-milestone-authority", operation_fields: { phase_instance: phase, step: "produce", status: "running", intent_id: raw.archflow_milestone_recovery.intent_id } },
+    { call: parseToolCall("archflow_state", raw.archflow_stale_refresh), operation: "refresh-stale-baseline", operation_fields: { phase_instance: phase, step: "triage", status: "succeeded", intent_id: raw.archflow_stale_refresh.intent_id } },
     { call: parseToolCall("archflow_state", raw.archflow_set_commit_authority), operation: "set-commit-authority", operation_fields: { phase_instance: phase, step: "produce", status: "running", target_commit: "HEAD", reason: "Rebase onto updated main branch", scope: ["milestone"] } },
+    { call: parseToolCall("archflow_state", raw.archflow_validation_override), operation: "request-validation-override", operation_fields: { phase_instance: phase, step: "produce", status: "failed", reason: "hardware runner unavailable", validation_override_request: { displaced_validations: ["hardware integration suite"] } } },
     { call: parseToolCall("archflow_counter_review", raw.archflow_counter_review), operation: "counter-review", operation_fields: { artifact_path: "phases/9/result.md" } },
     { call: parseToolCall("archflow_gate", raw.archflow_gate), operation: "gate", operation_fields: { phase_instance: phase, summary: "Approve implementation", subject_digest: "7".repeat(64), current_evidence: currentEvidence, kind: "artifact-approval", context: artifactApprovalContext, preview_digest: previewDigest, decision: gateDecision } },
     { call: parseToolCall("archflow_waiver", raw.archflow_waiver), operation: "waiver", operation_fields: { origin: waiverOrigin, rationale: "A bounded exception is required", preview_digest: previewDigest, decision: waiverDecision } },
@@ -187,6 +197,24 @@ describe("internal transaction request identity", () => {
     expect(new Set(digests).size).toBe(digests.length);
   });
 
+  it("gives request-bearing failure a distinct identity bound to its reason and exact validations", () => {
+    const raw = rawInputs();
+    const digestFor = (reason: string, displaced_validations: readonly string[]) =>
+      identifyTransactionRequest(parseToolCall("archflow_state", {
+        ...raw.archflow_validation_override,
+        reason,
+        validation_override_request: { displaced_validations },
+      }), authority, fingerprint).request_digest;
+    const baseline = digestFor("hardware runner unavailable", ["hardware integration suite"]);
+    expect(digestFor("device lab unavailable", ["hardware integration suite"])).not.toBe(baseline);
+    expect(digestFor("hardware runner unavailable", ["hardware integration suite", "physical-device smoke test"]))
+      .not.toBe(baseline);
+    const plainFailure = identifyTransactionRequest(parseToolCall("archflow_state", {
+      ...common, phase_instance: phase, step: "produce", status: "failed",
+    }), authority, fingerprint).request_digest;
+    expect(plainFailure).not.toBe(baseline);
+  });
+
   it("selects every artifact operation and binds the exact canonical artifact digest", () => {
     const triageArtifact = {
       schema_version: "1",
@@ -238,16 +266,41 @@ describe("internal transaction request identity", () => {
     }
   });
 
-  it("excludes CAS, intent, caller fingerprint, and transport metadata for every selector", () => {
+  it("excludes CAS, intent, caller fingerprint, and transport metadata for non-control selectors", () => {
     for (const fixture of selectorFixtures()) {
+      const isControlOp = fixture.call.name === "archflow_state" &&
+        fixture.call.input.operation !== undefined &&
+        fixture.call.input.operation !== "planning_restart" &&
+        fixture.call.input.operation !== "set_commit_authority";
       const baseline = identifyTransactionRequest(fixture.call, authority, fingerprint).request_digest;
       const envelopeA = { request_id: "transport-1", timestamp: "2026-07-28T00:00:00.000Z", call: fixture.call };
-      const raw = { ...fixture.call.input, intent_id: "retry-intent", expected_revision: 99, input_fingerprint: "c".repeat(64) };
+      const raw = {
+        ...fixture.call.input,
+        ...(isControlOp ? {} : { intent_id: "retry-intent" }),
+        expected_revision: 99,
+        input_fingerprint: "c".repeat(64),
+      };
       const retry = parseToolCall(fixture.call.name, raw) as ParsedToolCall;
       const envelopeB = { request_id: "transport-2", timestamp: "2026-07-28T01:00:00.000Z", call: retry };
       expect(identifyTransactionRequest(envelopeB.call, authority, fingerprint).request_digest, fixture.call.name).toBe(baseline);
       expect(identifyTransactionRequest(envelopeB.call, authority, parseSha256Digest("d".repeat(64))).request_digest, fixture.call.name).not.toBe(baseline);
       expect(envelopeA.request_id).not.toBe(envelopeB.request_id);
+    }
+  });
+
+  it("retains intent_id as discriminator for control operations", () => {
+    const raw = rawInputs();
+    for (const opInput of [
+      raw.archflow_approval_trigger_recovery,
+      raw.archflow_milestone_refresh,
+      raw.archflow_milestone_recovery,
+      raw.archflow_stale_refresh,
+    ]) {
+      const call1 = parseToolCall("archflow_state", { ...opInput, intent_id: "intent-1" });
+      const call2 = parseToolCall("archflow_state", { ...opInput, intent_id: "intent-2" });
+      const digest1 = identifyTransactionRequest(call1, authority, fingerprint).request_digest;
+      const digest2 = identifyTransactionRequest(call2, authority, fingerprint).request_digest;
+      expect(digest1).not.toBe(digest2);
     }
   });
 

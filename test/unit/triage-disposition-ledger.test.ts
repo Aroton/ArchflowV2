@@ -21,8 +21,14 @@ const finding = (finding_id: string, severity: "blocker" | "minor") => ({
   suggested_resolution: `${finding_id} resolution`,
 });
 
-const installation = (source: Record<string, unknown>) => ({
-  prepared: { manifest: { value: { artifact_digest: REVIEW, source_artifact: source } } },
+const taxonomyFinding = (finding_id: string) => ({
+  finding_id, claim_type: "risk", confidence: "likely",
+  summary: `${finding_id} summary`, evidence: `${finding_id} evidence`,
+  suggested_resolution: `${finding_id} resolution`, falsifier: `${finding_id} falsifier`,
+});
+
+const installation = (source: Record<string, unknown>, artifactDigest = REVIEW) => ({
+  prepared: { manifest: { value: { artifact_digest: artifactDigest, source_artifact: source } } },
 }) as never;
 
 const loaderWith =
@@ -60,7 +66,22 @@ describe("computeDispositionLedger", () => {
     ]);
   });
 
-  it("carries the predecessor's ledger forward and lets the newest disposition win", async () => {
+  it("embeds the complete V2 taxonomy from the exact reviewed occurrence", async () => {
+    const evidence = digest("2");
+    const ledger = await computeDispositionLedger(
+      [{ review_evidence_digest: evidence, finding_id: "runtime-risk", disposition: "rejected", rationale: "Refuted.", evidence: "Covered by the invariant." }],
+      { attempt, review_ref: ref("counter_review") },
+      loaderWith({ counter_review: installation({ artifact_kind: "review-evidence", evidence: { findings: [taxonomyFinding("runtime-risk")] } }, evidence) }),
+    );
+    expect(ledger[0]).toMatchObject({
+      claim_type: "risk", confidence: "likely", falsifier: "runtime-risk falsifier",
+      summary: "runtime-risk summary", suggested_resolution: "runtime-risk resolution",
+    });
+    expect(ledger[0]).not.toHaveProperty("severity");
+    expect(ledger[0]).not.toHaveProperty("blocking");
+  });
+
+  it("carries the predecessor ledger and replaces only an exact occurrence replay", async () => {
     const previous = installation({
       artifact_kind: "triage",
       evidence: {
@@ -76,15 +97,30 @@ describe("computeDispositionLedger", () => {
       { attempt, previous_triage_ref: ref("triage"), review_ref: ref("counter_review") },
       loaderWith({ triage: previous, counter_review: reviewInstallation }),
     );
-    expect(ledger.map((entry) => entry.finding_id)).toEqual(["older-round", "digest-drift", "naming-nit"]);
-    const redispositioned = ledger.find((entry) => entry.finding_id === "digest-drift")!;
-    expect(redispositioned).toMatchObject({
+    expect(ledger.map((entry) => `${entry.review_evidence_digest}:${entry.finding_id}`)).toEqual([
+      `${digest("9")}:older-round`, `${REVIEW}:digest-drift`, `${REVIEW}:naming-nit`,
+    ]);
+    expect(ledger.find((entry) => entry.finding_id === "digest-drift")).toMatchObject({
       attempt, rationale: "Real defect.", revision_intent: "Recompute.",
       summary: "digest-drift summary", evidence: "digest-drift evidence",
     });
-    expect(ledger.find((entry) => entry.finding_id === "older-round")).toMatchObject({
-      attempt: 1, rationale: "older rejection", evidence: "older rejection evidence",
+  });
+
+  it("retains recurring finding ids from distinct authenticated evidence", async () => {
+    const previousDigest = digest("8");
+    const previous = installation({
+      artifact_kind: "triage",
+      evidence: { disposition_ledger: [{
+        review_evidence_digest: previousDigest, finding_id: "same-id", disposition: "rejected",
+        attempt: 1, rationale: "Earlier occurrence.", evidence: "Earlier evidence.",
+      }] },
     });
+    const ledger = await computeDispositionLedger(
+      [{ review_evidence_digest: REVIEW, finding_id: "same-id", disposition: "accepted", rationale: "Current occurrence.", revision_intent: "Fix it." }],
+      { attempt, previous_triage_ref: ref("triage") },
+      loaderWith({ triage: previous }),
+    );
+    expect(ledger.map((entry) => entry.review_evidence_digest)).toEqual([previousDigest, REVIEW]);
   });
 
   it("carries nothing from an unloadable predecessor or review", async () => {
@@ -122,5 +158,48 @@ describe("computeDispositionLedger", () => {
     );
     expect(ledger[0]).not.toHaveProperty("severity");
     expect(ledger[0]).not.toHaveProperty("summary");
+  });
+
+  it("embeds accepted-editorial, escalated-human, and deferred dispositions into ledger", async () => {
+    const mixedReview = installation({
+      artifact_kind: "review-evidence",
+      evidence: { findings: [
+        taxonomyFinding("f1"),
+        taxonomyFinding("f2"),
+        taxonomyFinding("f3"),
+      ] },
+    });
+    const mixedDispositions: readonly TriageDisposition[] = [
+      { review_evidence_digest: REVIEW, finding_id: "f1", disposition: "accepted-editorial", rationale: "Style tweak", revision_intent: "Fix spelling" },
+      { review_evidence_digest: REVIEW, finding_id: "f2", disposition: "escalated-human", rationale: "Needs human call" },
+      { review_evidence_digest: REVIEW, finding_id: "f3", disposition: "deferred", rationale: "Not in scope", evidence: "Verified non-blocking" },
+    ];
+    const ledger = await computeDispositionLedger(
+      mixedDispositions,
+      { attempt, review_ref: ref("counter_review") },
+      loaderWith({ counter_review: mixedReview }),
+    );
+    expect(ledger).toEqual([
+      {
+        review_evidence_digest: REVIEW, finding_id: "f1", disposition: "accepted-editorial", attempt,
+        rationale: "Style tweak", revision_intent: "Fix spelling",
+        claim_type: "risk", confidence: "likely", falsifier: "f1 falsifier",
+        summary: "f1 summary", suggested_resolution: "f1 resolution",
+        evidence: "f1 evidence",
+      },
+      {
+        review_evidence_digest: REVIEW, finding_id: "f2", disposition: "escalated-human", attempt,
+        rationale: "Needs human call",
+        claim_type: "risk", confidence: "likely", falsifier: "f2 falsifier",
+        summary: "f2 summary", suggested_resolution: "f2 resolution",
+        evidence: "f2 evidence",
+      },
+      {
+        review_evidence_digest: REVIEW, finding_id: "f3", disposition: "deferred", attempt,
+        rationale: "Not in scope", evidence: "Verified non-blocking",
+        claim_type: "risk", confidence: "likely", falsifier: "f3 falsifier",
+        summary: "f3 summary", suggested_resolution: "f3 resolution",
+      },
+    ]);
   });
 });

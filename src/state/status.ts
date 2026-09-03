@@ -26,11 +26,24 @@ import type {
 } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import type { ReviewerRunV1, ReviewEvidence, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
-import type { RepositoryStatusV1 } from "../contracts/semantic-workflow.js";
+import type {
+  PublicReviewPushThroughAuditV1,
+  PublicValidationOverrideAuditV1,
+  RepositoryStatusV1,
+} from "../contracts/semantic-workflow.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { configuredRoute, resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
-import { assessCurrentEvidence, DEFAULT_MAX_ATTEMPTS, waiverInForce, type EvidenceAssessment } from "../review/fixed-point.js";
+import {
+  assessCurrentEvidence,
+  DEFAULT_MAX_ATTEMPTS,
+  deriveReviewPushThroughCandidate,
+  reviewPushThroughAuthorityMatchesCandidate,
+  waiverInForce,
+  type EvidenceAssessment,
+  type EvidenceSubject,
+  type ReviewPushThroughCandidate,
+} from "../review/fixed-point.js";
 import { loadCanonicalRubricForPhaseKind, type CanonicalRubric } from "../review/rubrics.js";
 import { createGitRunner, preflightGit, readChangedGitPaths, readCommitTreeBlob, readFirstParentChildAfter, resolveCommit } from "../repository/git.js";
 import { discoverWorktree, type RootBoundGitRunner } from "../repository/identity.js";
@@ -84,8 +97,26 @@ import {
 import { gateRequestClaim, parseWorkspacePathClaim, resolveTaskPath, resolveTaskWorkspacePath } from "../repository/paths.js";
 import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
 import { readCurrentDispatchFailure } from "../dispatch/failure-observation.js";
+import {
+  authenticatedValidationOverrideIsCurrent,
+  loadAuthenticatedValidationOverride,
+  type AuthenticatedValidationOverride,
+} from "./validation-overrides.js";
+import {
+  loadAuthenticatedReviewPushThrough,
+  reviewPushThroughAuthoritySource,
+  type AuthenticatedReviewPushThrough,
+} from "./review-push-throughs.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
+
+function auditFailureStatus(error: ProjectError): "invalid" | "unavailable" {
+  const parameters = error.diagnostic.parameters as Readonly<{ issue_code?: unknown }>;
+  const issueCode = typeof parameters.issue_code === "string" ? parameters.issue_code : "";
+  return error.code === "IO_ERROR" || issueCode.includes("unavailable") || issueCode.includes("missing")
+    ? "unavailable"
+    : "invalid";
+}
 
 type ConfigVerification = Readonly<{
   verified: boolean;
@@ -103,18 +134,14 @@ type StatusEvidence = Readonly<{
   current_evidence: CurrentEvidenceSetRef;
   /**
    * Every finding in the current review, joined to its recorded triage disposition when one
-   * exists. `severity`/`summary` are reviewer-authored; `disposition`/`rationale` are the
-   * producer's recorded answer. The join is keyed on the review evidence digest as well as the
+   * exists. The native V1 severity/blocking or V2 taxonomy fields and common finding prose are
+   * reviewer-authored; `disposition`/`rationale` are the producer's recorded answer. The join is keyed on the review evidence digest as well as the
    * finding id, so a triage bound to superseded review bytes contributes nothing rather than
    * mislabelling a current finding. Gate presentation reads this to show the human which
-   * blocking findings were rejected as immaterial rather than fixed.
+   * substantive findings were rejected as immaterial rather than fixed.
    */
-  findings: readonly Readonly<{
+  findings: readonly Readonly<ReviewEvidence["findings"][number] & {
     review_evidence_digest: Sha256Digest;
-    finding_id: string;
-    blocking: boolean;
-    severity: ReviewEvidence["findings"][number]["severity"];
-    summary: string;
     disposition?: string;
     rationale?: string;
   }>[];
@@ -189,7 +216,7 @@ export function reviewedRepositoryGateDetails(
   repositories: readonly RepositoryStatusV1[] | undefined,
 ): readonly string[] | undefined {
   if (
-    active.kind === "baseline-adoption" ||
+    active.kind === "baseline-adoption" || active.kind === "validation-override" ||
     !("current_evidence" in active) ||
     active.current_evidence.set_digest !== currentEvidence.set_digest ||
     reviewed === undefined ||
@@ -538,6 +565,10 @@ export type TaskStatusV1 = Readonly<{
   }>;
   /** Derived cleanup state. Cleanup debt is non-blocking and never changes workflow routing. */
   workspace?: WorkspaceCleanupReport;
+  /** Authenticated or explicitly unavailable validation-exception audit entries. */
+  validation_overrides?: readonly PublicValidationOverrideAuditV1[];
+  /** Authenticated or explicitly unavailable review push-through audit entries. */
+  review_push_throughs?: readonly PublicReviewPushThroughAuditV1[];
   next_action: NextAction;
 }>;
 
@@ -761,6 +792,19 @@ export function currentReviewPredecessor(
       });
 }
 
+async function currentGoverningPhaseDesignDigest(
+  dependencies: GateLifecycleDependencies,
+  authority: TransactionAuthority,
+  state: TaskStateV1,
+): Promise<Sha256Digest | undefined> {
+  if (decodePhaseInstance(state.phase_instance).kind !== "phase-impl") return undefined;
+  const binding = expectedProduceUpstreamBindings(state)
+    .find((candidate) => candidate.artifact_kind === "phase-design");
+  if (binding === undefined) return undefined;
+  const governing = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+  return governing.ok ? governing.value.artifact_digest : undefined;
+}
+
 export async function currentApprovedUpstreams(
   dependencies: GateLifecycleDependencies,
   authority: TransactionAuthority,
@@ -876,6 +920,7 @@ export function pendingAdjudicationGates(
       item.request.phase_instance === state.phase_instance &&
       item.request.context_digest === contextDigest &&
       item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
+      item.request.kind !== "validation-override" && // a validation request is not review evidence
       item.request.current_evidence.set_digest === currentSet.set_digest &&
       source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained));
     const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
@@ -886,7 +931,10 @@ export function pendingAdjudicationGates(
         : state.phase_instance.startsWith("phase-impl-")
           ? "commit-authorization"
           : undefined;
-    const ordinaryApproval = gate.kind === "constitution-review" && currentSet !== undefined &&
+    const hasActivePolicyIssues = !("policy_findings" in gate.context) ||
+      (gate.context as Record<string, unknown>).constitution !== "pass" ||
+      ((gate.context as Record<string, unknown>).policy_findings as readonly any[]).some((f) => f.compliance !== "pass" || f.trigger !== "not-matched");
+    const ordinaryApproval = gate.kind === "constitution-review" && hasActivePolicyIssues && currentSet !== undefined &&
       ordinaryKind !== undefined && authenticated.some((item) => {
         const decision = item.decision.envelope.payload.decision;
         return item.approval.gate_kind === ordinaryKind &&
@@ -1323,9 +1371,15 @@ async function computeTaskStatusDetailedInternal(
       const testReviewer = configuredRoute(parsedConfig, phaseKind, "test-reviewer") === undefined
         ? undefined
         : resolveDispatchRoute(parsedConfig, phaseKind, "test-reviewer");
-      const effortReviewer = configuredRoute(parsedConfig, phaseKind, "effort-reviewer") === undefined
-        ? undefined
-        : resolveDispatchRoute(parsedConfig, phaseKind, "effort-reviewer");
+      let effortReviewer: DispatchRoute | undefined;
+      try {
+        effortReviewer = configuredRoute(parsedConfig, phaseKind, "effort-reviewer") === undefined
+          ? undefined
+          : resolveDispatchRoute(parsedConfig, phaseKind, "effort-reviewer");
+      } catch {
+        // Selector route problems are advisory-only and collapse to the fixed implementation default.
+        effortReviewer = undefined;
+      }
       const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind, "adjudicator");
       routes = Object.freeze({
         counter_reviewer: counterReviewer,
@@ -1440,6 +1494,7 @@ async function computeTaskStatusDetailedInternal(
   const approvalFacts: Array<Readonly<{
     gate_kind: TaskStateV1["approvals"][number]["gate_kind"];
     subject_digest: Sha256Digest;
+    current_evidence_set_digest?: Sha256Digest;
   }>> = [];
   const approvalIssues: ApprovalIssue[] = [];
   for (const approval of state.approvals) {
@@ -1448,7 +1503,13 @@ async function computeTaskStatusDetailedInternal(
       if (loaded.ok) {
         if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) continue;
         authenticatedApprovals.push(loaded.value);
-        approvalFacts.push(Object.freeze({ gate_kind: approval.gate_kind, subject_digest: approval.subject_digest }));
+        approvalFacts.push(Object.freeze({
+          gate_kind: approval.gate_kind,
+          subject_digest: approval.subject_digest,
+          ...("set_digest" in loaded.value.request.current_evidence
+            ? { current_evidence_set_digest: loaded.value.request.current_evidence.set_digest }
+            : {}),
+        }));
       } else {
         blockers.push("approval-authority-unavailable");
         approvalIssues.push(Object.freeze({
@@ -1470,6 +1531,21 @@ async function computeTaskStatusDetailedInternal(
         }),
       }));
     }
+  }
+
+  const authenticatedValidationOverrides: AuthenticatedValidationOverride[] = [];
+  const validationAuditFailures = new Map<string, "invalid" | "unavailable">();
+  for (const record of state.validation_overrides ?? []) {
+    const loaded = await loadAuthenticatedValidationOverride(dependencies, authority, record);
+    if (loaded.ok) authenticatedValidationOverrides.push(loaded.value);
+    else validationAuditFailures.set(record.gate_id, auditFailureStatus(loaded.error));
+  }
+  const authenticatedReviewPushThroughs: AuthenticatedReviewPushThrough[] = [];
+  const pushThroughAuditFailures = new Map<string, "invalid" | "unavailable">();
+  for (const record of state.review_push_throughs ?? []) {
+    const loaded = await loadAuthenticatedReviewPushThrough(dependencies, authority, record);
+    if (loaded.ok) authenticatedReviewPushThroughs.push(loaded.value);
+    else pushThroughAuditFailures.set(record.gate_id, auditFailureStatus(loaded.error));
   }
 
   const settlementPolicy = constitution === undefined
@@ -1738,18 +1814,28 @@ async function computeTaskStatusDetailedInternal(
     : undefined;
   const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
   let assessment: EvidenceAssessment | undefined;
+  let assessmentSubject: EvidenceSubject | undefined;
+  let reviewPushThroughCandidate: ReviewPushThroughCandidate | undefined;
   if (constitution !== undefined && subjectDigest !== undefined) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
       () => currentApprovedUpstreams(dependencies, authority, state, authenticatedApprovals, produceSubject),
-      (approvedUpstreamDigests) => assessCurrentEvidence(state, retained, {
-        subject_digest: subjectDigest,
-        input_fingerprint: state.input_fingerprint,
-        constitution,
-        ...(reviewPredecessor === undefined ? {} : { review_predecessor: reviewPredecessor }),
-        approved_upstream_digests: approvedUpstreamDigests,
-        authenticated_gate_approvals: authenticatedApprovals,
-        ...(parsedConfig?.max_attempts === undefined ? {} : { max_attempts: parsedConfig.max_attempts }),
-      }),
+      (approvedUpstreamDigests) => {
+        assessmentSubject = {
+          subject_digest: subjectDigest,
+          input_fingerprint: state.input_fingerprint,
+          constitution,
+          ...(reviewPredecessor === undefined ? {} : { review_predecessor: reviewPredecessor }),
+          approved_upstream_digests: approvedUpstreamDigests,
+          authenticated_gate_approvals: authenticatedApprovals,
+          ...(authenticatedReviewPushThroughs.length === 0 ? {} : {
+            review_push_through_authority: reviewPushThroughAuthoritySource(authenticatedReviewPushThroughs),
+          }),
+          ...(parsedConfig?.max_attempts === undefined ? {} : { max_attempts: parsedConfig.max_attempts }),
+        };
+        const assessed = assessCurrentEvidence(state, retained, assessmentSubject);
+        reviewPushThroughCandidate = deriveReviewPushThroughCandidate(state, retained, assessmentSubject);
+        return assessed;
+      },
     );
     assessment = resolvedAssessment.assessment;
     if (resolvedAssessment.blocking_reason !== undefined) blockers.push(resolvedAssessment.blocking_reason);
@@ -1937,11 +2023,8 @@ async function computeTaskStatusDetailedInternal(
     const findings = derived.reviews.flatMap((review) => review.evidence.findings.map((finding) => {
       const recorded = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
       return Object.freeze({
+        ...finding,
         review_evidence_digest: review.evidence_digest,
-        finding_id: finding.finding_id,
-        blocking: finding.blocking,
-        severity: finding.severity,
-        summary: finding.summary,
         ...(recorded === undefined ? {} : { disposition: recorded.disposition, rationale: recorded.rationale }),
       });
     }));
@@ -1985,6 +2068,28 @@ async function computeTaskStatusDetailedInternal(
       ...(assessment === undefined ? {} : { assessment }),
     });
   }
+
+  const governingPhaseDesignDigest = await currentGoverningPhaseDesignDigest(
+    dependencies,
+    authority,
+    state,
+  ).catch(() => undefined);
+  const validationProductionInput = Object.freeze({
+    phase_instance: state.phase_instance,
+    input_fingerprint: produceSubject?.artifact.input_fingerprint ?? state.input_fingerprint,
+  });
+  const currentValidationOverrideDetails = governingPhaseDesignDigest === undefined
+    ? Object.freeze([])
+    : Object.freeze(authenticatedValidationOverrides
+      .filter((item) => authenticatedValidationOverrideIsCurrent(
+        item,
+        validationProductionInput,
+        governingPhaseDesignDigest,
+      ))
+      .flatMap((item) => [
+        `Validation exception granted at ${item.record.decided_at}: ${item.record.human_reason}`,
+        ...item.request.context.displaced_validations.map((validation) => `Not run: ${validation}`),
+      ]));
 
   let activeGate: ActiveGateV1 | undefined;
   let openGate: OpenGateStatus | undefined;
@@ -2048,6 +2153,8 @@ async function computeTaskStatusDetailedInternal(
             );
           }
           let reviewedRepositoryDetails: readonly string[] | undefined;
+          let escalatedFindingDetails: string[] | undefined;
+          let reviewPushThroughFindingDetails: string[] | undefined;
           if (evidence.available) {
             reviewedRepositoryDetails = reviewedRepositoryGateDetails(
               activeGate,
@@ -2055,12 +2162,50 @@ async function computeTaskStatusDetailedInternal(
               reviewedRepositories,
               repositories,
             );
+            const escalated = evidence.findings.filter((f) => f.disposition === "escalated-human");
+            if (escalated.length > 0) {
+              escalatedFindingDetails = escalated.map((f) => `Escalated finding ${f.finding_id}: ${f.summary} (rationale: ${f.rationale ?? ""})`);
+            }
+            if (activeGate.kind === "attempts-exhausted" &&
+                activeGate.context.review_push_through !== undefined) {
+              const roundCount = retained.get("triage")?.manifest.source_artifact;
+              const completedRounds = roundCount?.artifact_kind === "triage"
+                ? roundCount.evidence.review_round_history?.length
+                : undefined;
+              reviewPushThroughFindingDetails = [
+                ...(completedRounds === undefined ? [] : [`Completed counter-review rounds: ${completedRounds}.`]),
+                ...activeGate.context.review_push_through.accepted_occurrences.map((occurrence) => {
+                const finding = evidence.findings.find((candidate) =>
+                  candidate.review_evidence_digest === occurrence.review_evidence_digest &&
+                  candidate.finding_id === occurrence.finding_id);
+                if (finding === undefined || finding.disposition !== "accepted") {
+                  throw new TypeError("push-through presentation finding is not the current accepted occurrence");
+                }
+                const taxonomy = "claim_type" in finding
+                  ? `${finding.claim_type}/${finding.confidence}`
+                  : `${finding.severity}/${finding.blocking ? "blocking" : "advisory"}`;
+                const falsifier = "falsifier" in finding
+                  ? finding.falsifier
+                  : "Legacy finding: no structured falsifier was recorded.";
+                return `Accepted finding ${finding.finding_id} (${taxonomy}): ${finding.summary} Falsifier: ${falsifier}`;
+                }),
+              ];
+            }
           }
           openGate = gateStatus(activeGate, {
             ...(triggerDetails === undefined ? {} : { content_trigger: triggerDetails }),
             ...(reviewedRepositoryDetails === undefined
               ? {}
               : { reviewed_repositories: reviewedRepositoryDetails }),
+            ...(escalatedFindingDetails === undefined
+              ? {}
+              : { escalated_findings: escalatedFindingDetails }),
+            ...(reviewPushThroughFindingDetails === undefined
+              ? {}
+              : { review_push_through_findings: reviewPushThroughFindingDetails }),
+            ...(activeGate.kind !== "commit-authorization" || currentValidationOverrideDetails.length === 0
+              ? {}
+              : { validation_overrides: currentValidationOverrideDetails }),
           });
         } catch {
           // A disposable decision interface must never make an incomplete authority join look
@@ -2148,6 +2293,7 @@ async function computeTaskStatusDetailedInternal(
   const nextActionInput = {
     repository_initialized: true,
     state,
+    ...(state.pending_validation_override === undefined ? {} : { pending_validation_override: true as const }),
     config_verified: config.verified,
     ...(config.verified !== true && config.issue !== undefined ? { config_issue: config.issue } : {}),
     ...(statusReconciliation === undefined ? {} : { reconciliation_findings: statusReconciliation.findings }),
@@ -2164,6 +2310,8 @@ async function computeTaskStatusDetailedInternal(
       : { upstream_document_drift: Object.freeze([...upstreamDocumentDrift]) }),
     ...(policyFindings === undefined ? {} : { policy_findings: policyFindings }),
     evidence_available: evidence.available,
+    ...(evidence.available ? { current_evidence_set_digest: evidence.current_evidence.set_digest } : {}),
+    ...(assessment?.escalated_human_findings === true ? { escalated_human_findings: true } : {}),
     ...(subjectDigest === undefined ? {} : { subject_digest: subjectDigest }),
     authenticated_approvals: approvalFacts,
     ...(acceptedSettlement === undefined ? {} : { accepted_no_wait_settlement: acceptedSettlement }),
@@ -2265,6 +2413,68 @@ async function computeTaskStatusDetailedInternal(
     // A disposable diagnostic projection never blocks or changes canonical workflow status.
   }
 
+  const validationOverrides: PublicValidationOverrideAuditV1[] = (state.validation_overrides ?? []).map((record) => {
+    const authenticated = authenticatedValidationOverrides.find((item) => item.record.gate_id === record.gate_id);
+    if (authenticated === undefined) {
+      return Object.freeze({
+        phase_instance: record.phase_instance,
+        gate_id: record.gate_id,
+        status: validationAuditFailures.get(record.gate_id) ?? "unavailable",
+      });
+    }
+    const current = governingPhaseDesignDigest !== undefined &&
+      authenticatedValidationOverrideIsCurrent(
+        authenticated,
+        validationProductionInput,
+        governingPhaseDesignDigest,
+      );
+    return Object.freeze({
+      phase_instance: record.phase_instance,
+      gate_id: record.gate_id,
+      status: "granted" as const,
+      current,
+      reason: record.human_reason,
+      decided_at: record.decided_at,
+      input_fingerprint: record.input_fingerprint,
+      governing_phase_design_digest: record.governing_phase_design_digest,
+      displaced_validations: Object.freeze([...authenticated.record.displaced_validations]),
+    });
+  });
+  const reviewPushThroughs: PublicReviewPushThroughAuditV1[] = (state.review_push_throughs ?? []).map((record) => {
+    const authenticated = authenticatedReviewPushThroughs.find((item) => item.record.gate_id === record.gate_id);
+    if (authenticated === undefined) {
+      return Object.freeze({
+        phase_instance: record.phase_instance,
+        gate_id: record.gate_id,
+        attempt: record.attempt,
+        status: pushThroughAuditFailures.get(record.gate_id) ?? "unavailable",
+      });
+    }
+    const facts = reviewPushThroughAuthoritySource([authenticated]).authenticate(authenticated);
+    const current = reviewPushThroughCandidate !== undefined &&
+      reviewPushThroughAuthorityMatchesCandidate(state, reviewPushThroughCandidate, facts);
+    const requestContext = authenticated.approval.request.kind === "attempts-exhausted"
+      ? authenticated.approval.request.context.review_push_through
+      : undefined;
+    if (requestContext === undefined) {
+      return Object.freeze({
+        phase_instance: record.phase_instance,
+        gate_id: record.gate_id,
+        attempt: record.attempt,
+        status: "invalid" as const,
+      });
+    }
+    return Object.freeze({
+      phase_instance: record.phase_instance,
+      gate_id: record.gate_id,
+      attempt: record.attempt,
+      status: current ? "current" as const : "historical" as const,
+      reason: record.human_reason,
+      decided_at: record.decided_at,
+      accepted_occurrences: Object.freeze([...requestContext.accepted_occurrences]),
+    });
+  });
+
   const reviewPolicy = await loadCanonicalRubricForPhaseKind(
     decodePhaseInstance(state.phase_instance).kind,
   );
@@ -2297,6 +2507,8 @@ async function computeTaskStatusDetailedInternal(
     ...(baselineAdoptionInput === undefined ? {} : { baseline_adoption_gate: baselineAdoptionInput }),
     ...(milestoneRecoveryFacts === undefined ? {} : { milestone_recovery: milestoneRecoveryFacts }),
     workspace,
+    ...(validationOverrides.length === 0 ? {} : { validation_overrides: Object.freeze(validationOverrides) }),
+    ...(reviewPushThroughs.length === 0 ? {} : { review_push_throughs: Object.freeze(reviewPushThroughs) }),
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextAction,
   });

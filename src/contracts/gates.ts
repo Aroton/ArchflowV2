@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 
 import type { GitOid } from "./canonical.js";
-import { gitOidV1Schema } from "./canonical.js";
+import { canonicalJsonDigest, gitOidV1Schema } from "./canonical.js";
 import type { Sha256Digest } from "./evidence.js";
 import { pathSafeIdV1Schema, taskSlugV1Schema, type PathSafeId, type SafeInteger, type TaskSlug } from "./evidence.js";
 import { safeIdV1Schema } from "./evidence.js";
@@ -18,6 +18,18 @@ export const gateRepositoryNameV1Schema = z.string().regex(REPOSITORY_NAME_PATTE
 export type RuleVersionRef = { readonly rule_id: string; readonly rule_version: number };
 export type EvidenceIdentityKind = "prd" | "architecture" | "phase-design" | "implementation-result" | "review" | "adjudication" | "constitution" | "workflow" | "import";
 export type EvidenceIdentityRef = { readonly kind: EvidenceIdentityKind; readonly digest: Sha256Digest };
+export type ValidationOverrideRequestV1 = { readonly displaced_validations: readonly string[] };
+export const REVIEW_PUSH_THROUGH_MIN_ATTEMPT = 2 as const;
+export type ReviewAcceptedOccurrenceV1 = {
+  readonly review_evidence_digest: Sha256Digest;
+  readonly finding_id: string;
+};
+export type ReviewPushThroughContextV1 = {
+  readonly minimum_attempt: typeof REVIEW_PUSH_THROUGH_MIN_ATTEMPT;
+  readonly current_evidence_set_digest: Sha256Digest;
+  readonly triage_result_digest: Sha256Digest;
+  readonly accepted_occurrences: readonly ReviewAcceptedOccurrenceV1[];
+};
 /**
  * The axis of a constitution verdict a waiver covers. Compliance ("did the subject violate this
  * rule") and trigger ("does this rule's review_trigger condition apply here") are separate
@@ -142,7 +154,14 @@ export type GateContractByKind = {
    */
   readonly "constitution-review": { readonly context: { readonly constitution: "pass" | "fail" | "uncertain"; readonly failed_rules: readonly RuleVersionRef[]; readonly uncertain_rules: readonly RuleVersionRef[]; readonly matched_trigger_rules: readonly RuleVersionRef[]; readonly uncertain_trigger_rules: readonly RuleVersionRef[]; readonly eligible_waivers: readonly EligibleWaiver[] }; readonly decision: { readonly decision: "approve" | "revise" | "reject"; readonly reason: string } | { readonly decision: "waiver-requested"; readonly reason: string; readonly rule: RuleVersionRef; readonly operation: WaivableOperation; readonly rationale: string } };
   readonly "material-drift": { readonly context: { readonly affected_upstream: EvidenceIdentityRef; readonly drift: "material"; readonly affected_claim_ids: readonly string[] }; readonly decision: { readonly decision: "amend-upstream" | "revise-current" | "reject"; readonly reason: string } };
-  readonly "attempts-exhausted": { readonly context: { readonly step: PipelineStep; readonly attempts: number; readonly maximum_attempts: number }; readonly decision: { readonly decision: "retry-once" | "revise" | "abort"; readonly reason: string } };
+  readonly "attempts-exhausted": { readonly context: { readonly step: PipelineStep; readonly attempts: number; readonly maximum_attempts: number; readonly review_push_through?: ReviewPushThroughContextV1 }; readonly decision: { readonly decision: "retry-once" | "revise" | "abort" | "push-through-review"; readonly reason: string } };
+  readonly "validation-override": { readonly context: {
+    readonly request_revision: SafeInteger;
+    readonly input_fingerprint: Sha256Digest;
+    readonly governing_phase_design_digest: Sha256Digest;
+    readonly displaced_validations: readonly string[];
+    readonly producer_reason: string;
+  }; readonly decision: { readonly decision: "grant-validation-override" | "deny-validation-override"; readonly reason: string } };
   readonly "constitution-edit": { readonly context: { readonly pinned_constitution_digest: Sha256Digest; readonly current_constitution_digest: Sha256Digest; readonly changed_path_class: "task-branch-constitution" }; readonly decision: { readonly decision: "revert-edit" | "start-base-amendment" | "abort"; readonly reason: string } };
   readonly "commit-authorization": { readonly context: OrdinaryPolicyContext & { readonly target_ref: string; readonly baseline_commit: GitOid; readonly commit_message: string; readonly paths: readonly RepositoryPathClaim[]; readonly diff_digest: Sha256Digest; readonly current_artifact_digests: readonly Sha256Digest[]; readonly parent_document_digests: readonly Sha256Digest[]; readonly secondary_commits?: readonly SecondaryCommitAuthorizationV1[] }; readonly decision: { readonly decision: "authorize-commit" | "revise" | "abort"; readonly reason: string } | WaiverRequestedDecision };
   readonly "restore-collision": { readonly context: { readonly path: TaskPathClaim; readonly recorded_generation_digest: Sha256Digest; readonly current_generation_digest: Sha256Digest; readonly adoption_candidate?: AuthorityLinkRef }; readonly decision: { readonly decision: "discard-and-restore" | "abort"; readonly reason: string } | { readonly decision: "adopt-as-new-generation"; readonly reason: string; readonly adoption_authority: AuthorityLinkRef; readonly rationale: string } };
@@ -168,11 +187,11 @@ export type GateContractByKind = {
   readonly "migration-audit": { readonly context: { readonly source_identity_digest: Sha256Digest; readonly destination_identity_digest: Sha256Digest; readonly import_digest: Sha256Digest; readonly code_baseline_digest: Sha256Digest; readonly policy_baseline_digest: Sha256Digest; readonly resume_phase?: PhaseInstanceId; readonly planned_final_phase?: number; readonly imported_documents?: readonly { readonly path: RepositoryPathClaim; readonly content_digest: Sha256Digest }[]; readonly target_ref?: string; readonly baseline_commit?: GitOid; readonly commit_message?: string }; readonly decision: { readonly decision: "accept-import-audit" | "revise" | "abort"; readonly reason: string } };
 }
 
-export const GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "baseline-adoption", "migration-audit"] as const;
+export const GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "validation-override", "constitution-edit", "commit-authorization", "restore-collision", "baseline-adoption", "migration-audit"] as const;
 export type GateKind = keyof GateContractByKind;
 export type GateContext<K extends GateKind> = GateContractByKind[K]["context"];
 export type GateDecisionPayload<K extends GateKind> = GateContractByKind[K]["decision"];
-export type GateEffect = "advance" | "retry" | "redirect-waiver" | "redirect-upstream" | "non-advancing";
+export type GateEffect = "advance" | "retry" | "redirect-waiver" | "redirect-upstream" | "validation-resume" | "non-advancing";
 
 export type BaselineDriftedProjection = {
   readonly path: RepositoryPathClaim;
@@ -221,6 +240,26 @@ export type BaselineObservationRef = Readonly<{
   readonly drift_digest: Sha256Digest;
 }>;
 
+/** Authenticated request evidence for a validation-override gate; it is not review evidence. */
+export type ValidationOverrideRequestRefV1 = {
+  readonly schema_version: "1";
+  readonly evidence_kind: "validation-override-request";
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  readonly input_fingerprint: Sha256Digest;
+  readonly governing_phase_design_digest: Sha256Digest;
+  readonly request_revision: SafeInteger;
+  readonly validation_request_subject_digest: Sha256Digest;
+};
+
+export type ValidationOverrideSubjectV1 = {
+  readonly task_id: TaskSlug;
+  readonly phase_instance: PhaseInstanceId;
+  readonly input_fingerprint: Sha256Digest;
+  readonly governing_phase_design_digest: Sha256Digest;
+  readonly displaced_validations: readonly string[];
+};
+
 export type GateDecisionEnvelopeBase = { readonly schema_version: "1"; readonly gate_id: PathSafeId; readonly task_id: TaskSlug; readonly phase_instance: PhaseInstanceId; readonly subject_digest: Sha256Digest; readonly context_digest: Sha256Digest; readonly human_provenance: HumanDecisionProvenance };
 export type GateDecisionEnvelope<K extends GateKind = GateKind> = { readonly [P in K]: GateDecisionEnvelopeBase & { readonly kind: P; readonly payload: GateDecisionPayload<P> } }[K];
 
@@ -238,6 +277,8 @@ export type WaiverOriginRef = {
 }
 
 const safeId = safeIdV1Schema;
+// Mirrors the canonical review finding-id grammar without importing the review subsystem.
+const reviewFindingId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const boundedText = z.string().min(1).max(4096).regex(/\S/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -248,6 +289,33 @@ const authorityLink = z.object({ link_digest: digest, purpose: z.literal("restor
 const reason = boundedText;
 const decision = <T extends readonly [string, ...string[]]>(values: T) => z.object({ decision: z.enum(values), reason }).strict();
 const sortedUnique = <T>(items: readonly T[], compare: (left: T, right: T) => number): boolean => items.every((item, index) => index === 0 || compare(items[index - 1]!, item) < 0);
+export const displacedValidationsV1Schema = z.array(z.string().min(1).max(1024).regex(/\S/u)).min(1).max(32)
+  .superRefine((items, context) => {
+    if (!sortedUnique(items, (left, right) => left.localeCompare(right))) {
+      context.addIssue({ code: "custom", message: "displaced validations must be localeCompare-sorted with no duplicates" });
+    }
+  });
+export const validationOverrideRequestV1Schema = z.object({
+  displaced_validations: displacedValidationsV1Schema,
+}).strict() as unknown as z.ZodType<ValidationOverrideRequestV1>;
+export const reviewAcceptedOccurrenceV1Schema = z.object({
+  review_evidence_digest: digest,
+  finding_id: reviewFindingId,
+}).strict() as unknown as z.ZodType<ReviewAcceptedOccurrenceV1>;
+const compareReviewAcceptedOccurrences = (left: ReviewAcceptedOccurrenceV1, right: ReviewAcceptedOccurrenceV1): number =>
+  left.review_evidence_digest.localeCompare(right.review_evidence_digest) || left.finding_id.localeCompare(right.finding_id);
+export const reviewAcceptedOccurrencesV1Schema = z.array(reviewAcceptedOccurrenceV1Schema).min(1)
+  .superRefine((items, context) => {
+    if (!sortedUnique(items, compareReviewAcceptedOccurrences)) {
+      context.addIssue({ code: "custom", message: "accepted occurrences must be localeCompare-sorted with no duplicates" });
+    }
+  });
+export const reviewPushThroughContextV1Schema = z.object({
+  minimum_attempt: z.literal(REVIEW_PUSH_THROUGH_MIN_ATTEMPT),
+  current_evidence_set_digest: digest,
+  triage_result_digest: digest,
+  accepted_occurrences: reviewAcceptedOccurrencesV1Schema,
+}).strict() as unknown as z.ZodType<ReviewPushThroughContextV1>;
 const compareRules = (left: RuleVersionRef, right: RuleVersionRef): number => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version;
 const canonicalRules = z.array(rule).superRefine((items, context) => { if (!sortedUnique(items, compareRules)) context.addIssue({ code: "custom", message: "rules must be sorted and unique" }); });
 const compareEligibleWaivers = (left: EligibleWaiver, right: EligibleWaiver): number => compareRules(left.rule, right.rule) || left.scope.operation.localeCompare(right.scope.operation);
@@ -345,6 +413,22 @@ export const legacyExactCommitAuthorizationContextSchema = z.object({
   parent_document_digests: canonicalDigests.min(1),
 }).strict();
 export const archivedPreExactCommitAuthorizationContextSchema = legacyExactCommitAuthorizationContextSchema.omit({ baseline_commit: true, commit_message: true, paths: true });
+export const legacyAttemptsExhaustedContextSchema = z.object({
+  step: z.enum(PIPELINE_STEPS),
+  attempts: safeInteger,
+  maximum_attempts: safeInteger,
+}).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts");
+export const reviewPushThroughAttemptsExhaustedContextSchema = z.object({
+  step: z.enum(PIPELINE_STEPS),
+  attempts: safeInteger,
+  maximum_attempts: safeInteger,
+  review_push_through: reviewPushThroughContextV1Schema,
+}).strict().superRefine((value, context) => {
+  if (value.attempts < value.maximum_attempts) context.addIssue({ code: "custom", path: ["attempts"], message: "attempts must be at least maximum_attempts" });
+  if (value.attempts < value.review_push_through.minimum_attempt) {
+    context.addIssue({ code: "custom", path: ["review_push_through", "minimum_attempt"], message: "attempts must meet the review push-through minimum" });
+  }
+});
 
 const contexts = {
   "artifact-approval": z.object({ artifact_kind: z.enum(["prd", "design", "phase-design", "phase-implementation"]), ...ordinaryPolicyFields }).strict().superRefine(validateOrdinaryPolicyContext),
@@ -367,7 +451,19 @@ const contexts = {
     }
   }),
   "material-drift": z.object({ affected_upstream: z.object({ kind: z.enum(["prd", "architecture", "phase-design", "implementation-result", "review", "adjudication", "constitution", "workflow", "import"]), digest }).strict(), drift: z.literal("material"), affected_claim_ids: canonicalStrings.min(1) }).strict(),
-  "attempts-exhausted": z.object({ step: z.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
+  "attempts-exhausted": z.object({ step: z.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger, review_push_through: reviewPushThroughContextV1Schema.optional() }).strict().superRefine((value, context) => {
+    if (value.attempts < value.maximum_attempts) context.addIssue({ code: "custom", path: ["attempts"], message: "attempts must be at least maximum_attempts" });
+    if (value.review_push_through !== undefined && value.attempts < value.review_push_through.minimum_attempt) {
+      context.addIssue({ code: "custom", path: ["review_push_through", "minimum_attempt"], message: "attempts must meet the review push-through minimum" });
+    }
+  }),
+  "validation-override": z.object({
+    request_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    input_fingerprint: digest,
+    governing_phase_design_digest: digest,
+    displaced_validations: displacedValidationsV1Schema,
+    producer_reason: boundedText,
+  }).strict(),
   "constitution-edit": z.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: z.literal("task-branch-constitution" satisfies PathClass) }).strict(),
   "commit-authorization": z.object({
     ...ordinaryPolicyFields,
@@ -491,7 +587,8 @@ const decisions = {
   "design-approval": z.union([decision(["approve", "revise", "reject"]), z.object({ decision: z.literal("waiver-requested"), reason, rule, operation: z.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "constitution-review": z.union([decision(["approve", "revise", "reject"]), z.object({ decision: z.literal("waiver-requested"), reason, rule, operation: z.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "material-drift": decision(["amend-upstream", "revise-current", "reject"]),
-  "attempts-exhausted": decision(["retry-once", "revise", "abort"]),
+  "attempts-exhausted": decision(["retry-once", "revise", "abort", "push-through-review"]),
+  "validation-override": decision(["grant-validation-override", "deny-validation-override"]),
   "constitution-edit": decision(["revert-edit", "start-base-amendment", "abort"]),
   "commit-authorization": z.union([decision(["authorize-commit", "revise", "abort"]), z.object({ decision: z.literal("waiver-requested"), reason, rule, operation: z.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "restore-collision": z.union([decision(["discard-and-restore", "abort"]), z.object({ decision: z.literal("adopt-as-new-generation"), reason, adoption_authority: authorityLink, rationale: boundedText }).strict()]),
@@ -500,7 +597,7 @@ const decisions = {
 } as const;
 
 const effects = Object.freeze({
-  approve: "advance", revise: "retry", reject: "non-advancing", "waiver-requested": "redirect-waiver", "amend-upstream": "redirect-upstream", "revise-current": "retry", "retry-once": "retry", abort: "non-advancing", "revert-edit": "retry", "start-base-amendment": "redirect-upstream", "authorize-commit": "advance", "discard-and-restore": "advance", "adopt-as-new-generation": "advance", "adopt-current-bytes": "advance", "restore-recorded-bytes": "advance", "adopt-committed-deletions": "advance", "accept-import-audit": "advance",
+  approve: "advance", revise: "retry", reject: "non-advancing", "waiver-requested": "redirect-waiver", "amend-upstream": "redirect-upstream", "revise-current": "retry", "retry-once": "retry", abort: "non-advancing", "push-through-review": "advance", "grant-validation-override": "validation-resume", "deny-validation-override": "validation-resume", "revert-edit": "retry", "start-base-amendment": "redirect-upstream", "authorize-commit": "advance", "discard-and-restore": "advance", "adopt-as-new-generation": "advance", "adopt-current-bytes": "advance", "restore-recorded-bytes": "advance", "adopt-committed-deletions": "advance", "accept-import-audit": "advance",
 } as const satisfies Readonly<Record<GateDecisionPayload<GateKind>["decision"], GateEffect>>);
 
 export const GATE_CONTRACTS = Object.freeze(Object.fromEntries(GATE_KINDS.map((kind) => [kind, Object.freeze({ context: contexts[kind], decision: decisions[kind] })]))) as Readonly<{ [K in GateKind]: { readonly context: (typeof contexts)[K]; readonly decision: (typeof decisions)[K] } }>;
@@ -528,9 +625,37 @@ export const baselineObservationRefV1Schema = z.object({
   drift_digest: digest,
 }).strict();
 
+export const validationOverrideRequestRefV1Schema = z.object({
+  schema_version: z.literal("1"),
+  evidence_kind: z.literal("validation-override-request"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  input_fingerprint: digest,
+  governing_phase_design_digest: digest,
+  request_revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  validation_request_subject_digest: digest,
+}).strict() as unknown as z.ZodType<ValidationOverrideRequestRefV1>;
+
 export function parseBaselineObservationRef(value: unknown): BaselineObservationRef {
   assertPlainJson(value, "baseline observation reference");
   return baselineObservationRefV1Schema.parse(value) as BaselineObservationRef;
+}
+
+export function validationOverrideSubjectDigest(value: ValidationOverrideSubjectV1): Sha256Digest {
+  assertPlainJson(value, "validation override subject");
+  const subject = z.object({
+    task_id: taskSlugV1Schema,
+    phase_instance: phaseInstanceIdV1Schema,
+    input_fingerprint: digest,
+    governing_phase_design_digest: digest,
+    displaced_validations: displacedValidationsV1Schema,
+  }).strict().parse(structuredClone(value));
+  return canonicalJsonDigest({ schema_version: "1", digest_kind: "validation-override-subject", ...subject });
+}
+
+export function parseValidationOverrideRequestRef(value: unknown): ValidationOverrideRequestRefV1 {
+  assertPlainJson(value, "validation override request reference");
+  return validationOverrideRequestRefV1Schema.parse(value);
 }
 
 const contractArms = Object.fromEntries(GATE_KINDS.map((kind) => [
@@ -558,6 +683,7 @@ export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   constitutionReviewContext: contexts["constitution-review"],
   materialDriftContext: contexts["material-drift"],
   attemptsExhaustedContext: contexts["attempts-exhausted"],
+  validationOverrideContext: contexts["validation-override"],
   constitutionEditContext: contexts["constitution-edit"],
   commitAuthorizationContext: contexts["commit-authorization"],
   restoreCollisionContext: contexts["restore-collision"],
@@ -568,6 +694,7 @@ export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   constitutionReviewDecision: decisions["constitution-review"],
   materialDriftDecision: decisions["material-drift"],
   attemptsExhaustedDecision: decisions["attempts-exhausted"],
+  validationOverrideDecision: decisions["validation-override"],
   constitutionEditDecision: decisions["constitution-edit"],
   commitAuthorizationDecision: decisions["commit-authorization"],
   restoreCollisionDecision: decisions["restore-collision"],
@@ -578,6 +705,7 @@ export const gateContractSchemaDefs: Readonly<Record<string, z.ZodType>> = Objec
   constitutionReview: contractArms["constitution-review"],
   materialDrift: contractArms["material-drift"],
   attemptsExhausted: contractArms["attempts-exhausted"],
+  validationOverride: contractArms["validation-override"],
   constitutionEdit: contractArms["constitution-edit"],
   commitAuthorization: contractArms["commit-authorization"],
   restoreCollision: contractArms["restore-collision"],
@@ -595,6 +723,7 @@ export const gateDecisionEnvelopeV1Schema = z.discriminatedUnion("kind", [
   z.object({ ...envelopeBase, kind: z.literal("constitution-review"), payload: decisions["constitution-review"] }).strict(),
   z.object({ ...envelopeBase, kind: z.literal("material-drift"), payload: decisions["material-drift"] }).strict(),
   z.object({ ...envelopeBase, kind: z.literal("attempts-exhausted"), payload: decisions["attempts-exhausted"] }).strict(),
+  z.object({ ...envelopeBase, kind: z.literal("validation-override"), payload: decisions["validation-override"] }).strict(),
   z.object({ ...envelopeBase, kind: z.literal("constitution-edit"), payload: decisions["constitution-edit"] }).strict(),
   z.object({ ...envelopeBase, kind: z.literal("commit-authorization"), payload: decisions["commit-authorization"] }).strict(),
   z.object({ ...envelopeBase, kind: z.literal("restore-collision"), payload: decisions["restore-collision"] }).strict(),
@@ -642,6 +771,10 @@ function validateDecisionAgainst<K extends GateKind>(
     const candidate = (context as GateContext<"restore-collision">).adoption_candidate;
     const adoptionPayload = parsed as Extract<GateDecisionPayload<"restore-collision">, { decision: "adopt-as-new-generation" }>;
     if (candidate === undefined || !isDeepStrictEqual(candidate, adoptionPayload.adoption_authority)) throw new TypeError("restore adoption authority must exactly match the context candidate");
+  }
+  if (kind === "attempts-exhausted" && parsed.decision === "push-through-review" &&
+      (context as GateContext<"attempts-exhausted">).review_push_through === undefined) {
+    throw new TypeError("push-through-review requires authenticated review push-through context");
   }
   return parsed;
 }

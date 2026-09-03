@@ -172,11 +172,10 @@ else {
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const subject = envelope.subject;
   const output = subject.role === "counter-review" ? {
-    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-    producer_family: subject.producer_family, findings: [], matched_rule_versions: [],
-    verdict: "pass", blocking_count: 0
+    producer_family: subject.producer_family, findings: [], matched_rule_versions: []
   } : {
     schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "adjudicate", subject_digest: subject.subject_digest,
@@ -247,7 +246,13 @@ describe("counter-review handler replay integration", () => {
         ok: true,
         value: {
           verdict: "pass",
-          blocking_count: 0,
+          total_findings: 0,
+          partition_counts: {
+            "defect:certain": 0, "defect:likely": 0, "defect:suspicion": 0,
+            "risk:certain": 0, "risk:likely": 0, "risk:suspicion": 0,
+            "gap:certain": 0, "gap:likely": 0, "gap:suspicion": 0,
+            "preference:certain": 0, "preference:likely": 0, "preference:suspicion": 0
+          },
           constitution: {
             status: "evaluated",
             constitution: "pass",

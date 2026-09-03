@@ -219,15 +219,18 @@ function installReviewerStub(
   const generatorScript = `
 function generateOutput(envelope, findings) {
   const subject = envelope.subject;
+  const v2Findings = findings.map((finding) => "claim_type" in finding ? finding : ({
+    finding_id: finding.finding_id, claim_type: finding.blocking === true ? "defect" : "preference",
+    confidence: "certain", falsifier: "Inspect the cited fixture evidence to settle this finding.",
+    summary: finding.summary, evidence: finding.evidence, suggested_resolution: finding.suggested_resolution,
+  }));
   return {
-    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
+    task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
     producer_family: subject.producer_family,
-    findings,
-    matched_rule_versions: [],
-    verdict: findings.some((finding) => finding.blocking === true) ? "fail" : "advisory",
-    blocking_count: findings.filter((finding) => finding.blocking === true).length
+    findings: v2Findings,
+    matched_rule_versions: []
   };
 }
 `;
@@ -472,7 +475,7 @@ describe("post-triage re-entry edits are expected", () => {
           { finding_id: "scope-mismatch", disposition: "accepted-editorial", rationale: "Wording only.", revision_intent: "Reword the scope." },
           { finding_id: "wording-typo", disposition: "rejected", rationale: "Not a defect.", evidence: "Reads fine." },
         ],
-      })).rejects.toThrow(/blocking/u);
+      })).rejects.toThrow(/substantive/u);
 
       // The recorded triage: the blocker is rejected with evidence, the typo accepted as
       // purely editorial. accepted_count stays 0; only the editorial count is populated.

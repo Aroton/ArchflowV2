@@ -1,5 +1,5 @@
 import type { AdjudicationEvidence } from "./adjudication.js";
-import type { ReviewEvidence, ReviewFinding, RouteOverrideRecord, RouteSourceRecord, RuleVersionRef } from "./review.js";
+import type { LegacyReviewFinding, ReviewEvidence, ReviewFindingV2, RouteOverrideRecord, RouteSourceRecord, RuleVersionRef } from "./review.js";
 import type { QualifiedAdjudicationEvidence, QualifiedReviewEvidence, VerifiedReferencedEvidence } from "./trust.js";
 import type { TriageDisposition, ValidatedTriage } from "./triage.js";
 import { authenticQualifiedEvidence, authenticValidatedTriage, authenticVerifiedEvidence } from "./internal/trust-brands.js";
@@ -28,7 +28,16 @@ function provenanceMetadata(evidence: ReviewEvidence | AdjudicationEvidence): re
     ["result_id", evidence.assurance === "server-attested" ? evidence.result_id : undefined],
   ];
 }
-function renderReviewFinding(finding: ReviewFinding): string[] {
+function renderReviewFinding(finding: ReviewFindingV2 | LegacyReviewFinding): string[] {
+  if ("claim_type" in finding) {
+    return [
+      `### Finding ${visibleJsonString(finding.finding_id)} [${finding.claim_type}: ${finding.confidence}]`,
+      prose("falsifier", finding.falsifier),
+      prose("summary", finding.summary),
+      prose("evidence", finding.evidence),
+      prose("suggested_resolution", finding.suggested_resolution),
+    ];
+  }
   return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
 }
 
@@ -64,8 +73,11 @@ export function renderReviewEvidence(
     authenticQualifiedEvidence(value, "review", evidence.assurance) ||
     authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
   if (!authenticated) throw new TypeError("authenticated review evidence is required");
+  const summaryMetadata = evidence.schema_version === "2"
+    ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] as const
+    : [["blocking_count", evidence.blocking_count]] as const;
   const lines = ["# ArchFlow Review Evidence", ...metadata([
-    ["schema_version", evidence.schema_version], ["task_id", evidence.task_id], ["phase_instance", evidence.phase_instance], ["step", evidence.step], ["role", evidence.role], ["subject_digest", evidence.subject_digest], ["input_fingerprint", evidence.input_fingerprint], ["evidence_digest", value.evidence_digest], ["verdict", evidence.verdict], ["blocking_count", evidence.blocking_count], ["matched_rule_versions", evidence.matched_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ...provenanceMetadata(evidence),
+    ["schema_version", evidence.schema_version], ["task_id", evidence.task_id], ["phase_instance", evidence.phase_instance], ["step", evidence.step], ["role", evidence.role], ["subject_digest", evidence.subject_digest], ["input_fingerprint", evidence.input_fingerprint], ["evidence_digest", value.evidence_digest], ["verdict", evidence.verdict], ...summaryMetadata, ["matched_rule_versions", evidence.matched_rule_versions.map((rule) => `${rule.rule_id}@${rule.rule_version}`)], ...provenanceMetadata(evidence),
   ]), "", "## Findings"];
   for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
@@ -76,14 +88,19 @@ export function renderReviewEvidence(
 
 function renderDisposition(disposition: TriageDisposition): string[] {
   const lines = [`### ${canonical(disposition.disposition)} ${visibleJsonString(disposition.review_evidence_digest)} ${visibleJsonString(disposition.finding_id)}`, prose("rationale", disposition.rationale)];
-  if (disposition.disposition === "rejected") lines.push(prose("evidence", disposition.evidence));
-  else lines.push(prose("revision_intent", disposition.revision_intent));
+  if (disposition.disposition === "rejected") {
+    lines.push(prose("evidence", disposition.evidence));
+  } else if (disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial") {
+    lines.push(prose("revision_intent", disposition.revision_intent));
+  } else if (disposition.disposition === "deferred" && disposition.evidence !== undefined) {
+    lines.push(prose("evidence", disposition.evidence));
+  }
   return lines;
 }
 export function renderTriage(value: ValidatedTriage): Uint8Array {
   if (!authenticValidatedTriage(value)) throw new TypeError("validated triage is required");
   const lines = ["# ArchFlow Review Triage", ...metadata([
-    ["schema_version", value.schema_version], ["task_id", value.task_id], ["phase_instance", value.phase_instance], ["step", value.step], ["subject_digest", value.subject_digest], ["input_fingerprint", value.input_fingerprint], ["current_evidence_set_digest", value.current_evidence_set_digest], ["source_evidence_digests", value.source_evidence_digests], ["accepted_count", value.accepted_count], ["accepted_editorial_count", value.accepted_editorial_count], ["rejected_count", value.rejected_count],
+    ["schema_version", value.schema_version], ["task_id", value.task_id], ["phase_instance", value.phase_instance], ["step", value.step], ["subject_digest", value.subject_digest], ["input_fingerprint", value.input_fingerprint], ["current_evidence_set_digest", value.current_evidence_set_digest], ["source_evidence_digests", value.source_evidence_digests], ["accepted_count", value.accepted_count], ["accepted_editorial_count", value.accepted_editorial_count], ["rejected_count", value.rejected_count], ["escalated_human_count", value.escalated_human_count], ["deferred_count", value.deferred_count],
   ]), "", "## Dispositions"];
   for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
   if (value.disposition_ledger !== undefined && value.disposition_ledger.length > 0) {
@@ -98,8 +115,10 @@ export function renderTriage(value: ValidatedTriage): Uint8Array {
       if (entry.rationale !== undefined) lines.push(prose("rationale", entry.rationale));
       if (entry.revision_intent !== undefined) lines.push(prose("revision_intent", entry.revision_intent));
       if (entry.evidence !== undefined) lines.push(prose("evidence", entry.evidence));
-      if (entry.severity !== undefined) {
-        lines.push(`severity: ${canonical(entry.severity)}`, `blocking: ${canonical(entry.blocking ?? false)}`);
+      if ("claim_type" in entry) {
+        lines.push(`[${entry.claim_type}: ${entry.confidence}]`, prose("falsifier", entry.falsifier));
+      } else if ("severity" in entry) {
+        lines.push(`severity: ${canonical(entry.severity)}`, `blocking: ${canonical(entry.blocking)}`);
       }
       if (entry.summary !== undefined) lines.push(prose("summary", entry.summary));
       if (entry.suggested_resolution !== undefined) lines.push(prose("suggested_resolution", entry.suggested_resolution));

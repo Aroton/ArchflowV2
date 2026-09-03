@@ -7446,6 +7446,15 @@ function provenanceMetadata(evidence) {
   ];
 }
 function renderReviewFinding(finding) {
+  if ("claim_type" in finding) {
+    return [
+      `### Finding ${visibleJsonString(finding.finding_id)} [${finding.claim_type}: ${finding.confidence}]`,
+      prose("falsifier", finding.falsifier),
+      prose("summary", finding.summary),
+      prose("evidence", finding.evidence),
+      prose("suggested_resolution", finding.suggested_resolution)
+    ];
+  }
   return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
 }
 function renderRouteOverride(override) {
@@ -7467,6 +7476,7 @@ function renderReviewEvidence(value) {
   const evidence = value.evidence;
   const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
   if (!authenticated) throw new TypeError("authenticated review evidence is required");
+  const summaryMetadata = evidence.schema_version === "2" ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] : [["blocking_count", evidence.blocking_count]];
   const lines = ["# ArchFlow Review Evidence", ...metadata([
     ["schema_version", evidence.schema_version],
     ["task_id", evidence.task_id],
@@ -7477,7 +7487,7 @@ function renderReviewEvidence(value) {
     ["input_fingerprint", evidence.input_fingerprint],
     ["evidence_digest", value.evidence_digest],
     ["verdict", evidence.verdict],
-    ["blocking_count", evidence.blocking_count],
+    ...summaryMetadata,
     ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
     ...provenanceMetadata(evidence)
   ]), "", "## Findings"];
@@ -7489,8 +7499,13 @@ function renderReviewEvidence(value) {
 }
 function renderDisposition(disposition) {
   const lines = [`### ${canonical(disposition.disposition)} ${visibleJsonString(disposition.review_evidence_digest)} ${visibleJsonString(disposition.finding_id)}`, prose("rationale", disposition.rationale)];
-  if (disposition.disposition === "rejected") lines.push(prose("evidence", disposition.evidence));
-  else lines.push(prose("revision_intent", disposition.revision_intent));
+  if (disposition.disposition === "rejected") {
+    lines.push(prose("evidence", disposition.evidence));
+  } else if (disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial") {
+    lines.push(prose("revision_intent", disposition.revision_intent));
+  } else if (disposition.disposition === "deferred" && disposition.evidence !== void 0) {
+    lines.push(prose("evidence", disposition.evidence));
+  }
   return lines;
 }
 function renderTriage(value) {
@@ -7506,7 +7521,9 @@ function renderTriage(value) {
     ["source_evidence_digests", value.source_evidence_digests],
     ["accepted_count", value.accepted_count],
     ["accepted_editorial_count", value.accepted_editorial_count],
-    ["rejected_count", value.rejected_count]
+    ["rejected_count", value.rejected_count],
+    ["escalated_human_count", value.escalated_human_count],
+    ["deferred_count", value.deferred_count]
   ]), "", "## Dispositions"];
   for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
   if (value.disposition_ledger !== void 0 && value.disposition_ledger.length > 0) {
@@ -7521,8 +7538,10 @@ function renderTriage(value) {
       if (entry.rationale !== void 0) lines.push(prose("rationale", entry.rationale));
       if (entry.revision_intent !== void 0) lines.push(prose("revision_intent", entry.revision_intent));
       if (entry.evidence !== void 0) lines.push(prose("evidence", entry.evidence));
-      if (entry.severity !== void 0) {
-        lines.push(`severity: ${canonical(entry.severity)}`, `blocking: ${canonical(entry.blocking ?? false)}`);
+      if ("claim_type" in entry) {
+        lines.push(`[${entry.claim_type}: ${entry.confidence}]`, prose("falsifier", entry.falsifier));
+      } else if ("severity" in entry) {
+        lines.push(`severity: ${canonical(entry.severity)}`, `blocking: ${canonical(entry.blocking)}`);
       }
       if (entry.summary !== void 0) lines.push(prose("summary", entry.summary));
       if (entry.suggested_resolution !== void 0) lines.push(prose("suggested_resolution", entry.suggested_resolution));
@@ -8354,7 +8373,7 @@ var require_src = __commonJS({
 });
 
 // src/local/main.ts
-import { readFile as readFile17 } from "node:fs/promises";
+import { readFile as readFile16 } from "node:fs/promises";
 import process3 from "node:process";
 import { parseArgs } from "node:util";
 
@@ -23394,8 +23413,10 @@ var ITERATION_POLICIES = ["per_phase"];
 
 // src/contracts/gates.ts
 var gateRepositoryNameV1Schema = external_exports.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE);
-var GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "constitution-edit", "commit-authorization", "restore-collision", "baseline-adoption", "migration-audit"];
+var REVIEW_PUSH_THROUGH_MIN_ATTEMPT = 2;
+var GATE_KINDS = ["artifact-approval", "design-approval", "constitution-review", "material-drift", "attempts-exhausted", "validation-override", "constitution-edit", "commit-authorization", "restore-collision", "baseline-adoption", "migration-audit"];
 var safeId = safeIdV1Schema;
+var reviewFindingId = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 var boundedText = external_exports.string().min(1).max(4096).regex(/\S/u);
 var digest = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeInteger = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -23406,6 +23427,30 @@ var authorityLink = external_exports.object({ link_digest: digest, purpose: exte
 var reason = boundedText;
 var decision = (values) => external_exports.object({ decision: external_exports.enum(values), reason }).strict();
 var sortedUnique = (items, compare) => items.every((item, index) => index === 0 || compare(items[index - 1], item) < 0);
+var displacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).superRefine((items, context2) => {
+  if (!sortedUnique(items, (left, right) => left.localeCompare(right))) {
+    context2.addIssue({ code: "custom", message: "displaced validations must be localeCompare-sorted with no duplicates" });
+  }
+});
+var validationOverrideRequestV1Schema = external_exports.object({
+  displaced_validations: displacedValidationsV1Schema
+}).strict();
+var reviewAcceptedOccurrenceV1Schema = external_exports.object({
+  review_evidence_digest: digest,
+  finding_id: reviewFindingId
+}).strict();
+var compareReviewAcceptedOccurrences = (left, right) => left.review_evidence_digest.localeCompare(right.review_evidence_digest) || left.finding_id.localeCompare(right.finding_id);
+var reviewAcceptedOccurrencesV1Schema = external_exports.array(reviewAcceptedOccurrenceV1Schema).min(1).superRefine((items, context2) => {
+  if (!sortedUnique(items, compareReviewAcceptedOccurrences)) {
+    context2.addIssue({ code: "custom", message: "accepted occurrences must be localeCompare-sorted with no duplicates" });
+  }
+});
+var reviewPushThroughContextV1Schema = external_exports.object({
+  minimum_attempt: external_exports.literal(REVIEW_PUSH_THROUGH_MIN_ATTEMPT),
+  current_evidence_set_digest: digest,
+  triage_result_digest: digest,
+  accepted_occurrences: reviewAcceptedOccurrencesV1Schema
+}).strict();
 var compareRules = (left, right) => left.rule_id.localeCompare(right.rule_id) || left.rule_version - right.rule_version;
 var canonicalRules = external_exports.array(rule).superRefine((items, context2) => {
   if (!sortedUnique(items, compareRules)) context2.addIssue({ code: "custom", message: "rules must be sorted and unique" });
@@ -23501,6 +23546,22 @@ var legacyExactCommitAuthorizationContextSchema = external_exports.object({
   parent_document_digests: canonicalDigests.min(1)
 }).strict();
 var archivedPreExactCommitAuthorizationContextSchema = legacyExactCommitAuthorizationContextSchema.omit({ baseline_commit: true, commit_message: true, paths: true });
+var legacyAttemptsExhaustedContextSchema = external_exports.object({
+  step: external_exports.enum(PIPELINE_STEPS),
+  attempts: safeInteger,
+  maximum_attempts: safeInteger
+}).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts");
+var reviewPushThroughAttemptsExhaustedContextSchema = external_exports.object({
+  step: external_exports.enum(PIPELINE_STEPS),
+  attempts: safeInteger,
+  maximum_attempts: safeInteger,
+  review_push_through: reviewPushThroughContextV1Schema
+}).strict().superRefine((value, context2) => {
+  if (value.attempts < value.maximum_attempts) context2.addIssue({ code: "custom", path: ["attempts"], message: "attempts must be at least maximum_attempts" });
+  if (value.attempts < value.review_push_through.minimum_attempt) {
+    context2.addIssue({ code: "custom", path: ["review_push_through", "minimum_attempt"], message: "attempts must meet the review push-through minimum" });
+  }
+});
 var contexts = {
   "artifact-approval": external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]), ...ordinaryPolicyFields }).strict().superRefine(validateOrdinaryPolicyContext),
   "design-approval": external_exports.object({
@@ -23521,7 +23582,19 @@ var contexts = {
     }
   }),
   "material-drift": external_exports.object({ affected_upstream: external_exports.object({ kind: external_exports.enum(["prd", "architecture", "phase-design", "implementation-result", "review", "adjudication", "constitution", "workflow", "import"]), digest }).strict(), drift: external_exports.literal("material"), affected_claim_ids: canonicalStrings.min(1) }).strict(),
-  "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts"),
+  "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger, review_push_through: reviewPushThroughContextV1Schema.optional() }).strict().superRefine((value, context2) => {
+    if (value.attempts < value.maximum_attempts) context2.addIssue({ code: "custom", path: ["attempts"], message: "attempts must be at least maximum_attempts" });
+    if (value.review_push_through !== void 0 && value.attempts < value.review_push_through.minimum_attempt) {
+      context2.addIssue({ code: "custom", path: ["review_push_through", "minimum_attempt"], message: "attempts must meet the review push-through minimum" });
+    }
+  }),
+  "validation-override": external_exports.object({
+    request_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    input_fingerprint: digest,
+    governing_phase_design_digest: digest,
+    displaced_validations: displacedValidationsV1Schema,
+    producer_reason: boundedText
+  }).strict(),
   "constitution-edit": external_exports.object({ pinned_constitution_digest: digest, current_constitution_digest: digest, changed_path_class: external_exports.literal("task-branch-constitution") }).strict(),
   "commit-authorization": external_exports.object({
     ...ordinaryPolicyFields,
@@ -23623,7 +23696,8 @@ var decisions = {
   "design-approval": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "constitution-review": external_exports.union([decision(["approve", "revise", "reject"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "material-drift": decision(["amend-upstream", "revise-current", "reject"]),
-  "attempts-exhausted": decision(["retry-once", "revise", "abort"]),
+  "attempts-exhausted": decision(["retry-once", "revise", "abort", "push-through-review"]),
+  "validation-override": decision(["grant-validation-override", "deny-validation-override"]),
   "constitution-edit": decision(["revert-edit", "start-base-amendment", "abort"]),
   "commit-authorization": external_exports.union([decision(["authorize-commit", "revise", "abort"]), external_exports.object({ decision: external_exports.literal("waiver-requested"), reason, rule, operation: external_exports.enum(["review-trigger", "adjudication-failure"]), rationale: boundedText }).strict()]),
   "restore-collision": external_exports.union([decision(["discard-and-restore", "abort"]), external_exports.object({ decision: external_exports.literal("adopt-as-new-generation"), reason, adoption_authority: authorityLink, rationale: boundedText }).strict()]),
@@ -23639,6 +23713,9 @@ var effects = Object.freeze({
   "revise-current": "retry",
   "retry-once": "retry",
   abort: "non-advancing",
+  "push-through-review": "advance",
+  "grant-validation-override": "validation-resume",
+  "deny-validation-override": "validation-resume",
   "revert-edit": "retry",
   "start-base-amendment": "redirect-upstream",
   "authorize-commit": "advance",
@@ -23673,9 +23750,34 @@ var baselineObservationRefV1Schema = external_exports.object({
   observed_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   drift_digest: digest
 }).strict();
+var validationOverrideRequestRefV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  evidence_kind: external_exports.literal("validation-override-request"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  input_fingerprint: digest,
+  governing_phase_design_digest: digest,
+  request_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  validation_request_subject_digest: digest
+}).strict();
 function parseBaselineObservationRef(value) {
   assertPlainJson(value, "baseline observation reference");
   return baselineObservationRefV1Schema.parse(value);
+}
+function validationOverrideSubjectDigest(value) {
+  assertPlainJson(value, "validation override subject");
+  const subject = external_exports.object({
+    task_id: taskSlugV1Schema,
+    phase_instance: phaseInstanceIdV1Schema,
+    input_fingerprint: digest,
+    governing_phase_design_digest: digest,
+    displaced_validations: displacedValidationsV1Schema
+  }).strict().parse(structuredClone(value));
+  return canonicalJsonDigest({ schema_version: "1", digest_kind: "validation-override-subject", ...subject });
+}
+function parseValidationOverrideRequestRef(value) {
+  assertPlainJson(value, "validation override request reference");
+  return validationOverrideRequestRefV1Schema.parse(value);
 }
 var contractArms = Object.fromEntries(GATE_KINDS.map((kind) => [
   kind,
@@ -23701,6 +23803,7 @@ var gateContractSchemaDefs = Object.freeze({
   constitutionReviewContext: contexts["constitution-review"],
   materialDriftContext: contexts["material-drift"],
   attemptsExhaustedContext: contexts["attempts-exhausted"],
+  validationOverrideContext: contexts["validation-override"],
   constitutionEditContext: contexts["constitution-edit"],
   commitAuthorizationContext: contexts["commit-authorization"],
   restoreCollisionContext: contexts["restore-collision"],
@@ -23711,6 +23814,7 @@ var gateContractSchemaDefs = Object.freeze({
   constitutionReviewDecision: decisions["constitution-review"],
   materialDriftDecision: decisions["material-drift"],
   attemptsExhaustedDecision: decisions["attempts-exhausted"],
+  validationOverrideDecision: decisions["validation-override"],
   constitutionEditDecision: decisions["constitution-edit"],
   commitAuthorizationDecision: decisions["commit-authorization"],
   restoreCollisionDecision: decisions["restore-collision"],
@@ -23721,6 +23825,7 @@ var gateContractSchemaDefs = Object.freeze({
   constitutionReview: contractArms["constitution-review"],
   materialDrift: contractArms["material-drift"],
   attemptsExhausted: contractArms["attempts-exhausted"],
+  validationOverride: contractArms["validation-override"],
   constitutionEdit: contractArms["constitution-edit"],
   commitAuthorization: contractArms["commit-authorization"],
   restoreCollision: contractArms["restore-collision"],
@@ -23735,6 +23840,7 @@ var gateDecisionEnvelopeV1Schema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("constitution-review"), payload: decisions["constitution-review"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("material-drift"), payload: decisions["material-drift"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("attempts-exhausted"), payload: decisions["attempts-exhausted"] }).strict(),
+  external_exports.object({ ...envelopeBase, kind: external_exports.literal("validation-override"), payload: decisions["validation-override"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("constitution-edit"), payload: decisions["constitution-edit"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("commit-authorization"), payload: decisions["commit-authorization"] }).strict(),
   external_exports.object({ ...envelopeBase, kind: external_exports.literal("restore-collision"), payload: decisions["restore-collision"] }).strict(),
@@ -23768,6 +23874,9 @@ function validateDecisionAgainst(contextSchemas, kind, context2, payload) {
     const adoptionPayload = parsed;
     if (candidate === void 0 || !isDeepStrictEqual(candidate, adoptionPayload.adoption_authority)) throw new TypeError("restore adoption authority must exactly match the context candidate");
   }
+  if (kind === "attempts-exhausted" && parsed.decision === "push-through-review" && context2.review_push_through === void 0) {
+    throw new TypeError("push-through-review requires authenticated review push-through context");
+  }
   return parsed;
 }
 function validateGateDecision(kind, context2, payload) {
@@ -23800,67 +23909,6 @@ var phaseDesignComponentManifestV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   components: external_exports.array(componentSchema).min(1)
 }).strict();
-var ordinal2 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
-function requireSortedUnique(values, label) {
-  for (let index = 1; index < values.length; index += 1) {
-    if (ordinal2(values[index - 1], values[index]) >= 0) {
-      throw new TypeError(`${label} must be ordinal-sorted with no duplicates`);
-    }
-  }
-}
-function requireRepositoryOrder(repositories, knownRepositories, label) {
-  const names = repositories.map((repository) => repository.name);
-  if (names[0] !== "primary") throw new TypeError(`${label} must place primary first`);
-  requireSortedUnique(names.slice(1), `${label} secondary repositories`);
-  if (new Set(names).size !== names.length) throw new TypeError(`${label} repository names must not repeat`);
-  for (const repository of repositories) {
-    if (!knownRepositories.has(repository.name)) {
-      throw new TypeError(`${label} names unknown repository ${repository.name}`);
-    }
-    requireSortedUnique(repository.paths, `${label} ${repository.name} paths`);
-  }
-}
-function parsePhaseDesignComponentManifestV1(value, resolvedRepositoryNames) {
-  assertPlainJson(value, "phase design component manifest");
-  const materialized = structuredClone(value);
-  const parsed = phaseDesignComponentManifestV1Schema.parse(materialized);
-  const componentIds = parsed.components.map((component) => component.id);
-  if (new Set(componentIds).size !== componentIds.length) throw new TypeError("component ids must not repeat");
-  const known = new Set(resolvedRepositoryNames);
-  if (!known.has("primary")) throw new TypeError("resolved repository set must contain primary");
-  for (const component of parsed.components) {
-    requireRepositoryOrder(component.repositories, known, `component ${component.id} repositories`);
-  }
-  return structuredClone(parsed);
-}
-var SECTION = "## Implementation Components";
-var OPEN = "```archflow-components-v1";
-var CLOSE = "```";
-var MAX_MANIFEST_SCAN_LINES = 2e4;
-function extractPhaseDesignComponentManifest(markdown, resolvedRepositoryNames) {
-  if (typeof markdown !== "string") throw new TypeError("phase design must be a string");
-  const lines = markdown.split(/\r?\n/u);
-  if (lines.length > MAX_MANIFEST_SCAN_LINES) throw new TypeError("phase design exceeds the component manifest scan bound");
-  const sections = lines.flatMap((line, index) => line === SECTION ? [index] : []);
-  if (sections.length !== 1) throw new TypeError(`phase design must contain exactly one ${SECTION} section`);
-  const nextH2 = lines.findIndex((line, index) => index > sections[0] && /^##\s/u.test(line));
-  const end = nextH2 === -1 ? lines.length : nextH2;
-  const openings = lines.flatMap((line, index) => line === OPEN ? [index] : []);
-  if (openings.length !== 1) throw new TypeError(`phase design ${SECTION} section must contain exactly one ${OPEN} fence`);
-  if (openings[0] <= sections[0] || openings[0] >= end) {
-    throw new TypeError(`phase design ${SECTION} section must contain the ${OPEN} fence`);
-  }
-  const close = lines.findIndex((line, index) => index > openings[0] && index < end && line === CLOSE);
-  if (close === -1) throw new TypeError("phase design component manifest fence is unclosed");
-  const yaml = lines.slice(openings[0] + 1, close).join("\n");
-  return parsePhaseDesignComponentManifestV1(
-    parseSingleYamlDocument(yaml, "phase design component manifest"),
-    resolvedRepositoryNames
-  );
-}
-function phaseDesignComponentManifestDigest(manifest) {
-  return canonicalJsonDigest(manifest);
-}
 
 // src/contracts/hazard-registry.ts
 var repositoryName2 = external_exports.union([external_exports.literal("primary"), repositoryNameV1Schema]);
@@ -23886,70 +23934,6 @@ var hazardRegistryInputV1Schema = external_exports.object({
   hazards: external_exports.array(hazardRegistryEntryV1Schema),
   components: external_exports.array(componentHazardInputV1Schema)
 }).strict();
-var ordinal3 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
-var entryKey = (entry) => [entry.repository, entry.path, entry.score, entry.reason];
-function compareEntries(left, right) {
-  const a = entryKey(left);
-  const b = entryKey(right);
-  return ordinal3(a[0], b[0]) || ordinal3(a[1], b[1]) || a[2] - b[2] || ordinal3(a[3], b[3]);
-}
-function parseHazardRegistryV1(value, resolvedRepositoryNames) {
-  assertPlainJson(value, "hazard registry");
-  const parsed = hazardRegistryV1Schema.parse(structuredClone(value));
-  const known = new Set(resolvedRepositoryNames);
-  if (!known.has("primary")) throw new TypeError("resolved repository set must contain primary");
-  for (const entry of parsed.hazards) {
-    if (!known.has(entry.repository)) throw new TypeError(`hazard registry names unknown repository ${entry.repository}`);
-  }
-  for (let index = 1; index < parsed.hazards.length; index += 1) {
-    if (compareEntries(parsed.hazards[index - 1], parsed.hazards[index]) >= 0) {
-      throw new TypeError("hazard registry entries must be ordinal-sorted with no duplicates");
-    }
-  }
-  return structuredClone(parsed);
-}
-function parseHazardRegistryYaml(source, resolvedRepositoryNames) {
-  return parseHazardRegistryV1(parseSingleYamlDocument(source, ".archflow/hazards.yaml"), resolvedRepositoryNames);
-}
-function hazardPathOverlaps(left, right) {
-  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
-}
-function matchHazardsToComponents(registry2, manifest) {
-  return Object.freeze(manifest.components.map((component) => {
-    const matches = registry2.hazards.filter((entry) => component.repositories.some((repository) => repository.name === entry.repository && repository.paths.some((path2) => hazardPathOverlaps(path2, entry.path))));
-    const floor = matches.length === 0 ? "unmatched" : Math.max(...matches.map((entry) => entry.score));
-    return Object.freeze({ component_id: component.id, matches: Object.freeze(matches), e_floor: floor });
-  }));
-}
-function createHazardRegistryInput(state, registry2, manifest) {
-  return Object.freeze({
-    schema_version: "1",
-    state,
-    registry_digest: canonicalJsonDigest({ schema_version: "1", state, registry: registry2 }),
-    hazards: Object.freeze([...registry2.hazards]),
-    components: matchHazardsToComponents(registry2, manifest)
-  });
-}
-async function captureHazardRegistryInput(readRegistry, resolvedRepositoryNames, manifest) {
-  const bytes = await readRegistry();
-  if (bytes === void 0) {
-    return createHazardRegistryInput("absent", { schema_version: "1", hazards: [] }, manifest);
-  }
-  const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  const registry2 = parseHazardRegistryYaml(source, resolvedRepositoryNames);
-  return createHazardRegistryInput("present", registry2, manifest);
-}
-function compareHazardRegistryInput(sealedDigest, live, manifest) {
-  if (live.registry_digest === sealedDigest) return void 0;
-  const absentDigest = createHazardRegistryInput(
-    "absent",
-    { schema_version: "1", hazards: [] },
-    manifest
-  ).registry_digest;
-  if (sealedDigest === absentDigest && live.state === "present") return "registry-created";
-  if (sealedDigest !== absentDigest && live.state === "absent") return "registry-removed";
-  return "registry-changed";
-}
 
 // src/review/effort-policy.ts
 var IMPLEMENTATION_EFFORT_POLICY_ID = "implementation-effort-v1";
@@ -23963,12 +23947,13 @@ var EFFORT_CAVEAT_CODES = [
   "long-loop-unknown-conservative-glm",
   "short-component-unknown-conservative-glm"
 ];
-var PROFILES = Object.freeze({
+var IMPLEMENTATION_PROFILES = Object.freeze({
   "gemini-3-7-flash-max": Object.freeze({ profile_id: "gemini-3-7-flash-max", model: "gemini-3.7-flash", effort: "max" }),
   "glm-5-3-flash-max": Object.freeze({ profile_id: "glm-5-3-flash-max", model: "glm-5.3-flash", effort: "max" }),
   "gpt-5-6-sol-medium": Object.freeze({ profile_id: "gpt-5-6-sol-medium", model: "gpt-5.6-sol", effort: "medium" }),
   "gpt-5-6-sol-xhigh": Object.freeze({ profile_id: "gpt-5-6-sol-xhigh", model: "gpt-5.6-sol", effort: "xhigh" })
 });
+var DEFAULT_IMPLEMENTATION_PROFILE = IMPLEMENTATION_PROFILES["gpt-5-6-sol-medium"];
 var PROFILE_RANK = Object.freeze({
   "gemini-3-7-flash-max": 0,
   "glm-5-3-flash-max": 1,
@@ -24050,16 +24035,19 @@ var decomposition = external_exports.discriminatedUnion("status", [
   external_exports.object({ status: external_exports.literal("adequate"), rationale: nonblank2 }).strict(),
   external_exports.object({ status: external_exports.literal("undifferentiated"), rationale: nonblank2, missing_boundaries: external_exports.array(nonblank2).min(1) }).strict()
 ]);
+var digest2 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var taskSlug = createTaskSlugV1Schema();
+var phaseInstance = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 var rawEffortReviewV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only"),
+  task_id: taskSlug,
+  phase_instance: phaseInstance.refine((value) => value.startsWith("phase-design-"), "effort review is phase-design-only"),
   step: external_exports.literal("effort_review"),
   role: external_exports.literal("effort-reviewer"),
-  subject_digest: sha256DigestV1Schema,
-  input_fingerprint: sha256DigestV1Schema,
-  component_manifest_digest: sha256DigestV1Schema,
-  hazard_registry_digest: sha256DigestV1Schema,
+  subject_digest: digest2,
+  input_fingerprint: digest2,
+  component_manifest_digest: digest2,
+  hazard_registry_digest: digest2,
   policy_id: external_exports.literal(IMPLEMENTATION_EFFORT_POLICY_ID),
   decomposition,
   components: external_exports.array(componentEffortJudgmentV1Schema).min(1)
@@ -24147,27 +24135,85 @@ var effortAssessmentV1Schema = external_exports.object({
   reviewer: effortReviewerProvenanceV1Schema,
   recommendation
 }).strict();
+var IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v2";
+var EFFORT_SELECTOR_INSTRUCTIONS = "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-max; totals 3-5 select glm-5-3-flash-max when E is at least 2 or a long tool loop is yes or unknown, otherwise gemini-3-7-flash-max; totals 6-7 select gemini-3-7-flash-max only when B is at most 1 and the component is confidently short, otherwise glm-5-3-flash-max; totals 8-11 select gpt-5-6-sol-medium; totals 12-15 select gpt-5-6-sol-xhigh. Return the highest-ranked selected profile across all components in that same order. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis.";
+var selectorHazardInputSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  state: external_exports.enum(["absent", "present"]),
+  registry_digest: sha256DigestV1Schema,
+  hazards: external_exports.array(hazardRegistryEntryV1Schema)
+}).strict();
+var rawEffortSelectionV2Schema = external_exports.object({
+  schema_version: external_exports.literal("2"),
+  task_id: taskSlug,
+  phase_instance: phaseInstance.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
+  step: external_exports.literal("effort_review"),
+  role: external_exports.literal("effort-reviewer"),
+  subject_digest: digest2,
+  input_fingerprint: digest2,
+  policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  profile_id: external_exports.enum(IMPLEMENTATION_PROFILE_IDS)
+}).strict();
+var effortEnvelopeV2Schema = external_exports.object({
+  schema_version: external_exports.literal("2"),
+  instructions: external_exports.literal(EFFORT_SELECTOR_INSTRUCTIONS),
+  artifact: external_exports.string(),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
+  attempt: safeIntegerV1Schema.refine((value) => value >= 1, "attempt must be at least 1"),
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  invocation_id: safeIdV1Schema,
+  result_id: safeIdV1Schema,
+  policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  hazard_registry: selectorHazardInputSchema,
+  repositories: reviewedRepositoriesV1Schema
+}).strict();
+var effortSelectionV2Schema = external_exports.object({
+  schema_version: external_exports.literal("2"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
+  attempt: safeIntegerV1Schema.refine((value) => value >= 1, "attempt must be at least 1"),
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  profile: effortProfileV1Schema,
+  source: external_exports.discriminatedUnion("kind", [
+    external_exports.object({ kind: external_exports.literal("reviewer"), reviewer: effortReviewerProvenanceV1Schema }).strict(),
+    external_exports.object({ kind: external_exports.literal("default") }).strict()
+  ])
+}).strict();
+var effortEvidenceSchema = external_exports.union([
+  effortAssessmentV1Schema,
+  effortSelectionV2Schema
+]);
 
 // src/contracts/review.ts
-var REVIEW_VERDICTS = ["pass", "advisory", "fail"];
+var CLAIM_TYPES = ["defect", "risk", "gap", "preference"];
+var CONFIDENCE_LEVELS = ["certain", "likely", "suspicion"];
+var REVIEW_VERDICTS = ["pass", "advisory", "review-raised"];
+var LEGACY_REVIEW_VERDICTS = ["pass", "advisory", "fail"];
 var REVIEW_ROLES = ["counter-review"];
-var REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"];
+var LEGACY_REVIEW_FINDING_SEVERITIES = ["blocker", "major", "minor"];
+var REVIEW_FINDING_SEVERITIES = LEGACY_REVIEW_FINDING_SEVERITIES;
 var MODEL_FAMILIES = ["claude", "codex", "gemini"];
 var ADAPTER_IDS = ["claude-cli", "codex-cli", "antigravity-cli"];
 var EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max", "ultra"];
 var nonBlank = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+var boundedNonBlank = external_exports.string().min(1).max(4096).regex(/\S/, "must contain a non-whitespace character");
 var id = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-var digest2 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var taskSlug = createTaskSlugV1Schema();
-var phaseInstance = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
+var digest3 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var taskSlug2 = createTaskSlugV1Schema();
+var phaseInstance2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 var safePositive = external_exports.number().int().positive().safe();
+var safeCount = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 var repositoryName4 = external_exports.union([
   external_exports.literal("primary"),
   external_exports.string().regex(REPOSITORY_NAME_PATTERN, REPOSITORY_NAME_MESSAGE)
 ]);
 var reviewedRepositoryV1Schema = external_exports.object({
   name: repositoryName4,
-  repository_identity_digest: digest2,
+  repository_identity_digest: digest3,
   commit: gitOidV1Schema
 }).strict();
 function validateReviewedRepositories(repositories) {
@@ -24187,9 +24233,9 @@ var reviewedRepositoriesV1Schema2 = external_exports.array(reviewedRepositoryV1S
   }
 });
 var ruleVersionRefSchema = external_exports.object({ rule_id: id, rule_version: safePositive }).strict();
-var reviewFindingSchema = external_exports.object({
+var legacyReviewFindingV1Schema = external_exports.object({
   finding_id: id,
-  severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
+  severity: external_exports.enum(LEGACY_REVIEW_FINDING_SEVERITIES),
   blocking: external_exports.boolean(),
   summary: nonBlank,
   evidence: nonBlank,
@@ -24199,21 +24245,31 @@ var reviewFindingSchema = external_exports.object({
     context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
   }
 });
-var rawReviewSchema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  task_id: taskSlug,
-  phase_instance: phaseInstance,
+var reviewFindingV2Schema = external_exports.object({
+  finding_id: id,
+  claim_type: external_exports.enum(CLAIM_TYPES),
+  confidence: external_exports.enum(CONFIDENCE_LEVELS),
+  falsifier: boundedNonBlank,
+  summary: nonBlank,
+  evidence: nonBlank,
+  suggested_resolution: nonBlank
+}).strict();
+var findingPartitionShape = Object.fromEntries(
+  CLAIM_TYPES.flatMap((claimType) => CONFIDENCE_LEVELS.map((confidence) => [`${claimType}:${confidence}`, safeCount]))
+);
+var findingPartitionCountsSchema = external_exports.object(findingPartitionShape).strict();
+var rawReviewCommonShape = {
+  task_id: taskSlug2,
+  phase_instance: phaseInstance2,
   step: external_exports.literal("counter_review"),
   role: external_exports.enum(REVIEW_ROLES),
-  subject_digest: digest2,
-  input_fingerprint: digest2,
-  rubric_digest: digest2,
+  subject_digest: digest3,
+  input_fingerprint: digest3,
+  rubric_digest: digest3,
   producer_family: external_exports.enum(MODEL_FAMILIES),
-  findings: external_exports.array(reviewFindingSchema),
-  matched_rule_versions: external_exports.array(ruleVersionRefSchema),
-  verdict: external_exports.enum(REVIEW_VERDICTS),
-  blocking_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
-}).strict().superRefine((review, context2) => {
+  matched_rule_versions: external_exports.array(ruleVersionRefSchema)
+};
+function validateUniqueReviewMembers(review, context2) {
   const findingIds = /* @__PURE__ */ new Set();
   review.findings.forEach((finding, index) => {
     if (findingIds.has(finding.finding_id)) context2.addIssue({ code: "custom", path: ["findings", index, "finding_id"], message: "duplicate finding_id" });
@@ -24225,34 +24281,73 @@ var rawReviewSchema = external_exports.object({
     if (rules2.has(key)) context2.addIssue({ code: "custom", path: ["matched_rule_versions", index], message: "duplicate rule version" });
     rules2.add(key);
   });
-  const expected = expectedReviewSummary(review.findings);
+}
+var rawReviewV1StructuralSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  ...rawReviewCommonShape,
+  findings: external_exports.array(legacyReviewFindingV1Schema),
+  verdict: external_exports.enum(LEGACY_REVIEW_VERDICTS),
+  blocking_count: safeCount
+}).strict();
+var rawReviewV1Schema = rawReviewV1StructuralSchema.superRefine((review, context2) => {
+  validateUniqueReviewMembers(review, context2);
+  const expected = expectedLegacyReviewSummary(review.findings);
   if (review.blocking_count !== expected.blocking_count) context2.addIssue({ code: "custom", path: ["blocking_count"], message: `review blocking_count must be ${expected.blocking_count}` });
   if (review.verdict !== expected.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
 });
-function expectedReviewSummary(findings) {
+var rawReviewV2StructuralSchema = external_exports.object({
+  schema_version: external_exports.literal("2"),
+  ...rawReviewCommonShape,
+  findings: external_exports.array(reviewFindingV2Schema),
+  verdict: external_exports.enum(REVIEW_VERDICTS),
+  total_findings: safeCount,
+  partition_counts: findingPartitionCountsSchema
+}).strict();
+var rawReviewV2Schema = rawReviewV2StructuralSchema.superRefine((review, context2) => {
+  validateUniqueReviewMembers(review, context2);
+  validateV2Summary(review, context2);
+});
+var childReviewOutputV2Schema = external_exports.object({
+  ...rawReviewCommonShape,
+  findings: external_exports.array(reviewFindingV2Schema)
+}).strict().superRefine(validateUniqueReviewMembers);
+var rawReviewSchema = external_exports.discriminatedUnion("schema_version", [rawReviewV1Schema, rawReviewV2Schema]);
+function expectedLegacyReviewSummary(findings) {
   const blocking_count = findings.filter((finding) => finding.blocking).length;
   return { blocking_count, verdict: blocking_count > 0 ? "fail" : findings.length > 0 ? "advisory" : "pass" };
 }
-function validateReviewClaims(parsed) {
-  const expected = expectedReviewSummary(parsed.findings);
-  if (parsed.blocking_count !== expected.blocking_count) throw new TypeError(`review blocking_count must be ${expected.blocking_count}`);
-  if (parsed.verdict !== expected.verdict) throw new TypeError(`review verdict must be ${expected.verdict}`);
+function computeFindingPartitionCounts(findings) {
+  const counts = Object.fromEntries(
+    CLAIM_TYPES.flatMap((claimType) => CONFIDENCE_LEVELS.map((confidence) => [`${claimType}:${confidence}`, 0]))
+  );
+  for (const finding of findings) counts[`${finding.claim_type}:${finding.confidence}`] += 1;
+  return Object.freeze(counts);
 }
-function parseAndDeriveReview(value) {
-  assertPlainJson(value, "review");
-  const parsed = rawReviewSchema.parse(value);
-  validateReviewClaims(parsed);
-  return parsed;
+function isSubstantiveClaim(finding) {
+  if ("claim_type" in finding && typeof finding.claim_type === "string") {
+    return finding.claim_type === "defect" || finding.claim_type === "risk" || finding.claim_type === "gap";
+  }
+  return "blocking" in finding && typeof finding.blocking === "boolean" ? finding.blocking : false;
+}
+function expectedReviewSummaryV2(findings) {
+  return Object.freeze({
+    verdict: findings.some(isSubstantiveClaim) ? "review-raised" : findings.length > 0 ? "advisory" : "pass",
+    total_findings: findings.length,
+    partition_counts: computeFindingPartitionCounts(findings)
+  });
+}
+function validateV2Summary(review, context2) {
+  const expected = expectedReviewSummaryV2(review.findings);
+  if (review.total_findings !== expected.total_findings) context2.addIssue({ code: "custom", path: ["total_findings"], message: `review total_findings must be ${expected.total_findings}` });
+  if (review.verdict !== expected.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
+  for (const key of Object.keys(expected.partition_counts)) {
+    if (review.partition_counts[key] !== expected.partition_counts[key]) context2.addIssue({ code: "custom", path: ["partition_counts", key], message: `review partition count must be ${expected.partition_counts[key]}` });
+  }
 }
 var ROUTE_SOURCE_PROVENANCES = ["configured", "invocation-declared", "route-override"];
 var DISPLACED_ROUTE_SOURCES = ["configured", "invocation-declared"];
 var REVIEW_RUN_FOCUSES = ["general", "tests"];
 var REVIEW_RUN_ROLES = ["counter-reviewer", "test-reviewer"];
-var provenanceBase = rawReviewSchema.safeExtend({
-  model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
-  model: nonBlank,
-  effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
-});
 var routeOverrideRecordSchema2 = external_exports.object({
   reason: nonBlank,
   pinned_model: nonBlank.optional(),
@@ -24274,15 +24369,15 @@ var reviewerRunV1Schema = external_exports.object({
   focus: external_exports.enum(REVIEW_RUN_FOCUSES),
   routing_role: external_exports.enum(REVIEW_RUN_ROLES),
   criterion_ids: external_exports.array(id).min(1),
-  rubric_digest: digest2,
+  rubric_digest: digest3,
   model_family: external_exports.enum(MODEL_FAMILIES),
   model: nonBlank,
   effort: external_exports.enum(EFFORT_VALUES),
   adapter: external_exports.enum(ADAPTER_IDS),
   cli_version: nonBlank,
   invocation_id: id,
-  envelope_input_digest: digest2,
-  observed_output_digest: digest2,
+  envelope_input_digest: digest3,
+  observed_output_digest: digest3,
   finding_ids: external_exports.array(id),
   provider: nonBlank.optional(),
   route_source: routeSourceRecordSchema,
@@ -24295,23 +24390,34 @@ var reviewerRunV1Schema = external_exports.object({
     context2.addIssue({ code: "custom", path: ["finding_ids"], message: "reviewer run findings must be unique" });
   }
 });
-var serverAttestedReviewSchema = provenanceBase.safeExtend({
+var provenanceFields = {
+  model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
+  model: nonBlank,
+  effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
+};
+var serverAttestedFields = {
   assurance: external_exports.literal("server-attested"),
   adapter: external_exports.enum(ADAPTER_IDS),
   cli_version: nonBlank,
   model_family: external_exports.enum(MODEL_FAMILIES),
   effort: external_exports.enum(EFFORT_VALUES),
   invocation_id: id,
-  envelope_input_digest: digest2,
-  observed_output_digest: digest2,
+  envelope_input_digest: digest3,
+  observed_output_digest: digest3,
   result_id: id,
   provider: nonBlank.optional(),
   route_source: routeSourceRecordSchema.optional(),
   route_override: routeOverrideRecordSchema2.optional(),
   repositories: reviewedRepositoriesV1Schema2.optional(),
   reviewer_runs: external_exports.array(reviewerRunV1Schema).min(1).optional(),
-  effort_review: external_exports.lazy(() => effortAssessmentV1Schema).optional()
-}).strict().superRefine((review, context2) => {
+  effort_review: external_exports.lazy(() => effortEvidenceSchema).optional()
+};
+var degradedFields = {
+  ...provenanceFields,
+  assurance: external_exports.literal("degraded"),
+  reason: nonBlank
+};
+function validateReviewerRuns(review, context2) {
   if (review.reviewer_runs === void 0) return;
   const reviewerIds = review.reviewer_runs.map((run) => run.reviewer_id);
   if (new Set(reviewerIds).size !== reviewerIds.length) {
@@ -24322,16 +24428,43 @@ var serverAttestedReviewSchema = provenanceBase.safeExtend({
   if (owned.length !== findings.length || new Set(owned).size !== owned.length || findings.some((finding) => !owned.includes(finding))) {
     context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer runs must partition review findings exactly" });
   }
+}
+var serverAttestedReviewV1Schema = rawReviewV1StructuralSchema.safeExtend({
+  ...provenanceFields,
+  ...serverAttestedFields
+}).strict().superRefine((review, context2) => {
+  validateUniqueReviewMembers(review, context2);
+  const expected = expectedLegacyReviewSummary(review.findings);
+  if (review.blocking_count !== expected.blocking_count) context2.addIssue({ code: "custom", path: ["blocking_count"], message: `review blocking_count must be ${expected.blocking_count}` });
+  if (review.verdict !== expected.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
+  validateReviewerRuns(review, context2);
 });
-var degradedReviewSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank }).strict();
-var reviewEvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewSchema, degradedReviewSchema]);
+var serverAttestedReviewV2Schema = rawReviewV2StructuralSchema.safeExtend({
+  ...provenanceFields,
+  ...serverAttestedFields
+}).strict().superRefine((review, context2) => {
+  validateUniqueReviewMembers(review, context2);
+  validateReviewerRuns(review, context2);
+});
+var degradedReviewV1Schema = rawReviewV1StructuralSchema.safeExtend(degradedFields).strict().superRefine((review, context2) => {
+  validateUniqueReviewMembers(review, context2);
+  const expected = expectedLegacyReviewSummary(review.findings);
+  if (review.blocking_count !== expected.blocking_count) context2.addIssue({ code: "custom", path: ["blocking_count"], message: `review blocking_count must be ${expected.blocking_count}` });
+  if (review.verdict !== expected.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expected.verdict}` });
+});
+var degradedReviewV2Schema = rawReviewV2StructuralSchema.safeExtend(degradedFields).strict().superRefine((review, context2) => {
+  validateUniqueReviewMembers(review, context2);
+  validateV2Summary(review, context2);
+});
+var v1EvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewV1Schema, degradedReviewV1Schema]);
+var v2EvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewV2Schema, degradedReviewV2Schema]);
+var reviewEvidenceSchema = external_exports.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema]);
 function parseReviewEvidence(value) {
   assertPlainJson(value, "review evidence");
   const parsed = reviewEvidenceSchema.parse(value);
-  validateReviewClaims(parsed);
   return parsed;
 }
-var referencedReviewWrapperSchema = external_exports.object({ evidence_digest: digest2, evidence: external_exports.unknown() }).strict();
+var referencedReviewWrapperSchema = external_exports.object({ evidence_digest: digest3, evidence: external_exports.unknown() }).strict();
 
 // src/contracts/tool-names.ts
 var TOOL_NAMES = Object.freeze([
@@ -24351,9 +24484,9 @@ function isToolName(value) {
 
 // src/contracts/errors.ts
 var documentScoped = (schema) => schema.clone(schema.def);
-var digest3 = documentScoped(sha256DigestV1Schema);
+var digest4 = documentScoped(sha256DigestV1Schema);
 var id2 = documentScoped(safeIdV1Schema);
-var taskSlug2 = documentScoped(taskSlugV1Schema);
+var taskSlug3 = documentScoped(taskSlugV1Schema);
 var pathSafeId = documentScoped(pathSafeIdV1Schema);
 var code = documentScoped(safeCodeV1Schema);
 var version2 = documentScoped(safeVersionV1Schema);
@@ -24364,7 +24497,7 @@ var adapter = external_exports.enum(ADAPTER_IDS);
 var family = external_exports.enum(MODEL_FAMILIES);
 var gateKind = external_exports.enum(GATE_KINDS);
 var repositoryName5 = external_exports.union([external_exports.literal("primary"), external_exports.string().regex(REPOSITORY_NAME_PATTERN)]);
-var phaseInstance2 = external_exports.string().regex(/^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$/u).refine((value) => {
+var phaseInstance3 = external_exports.string().regex(/^(prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-9]*)$/u).refine((value) => {
   try {
     decodePhaseInstance(value);
     return true;
@@ -24373,9 +24506,9 @@ var phaseInstance2 = external_exports.string().regex(/^(prd|design|phase-design-
   }
 });
 var object2 = (shape) => external_exports.object(shape).strict();
-var digestPair = { expected_digest: digest3, observed_digest: digest3 };
+var digestPair = { expected_digest: digest4, observed_digest: digest4 };
 var pathClass = external_exports.enum(PATH_CLASSES);
-var taskPathClass = { task_id: taskSlug2, path_class: pathClass };
+var taskPathClass = { task_id: taskSlug3, path_class: pathClass };
 var adapterAttempt = { adapter, attempt: integer2 };
 var sortedPaths = external_exports.array(repositoryPathClaim).min(1).superRefine((items, context2) => {
   for (let index = 1; index < items.length; index += 1) if (items[index - 1].localeCompare(items[index]) >= 0) context2.addIssue({ code: "custom", message: "offending_paths must be sorted and unique" });
@@ -24399,7 +24532,7 @@ function describeValidationIssues(error51) {
 }
 var PROJECT_PARAMETER_SCHEMAS = {
   CONTRACT_INVALID: object2({ tool: tool.optional(), issue_code: code, schema_version: version2.optional(), issues: validationIssues.optional() }),
-  RESULT_INVALID: object2({ tool, result_id: id2, expected_digest: digest3.optional(), observed_digest: digest3.optional() }),
+  RESULT_INVALID: object2({ tool, result_id: id2, expected_digest: digest4.optional(), observed_digest: digest4.optional() }),
   CONTRACT_VERSION_UNSUPPORTED: object2({ schema_version: version2, supported_version: version2 }),
   ENVELOPE_OVERFLOW: object2({ offending_paths: sortedPaths, current_bytes: integer2, byte_cap: integer2 }),
   WORKFLOW_INVALID: issueParams,
@@ -24407,30 +24540,30 @@ var PROJECT_PARAMETER_SCHEMAS = {
   CONFIG_MODEL_UNSUPPORTED: object2({ model: id2 }),
   CONFIG_FAMILY_UNSUPPORTED: object2({ family: id2 }),
   RUNTIME_VERSION_UNSUPPORTED: object2({ component: id2, version: version2 }),
-  REPOSITORY_NOT_FOUND: object2({ repository_candidate_digest: digest3 }),
+  REPOSITORY_NOT_FOUND: object2({ repository_candidate_digest: digest4 }),
   REPOSITORY_MISMATCH: digestsParams,
   REPOSITORY_VIEW_UNAVAILABLE: object2({ repository_name: repositoryName5 }),
-  TASK_INVALID: object2({ task_id: taskSlug2, issue_code: code }),
+  TASK_INVALID: object2({ task_id: taskSlug3, issue_code: code }),
   PATH_INVALID: taskPathParams,
   PATH_ESCAPE: taskPathParams,
   TASK_SCOPE_VIOLATION: taskPathParams,
   GIT_CONFLICT: object2({ operation: code }),
   GIT_DIVERGED: digestsParams,
-  HANDOFF_REQUIRED: object2({ phase_instance: phaseInstance2 }),
-  POLICY_BASE_INVALID: object2({ expected_digest: digest3, observed_digest: digest3.optional() }),
+  HANDOFF_REQUIRED: object2({ phase_instance: phaseInstance3 }),
+  POLICY_BASE_INVALID: object2({ expected_digest: digest4, observed_digest: digest4.optional() }),
   WORKFLOW_MISMATCH: digestsParams,
   STALE_SKILLS: digestsParams,
-  STATE_MISSING: object2({ phase_instance: phaseInstance2 }),
-  STATE_INVALID: object2({ phase_instance: phaseInstance2, issue_code: code }),
-  TRANSITION_INVALID: object2({ phase_instance: phaseInstance2, from: code, to: code }),
+  STATE_MISSING: object2({ phase_instance: phaseInstance3 }),
+  STATE_INVALID: object2({ phase_instance: phaseInstance3, issue_code: code }),
+  TRANSITION_INVALID: object2({ phase_instance: phaseInstance3, from: code, to: code }),
   INPUT_FINGERPRINT_MISMATCH: digestsParams,
   STATE_CONFLICT: object2({ expected_revision: integer2, observed_revision: integer2 }),
   INTENT_MISMATCH: digestsParams,
   INTENT_NOT_CURRENT: object2({ intent_id: pathSafeId, receipt_revision: integer2, current_revision: integer2 }),
   SNAPSHOT_LIMIT: object2({ limit_scope: external_exports.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: integer2, byte_cap: integer2 }),
-  SNAPSHOT_INVALID: object2({ snapshot_digest: digest3, issue_code: code, repository_name: repositoryName5.optional() }),
+  SNAPSHOT_INVALID: object2({ snapshot_digest: digest4, issue_code: code, repository_name: repositoryName5.optional() }),
   RESTORE_COLLISION: object2({ gate_id: pathSafeId, path_class: pathClass }),
-  RECONCILIATION_REQUIRED: object2({ recorded_digest: digest3, observed_digest: digest3 }),
+  RECONCILIATION_REQUIRED: object2({ recorded_digest: digest4, observed_digest: digest4 }),
   SECRET_DETECTED: object2({ path_class: pathClass, detector_id: id2 }),
   GATE_ACTIVE: gateParams,
   GATE_DECISION_INVALID: object2({ gate_id: pathSafeId, gate_kind: gateKind, issue_code: code }),
@@ -24560,7 +24693,7 @@ function parseProjectError(value) {
 var internalErrorSchemaTables = Object.freeze({
   project: Object.freeze({
     parameters: PROJECT_PARAMETER_SCHEMAS,
-    primitives: Object.freeze({ digest: digest3, id: id2, taskSlug: taskSlug2, pathSafeId, pathClass, code, version: version2, integer: integer2, tool, adapter, family, gate: gateKind, phase: phaseInstance2, repositoryPathClaim }),
+    primitives: Object.freeze({ digest: digest4, id: id2, taskSlug: taskSlug3, pathSafeId, pathClass, code, version: version2, integer: integer2, tool, adapter, family, gate: gateKind, phase: phaseInstance3, repositoryPathClaim }),
     shared: Object.freeze({ issue: issueParams, validationIssues, digests: digestsParams, taskPath: taskPathParams, gateParams, adapterOnly: adapterOnlyParams, adapterAttempt: adapterAttemptParams })
   }),
   protocol: Object.freeze({
@@ -24579,8 +24712,8 @@ var COMPLIANCE_RESULTS = ["pass", "fail", "uncertain"];
 var TRIGGER_RESULTS = ["not-matched", "matched", "uncertain"];
 var nonBlank2 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 var id3 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-var digest4 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var taskSlug3 = createTaskSlugV1Schema();
+var digest5 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var taskSlug4 = createTaskSlugV1Schema();
 var ruleVersionSchema = external_exports.object({ rule_id: id3, rule_version: external_exports.number().int().positive().safe() }).strict();
 var constitutionRuleFindingSchema = ruleVersionSchema.extend({
   compliance: external_exports.enum(COMPLIANCE_RESULTS),
@@ -24589,7 +24722,7 @@ var constitutionRuleFindingSchema = ruleVersionSchema.extend({
   trigger_evidence: nonBlank2
 }).strict();
 var driftFindingSchema = external_exports.object({
-  upstream_digest: digest4,
+  upstream_digest: digest5,
   drift: external_exports.enum(DRIFT_RESULTS),
   affected_claim_ids: external_exports.array(id3),
   rationale: nonBlank2
@@ -24599,14 +24732,14 @@ var driftFindingSchema = external_exports.object({
 });
 var rawAdjudicationTransportSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
-  task_id: taskSlug3,
+  task_id: taskSlug4,
   phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: external_exports.literal("adjudicate"),
-  subject_digest: digest4,
-  input_fingerprint: digest4,
-  pinned_constitution_digest: digest4,
-  approved_upstream_digests: external_exports.array(digest4),
-  source_review_envelope_digest: digest4,
+  subject_digest: digest5,
+  input_fingerprint: digest5,
+  pinned_constitution_digest: digest5,
+  approved_upstream_digests: external_exports.array(digest5),
+  source_review_envelope_digest: digest5,
   rule_findings: external_exports.array(constitutionRuleFindingSchema),
   drift_findings: external_exports.array(driftFindingSchema)
 }).strict();
@@ -24668,16 +24801,16 @@ function parseAndDeriveAdjudication(value) {
   validateAdjudicationFindings(parsed);
   return { ...parsed, ...deriveAdjudicationSummaries(parsed) };
 }
-var provenanceBase2 = derivedAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank2, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
-var agentSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
-var serverSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank2, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id3, envelope_input_digest: digest4, observed_output_digest: digest4, result_id: id3, provider: nonBlank2.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema2.optional(), repositories: reviewedRepositoriesV1Schema2.optional() }).strict();
-var degradedSchema = provenanceBase2.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank2 }).strict();
+var provenanceBase = derivedAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank2, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
+var agentSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
+var serverSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank2, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id3, envelope_input_digest: digest5, observed_output_digest: digest5, result_id: id3, provider: nonBlank2.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema2.optional(), repositories: reviewedRepositoriesV1Schema2.optional() }).strict();
+var degradedSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank2 }).strict();
 var adjudicationEvidenceSchema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
 function parseAdjudicationEvidence(value) {
   assertPlainJson(value, "adjudication evidence");
   return adjudicationEvidenceSchema.parse(value);
 }
-var referencedAdjudicationWrapperSchema = external_exports.object({ evidence_digest: digest4, evidence: external_exports.unknown() }).strict();
+var referencedAdjudicationWrapperSchema = external_exports.object({ evidence_digest: digest5, evidence: external_exports.unknown() }).strict();
 
 // src/contracts/trust.ts
 init_trust_brands();
@@ -24715,11 +24848,12 @@ var observationSource = Object.freeze({
     if (binding === void 0 || capability.kind !== "review") throw new TypeError("invalid review observation capability");
     assertAdapterFamily(binding.adapter, binding.family);
     const bytes = copiedBytes(observedOutputBytes);
-    const derived = parseAndDeriveReview(decodeJson(bytes));
-    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(derived[key], expected, key);
+    const childOutput = childReviewOutputV2Schema.parse(decodeJson(bytes));
+    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(childOutput[key], expected, key);
+    const summary = expectedReviewSummaryV2(childOutput.findings);
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation(binding, bytes, raw_output_digest);
-    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.provider === void 0 ? {} : { provider: binding.provider }, route_source: binding.route_source, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override }, repositories: binding.repositories });
+    const evidence = copyFreezeJson({ schema_version: "2", ...childOutput, ...summary, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.provider === void 0 ? {} : { provider: binding.provider }, route_source: binding.route_source, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override }, repositories: binding.repositories });
     return Object.freeze({ observation, evidence });
   },
   observeAdjudication(capability, observedOutputBytes) {
@@ -24786,8 +24920,8 @@ function assertLinkMatches(kind, link2, value) {
   if (evidence.assurance !== authenticatedAssurance || link2.assurance !== authenticatedAssurance) throw new TypeError("authority assurance does not match authenticated identity");
   const expectedAuthorityKind = evidence.assurance === "server-attested" ? "server" : evidence.assurance;
   if (link2.authority.kind !== expectedAuthorityKind) throw new TypeError("authority references do not match assurance");
-  const phaseInstance4 = encodePhaseInstance(decodePhaseInstance(evidence.phase_instance));
-  if (link2.evidence_kind !== kind || link2.assurance !== evidence.assurance || link2.evidence_digest !== value.evidence_digest || link2.task_id !== evidence.task_id || link2.phase_instance !== phaseInstance4 || link2.subject_digest !== evidence.subject_digest || link2.input_fingerprint !== evidence.input_fingerprint) throw new TypeError("authority link does not match verified evidence");
+  const phaseInstance5 = encodePhaseInstance(decodePhaseInstance(evidence.phase_instance));
+  if (link2.evidence_kind !== kind || link2.assurance !== evidence.assurance || link2.evidence_digest !== value.evidence_digest || link2.task_id !== evidence.task_id || link2.phase_instance !== phaseInstance5 || link2.subject_digest !== evidence.subject_digest || link2.input_fingerprint !== evidence.input_fingerprint) throw new TypeError("authority link does not match verified evidence");
   if (link2.role !== (kind === "review" ? evidence.role : "adjudication")) throw new TypeError("authority role does not match evidence");
   if (evidence.assurance === "server-attested") {
     if (link2.authority.kind !== "server" || link2.authority.invocation_id !== evidence.invocation_id || link2.authority.result_id !== evidence.result_id || link2.authority.envelope_input_digest !== evidence.envelope_input_digest || link2.authority.observed_output_digest !== evidence.observed_output_digest) {
@@ -24840,19 +24974,19 @@ var authorityQualifier = Object.freeze({
 function exactCommitAuthorizationContext(context2) {
   return "baseline_commit" in context2 && "commit_message" in context2 && "paths" in context2 ? context2 : void 0;
 }
-var digest5 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var digest6 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var pathSafeId2 = pathSafeIdV1Schema;
-var taskSlug4 = taskSlugV1Schema;
+var taskSlug5 = taskSlugV1Schema;
 var phase = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 var text = external_exports.string().min(1).max(4096).regex(/\S/u);
 var rule2 = gateRuleVersionRefSchema;
 var scope = gateWaiverScopeSchema;
-var origin = external_exports.object({ origin_gate_id: pathSafeId2, origin_decision_digest: digest5, origin_context_digest: digest5, task_id: taskSlug4, phase_instance: phase, subject_digest: digest5, current_evidence_set_digest: digest5, rule: rule2, scope }).strict();
-var legacySupersession = external_exports.object({ superseded_gate_id: pathSafeId2, accepted_triage_digest: digest5, old_subject_digest: digest5 }).strict();
-var legacySupplementalGate = external_exports.object({ prior_gate_id: pathSafeId2, task_id: taskSlug4, phase_instance: phase, subject_digest: digest5, input_fingerprint: digest5 }).strict();
+var origin = external_exports.object({ origin_gate_id: pathSafeId2, origin_decision_digest: digest6, origin_context_digest: digest6, task_id: taskSlug5, phase_instance: phase, subject_digest: digest6, current_evidence_set_digest: digest6, rule: rule2, scope }).strict();
+var legacySupersession = external_exports.object({ superseded_gate_id: pathSafeId2, accepted_triage_digest: digest6, old_subject_digest: digest6 }).strict();
+var legacySupplementalGate = external_exports.object({ prior_gate_id: pathSafeId2, task_id: taskSlug5, phase_instance: phase, subject_digest: digest6, input_fingerprint: digest6 }).strict();
 var legacySupplementalSlot = external_exports.object({
   role: external_exports.literal("gate-counter-review"),
-  evidence_digest: digest5,
+  evidence_digest: digest6,
   assurance: external_exports.enum(["server-attested", "degraded"]),
   producer_family: external_exports.enum(MODEL_FAMILIES),
   reviewer_family: external_exports.enum(MODEL_FAMILIES),
@@ -24865,10 +24999,10 @@ var legacySupplementalSlot = external_exports.object({
 });
 var legacySupplementalReview = external_exports.object({
   prior_gate_id: pathSafeId2,
-  task_id: taskSlug4,
+  task_id: taskSlug5,
   phase_instance: phase,
-  subject_digest: digest5,
-  input_fingerprint: digest5,
+  subject_digest: digest6,
+  input_fingerprint: digest6,
   evidence_slot: legacySupplementalSlot
 }).strict().superRefine((review, context2) => {
   if (review.evidence_slot.gate_id !== review.prior_gate_id) {
@@ -24879,9 +25013,9 @@ var legacySupplementalReason = external_exports.string().min(1).regex(/\S/u);
 var legacySupplemental = external_exports.array(external_exports.discriminatedUnion("action", [
   external_exports.object({ action: external_exports.literal("decline"), gate: legacySupplementalGate, reason: legacySupplementalReason }).strict(),
   external_exports.object({ action: external_exports.literal("ingest"), review: legacySupplementalReview, reason: legacySupplementalReason }).strict(),
-  external_exports.object({ action: external_exports.literal("triage-no-change"), review: legacySupplementalReview, triage_digest: digest5, reason: legacySupplementalReason }).strict()
+  external_exports.object({ action: external_exports.literal("triage-no-change"), review: legacySupplementalReview, triage_digest: digest6, reason: legacySupplementalReason }).strict()
 ]));
-var base = { schema_version: external_exports.literal("1"), gate_id: pathSafeId2, task_id: taskSlug4, phase_instance: phase, kind: external_exports.enum(GATE_KINDS), subject_digest: digest5, context_digest: digest5 };
+var base = { schema_version: external_exports.literal("1"), gate_id: pathSafeId2, task_id: taskSlug5, phase_instance: phase, kind: external_exports.enum(GATE_KINDS), subject_digest: digest6, context_digest: digest6 };
 var decisionRecordArms = {
   decided: external_exports.object({ ...base, outcome: external_exports.literal("decided"), envelope: gateDecisionEnvelopeV1Schema }).strict(),
   waiverDecided: external_exports.object({ ...base, outcome: external_exports.literal("waiver-decided"), granted: external_exports.boolean(), scope, origin, notes: text, human_provenance: humanDecisionProvenanceV1Schema }).strict(),
@@ -24891,8 +25025,8 @@ var staleBaselineGateSupersessionV1Schema = external_exports.object({
   ...base,
   kind: external_exports.literal("baseline-adoption"),
   outcome: external_exports.literal("superseded-stale-baseline"),
-  live_subject_digest: digest5,
-  live_context_digest: digest5,
+  live_subject_digest: digest6,
+  live_context_digest: digest6,
   superseded_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
 }).strict();
 var gateDecisionRecordV1Schema = external_exports.discriminatedUnion("outcome", [
@@ -24912,7 +25046,8 @@ var GATE_REQUEST_DECISIONS = {
   "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
-  "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
+  "attempts-exhausted": ["retry-once", "revise", "abort", "push-through-review", "cancel"],
+  "validation-override": ["grant-validation-override", "deny-validation-override", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
@@ -24923,31 +25058,47 @@ var WAIVER_DECISIONS = ["grant", "deny", "cancel"];
 var LEGACY_ARTIFACT_APPROVAL_DECISIONS = ["approve", "revise", "reject", "cancel"];
 var LEGACY_DESIGN_APPROVAL_DECISIONS = ["approve", "revise", "reject", "waiver-requested", "cancel"];
 var LEGACY_COMMIT_AUTHORIZATION_DECISIONS = ["authorize-commit", "revise", "abort", "cancel"];
+var LEGACY_ATTEMPTS_EXHAUSTED_DECISIONS = ["retry-once", "revise", "abort", "cancel"];
 var literalTuple = (values) => external_exports.tuple(values.map((value) => external_exports.literal(value)));
 var allowedDecisionTuples = Object.fromEntries(
   GATE_KINDS.map((kind) => [kind, literalTuple(GATE_REQUEST_DECISIONS[kind])])
 );
 var waiverDecisionsTuple = literalTuple(WAIVER_DECISIONS);
+var legacyAttemptsExhaustedDecisionsTuple = literalTuple(LEGACY_ATTEMPTS_EXHAUSTED_DECISIONS);
 var waiverGateContextSchema = external_exports.object({ origin, rationale: text }).strict();
 var gateRequestCommon = {
   schema_version: external_exports.literal("1"),
   gate_id: pathSafeId2,
   intent_id: pathSafeId2,
-  request_digest: digest5,
-  task_id: taskSlug4,
+  request_digest: digest6,
+  task_id: taskSlug5,
   phase_instance: phase,
   summary: text,
-  subject_digest: digest5,
-  context_digest: digest5,
+  subject_digest: digest6,
+  context_digest: digest6,
   current_evidence: currentEvidenceSetRefSchema,
   opened_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
 };
+var phaseImpl = external_exports.string().regex(/^phase-impl-[1-9][0-9]*$/u);
 var gateArm = (kind, context2, decisions2, extra) => external_exports.object({ ...gateRequestCommon, ...extra, kind: external_exports.literal(kind), context: context2, allowed_decisions: decisions2 }).strict();
+var reviewPushThroughGateArm = (extra) => gateArm(
+  "attempts-exhausted",
+  reviewPushThroughAttemptsExhaustedContextSchema,
+  allowedDecisionTuples["attempts-exhausted"],
+  extra
+).superRefine((request, context2) => {
+  const pushThrough = request.context;
+  if (request.current_evidence.set_digest !== pushThrough.review_push_through?.current_evidence_set_digest) {
+    context2.addIssue({ code: "custom", path: ["context", "review_push_through", "current_evidence_set_digest"], message: "review push-through must bind the gate current evidence set" });
+  }
+});
 var gateArms = (extra) => ({
   artifactApproval: gateArm("artifact-approval", GATE_CONTRACTS["artifact-approval"].context, allowedDecisionTuples["artifact-approval"], extra),
   designApproval: gateArm("design-approval", GATE_CONTRACTS["design-approval"].context, allowedDecisionTuples["design-approval"], extra),
   materialDrift: gateArm("material-drift", GATE_CONTRACTS["material-drift"].context, allowedDecisionTuples["material-drift"], extra),
-  attemptsExhausted: gateArm("attempts-exhausted", GATE_CONTRACTS["attempts-exhausted"].context, allowedDecisionTuples["attempts-exhausted"], extra),
+  attemptsExhausted: gateArm("attempts-exhausted", legacyAttemptsExhaustedContextSchema, legacyAttemptsExhaustedDecisionsTuple, extra),
+  attemptsExhaustedPushThrough: reviewPushThroughGateArm(extra),
+  validationOverride: gateArm("validation-override", GATE_CONTRACTS["validation-override"].context, allowedDecisionTuples["validation-override"], { ...extra, phase_instance: phaseImpl, current_evidence: validationOverrideRequestRefV1Schema }),
   constitutionEdit: gateArm("constitution-edit", GATE_CONTRACTS["constitution-edit"].context, allowedDecisionTuples["constitution-edit"], extra),
   commitAuthorization: gateArm("commit-authorization", GATE_CONTRACTS["commit-authorization"].context, allowedDecisionTuples["commit-authorization"], extra),
   restoreCollision: gateArm("restore-collision", GATE_CONTRACTS["restore-collision"].context, allowedDecisionTuples["restore-collision"], extra),
@@ -24987,6 +25138,12 @@ var archivedSupersededBaselineAdoptionRequestV1Schema = gateArm(
   literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
   { current_evidence: baselineObservationRefV1Schema, supersedes: legacySupersession }
 );
+var archivedAttemptsExhaustedRequestV1Schema = gateArm(
+  "attempts-exhausted",
+  legacyAttemptsExhaustedContextSchema,
+  legacyAttemptsExhaustedDecisionsTuple,
+  {}
+);
 var PAYLOAD_REQUIRED_FIELDS = ["payload", "human_provenance"];
 var WAIVER_REQUIRED_FIELDS = ["granted", "scope", "origin", "notes", "human_provenance"];
 var CANCELLATION_FIELDS = ["cancelled", "reason", "human_provenance"];
@@ -24996,11 +25153,11 @@ var cancellationFieldsTuple = literalTuple(CANCELLATION_FIELDS);
 var gateDecisionTemplateV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   gate_id: pathSafeId2,
-  task_id: taskSlug4,
+  task_id: taskSlug5,
   phase_instance: phase,
   kind: external_exports.enum(GATE_KINDS),
-  subject_digest: digest5,
-  context_digest: digest5,
+  subject_digest: digest6,
+  context_digest: digest6,
   required_fields: external_exports.union([payloadRequiredFieldsTuple, waiverRequiredFieldsTuple]),
   cancellation_fields: cancellationFieldsTuple
 }).strict();
@@ -25028,15 +25185,24 @@ var archivedSupersededBaselineActiveGateV1Schema = gateArm(
   literalTuple(["adopt-current-bytes", "restore-recorded-bytes", "abort", "cancel"]),
   { ...archivedActiveGateExtra, current_evidence: baselineObservationRefV1Schema, supersedes: legacySupersession }
 );
+var archivedAttemptsExhaustedActiveGateV1Schema = gateArm(
+  "attempts-exhausted",
+  legacyAttemptsExhaustedContextSchema,
+  legacyAttemptsExhaustedDecisionsTuple,
+  archivedActiveGateExtra
+);
 var gateRequestSchemaDefs = Object.freeze({
   currentEvidence: currentEvidenceSetRefSchema,
   baselineObservation: baselineObservationRefV1Schema,
+  validationOverrideRequest: validationOverrideRequestRefV1Schema,
   origin,
   waiverContext: waiverGateContextSchema,
   artifactApprovalDecisions: allowedDecisionTuples["artifact-approval"],
   designApprovalDecisions: allowedDecisionTuples["design-approval"],
   materialDriftDecisions: allowedDecisionTuples["material-drift"],
-  attemptsExhaustedDecisions: allowedDecisionTuples["attempts-exhausted"],
+  attemptsExhaustedDecisions: legacyAttemptsExhaustedDecisionsTuple,
+  reviewPushThroughDecisions: allowedDecisionTuples["attempts-exhausted"],
+  validationOverrideDecisions: allowedDecisionTuples["validation-override"],
   constitutionEditDecisions: allowedDecisionTuples["constitution-edit"],
   commitAuthorizationDecisions: allowedDecisionTuples["commit-authorization"],
   restoreCollisionDecisions: allowedDecisionTuples["restore-collision"],
@@ -25049,7 +25215,9 @@ var gateRequestSchemaDefOverrides = Object.freeze({
   artifactApprovalDecisions: { const: GATE_REQUEST_DECISIONS["artifact-approval"] },
   designApprovalDecisions: { const: GATE_REQUEST_DECISIONS["design-approval"] },
   materialDriftDecisions: { const: GATE_REQUEST_DECISIONS["material-drift"] },
-  attemptsExhaustedDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
+  attemptsExhaustedDecisions: { const: LEGACY_ATTEMPTS_EXHAUSTED_DECISIONS },
+  reviewPushThroughDecisions: { const: GATE_REQUEST_DECISIONS["attempts-exhausted"] },
+  validationOverrideDecisions: { const: GATE_REQUEST_DECISIONS["validation-override"] },
   constitutionEditDecisions: { const: GATE_REQUEST_DECISIONS["constitution-edit"] },
   commitAuthorizationDecisions: { const: GATE_REQUEST_DECISIONS["commit-authorization"] },
   restoreCollisionDecisions: { const: GATE_REQUEST_DECISIONS["restore-collision"] },
@@ -25087,6 +25255,7 @@ function parseArchivedGateRequest(value) {
     archivedPolicyGateRequestV1Schema,
     archivedOrdinaryGateRequestV1Schema,
     archivedBaselineAdoptionRequestV1Schema,
+    archivedAttemptsExhaustedRequestV1Schema,
     legacyGateRequestV1Schema,
     archivedSupersededOrdinaryGateRequestV1Schema,
     archivedSupersededBaselineAdoptionRequestV1Schema
@@ -25113,6 +25282,7 @@ function parseActiveGate(value) {
     archivedPolicyActiveGateV1Schema,
     archivedOrdinaryActiveGateV1Schema,
     archivedBaselineActiveGateV1Schema,
+    archivedAttemptsExhaustedActiveGateV1Schema,
     archivedSupersededBaselineActiveGateV1Schema,
     archivedSupersededActiveGateV1Schema,
     archivedSupersededOrdinaryActiveGateV1Schema
@@ -25398,42 +25568,88 @@ function parseImplementationOutput(value) {
 
 // src/contracts/triage.ts
 init_trust_brands();
+var TRIAGE_DISPOSITIONS = [
+  "accepted",
+  "accepted-editorial",
+  "rejected",
+  "escalated-human",
+  "deferred"
+];
 var id4 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-var digest6 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var digest7 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var nonBlank3 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
-var findingRefShape = { review_evidence_digest: digest6, finding_id: id4 };
+var findingRefShape = { review_evidence_digest: digest7, finding_id: id4 };
 var acceptedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted"), rationale: nonBlank3, revision_intent: nonBlank3 }).strict();
 var acceptedEditorialDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted-editorial"), rationale: nonBlank3, revision_intent: nonBlank3 }).strict();
 var rejectedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("rejected"), rationale: nonBlank3, evidence: nonBlank3 }).strict();
-var triageDispositionSchema = external_exports.discriminatedUnion("disposition", [acceptedDispositionSchema, acceptedEditorialDispositionSchema, rejectedDispositionSchema]);
-var triageDispositionLedgerEntrySchema = external_exports.object({
+var escalatedHumanDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("escalated-human"), rationale: nonBlank3 }).strict();
+var deferredDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("deferred"), rationale: nonBlank3, evidence: nonBlank3.optional() }).strict();
+var triageDispositionSchema = external_exports.discriminatedUnion("disposition", [
+  acceptedDispositionSchema,
+  acceptedEditorialDispositionSchema,
+  rejectedDispositionSchema,
+  escalatedHumanDispositionSchema,
+  deferredDispositionSchema
+]);
+var ledgerEntryBaseShape = {
   ...findingRefShape,
-  disposition: external_exports.enum(["accepted", "accepted-editorial", "rejected"]),
+  disposition: external_exports.enum(TRIAGE_DISPOSITIONS),
   attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   rationale: nonBlank3.optional(),
   revision_intent: nonBlank3.optional(),
   evidence: nonBlank3.optional(),
-  severity: external_exports.enum(REVIEW_FINDING_SEVERITIES).optional(),
-  blocking: external_exports.boolean().optional(),
   summary: nonBlank3.optional(),
   suggested_resolution: nonBlank3.optional()
-  // The branded cast mirrors the digest schema above: zod's `.optional()` emits `T | undefined`
-  // property types, which exactOptionalPropertyTypes rejects against the ledger entry type.
+};
+var triageDispositionLedgerEntryV2Schema = external_exports.object({
+  ...ledgerEntryBaseShape,
+  claim_type: external_exports.enum(CLAIM_TYPES),
+  confidence: external_exports.enum(CONFIDENCE_LEVELS),
+  falsifier: nonBlank3
 }).strict();
+var detailedLegacyTriageDispositionLedgerEntrySchema = external_exports.object({
+  ...ledgerEntryBaseShape,
+  severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
+  blocking: external_exports.boolean()
+}).strict();
+var detailLessLegacyTriageDispositionLedgerEntrySchema = external_exports.object(ledgerEntryBaseShape).strict();
+var triageDispositionLedgerEntrySchema = external_exports.union([
+  triageDispositionLedgerEntryV2Schema,
+  detailedLegacyTriageDispositionLedgerEntrySchema,
+  detailLessLegacyTriageDispositionLedgerEntrySchema
+]);
+var reviewRoundHistoryEntryV1Schema = external_exports.object({
+  attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  review_evidence_digest: digest7
+}).strict();
+var reviewRoundHistoryV1Schema = external_exports.array(reviewRoundHistoryEntryV1Schema).superRefine((history, context2) => {
+  history.forEach((entry, index) => {
+    if (index > 0 && history[index - 1].attempt >= entry.attempt) {
+      context2.addIssue({
+        code: "custom",
+        path: [index],
+        message: "review round history must be sorted by attempt with no duplicates"
+      });
+    }
+  });
+});
 var triageCandidateSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
   phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: external_exports.literal("triage"),
-  subject_digest: digest6,
-  input_fingerprint: digest6,
-  current_evidence_set_digest: digest6,
-  source_evidence_digests: external_exports.array(digest6),
+  subject_digest: digest7,
+  input_fingerprint: digest7,
+  current_evidence_set_digest: digest7,
+  source_evidence_digests: external_exports.array(digest7),
   dispositions: external_exports.array(triageDispositionSchema),
   accepted_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   rejected_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   accepted_editorial_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
-  disposition_ledger: external_exports.array(triageDispositionLedgerEntrySchema).optional()
+  escalated_human_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  deferred_count: external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  disposition_ledger: external_exports.array(triageDispositionLedgerEntrySchema).optional(),
+  review_round_history: reviewRoundHistoryV1Schema.optional()
 }).strict().superRefine((triage, context2) => {
   if (new Set(triage.source_evidence_digests).size !== triage.source_evidence_digests.length) {
     context2.addIssue({ code: "custom", path: ["source_evidence_digests"], message: "source evidence digests must be unique" });
@@ -25446,33 +25662,63 @@ var triageCandidateSchema = external_exports.object({
   });
   const seenLedger = /* @__PURE__ */ new Set();
   triage.disposition_ledger?.forEach((entry, index) => {
-    if (seenLedger.has(entry.finding_id)) {
-      context2.addIssue({ code: "custom", path: ["disposition_ledger", index], message: "duplicate ledger finding_id" });
+    const key = `${entry.review_evidence_digest}:${entry.finding_id}`;
+    if (seenLedger.has(key)) {
+      context2.addIssue({ code: "custom", path: ["disposition_ledger", index], message: "duplicate ledger finding occurrence" });
     }
-    seenLedger.add(entry.finding_id);
+    seenLedger.add(key);
   });
 });
 function parseTriageCandidate(value) {
   assertPlainJson(value, "review triage candidate");
-  const { accepted_editorial_count, disposition_ledger, ...rest } = triageCandidateSchema.parse(value);
+  const parsed = triageCandidateSchema.parse(value);
+  const dispositions = parsed.dispositions.map((d) => {
+    if (d.disposition === "deferred") {
+      const res = {
+        review_evidence_digest: d.review_evidence_digest,
+        finding_id: d.finding_id,
+        disposition: "deferred",
+        rationale: d.rationale,
+        ...d.evidence !== void 0 ? { evidence: d.evidence } : {}
+      };
+      return res;
+    }
+    return d;
+  });
+  const {
+    accepted_editorial_count,
+    escalated_human_count,
+    deferred_count,
+    disposition_ledger,
+    review_round_history,
+    ...rest
+  } = parsed;
   return {
     ...rest,
+    dispositions,
     ...accepted_editorial_count === void 0 ? {} : { accepted_editorial_count },
-    ...disposition_ledger === void 0 ? {} : { disposition_ledger }
+    ...escalated_human_count === void 0 ? {} : { escalated_human_count },
+    ...deferred_count === void 0 ? {} : { deferred_count },
+    ...disposition_ledger === void 0 ? {} : { disposition_ledger },
+    ...review_round_history === void 0 ? {} : { review_round_history }
   };
 }
 var refKey = (value) => `${value.review_evidence_digest}:${value.finding_id}`;
-function validateTriage(current, candidate, dispositionLedger) {
+function validateTriage(current, candidate, dispositionLedger, reviewRoundHistory) {
   if (!authenticCurrentReviewSet(current)) throw new TypeError("an authenticated current review set is required");
   const parsed = parseTriageCandidate(candidate);
   if (parsed.disposition_ledger !== void 0) {
     throw new TypeError("disposition_ledger is server-computed; triage candidates must not carry one");
   }
+  if (parsed.review_round_history !== void 0) {
+    throw new TypeError("review_round_history is server-computed; triage candidates must not carry one");
+  }
+  const parsedReviewRoundHistory = reviewRoundHistory === void 0 ? void 0 : reviewRoundHistoryV1Schema.parse(structuredClone(reviewRoundHistory));
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
   const expected = /* @__PURE__ */ new Set();
-  const blocking = /* @__PURE__ */ new Set();
+  const findingsByKey = /* @__PURE__ */ new Map();
   for (const review of current.reviews) {
     const localIds = /* @__PURE__ */ new Set();
     for (const finding of review.evidence.findings) {
@@ -25480,27 +25726,70 @@ function validateTriage(current, candidate, dispositionLedger) {
       localIds.add(finding.finding_id);
       const key = refKey({ review_evidence_digest: review.evidence_digest, finding_id: finding.finding_id });
       expected.add(key);
-      if (finding.blocking) blocking.add(key);
+      findingsByKey.set(key, finding);
     }
   }
   const actual = /* @__PURE__ */ new Set();
+  const isEditorialAllowed = parsed.phase_instance === "prd" || parsed.phase_instance === "design";
   for (const disposition of parsed.dispositions) {
     const key = refKey(disposition);
     if (actual.has(key)) throw new TypeError(`duplicate triage disposition ${key}`);
     if (!expected.has(key)) throw new TypeError(`foreign or stale triage disposition ${key}`);
-    if (disposition.disposition === "accepted-editorial" && blocking.has(key)) throw new TypeError(`accepted-editorial is refused for blocking finding ${key}; a blocking finding's fix is never purely editorial`);
+    const finding = findingsByKey.get(key);
+    if (disposition.disposition === "accepted-editorial") {
+      if (isSubstantiveClaim(finding)) {
+        throw new TypeError(
+          `accepted-editorial is refused for substantive finding ${key}; a substantive finding's fix is never purely editorial \u2014 use "accepted", "rejected", "escalated-human", or "deferred"`
+        );
+      }
+      if (!isEditorialAllowed) {
+        throw new TypeError(
+          `accepted-editorial is refused for position ${parsed.phase_instance}; editorial produce is supported only for PRD and design \u2014 use "accepted"`
+        );
+      }
+    }
+    if (disposition.disposition === "deferred") {
+      const isDefectOrBlocking = "claim_type" in finding && finding.claim_type === "defect" || !("claim_type" in finding) && finding.blocking === true;
+      if (isDefectOrBlocking) {
+        throw new TypeError(
+          `deferred is refused for defect finding ${key}; a defect cannot be deferred without remediation or falsification \u2014 use "accepted", "rejected", or "escalated-human"`
+        );
+      }
+      if (isSubstantiveClaim(finding)) {
+        if (typeof disposition.evidence !== "string" || disposition.evidence.trim().length === 0) {
+          throw new TypeError(
+            `deferred requires non-blank evidence demonstrating non-material consequence for substantive finding ${key}`
+          );
+        }
+      } else {
+        if (typeof disposition.rationale !== "string" || disposition.rationale.trim().length === 0) {
+          throw new TypeError(
+            `deferred requires non-blank rationale for finding ${key}`
+          );
+        }
+      }
+    }
     actual.add(key);
   }
   if (actual.size !== expected.size || [...expected].some((key) => !actual.has(key))) throw new TypeError("triage dispositions must exactly cover every current finding");
   const accepted = parsed.dispositions.filter((value) => value.disposition === "accepted").length;
   const acceptedEditorial = parsed.dispositions.filter((value) => value.disposition === "accepted-editorial").length;
-  const rejected = parsed.dispositions.length - accepted - acceptedEditorial;
+  const rejected = parsed.dispositions.filter((value) => value.disposition === "rejected").length;
+  const escalatedHuman = parsed.dispositions.filter((value) => value.disposition === "escalated-human").length;
+  const deferred = parsed.dispositions.filter((value) => value.disposition === "deferred").length;
   if (parsed.accepted_editorial_count === void 0) throw new TypeError("triage requires accepted_editorial_count");
-  if (parsed.accepted_count !== accepted || parsed.rejected_count !== rejected || parsed.accepted_editorial_count !== acceptedEditorial) throw new TypeError("triage disposition counts are contradictory");
+  if (parsed.escalated_human_count === void 0) throw new TypeError("triage requires escalated_human_count");
+  if (parsed.deferred_count === void 0) throw new TypeError("triage requires deferred_count");
+  if (parsed.accepted_count !== accepted || parsed.rejected_count !== rejected || parsed.accepted_editorial_count !== acceptedEditorial || parsed.escalated_human_count !== escalatedHuman || parsed.deferred_count !== deferred) {
+    throw new TypeError("triage disposition counts are contradictory");
+  }
   const validated = Object.freeze({
     ...parsed,
     accepted_editorial_count: parsed.accepted_editorial_count,
+    escalated_human_count: parsed.escalated_human_count,
+    deferred_count: parsed.deferred_count,
     ...dispositionLedger === void 0 ? {} : { disposition_ledger: Object.freeze(dispositionLedger.map((entry) => Object.freeze({ ...entry }))) },
+    ...parsedReviewRoundHistory === void 0 ? {} : { review_round_history: Object.freeze(parsedReviewRoundHistory.map((entry) => Object.freeze({ ...entry }))) },
     source_evidence_digests: Object.freeze([...parsed.source_evidence_digests]),
     dispositions: Object.freeze(parsed.dispositions.map((value) => Object.freeze({ ...value })))
   });
@@ -25647,14 +25936,14 @@ function verificationTranscriptClaim(phase3) {
   }
   return parseWorkspacePathClaim(`cache/phases/${phase3}/verification.txt`);
 }
-function counterReviewClaim(phaseInstance4) {
-  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance4}.counter.md`);
+function counterReviewClaim(phaseInstance5) {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance5}.counter.md`);
 }
-function triageReviewClaim(phaseInstance4) {
-  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance4}.triage.md`);
+function triageReviewClaim(phaseInstance5) {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance5}.triage.md`);
 }
-function adjudicationReviewClaim(phaseInstance4) {
-  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance4}.adjudication.md`);
+function adjudicationReviewClaim(phaseInstance5) {
+  return parseWorkspacePathClaim(`cache/reviews/${phaseInstance5}.adjudication.md`);
 }
 var PATH_SAFE_ID = "[A-Za-z0-9][A-Za-z0-9._-]{0,127}";
 var SHA256 = "[0-9a-f]{64}";
@@ -26693,7 +26982,7 @@ function ioError2(context2) {
 function isErrnoException(error51) {
   return error51 instanceof Error && typeof error51.code === "string";
 }
-function ordinal4(a, b) {
+function ordinal2(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 var MAX_REPOSITORY_IDENTITIES = 256;
@@ -26778,9 +27067,9 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
       argv: ["rev-list", "--max-parents=0", "HEAD"],
       operation: ROOTS_OPERATION
     });
-    const rootCommits = output.split("\n").filter((line) => line !== "").map((line) => parseGitOid(line)).sort(ordinal4);
+    const rootCommits = output.split("\n").filter((line) => line !== "").map((line) => parseGitOid(line)).sort(ordinal2);
     if (rootCommits.length === 0) return fail4(repositoryNotFound(runner));
-    const digest10 = sha256Bytes(
+    const digest12 = sha256Bytes(
       canonicalJsonBytes({
         object_format: environment.object_format,
         root_commits: rootCommits.map((oid) => oid)
@@ -26790,7 +27079,7 @@ async function resolveRepositoryIdentity(runner, environment, context2) {
       schema_version: "1",
       object_format: environment.object_format,
       root_commits: Object.freeze(rootCommits),
-      digest: digest10
+      digest: digest12
     });
     if (repositoryIdentityCache.size >= MAX_REPOSITORY_IDENTITIES) {
       const oldestKey = repositoryIdentityCache.keys().next().value;
@@ -26970,23 +27259,23 @@ async function ensureAuthorityDirectory(authority) {
   assertInternalTransactionAuthority(authority);
   await ensureRealDirectory(join2(authority.task_root, "authority"));
 }
-async function ensureResultDirectory(authority, digest10) {
+async function ensureResultDirectory(authority, digest12) {
   assertInternalTransactionAuthority(authority);
-  if (!/^[0-9a-f]{64}$/u.test(digest10)) throw new TypeError("result digest must be lowercase SHA-256");
+  if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
   await ensureAuthorityDirectory(authority);
   await ensureRealDirectory(join2(authority.task_root, "authority", "results"));
   await ensureWorkspaceRoot(authority);
-  const parts = ["cache", "results", digest10, "payload"];
+  const parts = ["cache", "results", digest12, "payload"];
   let current = authority.workspace_root;
   for (const part of parts) {
     current = join2(current, part);
     await ensureRealDirectory(current);
   }
 }
-async function ensurePayloadParent(authority, digest10, target2) {
+async function ensurePayloadParent(authority, digest12, target2) {
   assertInternalTransactionAuthority(authority);
-  if (!/^[0-9a-f]{64}$/u.test(digest10)) throw new TypeError("result digest must be lowercase SHA-256");
-  const root = join2(authority.workspace_root, "cache", "results", digest10, "payload");
+  if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
+  const root = join2(authority.workspace_root, "cache", "results", digest12, "payload");
   const parent = join2(target2, "..");
   const rel = relative2(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) throw new TypeError("payload parent escaped result directory");
@@ -27100,8 +27389,8 @@ var HUMAN_REVISION_GATE_KINDS = [
 function compareRuleSettlements(left, right) {
   const phase3 = left.phase_instance < right.phase_instance ? -1 : left.phase_instance > right.phase_instance ? 1 : 0;
   if (phase3 !== 0) return phase3;
-  const digest10 = left.subject_digest < right.subject_digest ? -1 : left.subject_digest > right.subject_digest ? 1 : 0;
-  if (digest10 !== 0) return digest10;
+  const digest12 = left.subject_digest < right.subject_digest ? -1 : left.subject_digest > right.subject_digest ? 1 : 0;
+  if (digest12 !== 0) return digest12;
   return left.settled_at_revision - right.settled_at_revision;
 }
 function isSortedUniqueRuleSettlements(items) {
@@ -27248,6 +27537,53 @@ var baselineAdoptionRecordV1Schema = external_exports.object({
     repositoryPathClaimV1Schema,
     external_exports.object({ repository: settlementRepositoryNameV1Schema, path: repositoryPathClaimV1Schema }).strict()
   ])).optional().refine((items) => isSortedUniqueBy(items, adoptedAbsenceKey), "adopted absences must be sorted by repository and path with no duplicates")
+}).strict();
+var phaseImplInstanceV1Schema = external_exports.string().regex(/^phase-impl-[1-9][0-9]*$/u);
+var archivedHumanDecisionTimeV1Schema = external_exports.string().datetime({ offset: false, local: false, precision: 3 });
+var boundedReasonV1Schema = external_exports.string().min(1).max(4096).regex(/\S/u);
+var requestDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1].localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates");
+var durableDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1] < item), "displaced validations must be ordinal-sorted with no duplicates");
+var durableAcceptedOccurrencesV1Schema = external_exports.array(external_exports.object({
+  review_evidence_digest: sha256Digest5,
+  finding_id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
+}).strict()).min(1).refine((items) => items.every((item, index) => {
+  if (index === 0) return true;
+  const previous = items[index - 1];
+  return previous.review_evidence_digest < item.review_evidence_digest || previous.review_evidence_digest === item.review_evidence_digest && previous.finding_id < item.finding_id;
+}), "accepted occurrences must be ordinal-sorted with no duplicates");
+var pendingValidationOverrideV1Schema = external_exports.object({
+  phase_instance: phaseImplInstanceV1Schema,
+  input_fingerprint: sha256Digest5,
+  governing_phase_design_digest: sha256Digest5,
+  displaced_validations: requestDisplacedValidationsV1Schema,
+  producer_reason: boundedReasonV1Schema,
+  request_digest: sha256Digest5,
+  request_revision: positiveSafeInteger
+}).strict();
+var validationOverrideRecordV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  decision_digest: sha256Digest5,
+  phase_instance: phaseImplInstanceV1Schema,
+  input_fingerprint: sha256Digest5,
+  governing_phase_design_digest: sha256Digest5,
+  subject_digest: sha256Digest5,
+  displaced_validations: durableDisplacedValidationsV1Schema,
+  human_reason: boundedReasonV1Schema,
+  decided_at: archivedHumanDecisionTimeV1Schema,
+  granted_at_revision: positiveSafeInteger
+}).strict();
+var reviewPushThroughRecordV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  decision_digest: sha256Digest5,
+  phase_instance: phaseInstanceIdV1Schema,
+  subject_digest: sha256Digest5,
+  current_evidence_set_digest: sha256Digest5,
+  triage_result_digest: sha256Digest5,
+  accepted_occurrences: durableAcceptedOccurrencesV1Schema,
+  attempt: positiveSafeInteger,
+  human_reason: boundedReasonV1Schema,
+  decided_at: archivedHumanDecisionTimeV1Schema,
+  resolved_at_revision: positiveSafeInteger
 }).strict();
 var ruleSettlementMatchV1Schema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ kind: external_exports.literal("subject"), subject: workflowSubjectV1Schema }).strict(),
@@ -27439,10 +27775,13 @@ var taskStateV1Schema = external_exports.object({
   planned_final_phase: positiveSafeInteger.optional(),
   open_gate: openGateRefV1Schema.optional(),
   pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  pending_validation_override: pendingValidationOverrideV1Schema.optional(),
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
   restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
   milestone_recovery_history: external_exports.array(milestoneRecoveryRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("recovery_id")), "milestone recovery history must be sorted by recovery_id with no duplicates").optional(),
   baseline_adoptions: external_exports.array(baselineAdoptionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates").optional(),
+  validation_overrides: external_exports.array(validationOverrideRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "gate_id"])), "validation_overrides must be sorted by (phase_instance, gate_id) with no duplicates").refine((items) => new Set(items.map((item) => item.gate_id)).size === items.length, "validation_overrides must contain unique gate IDs").optional(),
+  review_push_throughs: external_exports.array(reviewPushThroughRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "gate_id"])), "review_push_throughs must be sorted by (phase_instance, gate_id) with no duplicates").refine((items) => new Set(items.map((item) => item.gate_id)).size === items.length, "review_push_throughs must contain unique gate IDs").optional(),
   rule_settlements: external_exports.array(ruleSettlementV1Schema).refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates").optional(),
   last_seen_config: taskConfigSnapshotV1Schema.optional(),
   last_seen_repository_bindings: external_exports.array(lastSeenRepositoryBindingV1Schema).refine(
@@ -27467,15 +27806,53 @@ var taskStateV1Schema = external_exports.object({
       context2.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
     }
   });
+  state.validation_overrides?.forEach((record2, index) => {
+    if (record2.granted_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["validation_overrides", index, "granted_at_revision"], message: "validation override revision cannot exceed the current state revision" });
+    }
+  });
+  state.review_push_throughs?.forEach((record2, index) => {
+    if (record2.resolved_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["review_push_throughs", index, "resolved_at_revision"], message: "review push-through revision cannot exceed the current state revision" });
+    }
+    const approval = state.approvals.find((candidate) => candidate.gate_id === record2.gate_id);
+    if (approval === void 0 || approval.gate_kind !== "attempts-exhausted" || approval.subject_digest !== record2.subject_digest || approval.decision_digest !== record2.decision_digest || approval.resolved_at_revision !== record2.resolved_at_revision) {
+      context2.addIssue({ code: "custom", path: ["review_push_throughs", index], message: "review push-through must match its attempts-exhausted approval" });
+    }
+  });
+  state.approvals.forEach((approval, index) => {
+    if (approval.gate_kind === "attempts-exhausted" && !(state.review_push_throughs ?? []).some((record2) => record2.gate_id === approval.gate_id)) {
+      context2.addIssue({ code: "custom", path: ["approvals", index], message: "attempts-exhausted advance approval requires its review push-through record" });
+    }
+  });
   state.rule_settlements?.forEach((settlement, index) => {
     if (settlement.settled_at_revision > state.revision) {
       context2.addIssue({ code: "custom", path: ["rule_settlements", index, "settled_at_revision"], message: "rule settlement revision cannot exceed the current state revision" });
     }
   });
   const pending = state.pending_human_revision;
-  if (pending === void 0) return;
-  if (state.open_gate !== void 0 || state.terminal !== void 0 || state.step !== "produce" || state.status === "succeeded" || state.attempt !== pending.attempt || pending.requested_at_revision > state.revision || pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance)) {
+  if (pending !== void 0 && (state.open_gate !== void 0 || state.terminal !== void 0 || state.step !== "produce" || state.status === "succeeded" || state.attempt !== pending.attempt || pending.requested_at_revision > state.revision || pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance))) {
     context2.addIssue({ code: "custom", path: ["pending_human_revision"], message: "pending human revision does not match its active produce state" });
+  }
+  const pendingValidation = state.pending_validation_override;
+  let pendingValidationSubject;
+  if (pendingValidation !== void 0) {
+    try {
+      pendingValidationSubject = validationOverrideSubjectDigest({
+        task_id: state.task_id,
+        phase_instance: pendingValidation.phase_instance,
+        input_fingerprint: pendingValidation.input_fingerprint,
+        governing_phase_design_digest: pendingValidation.governing_phase_design_digest,
+        displaced_validations: pendingValidation.displaced_validations
+      });
+    } catch {
+    }
+  }
+  if (pendingValidation !== void 0 && (state.terminal !== void 0 || state.step !== "produce" || state.status !== "failed" || pendingValidation.phase_instance !== state.phase_instance || pendingValidation.input_fingerprint !== state.input_fingerprint || pendingValidation.request_revision > state.revision || state.open_gate === void 0 && pendingValidation.request_revision !== state.revision || state.open_gate !== void 0 && (state.open_gate.gate_kind !== "validation-override" || state.open_gate.subject_digest !== pendingValidationSubject || state.open_gate.opened_at_revision !== pendingValidation.request_revision + 1))) {
+    context2.addIssue({ code: "custom", path: ["pending_validation_override"], message: "pending validation override does not match its failed phase implementation state" });
+  }
+  if (state.open_gate?.gate_kind === "validation-override" && pendingValidation === void 0) {
+    context2.addIssue({ code: "custom", path: ["open_gate"], message: "an open validation override gate requires its pending request" });
   }
 });
 
@@ -27487,7 +27864,7 @@ var parsedCalls = /* @__PURE__ */ new WeakSet();
 var structuralResults = /* @__PURE__ */ new WeakSet();
 var resultExpectations = /* @__PURE__ */ new WeakSet();
 var requestDigests = /* @__PURE__ */ new WeakMap();
-var digest7 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var digest8 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var safeId2 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 var text2 = external_exports.string().min(1).max(4096).regex(/\S/u);
 var safeInteger6 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -27502,7 +27879,10 @@ var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|imp
 var rule3 = external_exports.object({ rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
 var scope2 = external_exports.object({ operation: external_exports.enum(["review-trigger", "adjudication-failure"]), boundary: external_exports.enum(["subject", "phase", "task"]) }).strict();
 var provenance = humanDecisionProvenanceV1Schema.clone(humanDecisionProvenanceV1Schema.def);
-var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger6, input_fingerprint: digest7 };
+var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger6, input_fingerprint: digest8 };
+var stateValidationOverrideRequestV1Schema = external_exports.object({
+  displaced_validations: external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1].localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates")
+}).strict();
 var def = (name) => Object.freeze({ name, input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`, result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result` });
 var TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") });
 var durableArtifact = external_exports.union([
@@ -27539,7 +27919,7 @@ var planningRestartInputSchema = external_exports.object({
   phase_instance: phase2,
   target_phase_instance: phase2,
   reason: text2,
-  ask_base_digest: digest7.optional(),
+  ask_base_digest: digest8.optional(),
   step: external_exports.literal("produce"),
   status: external_exports.literal("running")
 }).strict();
@@ -27550,13 +27930,24 @@ var stateInputSchema = external_exports.object({
   status: external_exports.enum(["running", "succeeded", "failed"]),
   artifact: durableArtifact.optional(),
   human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline", "set_commit_authority"]).optional(),
+  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline", "set_commit_authority", "request_validation_override"]).optional(),
   target_commit: external_exports.string().min(1).max(256).optional(),
   scope: external_exports.array(external_exports.enum(["milestone", "policy"])).optional(),
   target_phase_instance: phase2.optional(),
   reason: text2.optional(),
-  ask_base_digest: digest7.optional()
+  validation_override_request: stateValidationOverrideRequestV1Schema.optional(),
+  ask_base_digest: digest8.optional()
 }).strict().superRefine((input, context2) => {
+  if (input.operation === "request_validation_override") {
+    if (!input.phase_instance.startsWith("phase-impl-")) context2.addIssue({ code: "custom", path: ["phase_instance"], message: "request_validation_override is phase implementation only" });
+    if (input.step !== "produce" || input.status !== "failed") context2.addIssue({ code: "custom", path: ["status"], message: "request_validation_override requires produce/failed" });
+    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "request_validation_override requires reason" });
+    if (input.validation_override_request === void 0) context2.addIssue({ code: "custom", path: ["validation_override_request"], message: "request_validation_override requires validation_override_request" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "request_validation_override carries only its reason and bounded validation request" });
+    }
+    return;
+  }
   if (input.operation === "planning_restart") {
     if (input.target_phase_instance === void 0) context2.addIssue({ code: "custom", path: ["target_phase_instance"], message: "planning_restart requires target_phase_instance" });
     if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "planning_restart requires reason" });
@@ -27564,32 +27955,33 @@ var stateInputSchema = external_exports.object({
     if (input.artifact !== void 0 || input.human_revision !== void 0) context2.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
     if (input.target_phase_instance === "prd" && input.ask_base_digest === void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
     if (input.target_phase_instance !== "prd" && input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
-    if (input.target_commit !== void 0 || input.scope !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "planning_restart cannot carry commit authority fields" });
+    if (input.target_commit !== void 0 || input.scope !== void 0 || input.validation_override_request !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "planning_restart cannot carry commit authority or validation override fields" });
     return;
   }
   if (input.operation === "set_commit_authority") {
     if (input.target_commit === void 0) context2.addIssue({ code: "custom", path: ["target_commit"], message: "set_commit_authority requires target_commit" });
     if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "set_commit_authority requires reason" });
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.ask_base_digest !== void 0) {
-      context2.addIssue({ code: "custom", path: ["operation"], message: "set_commit_authority carries no artifact, human revision, restart target, or ask digest" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.ask_base_digest !== void 0 || input.validation_override_request !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "set_commit_authority carries no artifact, human revision, restart target, ask digest, or validation override request" });
     }
     return;
   }
   if (input.operation === "refresh_milestone_baseline") {
     if (input.step !== "triage" || input.status !== "succeeded") context2.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.validation_override_request !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
       context2.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, ask digest, or commit authority fields" });
     }
     return;
   }
   if (input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" || input.operation === "refresh_stale_baseline") {
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.validation_override_request !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
       context2.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, ask digest, or commit authority fields` });
     }
     return;
   }
   if (input.target_commit !== void 0 || input.scope !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "commit authority fields require set_commit_authority" });
   if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
+  if (input.validation_override_request !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "validation_override_request requires request_validation_override" });
   if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
 });
 var reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
@@ -27607,11 +27999,10 @@ var routeOverrideSchema = external_exports.object({
   reason: text2,
   "counter-reviewer": reviewModelRouteV1Schema.optional(),
   "test-reviewer": reviewModelRouteV1Schema.optional(),
-  "effort-reviewer": reviewModelRouteV1Schema.optional(),
   adjudicator: reviewModelRouteV1Schema.optional()
 }).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override["effort-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 var counterReviewInputSchema = external_exports.object({
@@ -27621,7 +28012,7 @@ var counterReviewInputSchema = external_exports.object({
   route_override: routeOverrideSchema.optional()
 }).strict();
 var humanGateChoiceSchema = external_exports.object({ choice: text2, reason: text2 }).strict();
-var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text2, subject_digest: digest7, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown(), preview_digest: digest7.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
+var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text2, subject_digest: digest8, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown(), preview_digest: digest8.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
   try {
     parseGateContext(input.kind, input.context);
   } catch (error51) {
@@ -27629,16 +28020,44 @@ var gateInputSchema = external_exports.object({ ...common2, phase_instance: phas
   }
   try {
     if (input.kind === "baseline-adoption") parseBaselineObservationRef(input.current_evidence);
+    else if (input.kind === "validation-override") parseValidationOverrideRequestRef(input.current_evidence);
     else parseCurrentEvidenceSetRef(input.current_evidence);
   } catch (error51) {
     context2.addIssue({ code: "custom", path: ["current_evidence"], message: error51 instanceof Error ? error51.message : "invalid current evidence" });
+  }
+  if (input.kind === "validation-override") {
+    if (!input.phase_instance.startsWith("phase-impl-")) context2.addIssue({ code: "custom", path: ["phase_instance"], message: "validation override gates are phase implementation only" });
+    try {
+      const gateContext = parseGateContext("validation-override", input.context);
+      const evidence = parseValidationOverrideRequestRef(input.current_evidence);
+      const expectedSubject = validationOverrideSubjectDigest({
+        task_id: input.task_id,
+        phase_instance: input.phase_instance,
+        input_fingerprint: gateContext.input_fingerprint,
+        governing_phase_design_digest: gateContext.governing_phase_design_digest,
+        displaced_validations: gateContext.displaced_validations
+      });
+      if (input.input_fingerprint !== gateContext.input_fingerprint || input.subject_digest !== expectedSubject || evidence.task_id !== input.task_id || evidence.phase_instance !== input.phase_instance || evidence.input_fingerprint !== gateContext.input_fingerprint || evidence.governing_phase_design_digest !== gateContext.governing_phase_design_digest || evidence.request_revision !== gateContext.request_revision || evidence.validation_request_subject_digest !== input.subject_digest) {
+        context2.addIssue({ code: "custom", path: ["current_evidence"], message: "validation override evidence must exactly bind the request subject" });
+      }
+    } catch {
+    }
+  }
+  if (input.kind === "attempts-exhausted") {
+    try {
+      const gateContext = parseGateContext("attempts-exhausted", input.context);
+      if (gateContext.review_push_through !== void 0 && parseCurrentEvidenceSetRef(input.current_evidence).set_digest !== gateContext.review_push_through.current_evidence_set_digest) {
+        context2.addIssue({ code: "custom", path: ["context", "review_push_through", "current_evidence_set_digest"], message: "review push-through must bind the gate current evidence set" });
+      }
+    } catch {
+    }
   }
   if (input.preview_digest === void 0 !== (input.decision === void 0)) {
     context2.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call decision) or both omitted (gate opens and awaits the human decision)" });
   }
 });
-var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest7, origin_context_digest: digest7, task_id: taskSlugV1Schema, phase_instance: phase2, subject_digest: digest7, current_evidence_set_digest: digest7, rule: rule3, scope: scope2 }).strict();
-var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2, preview_digest: digest7.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
+var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest8, origin_context_digest: digest8, task_id: taskSlugV1Schema, phase_instance: phase2, subject_digest: digest8, current_evidence_set_digest: digest8, rule: rule3, scope: scope2 }).strict();
+var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text2, preview_digest: digest8.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
   if (input.task_id !== input.origin.task_id) context2.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
   if (input.preview_digest === void 0 !== (input.decision === void 0)) {
     context2.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call waiver decision) or both omitted (waiver gate opens and awaits the human decision)" });
@@ -27648,7 +28067,7 @@ function inputFor(name, value) {
   const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
   if (name === "archflow_gate") {
     const v = parsed;
-    return { ...v, current_evidence: v.kind === "baseline-adoption" ? parseBaselineObservationRef(v.current_evidence) : parseCurrentEvidenceSetRef(v.current_evidence) };
+    return { ...v, current_evidence: v.kind === "baseline-adoption" ? parseBaselineObservationRef(v.current_evidence) : v.kind === "validation-override" ? parseValidationOverrideRequestRef(v.current_evidence) : parseCurrentEvidenceSetRef(v.current_evidence) };
   }
   return parsed;
 }
@@ -27679,13 +28098,24 @@ function parseToolCall(name, value) {
 }
 function bindParsedToolCallRequest(call, requestDigest) {
   if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
-  digest7.parse(requestDigest);
+  digest8.parse(requestDigest);
   requestDigests.set(call, requestDigest);
   return call;
 }
 var toolSuccessSchemas = {
-  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest7.optional() }).strict(),
-  archflow_counter_review: external_exports.object({
+  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest8.optional() }).strict(),
+  archflow_counter_review: external_exports.union([external_exports.object({
+    path: repositoryPathClaimV1Schema,
+    verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
+    total_findings: safeInteger6,
+    partition_counts: findingPartitionCountsSchema,
+    constitution: external_exports.union([
+      external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule3) }).strict(),
+      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
+    ]),
+    revision: safeInteger6,
+    request_digest: digest8.optional()
+  }).strict(), external_exports.object({
     path: repositoryPathClaimV1Schema,
     verdict: external_exports.enum(["pass", "advisory", "fail"]),
     blocking_count: safeInteger6,
@@ -27694,13 +28124,13 @@ var toolSuccessSchemas = {
       external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
     ]),
     revision: safeInteger6,
-    request_digest: digest7.optional()
-  }).strict(),
-  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(),
-  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest7, current_evidence_set_digest: digest7, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest7.optional() }).strict()])
+    request_digest: digest8.optional()
+  }).strict()]),
+  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text2, revision: safeInteger6, request_digest: digest8.optional() }).strict(),
+  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest8, current_evidence_set_digest: digest8, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text2, revision: safeInteger6, request_digest: digest8.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest8, current_evidence_set_digest: digest8, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text2, revision: safeInteger6, request_digest: digest8.optional() }).strict()])
 };
 var mcpToolsSchemaDefs = Object.freeze({
-  digest: digest7,
+  digest: digest8,
   id: safeId2,
   text: text2,
   integer: safeInteger6,
@@ -27755,7 +28185,7 @@ function validateProjectResultStructure(call, value) {
   structuralResults.add(branded);
   return branded;
 }
-var resultExpectationDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), tool: external_exports.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest7, request_digest: digest7, result_id: safeId2, resulting_revision: safeInteger6, success: external_exports.unknown() }).strict().superRefine((expectation, context2) => {
+var resultExpectationDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), tool: external_exports.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest8, request_digest: digest8, result_id: safeId2, resulting_revision: safeInteger6, success: external_exports.unknown() }).strict().superRefine((expectation, context2) => {
   const success2 = toolSuccessSchemas[expectation.tool].safeParse(expectation.success);
   if (!success2.success) {
     context2.addIssue({ code: "custom", path: ["success"], message: `invalid ${expectation.tool} success value` });
@@ -27805,7 +28235,7 @@ async function openRepository(workingDirectory, operationContext) {
   repositoryBindings.set(rootKey, binding);
   return ok4(binding);
 }
-function ordinal5(a, b) {
+function ordinal3(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 var VIEW_FAILURE_ISSUE_CODES = Object.freeze({
@@ -27863,7 +28293,7 @@ async function resolveRepositorySet(primaryBinding, config2, context2) {
   if (!primary.ok) return primary;
   const members = [primary.value];
   const declarations = config2.repositories ?? {};
-  for (const rawName of Object.keys(declarations).sort(ordinal5)) {
+  for (const rawName of Object.keys(declarations).sort(ordinal3)) {
     const name = rawName;
     const declaration = declarations[name];
     const declaredPath = declaration.path;
@@ -27884,12 +28314,12 @@ async function resolveRepositorySet(primaryBinding, config2, context2) {
     }
   }
   const frozenMembers = Object.freeze(members);
-  const digest10 = sha256Bytes(canonicalJsonBytes(frozenMembers.map((member) => ({
+  const digest12 = sha256Bytes(canonicalJsonBytes(frozenMembers.map((member) => ({
     name: member.name,
     mode: member.mode,
     repository_identity_digest: member.identity.digest
   }))));
-  return ok4(Object.freeze({ members: frozenMembers, digest: digest10 }));
+  return ok4(Object.freeze({ members: frozenMembers, digest: digest12 }));
 }
 
 // src/state/atomic.ts
@@ -28085,7 +28515,7 @@ function materialize(subject, label) {
   assertPlainJson(subject, label);
   return structuredClone(subject);
 }
-function ordinal6(a, b) {
+function ordinal4(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 function sortedSet(items, key, label) {
@@ -28095,7 +28525,7 @@ function sortedSet(items, key, label) {
     if (seen.has(value)) throw new TypeError(`${label} is a set: duplicate key ${JSON.stringify(value)}`);
     seen.add(value);
   }
-  return [...items].sort((left, right) => ordinal6(key(left), key(right)));
+  return [...items].sort((left, right) => ordinal4(key(left), key(right)));
 }
 var identityJson = (identity) => ({
   path: identity.path,
@@ -28161,6 +28591,17 @@ function closedOperationFields(subject) {
           ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
         };
       }
+      if (subject.operation === "request-validation-override") {
+        const request = fields;
+        exactFields(fields, ["phase_instance", "step", "status", "reason", "validation_override_request"]);
+        return {
+          phase_instance: request.phase_instance,
+          step: request.step,
+          status: request.status,
+          reason: request.reason,
+          validation_override_request: request.validation_override_request
+        };
+      }
       if (subject.operation === "set-commit-authority") {
         const commitAuth = fields;
         exactFields(fields, commitAuth.scope === void 0 ? ["phase_instance", "step", "status", "target_commit", "reason"] : ["phase_instance", "step", "status", "target_commit", "reason", "scope"]);
@@ -28179,9 +28620,9 @@ function closedOperationFields(subject) {
         return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
       }
       if (subject.operation === "refresh-milestone-baseline" || subject.operation === "recover-milestone-authority" || subject.operation === "recover-approval-trigger-authority" || subject.operation === "refresh-stale-baseline") {
-        exactFields(fields, ["phase_instance", "step", "status"]);
+        exactFields(fields, ["phase_instance", "step", "status", "intent_id"]);
         const control = fields;
-        return { phase_instance: control.phase_instance, step: control.step, status: control.status };
+        return { phase_instance: control.phase_instance, step: control.step, status: control.status, intent_id: control.intent_id };
       }
       const artifactFields = fields;
       const operationForKind = {
@@ -28549,7 +28990,7 @@ var failure = (state, issueCode) => Object.freeze({
     issue_code: issueCode
   })
 });
-function phaseInstance3(call, context2) {
+function phaseInstance4(call, context2) {
   switch (call.name) {
     case "archflow_state":
       if (call.input.operation === "planning_restart") return call.input.target_phase_instance;
@@ -28624,7 +29065,7 @@ function createInternalInputFingerprintResolver(input) {
       artifact_identities: structuredClone(artifacts.value),
       upstream_identities: structuredClone(upstream.value),
       rubric_digest: rubric.value,
-      phase_instance: phaseInstance3(context2.call, context2.context),
+      phase_instance: phaseInstance4(context2.call, context2.context),
       declared_inputs: structuredClone(declared.value),
       ...secondaryDeclared.value.length === 0 ? {} : {
         secondary_declared_inputs: structuredClone(secondaryDeclared.value)
@@ -28751,8 +29192,8 @@ function authenticateRuleAcceptancePolicy(state, constitution) {
   const selected = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3.map(({ id: id6 }) => constitution.rules.get(id6));
   if (selected.some((rule4) => rule4 === void 0 || rule4.status !== "active")) return void 0;
   const normalized = selected.map((rule4) => normalizedSelectedRule(rule4)).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-  const digest10 = canonicalJsonDigest(normalized);
-  if (!SUPPORTED_RULE_ACCEPTANCE_PROFILES.some((profile) => canonicalJsonDigest(profile) === digest10)) {
+  const digest12 = canonicalJsonDigest(normalized);
+  if (!SUPPORTED_RULE_ACCEPTANCE_PROFILES.some((profile) => canonicalJsonDigest(profile) === digest12)) {
     return void 0;
   }
   const policy = Object.freeze({
@@ -28923,12 +29364,12 @@ var readCanonicalWorkflowDigest = async (input) => {
       argv: ["cat-file", "blob", entry.oid],
       operation: "git-workflow-read"
     });
-    const digest10 = sha256Bytes(bytes.stdout);
+    const digest12 = sha256Bytes(bytes.stdout);
     if (workflowDigestCache.size >= MAX_CACHED_WORKFLOW_DIGESTS) {
       workflowDigestCache.delete(workflowDigestCache.keys().next().value);
     }
-    workflowDigestCache.set(cacheKey, digest10);
-    return ok9(digest10);
+    workflowDigestCache.set(cacheKey, digest12);
+    return ok9(digest12);
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
       return fail8(projectErrorForGitFailure(error51, input.runner, input.context));
@@ -31895,8 +32336,8 @@ function parsePkcs12(buf) {
       throw new Error("PKCS12: unexpected MAC algorithm parameters");
     }
   }
-  const digest10 = readTlv(digestInfo.content, alg.end);
-  expectTag(digest10, TAG_OCTET_STRING, "digest OCTET STRING");
+  const digest12 = readTlv(digestInfo.content, alg.end);
+  expectTag(digest12, TAG_OCTET_STRING, "digest OCTET STRING");
   const salt = readTlv(macData.content, digestInfo.end);
   expectTag(salt, TAG_OCTET_STRING, "macSalt OCTET STRING");
   let iterations = 1;
@@ -31911,7 +32352,7 @@ function parsePkcs12(buf) {
     authSafe: authSafeOctet.content,
     macHash,
     macSalt: salt.content,
-    macDigest: digest10.content,
+    macDigest: digest12.content,
     iterations
   };
 }
@@ -31920,7 +32361,7 @@ function toBufferSource(data) {
   copy2.set(data);
   return copy2;
 }
-async function digest8(hash3, data) {
+async function digest9(hash3, data) {
   return new Uint8Array(await globalThis.crypto.subtle.digest(hash3.name, toBufferSource(data)));
 }
 function padToMultipleOf(src, blockSize) {
@@ -31954,9 +32395,9 @@ async function deriveMacKey(hash3, password, salt, iterations) {
   DI.set(D, 0);
   DI.set(S, D.length);
   DI.set(P, D.length + S.length);
-  let A = await digest8(hash3, DI);
+  let A = await digest9(hash3, DI);
   for (let i = 1; i < iterations; i++) {
-    A = await digest8(hash3, A);
+    A = await digest9(hash3, A);
   }
   return A.subarray(0, u);
 }
@@ -33873,7 +34314,7 @@ var FILTER_RULE = "@secretlint/secretlint-rule-filter-comments";
 var RULE_PREFIX = "@secretlint/secretlint-rule-";
 var RULE_ID = /^@secretlint\/secretlint-rule-(?<suffix>[a-z0-9][a-z0-9-]*)$/u;
 var utf8 = new TextDecoder("utf-8", { fatal: true });
-var ordinal7 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var enabledCreators = rules.filter((creator) => creator.meta.id !== FILTER_RULE);
 var enabledRuleIds = Object.freeze(enabledCreators.map((creator) => creator.meta.id).sort());
 if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id6) => !RULE_ID.test(id6))) {
@@ -33936,7 +34377,7 @@ function createSecretlintScanner() {
     const seen = /* @__PURE__ */ new Set();
     const findings = [];
     try {
-      for (const candidate of candidates.sort((left, right) => ordinal7(left.virtual_path, right.virtual_path))) {
+      for (const candidate of candidates.sort((left, right) => ordinal5(left.virtual_path, right.virtual_path))) {
         if (seen.has(candidate.virtual_path)) throw new TypeError("duplicate secret-scan candidate path");
         seen.add(candidate.virtual_path);
         const extension = sourceExtension(candidate.virtual_path);
@@ -33974,7 +34415,7 @@ function createSecretlintScanner() {
       await releaseSecretlintProfilerEntries();
     }
     if (findings.length > 0) {
-      findings.sort((left, right) => ordinal7(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal7(left.detector_id, right.detector_id));
+      findings.sort((left, right) => ordinal5(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal5(left.detector_id, right.detector_id));
       return Object.freeze({
         schema_version: "1",
         outcome: "detected",
@@ -34147,6 +34588,12 @@ var DURABLE_ISSUE_CODES = Object.freeze({
   /** gate */
   gateDecisionPayloadInvalid: "gate-decision-payload-invalid",
   /** gate */
+  gateValidationEvidenceMismatch: "gate-validation-evidence-mismatch",
+  /** gate */
+  gateReviewPushThroughEvidenceMismatch: "gate-review-push-through-evidence-mismatch",
+  /** state */
+  pendingValidationTransitionMismatch: "pending-validation-transition-mismatch",
+  /** gate */
   waiverDecisionOriginMismatch: "waiver-decision-origin-mismatch",
   /** gate */
   openGateFrozenStateMismatch: "open-gate-frozen-state-mismatch"
@@ -34177,9 +34624,9 @@ function ownEnumerableDataField(document2, field, label) {
 }
 function materialize2(document2, label) {
   const value = ownDataField(document2, "value", label);
-  const digest10 = ownDataField(document2, "digest", label);
+  const digest12 = ownDataField(document2, "digest", label);
   assertPlainJson(value, `${label} value`);
-  return { value: structuredClone(value), digest: digest10 };
+  return { value: structuredClone(value), digest: digest12 };
 }
 function stateInvalid(state, issue_code) {
   return createProjectError("STATE_INVALID", { phase_instance: state.phase_instance, issue_code });
@@ -34297,6 +34744,31 @@ function validateDurableSemantics(subject) {
   }
   if (gateDecision !== void 0 && canonicalJsonDigest(gateDecision) !== gateDecisionSlot?.digest) {
     return fail9(contractInvalid(DURABLE_ISSUE_CODES.documentDigestMismatch));
+  }
+  if (gateRequest?.kind === "validation-override") {
+    const evidence = gateRequest.current_evidence;
+    const context2 = gateRequest.context;
+    const expectedSubject = validationOverrideSubjectDigest({
+      task_id: gateRequest.task_id,
+      phase_instance: gateRequest.phase_instance,
+      input_fingerprint: context2.input_fingerprint,
+      governing_phase_design_digest: context2.governing_phase_design_digest,
+      displaced_validations: context2.displaced_validations
+    });
+    if (evidence.task_id !== gateRequest.task_id || evidence.phase_instance !== gateRequest.phase_instance || evidence.input_fingerprint !== context2.input_fingerprint || evidence.governing_phase_design_digest !== context2.governing_phase_design_digest || evidence.request_revision !== context2.request_revision || evidence.validation_request_subject_digest !== gateRequest.subject_digest || expectedSubject !== gateRequest.subject_digest) {
+      return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateValidationEvidenceMismatch));
+    }
+  }
+  if (gateRequest?.kind === "attempts-exhausted" && gateRequest.context.review_push_through !== void 0 && gateRequest.current_evidence.set_digest !== gateRequest.context.review_push_through.current_evidence_set_digest) {
+    return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateReviewPushThroughEvidenceMismatch));
+  }
+  if (state?.pending_validation_override !== void 0) {
+    const pending = state.pending_validation_override;
+    const transition = state.last_transition;
+    const originMatches = transition !== void 0 && transition.tool === "archflow_state" && transition.operation === "request-validation-override" && transition.request_digest === pending.request_digest && transition.input_fingerprint === pending.input_fingerprint && transition.resulting_revision === pending.request_revision;
+    if (state.open_gate === void 0 && !originMatches || state.open_gate?.gate_kind === "validation-override" && transition !== void 0) {
+      return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.pendingValidationTransitionMismatch));
+    }
   }
   if (state?.open_gate !== void 0 && openGateFrozenStateDigest(state) !== state.open_gate.frozen_state_digest) {
     return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.openGateFrozenStateMismatch));
@@ -34850,14 +35322,14 @@ async function proveImplementationCommit(runner, subject, facts, options) {
       operation: `${options.operation_prefix}-implementation-commit-message`
     });
     if (message !== facts.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
-    const authorizedPaths = [...facts.paths].sort(ordinal8);
+    const authorizedPaths = [...facts.paths].sort(ordinal6);
     if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniqueImplementationPaths(subject))) {
       return missing(pin.target_ref, pin.target_head, "paths-mismatch");
     }
     const changedPaths = [...new Set(await runner.runNulFields({
       argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", facts.baseline_commit, pin.candidate, "--"],
       operation: `${options.operation_prefix}-implementation-commit-paths`
-    }))].sort(ordinal8);
+    }))].sort(ordinal6);
     if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) {
       return missing(pin.target_ref, pin.target_head, "paths-mismatch", changedPaths);
     }
@@ -35042,7 +35514,7 @@ async function resolveAutonomousDesignMilestoneProofUnchecked(runner, state, art
   const changed = [...new Set(await runner.runNulFields({
     argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, pin.candidate, "--"],
     operation: "git-autonomous-design-commit-paths"
-  }))].sort(ordinal8);
+  }))].sort(ordinal6);
   if (changed.length === 0 || changed.some((path2) => !path2.startsWith(prefix))) return missing(pin.target_ref, pin.target_head, "paths-outside-task", changed);
   if (!changed.includes(`${prefix}state.json`)) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
   for (const path2 of approvedPaths) {
@@ -35138,7 +35610,7 @@ async function approvedDesignWorktreeMatchesRetainedArtifact(runner, taskId, art
   }
   return true;
 }
-var ordinal8 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal6 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
   if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
@@ -35158,13 +35630,13 @@ function sortedUniqueImplementationPaths(output) {
       paths.add(entry.previous_path);
     }
   }
-  return Object.freeze([...paths].sort(ordinal8));
+  return Object.freeze([...paths].sort(ordinal6));
 }
 function deriveSnapshotDigest(entries) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-output-snapshot",
-    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path))
+    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path))
   });
 }
 function deriveImplementationDiffDigest(baseCommit, outputs) {
@@ -35186,7 +35658,7 @@ function deriveImplementationDiffDigest(baseCommit, outputs) {
     schema_version: "1",
     digest_kind: "implementation-diff",
     base_commit: baseCommit,
-    entries: entries.sort((left, right) => ordinal8(left.path, right.path))
+    entries: entries.sort((left, right) => ordinal6(left.path, right.path))
   });
 }
 function deriveOverallImplementationDiffDigest(primaryDigest, sections) {
@@ -35195,7 +35667,7 @@ function deriveOverallImplementationDiffDigest(primaryDigest, sections) {
     schema_version: "1",
     digest_kind: "multi-repository-implementation-diff",
     primary_diff_digest: primaryDigest,
-    secondary_repositories: [...sections].sort((a, b) => ordinal8(a.repository, b.repository)).map((section) => ({
+    secondary_repositories: [...sections].sort((a, b) => ordinal6(a.repository, b.repository)).map((section) => ({
       repository: section.repository,
       repository_identity_digest: section.repository_identity_digest,
       base_commit: section.base_commit,
@@ -35209,7 +35681,7 @@ function deriveOverallImplementationSnapshotDigest(primaryDigest, sections) {
     schema_version: "1",
     digest_kind: "multi-repository-implementation-snapshot",
     primary_snapshot_digest: primaryDigest,
-    secondary_repositories: [...sections].sort((a, b) => ordinal8(a.repository, b.repository)).map((section) => ({
+    secondary_repositories: [...sections].sort((a, b) => ordinal6(a.repository, b.repository)).map((section) => ({
       repository: section.repository,
       repository_identity_digest: section.repository_identity_digest,
       base_commit: section.base_commit,
@@ -35221,7 +35693,7 @@ function deriveIndexIdentityDigest(entries, undeclaredChanges) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-index-identity",
-    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path)),
+    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path)),
     undeclared_changes: undeclaredChanges
   });
 }
@@ -35229,7 +35701,7 @@ function deriveWorktreeIdentityDigest(entries, undeclaredChanges) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-worktree-identity",
-    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path)),
+    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path)),
     undeclared_changes: undeclaredChanges
   });
 }
@@ -35344,7 +35816,7 @@ async function readRenameSources(runner, baseCommit) {
       if (status === "D") deleted.push(parseRepositoryPathClaim(path2));
     }
   }
-  return Object.freeze({ renames, deleted: Object.freeze(deleted.sort(ordinal8)) });
+  return Object.freeze({ renames, deleted: Object.freeze(deleted.sort(ordinal6)) });
 }
 function identityOf(observation) {
   return Object.freeze({
@@ -35375,7 +35847,7 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
       error: createProjectError("CONTRACT_INVALID", { issue_code: "secondary-base-commit-mismatch" })
     });
   }
-  const outputPaths = [...declaration.outputs].sort(ordinal8);
+  const outputPaths = [...declaration.outputs].sort(ordinal6);
   if (new Set(outputPaths).size !== outputPaths.length) throw new TypeError(`secondary repository ${member.name} outputs must be unique`);
   const renameChanges = await readRenameSources(runner, base2.value);
   const observations = /* @__PURE__ */ new Map();
@@ -35469,12 +35941,12 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
       }));
     } else throw new TypeError("secondary declared output is absent from both base and worktree");
   }
-  outputs.sort((a, b) => ordinal8(a.path, b.path));
-  const restoreTargets = [...declaration.restore_targets].sort(ordinal8);
+  outputs.sort((a, b) => ordinal6(a.path, b.path));
+  const restoreTargets = [...declaration.restore_targets].sort(ordinal6);
   if (new Set(restoreTargets).size !== restoreTargets.length || restoreTargets.some((path2) => !outputPaths.includes(path2))) {
     throw new TypeError(`secondary repository ${member.name} restore targets must be unique declared outputs`);
   }
-  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal8);
+  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal6);
   const changed = await readChangedGitPaths(runner);
   const scopeSet = new Set(scope3);
   const callerChanges = changed.paths.filter((path2) => !path2.startsWith(".archflow/runtime/"));
@@ -35494,7 +35966,7 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
     return Object.freeze({ path: path2, state: "present", stage: 0, mode: entry.mode, oid: entry.oid });
   });
   const declaredInputs = [];
-  for (const declared of [...declaration.declared_inputs].sort((a, b) => ordinal8(a.input_id, b.input_id))) {
+  for (const declared of [...declaration.declared_inputs].sort((a, b) => ordinal6(a.input_id, b.input_id))) {
     if (declared.path === ".archflow" || declared.path.startsWith(".archflow/")) throw new TypeError(`secondary repository ${member.name} input is not repository source`);
     const resolved = await resolveRepositoryPath({ runner, claim: declared.path, context: authority.context });
     if (!resolved.ok) return resolved;
@@ -35745,8 +36217,8 @@ function deriveDeclaredSnapshotDigest(outputs, projections) {
   }
   return deriveSnapshotDigest([...entries.values()]);
 }
-function snapshotInvalid(digest10, issue_code) {
-  return fail11(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest10, issue_code }));
+function snapshotInvalid(digest12, issue_code) {
+  return fail11(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest12, issue_code }));
 }
 function ownEnumerableData2(value, key) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -36773,9 +37245,7 @@ async function createProductionServices(input) {
 }
 
 // src/state/semantic-status.ts
-import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
-import { readFile as readFile11 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
 
 // src/contracts/dispatch-failure.ts
 var DISPATCH_FAILURE_CODES = [
@@ -36842,6 +37312,20 @@ function projectDispatchFailureObservation(observation) {
 // src/contracts/semantic-workflow.ts
 var nonBlank4 = external_exports.string().min(1).regex(/\S/u);
 var boundedText2 = nonBlank4.max(4096);
+var digest10 = sha256DigestV1Schema;
+var semanticDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1].localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates");
+var semanticOrdinalDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1] < item), "displaced validations must be ordinal-sorted with no duplicates");
+var semanticOrdinalAcceptedOccurrencesV1Schema = external_exports.array(external_exports.object({
+  review_evidence_digest: digest10,
+  finding_id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
+}).strict()).min(1).refine((items) => items.every((item, index) => {
+  if (index === 0) return true;
+  const previous = items[index - 1];
+  return previous.review_evidence_digest < item.review_evidence_digest || previous.review_evidence_digest === item.review_evidence_digest && previous.finding_id < item.finding_id;
+}), "accepted occurrences must be ordinal-sorted with no duplicates");
+var semanticValidationOverrideRequestV1Schema = external_exports.object({
+  displaced_validations: semanticDisplacedValidationsV1Schema
+}).strict();
 var workflowRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
 var WORKFLOW_CONDITIONS = ["awaiting-client", "awaiting-human", "ready", "blocked", "complete"];
 var IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
@@ -36850,148 +37334,46 @@ var IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
   "subject-stale",
   "legacy-evidence"
 ];
-var IMPLEMENTATION_RECOMMENDATION_REGISTRY_DRIFT = [
-  "registry-created",
-  "registry-removed",
-  "registry-changed",
-  "registry-unreadable"
-];
-var actualImplementationRouteV1Schema = external_exports.object({ status: external_exports.literal("not-recorded") }).strict();
-var registryDriftV1Schema = external_exports.object({
-  kind: external_exports.enum(IMPLEMENTATION_RECOMMENDATION_REGISTRY_DRIFT),
-  explanation: nonBlank4
-}).strict();
-var effortValue = external_exports.enum(["low", "medium", "high", "xhigh", "max", "ultra"]);
-var publicEffortReviewerV1Schema = external_exports.object({
-  model: nonBlank4,
-  effort: effortValue,
-  model_family: external_exports.enum(["claude", "codex", "gemini"]),
-  provider: nonBlank4.optional(),
-  route_source: external_exports.discriminatedUnion("provenance", [
-    external_exports.object({ provenance: external_exports.literal("configured") }).strict(),
-    external_exports.object({ provenance: external_exports.literal("invocation-declared") }).strict(),
-    external_exports.object({
-      provenance: external_exports.literal("route-override"),
-      displaced: external_exports.object({
-        source: external_exports.enum(["configured", "invocation-declared"]),
-        model: nonBlank4,
-        effort: effortValue,
-        provider: nonBlank4.optional()
-      }).strict()
-    }).strict()
-  ]),
-  route_override: external_exports.object({
-    reason: nonBlank4,
-    pinned_model: nonBlank4.optional(),
-    pinned_effort: effortValue.optional(),
-    pinned_provider: nonBlank4.optional()
-  }).strict().optional()
-}).strict();
-var implementationProfileSchema = external_exports.discriminatedUnion("profile_id", [
-  external_exports.object({ profile_id: external_exports.literal(IMPLEMENTATION_PROFILE_IDS[0]), model: external_exports.literal("gemini-3.7-flash"), effort: external_exports.literal("max") }).strict(),
-  external_exports.object({ profile_id: external_exports.literal(IMPLEMENTATION_PROFILE_IDS[1]), model: external_exports.literal("glm-5.3-flash"), effort: external_exports.literal("max") }).strict(),
-  external_exports.object({ profile_id: external_exports.literal(IMPLEMENTATION_PROFILE_IDS[2]), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.literal("medium") }).strict(),
-  external_exports.object({ profile_id: external_exports.literal(IMPLEMENTATION_PROFILE_IDS[3]), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.literal("xhigh") }).strict()
+var readyImplementationRecommendationSchema = external_exports.discriminatedUnion("model", [
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash"), effort: external_exports.literal("max") }).strict(),
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("glm-5.3-flash"), effort: external_exports.literal("max") }).strict(),
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.enum(["medium", "xhigh"]) }).strict()
 ]);
-var effortCaveatSchema = external_exports.object({ code: external_exports.enum(EFFORT_CAVEAT_CODES), message: nonBlank4 }).strict();
-var blockerSchema = external_exports.discriminatedUnion("kind", [
-  external_exports.object({
-    kind: external_exports.literal("specification-gap"),
-    component_id: external_exports.string(),
-    answer_kind: external_exports.enum(["number", "priority-order"]),
-    question: nonBlank4
-  }).strict(),
-  external_exports.object({
-    kind: external_exports.literal("undifferentiated-decomposition"),
-    rationale: nonBlank4,
-    missing_boundaries: external_exports.array(nonBlank4).min(1)
-  }).strict()
-]);
-var publicImplementationComponentV1Schema = componentEffortJudgmentV1Schema.extend({
-  total: external_exports.number().int().min(0).max(15),
-  profile: implementationProfileSchema.optional(),
-  caveats: external_exports.array(effortCaveatSchema)
-}).strict();
-var publicRecommendationEvidenceShape = {
-  phase: positiveSafePhaseNumberV1Schema,
-  policy_id: external_exports.literal("implementation-effort-v1"),
-  subject_digest: sha256DigestV1Schema,
-  component_manifest_digest: sha256DigestV1Schema,
-  hazard_registry_digest: sha256DigestV1Schema,
-  reviewer: publicEffortReviewerV1Schema,
-  components: external_exports.array(publicImplementationComponentV1Schema).min(1),
-  registry_drift: registryDriftV1Schema.optional(),
-  actual_implementation_route: actualImplementationRouteV1Schema
-};
-var implementationRecommendationV1Schema = external_exports.discriminatedUnion("status", [
-  external_exports.object({
-    status: external_exports.literal("ready"),
-    ...publicRecommendationEvidenceShape,
-    phase_profile: implementationProfileSchema,
-    determining_component_ids: external_exports.array(external_exports.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)).min(1)
-  }).strict(),
-  external_exports.object({
-    status: external_exports.literal("blocked"),
-    ...publicRecommendationEvidenceShape,
-    blockers: external_exports.array(blockerSchema).min(1)
-  }).strict(),
+var implementationRecommendationV1Schema = external_exports.union([
+  readyImplementationRecommendationSchema,
   external_exports.object({
     status: external_exports.literal("unavailable"),
     phase: positiveSafePhaseNumberV1Schema.optional(),
     reason: external_exports.enum(IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS),
-    explanation: nonBlank4,
-    actual_implementation_route: actualImplementationRouteV1Schema
+    explanation: nonBlank4
   }).strict()
 ]);
-var ACTUAL_ROUTE_NOT_RECORDED = Object.freeze({ status: "not-recorded" });
 function unavailableImplementationRecommendation(reason2, explanation, phase3) {
   return Object.freeze(implementationRecommendationV1Schema.parse({
     status: "unavailable",
     ...phase3 === void 0 ? {} : { phase: phase3 },
     reason: reason2,
-    explanation,
-    actual_implementation_route: ACTUAL_ROUTE_NOT_RECORDED
+    explanation
   }));
 }
-function implementationRecommendationFromAssessment(value, phase3, registryDrift) {
-  const assessment = effortAssessmentV1Schema.parse(structuredClone(value));
-  if (assessment.phase_instance !== `phase-design-${String(phase3)}`) {
-    throw new TypeError("effort assessment does not match the governing phase design");
-  }
-  const profiles = new Map(assessment.recommendation.component_profiles.map((component) => [component.component_id, component]));
-  const components = assessment.judgments.map((judgment) => {
-    const profile = profiles.get(judgment.component_id);
-    return Object.freeze({
-      ...judgment,
-      total: Object.values(judgment.axes).reduce((sum, axis) => sum + axis.score, 0),
-      ...profile === void 0 ? {} : { profile: profile.profile },
-      caveats: Object.freeze([...profile?.caveats ?? []])
-    });
-  });
-  const common3 = {
-    phase: phase3,
-    policy_id: assessment.policy_id,
-    subject_digest: assessment.subject_digest,
-    component_manifest_digest: assessment.component_manifest_digest,
-    hazard_registry_digest: assessment.hazard_registry_digest,
-    reviewer: Object.freeze({
-      model: assessment.reviewer.model,
-      effort: assessment.reviewer.effort,
-      model_family: assessment.reviewer.model_family,
-      ...assessment.reviewer.provider === void 0 ? {} : { provider: assessment.reviewer.provider },
-      route_source: assessment.reviewer.route_source,
-      ...assessment.reviewer.route_override === void 0 ? {} : { route_override: assessment.reviewer.route_override }
-    }),
-    components: Object.freeze(components),
-    ...registryDrift === void 0 ? {} : { registry_drift: Object.freeze(registryDrift) },
-    actual_implementation_route: ACTUAL_ROUTE_NOT_RECORDED
-  };
-  return Object.freeze(implementationRecommendationV1Schema.parse(assessment.recommendation.status === "ready" ? {
+function defaultImplementationRecommendation() {
+  return Object.freeze(implementationRecommendationV1Schema.parse({
     status: "ready",
-    ...common3,
-    phase_profile: assessment.recommendation.phase_profile,
-    determining_component_ids: assessment.recommendation.determining_component_ids
-  } : { status: "blocked", ...common3, blockers: assessment.recommendation.blockers }));
+    model: DEFAULT_IMPLEMENTATION_PROFILE.model,
+    effort: DEFAULT_IMPLEMENTATION_PROFILE.effort
+  }));
+}
+function implementationRecommendationFromAssessment(value, phase3) {
+  const assessment = effortEvidenceSchema.parse(structuredClone(value));
+  if (assessment.phase_instance !== `phase-design-${String(phase3)}`) {
+    throw new TypeError("effort evidence does not match the governing phase design");
+  }
+  const profile = assessment.schema_version === "2" ? assessment.profile : assessment.recommendation.status === "ready" ? assessment.recommendation.phase_profile : DEFAULT_IMPLEMENTATION_PROFILE;
+  return Object.freeze(implementationRecommendationV1Schema.parse({
+    status: "ready",
+    model: profile.model,
+    effort: profile.effort
+  }));
 }
 var SEMANTIC_ACTION_KINDS = [
   "initialize-task",
@@ -37016,13 +37398,27 @@ var APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate
 var workflowResourceV1Schema = external_exports.object({ role: nonBlank4, path: nonBlank4, access: external_exports.enum(["read", "write", "read-write"]) }).strict();
 var findingDispositionV1Schema = external_exports.discriminatedUnion("disposition", [
   external_exports.object({ disposition: external_exports.enum(["accepted", "accepted-editorial"]), rationale: boundedText2, revision_intent: boundedText2 }).strict(),
-  external_exports.object({ disposition: external_exports.literal("rejected"), rationale: boundedText2, evidence: boundedText2 }).strict()
+  external_exports.object({ disposition: external_exports.literal("rejected"), rationale: boundedText2, evidence: boundedText2 }).strict(),
+  external_exports.object({ disposition: external_exports.literal("escalated-human"), rationale: boundedText2 }).strict(),
+  external_exports.object({ disposition: external_exports.literal("deferred"), rationale: boundedText2, evidence: boundedText2.optional() }).strict()
 ]);
 var triageDispositionV1Schema = external_exports.discriminatedUnion("disposition", [
   external_exports.object({ finding_id: nonBlank4, disposition: external_exports.enum(["accepted", "accepted-editorial"]), rationale: boundedText2, revision_intent: boundedText2 }).strict(),
-  external_exports.object({ finding_id: nonBlank4, disposition: external_exports.literal("rejected"), rationale: boundedText2, evidence: boundedText2 }).strict()
+  external_exports.object({ finding_id: nonBlank4, disposition: external_exports.literal("rejected"), rationale: boundedText2, evidence: boundedText2 }).strict(),
+  external_exports.object({ finding_id: nonBlank4, disposition: external_exports.literal("escalated-human"), rationale: boundedText2 }).strict(),
+  external_exports.object({ finding_id: nonBlank4, disposition: external_exports.literal("deferred"), rationale: boundedText2, evidence: boundedText2.optional() }).strict()
 ]);
-var publicFindingV1Schema = external_exports.object({
+var publicFindingV2Schema = external_exports.object({
+  finding_id: nonBlank4,
+  claim_type: external_exports.enum(CLAIM_TYPES),
+  confidence: external_exports.enum(CONFIDENCE_LEVELS),
+  falsifier: boundedText2,
+  summary: nonBlank4,
+  evidence: nonBlank4,
+  suggested_resolution: nonBlank4,
+  current_disposition: findingDispositionV1Schema.optional()
+}).strict();
+var legacyPublicFindingV1Schema = external_exports.object({
   finding_id: nonBlank4,
   severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
   blocking: external_exports.boolean(),
@@ -37033,13 +37429,49 @@ var publicFindingV1Schema = external_exports.object({
 }).strict().superRefine((finding, context2) => {
   if (finding.blocking !== (finding.severity === "blocker")) context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
 });
+var publicFindingV1Schema = external_exports.union([
+  publicFindingV2Schema,
+  legacyPublicFindingV1Schema
+]);
 var publicConstitutionRuleV1Schema = external_exports.object({ id: nonBlank4, version: positiveSafePhaseNumberV1Schema, text: nonBlank4, review_trigger: nonBlank4.optional(), enforced_by: external_exports.array(nonBlank4).min(1).optional() }).strict();
 var rubricCriterionV1Schema = external_exports.object({ id: nonBlank4, text: nonBlank4, blocking: external_exports.boolean() }).strict();
 var publicRubricV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), kind: external_exports.enum(["artifact", "implementation"]), mode: external_exports.literal("adversarial"), criteria: external_exports.array(rubricCriterionV1Schema).min(1) }).strict();
 var publicReviewAssignmentV1Schema = external_exports.object({ reviewer_id: nonBlank4, focus: external_exports.enum(["general", "tests"]), criterion_ids: external_exports.array(nonBlank4).min(1) }).strict();
 var publicReviewContextV1Schema = external_exports.object({ rubric: publicRubricV1Schema, assignments: external_exports.array(publicReviewAssignmentV1Schema).min(1).optional(), active_rules: external_exports.array(publicConstitutionRuleV1Schema) }).strict();
 var roundCount = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
-var publicReviewRoundV1Schema = external_exports.object({ attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), findings: roundCount, blocking: roundCount, accepted: roundCount }).strict();
+var publicReviewRoundV2Schema = external_exports.object({
+  attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  findings: roundCount,
+  partition_counts: findingPartitionCountsSchema,
+  accepted: roundCount,
+  matched_rules: external_exports.array(nonBlank4).optional()
+}).strict();
+var legacyPublicReviewRoundV1Schema = external_exports.object({
+  attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  findings: roundCount,
+  blocking: roundCount,
+  accepted: roundCount,
+  matched_rules: external_exports.array(nonBlank4).optional()
+}).strict();
+var publicReviewRoundV1Schema = external_exports.union([
+  publicReviewRoundV2Schema,
+  legacyPublicReviewRoundV1Schema
+]);
+var denialRate = external_exports.number().finite().min(0).max(1);
+var taxonomyDenialRatesV1Schema = external_exports.object({
+  "defect:certain": denialRate,
+  "defect:likely": denialRate,
+  "defect:suspicion": denialRate,
+  "risk:certain": denialRate,
+  "risk:likely": denialRate,
+  "risk:suspicion": denialRate,
+  "gap:certain": denialRate,
+  "gap:likely": denialRate,
+  "gap:suspicion": denialRate,
+  "preference:certain": denialRate,
+  "preference:likely": denialRate,
+  "preference:suspicion": denialRate
+}).strict();
 var publicReviewerStrengthV1Schema = external_exports.object({ reviewer_id: nonBlank4, focus: external_exports.enum(["general", "tests"]), model: nonBlank4, effort: nonBlank4, reviewer_family: nonBlank4, same_family: external_exports.boolean(), finding_count: roundCount }).strict();
 var publicReviewStrengthV1Schema = external_exports.object({ reviewer_model: nonBlank4, reviewer_effort: nonBlank4, reviewer_family: nonBlank4, producer_family: nonBlank4, same_family: external_exports.boolean(), attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: external_exports.boolean(), rounds: external_exports.array(publicReviewRoundV1Schema), reviewers: external_exports.array(publicReviewerStrengthV1Schema).min(1).optional() }).strict();
 var presentationClass = external_exports.enum(["configured-approval", "exception"]);
@@ -37115,7 +37547,62 @@ var repositoryStatusV1Schema = external_exports.object({
   head: gitOidV1Schema.optional(),
   last_reviewed_commit: gitOidV1Schema.optional()
 }).strict();
-var workflowViewV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, condition: external_exports.enum(WORKFLOW_CONDITIONS), headline: nonBlank4, detail: nonBlank4, position: workflowPositionV1Schema.optional(), resources: external_exports.array(workflowResourceV1Schema), next_action: semanticNextActionV1Schema, findings: external_exports.array(publicFindingV1Schema).optional(), review_context: publicReviewContextV1Schema.optional(), review_strength: publicReviewStrengthV1Schema.optional(), implementation_recommendation: implementationRecommendationV1Schema, presentation: humanPresentationV1Schema.optional(), dispatch_failure: publicDispatchFailureV1Schema.optional(), repositories: external_exports.array(repositoryStatusV1Schema).optional(), config_change: external_exports.array(configChangeEntryV1Schema).optional() }).strict();
+var publicValidationOverrideAuditV1Schema = external_exports.discriminatedUnion("status", [
+  external_exports.object({
+    phase_instance: external_exports.string().regex(/^phase-impl-[1-9][0-9]*$/u),
+    gate_id: nonBlank4,
+    status: external_exports.literal("granted"),
+    current: external_exports.boolean(),
+    reason: boundedText2,
+    decided_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 }),
+    input_fingerprint: digest10,
+    governing_phase_design_digest: digest10,
+    displaced_validations: semanticOrdinalDisplacedValidationsV1Schema
+  }).strict(),
+  external_exports.object({
+    phase_instance: external_exports.string().regex(/^phase-impl-[1-9][0-9]*$/u),
+    gate_id: nonBlank4,
+    status: external_exports.enum(["invalid", "unavailable"])
+  }).strict()
+]);
+var publicReviewPushThroughAuditV1Schema = external_exports.discriminatedUnion("status", [
+  external_exports.object({
+    phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
+    gate_id: nonBlank4,
+    attempt: positiveSafePhaseNumberV1Schema,
+    status: external_exports.enum(["current", "historical"]),
+    reason: boundedText2,
+    decided_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 }),
+    accepted_occurrences: semanticOrdinalAcceptedOccurrencesV1Schema
+  }).strict(),
+  external_exports.object({
+    phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
+    gate_id: nonBlank4,
+    attempt: positiveSafePhaseNumberV1Schema,
+    status: external_exports.enum(["invalid", "unavailable"])
+  }).strict()
+]);
+var workflowViewV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  condition: external_exports.enum(WORKFLOW_CONDITIONS),
+  headline: nonBlank4,
+  detail: nonBlank4,
+  position: workflowPositionV1Schema.optional(),
+  resources: external_exports.array(workflowResourceV1Schema),
+  next_action: semanticNextActionV1Schema,
+  findings: external_exports.array(publicFindingV1Schema).optional(),
+  taxonomy_denial_rates: taxonomyDenialRatesV1Schema.optional(),
+  review_context: publicReviewContextV1Schema.optional(),
+  review_strength: publicReviewStrengthV1Schema.optional(),
+  implementation_recommendation: implementationRecommendationV1Schema,
+  presentation: humanPresentationV1Schema.optional(),
+  dispatch_failure: publicDispatchFailureV1Schema.optional(),
+  repositories: external_exports.array(repositoryStatusV1Schema).optional(),
+  config_change: external_exports.array(configChangeEntryV1Schema).optional(),
+  validation_overrides: external_exports.array(publicValidationOverrideAuditV1Schema).optional(),
+  review_push_throughs: external_exports.array(publicReviewPushThroughAuditV1Schema).optional()
+}).strict();
 var semanticErrorSummaryV1Schema = external_exports.object({
   code: nonBlank4.max(128),
   message: nonBlank4.max(4096),
@@ -37147,18 +37634,17 @@ var routeOverrideDeclarationV1Schema = external_exports.object({
   reason: boundedText2,
   "counter-reviewer": overrideRoute.optional(),
   "test-reviewer": overrideRoute.optional(),
-  "effort-reviewer": overrideRoute.optional(),
   adjudicator: overrideRoute.optional()
 }).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override["effort-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
   }
 });
 var applySubmissionV1Schema = external_exports.union([
   external_exports.object({ kind: external_exports.literal("task-ask"), text: boundedText2 }).strict(),
   external_exports.object({ kind: external_exports.literal("reopening-request"), request: boundedText2 }).strict(),
   external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("succeeded"), implementation: implementationFactsV1Schema.optional(), human_revision: humanRevisionDeclarationV1Schema.optional() }).strict(),
-  external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("failed"), reason: boundedText2 }).strict(),
+  external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("failed"), reason: boundedText2, validation_override_request: semanticValidationOverrideRequestV1Schema.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("triage"), dispositions: external_exports.array(triageDispositionV1Schema) }).strict(),
   external_exports.object({ kind: external_exports.literal("gate-summary"), summary: boundedText2 }).strict(),
   external_exports.object({ kind: external_exports.literal("decision"), choice: nonBlank4, reason: boundedText2, option_rationale: boundedText2.optional() }).strict(),
@@ -37166,15 +37652,19 @@ var applySubmissionV1Schema = external_exports.union([
 ]);
 var archFlowApplyInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: external_exports.object({ offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict().superRefine((input, context2) => {
   const submission = input.action.submission;
+  if (submission?.kind === "work-result" && submission.outcome === "failed" && submission.validation_override_request !== void 0 && input.invocation.skill !== "archflow-phase-impl") {
+    context2.addIssue({
+      code: "custom",
+      path: ["action", "submission", "validation_override_request"],
+      message: "validation override requests are available only for failed phase implementation work results"
+    });
+  }
   if ((input.invocation.skill === "archflow-prd" || input.invocation.skill === "archflow-design") && submission?.kind === "review-dispatch" && submission.route_override["test-reviewer"] !== void 0) {
     context2.addIssue({
       code: "custom",
       path: ["action", "submission", "route_override", "test-reviewer"],
       message: "test-reviewer overrides are available only for phase design and phase implementation"
     });
-  }
-  if (input.invocation.skill !== "archflow-phase-design" && submission?.kind === "review-dispatch" && submission.route_override["effort-reviewer"] !== void 0) {
-    context2.addIssue({ code: "custom", path: ["action", "submission", "route_override", "effort-reviewer"], message: "effort-reviewer overrides are available only for phase design" });
   }
 });
 var archFlowStatusInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict();
@@ -37193,7 +37683,8 @@ var DECISIONS = Object.freeze({
   "design-approval": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "constitution-review": ["approve", "revise", "reject", "waiver-requested", "cancel"],
   "material-drift": ["amend-upstream", "revise-current", "reject", "cancel"],
-  "attempts-exhausted": ["retry-once", "revise", "abort", "cancel"],
+  "attempts-exhausted": ["retry-once", "revise", "abort", "push-through-review", "cancel"],
+  "validation-override": ["grant-validation-override", "deny-validation-override", "cancel"],
   "constitution-edit": ["revert-edit", "start-base-amendment", "abort", "cancel"],
   "commit-authorization": ["authorize-commit", "revise", "abort", "waiver-requested", "cancel"],
   "restore-collision": ["discard-and-restore", "adopt-as-new-generation", "abort", "cancel"],
@@ -37361,10 +37852,18 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
     parseArchivedGateDecisionRecord
   );
   if (request === "missing" || request === "invalid") {
-    return issue2("STATE_INVALID", current.value.value, "gate-approval-request-invalid");
+    return issue2(
+      "STATE_INVALID",
+      current.value.value,
+      request === "missing" ? "gate-approval-request-unavailable" : "gate-approval-request-invalid"
+    );
   }
   if (decision3 === "missing" || decision3 === "invalid") {
-    return issue2("STATE_INVALID", current.value.value, "gate-approval-decision-invalid");
+    return issue2(
+      "STATE_INVALID",
+      current.value.value,
+      decision3 === "missing" ? "gate-approval-decision-unavailable" : "gate-approval-decision-invalid"
+    );
   }
   if (decision3.digest !== claimed.decision_digest || !validateDurableSemantics({
     gate_request: request,
@@ -37751,11 +38250,11 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
   } catch {
     return fail14(authority.context.phase_instance, "produce-projection-unavailable");
   }
-  const digest10 = sha256Bytes(bytes);
-  if (digest10 !== retainedDigest) {
+  const digest12 = sha256Bytes(bytes);
+  if (digest12 !== retainedDigest) {
     return fail14(authority.context.phase_instance, "produce-projection-not-current");
   }
-  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest: digest10 }) });
+  return Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ path: artifactPath, bytes, digest: digest12 }) });
 }
 async function readProduceProjectionSet(runner, authority, subject, selectedPath, excludedPaths = []) {
   let paths;
@@ -37781,7 +38280,7 @@ async function readProduceProjectionSet(runner, authority, subject, selectedPath
 
 // src/state/evidence-results.ts
 var ok14 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-function qualifyAndRender(value, dispositionLedger) {
+function qualifyAndRender(value, dispositionLedger, reviewRoundHistory) {
   if (value.kind === "review") {
     const verified = createVerifiedEvidenceReference(value.evidence);
     return Object.freeze({
@@ -37814,7 +38313,12 @@ function qualifyAndRender(value, dispositionLedger) {
       input_fingerprint: verified.evidence.input_fingerprint
     });
   }
-  const triage = validateTriage(value.current_reviews, value.evidence, dispositionLedger);
+  const triage = validateTriage(
+    value.current_reviews,
+    value.evidence,
+    dispositionLedger,
+    reviewRoundHistory
+  );
   return Object.freeze({
     artifact: Object.freeze({
       schema_version: "1",
@@ -37836,7 +38340,9 @@ async function computeDispositionLedger(dispositions, sources, loadRetainedResul
     if (previous.ok) {
       const source = previous.value.prepared.manifest.value.source_artifact;
       if (source.artifact_kind === "triage" && source.evidence.disposition_ledger !== void 0) {
-        for (const entry of source.evidence.disposition_ledger) merged.set(entry.finding_id, entry);
+        for (const entry of source.evidence.disposition_ledger) {
+          merged.set(`${entry.review_evidence_digest}:${entry.finding_id}`, entry);
+        }
       }
     }
   }
@@ -37854,19 +38360,28 @@ async function computeDispositionLedger(dispositions, sources, loadRetainedResul
   }
   for (const disposition of dispositions) {
     const finding = findingDetails.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
-    merged.set(disposition.finding_id, Object.freeze({
+    const occurrenceKey = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
+    merged.set(occurrenceKey, Object.freeze({
       review_evidence_digest: disposition.review_evidence_digest,
       finding_id: disposition.finding_id,
       disposition: disposition.disposition,
       attempt: sources.attempt,
       rationale: disposition.rationale,
-      ...disposition.disposition === "rejected" ? { evidence: disposition.evidence } : {
+      ...disposition.disposition === "rejected" ? { evidence: disposition.evidence } : disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial" ? {
         revision_intent: disposition.revision_intent,
         ...finding === void 0 ? {} : { evidence: finding.evidence }
+      } : disposition.disposition === "escalated-human" ? finding === void 0 ? {} : { evidence: finding.evidence } : {
+        ...disposition.evidence !== void 0 ? { evidence: disposition.evidence } : finding !== void 0 ? { evidence: finding.evidence } : {}
       },
       ...finding === void 0 ? {} : {
-        severity: finding.severity,
-        blocking: finding.blocking,
+        ..."claim_type" in finding ? {
+          claim_type: finding.claim_type,
+          confidence: finding.confidence,
+          falsifier: finding.falsifier
+        } : {
+          severity: finding.severity,
+          blocking: finding.blocking
+        },
         summary: finding.summary,
         suggested_resolution: finding.suggested_resolution
       }
@@ -37885,10 +38400,63 @@ async function triageLedgerFrom(input) {
     input.load_retained_result
   );
 }
+async function computeReviewRoundHistory(sources, loadRetainedResult) {
+  const rounds = /* @__PURE__ */ new Map();
+  const ambiguousAttempts = /* @__PURE__ */ new Set();
+  const remember = (entry) => {
+    if (ambiguousAttempts.has(entry.attempt)) return;
+    const existing = rounds.get(entry.attempt);
+    if (existing !== void 0 && existing.review_evidence_digest !== entry.review_evidence_digest) {
+      rounds.delete(entry.attempt);
+      ambiguousAttempts.add(entry.attempt);
+      return;
+    }
+    rounds.set(entry.attempt, Object.freeze({ ...entry }));
+  };
+  if (sources.previous_triage_ref !== void 0) {
+    const previous = await loadRetainedResult(sources.previous_triage_ref);
+    if (previous.ok) {
+      const source = previous.value.prepared.manifest.value.source_artifact;
+      if (source.artifact_kind === "triage") {
+        for (const entry of source.evidence.review_round_history ?? []) {
+          remember(entry);
+        }
+        for (const entry of source.evidence.disposition_ledger ?? []) {
+          remember({
+            attempt: entry.attempt,
+            review_evidence_digest: entry.review_evidence_digest
+          });
+        }
+      }
+    }
+  }
+  if (sources.review_ref !== void 0) {
+    const review = await loadRetainedResult(sources.review_ref);
+    if (review.ok) {
+      const manifest = review.value.prepared.manifest.value;
+      if (manifest.source_artifact.artifact_kind === "review-evidence") {
+        const entry = Object.freeze({
+          attempt: sources.attempt,
+          review_evidence_digest: manifest.artifact_digest
+        });
+        remember(entry);
+      }
+    }
+  }
+  return Object.freeze([...rounds.values()].sort((left, right) => left.attempt - right.attempt));
+}
+async function triageRoundHistoryFrom(input) {
+  if (input.value.kind !== "triage" || input.disposition_ledger === void 0) return void 0;
+  if (input.load_retained_result === void 0) {
+    throw new TypeError("review round history sources require a retained-result loader");
+  }
+  return computeReviewRoundHistory(input.disposition_ledger, input.load_retained_result);
+}
 async function prepareEvidenceResult(input) {
   assertInternalTransactionAuthority(input.authority);
   const dispositionLedger = input.value.kind === "triage" ? await triageLedgerFrom(input) : void 0;
-  const qualified = qualifyAndRender(input.value, dispositionLedger);
+  const reviewRoundHistory = input.value.kind === "triage" ? await triageRoundHistoryFrom(input) : void 0;
+  const qualified = qualifyAndRender(input.value, dispositionLedger, reviewRoundHistory);
   if (qualified.task_id !== input.authority.task_id || qualified.phase_instance !== input.authority.context.phase_instance) {
     throw new TypeError("evidence scope does not match transaction authority");
   }
@@ -38127,14 +38695,14 @@ function retainedEditorialTriage(retained) {
   const source = entry?.manifest.source_artifact;
   if (entry === void 0 || source?.artifact_kind !== "triage") return void 0;
   const triage = source.evidence;
-  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0) return void 0;
+  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0 || (triage.escalated_human_count ?? 0) !== 0) return void 0;
   let derived;
   try {
     derived = deriveCurrentEvidenceSet(retained);
   } catch {
     return void 0;
   }
-  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest10, index) => digest10 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
+  if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest12, index) => digest12 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
   return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
 }
 async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
@@ -38499,13 +39067,13 @@ function currentFor(retained, step, subject, reviews) {
   if (!subjectCurrent(evidence, subject, true) || reviews === void 0) return false;
   if (step === "triage") {
     const triage = evidence;
-    return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest && triage.source_evidence_digests.length === reviews.current_evidence_set.slots.length && triage.source_evidence_digests.every((digest10, index) => digest10 === reviews.current_evidence_set.slots[index].evidence_digest);
+    return triage.current_evidence_set_digest === reviews.current_evidence_set.set_digest && triage.source_evidence_digests.length === reviews.current_evidence_set.slots.length && triage.source_evidence_digests.every((digest12, index) => digest12 === reviews.current_evidence_set.slots[index].evidence_digest);
   }
   if (step === "adjudicate") {
     const adjudication = evidence;
     const currentReview = reviews.reviews[0]?.evidence;
     const currentEnvelopeDigest = currentReview !== void 0 && currentReview.assurance === "server-attested" ? currentReview.envelope_input_digest : void 0;
-    return currentEnvelopeDigest !== void 0 && adjudication.source_review_envelope_digest === currentEnvelopeDigest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest10, index) => digest10 === (subject.approved_upstream_digests ?? [])[index]);
+    return currentEnvelopeDigest !== void 0 && adjudication.source_review_envelope_digest === currentEnvelopeDigest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest12, index) => digest12 === (subject.approved_upstream_digests ?? [])[index]);
   }
   return false;
 }
@@ -38522,11 +39090,11 @@ function approvalBindingFailure(approval, gate) {
   if (approval.subject_digest !== gate.subject_digest) return "approval-subject-digest";
   return void 0;
 }
-function requestBindingFailure(request, gate, contextDigest, phaseInstance4) {
+function requestBindingFailure(request, gate, contextDigest, phaseInstance5) {
   if (request.kind !== gate.kind) return "request-gate-kind";
   if (request.subject_digest !== gate.subject_digest) return "request-subject-digest";
   if (request.context_digest !== contextDigest) return "request-context-digest";
-  if (request.phase_instance !== phaseInstance4) return "request-phase-instance";
+  if (request.phase_instance !== phaseInstance5) return "request-phase-instance";
   return void 0;
 }
 function decisionBindingFailure(decision3, contextDigest) {
@@ -38535,7 +39103,9 @@ function decisionBindingFailure(decision3, contextDigest) {
   return void 0;
 }
 function evidenceBindingFailure(request, evidence, subject) {
-  if (request.kind === "baseline-adoption") return "request-gate-kind";
+  if (request.kind === "baseline-adoption" || request.kind === "validation-override") {
+    return "request-gate-kind";
+  }
   const { counter_review_digest: counterDigest, triage, adjudication } = evidence;
   if (counterDigest === void 0) return "counter-review-evidence-missing";
   if (triage === void 0) return "triage-evidence-missing";
@@ -38573,18 +39143,26 @@ function waiverPathSatisfiesGate(state, gate) {
 function adjudicationGateSatisfied(state, retained, subject, gate) {
   const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
   if (gate.kind === "constitution-review") {
-    const ordinaryKind = state.phase_instance === "prd" ? "artifact-approval" : designPhase ? "design-approval" : state.phase_instance.startsWith("phase-impl-") ? "commit-authorization" : void 0;
-    const evidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
-    const ordinaryApproval = ordinaryKind !== void 0 && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
-      assertAuthenticatedGateApproval(authenticated);
-      const decision3 = authenticated.decision.envelope.payload.decision;
-      return authenticated.approval.gate_kind === ordinaryKind && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === ordinaryKind && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === evidenceSetDigest && (decision3 === "approve" || decision3 === "authorize-commit");
-    });
-    const migrationApproval = designPhase && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
-      assertAuthenticatedGateApproval(authenticated);
-      return authenticated.approval.gate_kind === "migration-audit" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === evidenceSetDigest && authenticated.decision.envelope.payload.decision === "accept-import-audit";
-    });
-    if (ordinaryApproval || migrationApproval) return true;
+    const hasActivePolicyIssues = !("policy_findings" in gate.context) || gate.context.constitution !== "pass" || gate.context.policy_findings.some((f) => f.compliance !== "pass" || f.trigger !== "not-matched");
+    if (hasActivePolicyIssues) {
+      const ordinaryKind = state.phase_instance === "prd" ? "artifact-approval" : designPhase ? "design-approval" : state.phase_instance.startsWith("phase-impl-") ? "commit-authorization" : void 0;
+      let evidenceSetDigest;
+      try {
+        evidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
+      } catch {
+        evidenceSetDigest = "";
+      }
+      const ordinaryApproval = ordinaryKind !== void 0 && evidenceSetDigest !== "" && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+        assertAuthenticatedGateApproval(authenticated);
+        const decision3 = authenticated.decision.envelope.payload.decision;
+        return authenticated.approval.gate_kind === ordinaryKind && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === ordinaryKind && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === evidenceSetDigest && (decision3 === "approve" || decision3 === "authorize-commit");
+      });
+      const migrationApproval = designPhase && evidenceSetDigest !== "" && (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+        assertAuthenticatedGateApproval(authenticated);
+        return authenticated.approval.gate_kind === "migration-audit" && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === "migration-audit" && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === evidenceSetDigest && authenticated.decision.envelope.payload.decision === "accept-import-audit";
+      });
+      if (ordinaryApproval || migrationApproval) return true;
+    }
   }
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence = Object.freeze({
@@ -38607,27 +39185,112 @@ function adjudicationGatePending(state, gate) {
   const open7 = state.open_gate;
   return open7 !== void 0 && open7.gate_kind === gate.kind && open7.subject_digest === gate.subject_digest && open7.context_digest === computeGateContextDigest(gate.kind, gate.context);
 }
-function dispositionState(retained, reviews, triage) {
-  const counter = reviews?.reviews[0]?.evidence;
-  if (reviews === void 0 || counter === void 0 || triage === void 0) {
-    return Object.freeze({ complete: false, blocker: false, accepted: false });
+function escalationSettled(state, retained, subject) {
+  const phase3 = decodePhaseInstance(state.phase_instance);
+  const ordinaryKind = phase3.kind === "prd" ? "artifact-approval" : phase3.kind === "design" || phase3.kind === "phase-design" ? "design-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
+  if (ordinaryKind === void 0) return false;
+  let evidenceSetDigest;
+  try {
+    evidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
+  } catch {
+    return false;
   }
-  const counterDigest = reviews.current_evidence_set.slots[0].evidence_digest;
+  return (subject.authenticated_gate_approvals ?? []).some((authenticated) => {
+    assertAuthenticatedGateApproval(authenticated);
+    const decision3 = authenticated.decision.envelope.payload.decision;
+    const isMatchingDecision = decision3 === "approve" || decision3 === "authorize-commit";
+    const isMatchingScope = authenticated.approval.gate_kind === ordinaryKind && authenticated.approval.subject_digest === subject.subject_digest && authenticated.request.kind === ordinaryKind && authenticated.request.phase_instance === state.phase_instance && authenticated.request.subject_digest === subject.subject_digest && authenticated.request.current_evidence.set_digest === evidenceSetDigest;
+    return isMatchingDecision && isMatchingScope;
+  });
+}
+function dispositionState(retained, reviews, triage) {
+  if (reviews === void 0 || triage === void 0) {
+    return Object.freeze({ complete: false, blocker: false, accepted: false, escalated_human: false, deferred: false });
+  }
   const expected = /* @__PURE__ */ new Map();
-  for (const finding of counter.findings) {
-    expected.set(`${counterDigest}:${finding.finding_id}`, finding.blocking);
+  for (const review of reviews.reviews) {
+    for (const finding of review.evidence.findings) {
+      expected.set(`${review.evidence_digest}:${finding.finding_id}`, isSubstantiveClaim(finding));
+    }
+  }
+  if (expected.size === 0) {
+    return Object.freeze({ complete: true, blocker: false, accepted: false, escalated_human: false, deferred: false });
   }
   const actual = new Map(triage.dispositions.map((item) => [
     `${item.review_evidence_digest}:${item.finding_id}`,
     item.disposition
   ]));
   const complete = actual.size === expected.size && [...expected.keys()].every((key) => actual.has(key));
-  const blocker2 = [...expected].some(([key, blocking]) => blocking && actual.get(key) !== "rejected");
+  const blocker2 = [...expected].some(([key, substantive]) => {
+    const disp = actual.get(key);
+    return substantive && disp !== "rejected" && disp !== "deferred";
+  });
+  const accepted = (triage.accepted_count ?? 0) > 0;
+  const escalatedHuman = (triage.escalated_human_count ?? 0) > 0 || [...actual.values()].some((disp) => disp === "escalated-human");
+  const deferred = (triage.deferred_count ?? 0) > 0 || [...actual.values()].some((disp) => disp === "deferred");
   return Object.freeze({
     complete,
     blocker: blocker2,
-    accepted: triage.accepted_count > 0
+    accepted,
+    escalated_human: escalatedHuman,
+    deferred
   });
+}
+var acceptedOccurrenceKey = (occurrence) => `${occurrence.review_evidence_digest}:${occurrence.finding_id}`;
+var compareAcceptedOccurrencesForGate = (left, right) => left.review_evidence_digest.localeCompare(right.review_evidence_digest) || left.finding_id.localeCompare(right.finding_id);
+function deriveReviewPushThroughCandidate(state, retained, subject) {
+  assertSubjectMatchesDurableState(state, retained, subject);
+  if (state.step !== "triage" || state.status !== "succeeded") return void 0;
+  const reviews = currentReviewSet(state, retained, subject);
+  const triage = triageAt(retained);
+  if (reviews === void 0 || triage === void 0 || !currentFor(retained, "triage", subject, reviews)) return void 0;
+  const disposition = dispositionState(retained, reviews, triage);
+  if (!disposition.complete || !disposition.accepted) return void 0;
+  const currentOccurrences = /* @__PURE__ */ new Set();
+  for (const review of reviews.reviews) {
+    for (const finding of review.evidence.findings) {
+      currentOccurrences.add(acceptedOccurrenceKey({
+        review_evidence_digest: review.evidence_digest,
+        finding_id: finding.finding_id
+      }));
+    }
+  }
+  const accepted = triage.dispositions.filter((item) => item.disposition === "accepted").map((item) => Object.freeze({
+    review_evidence_digest: item.review_evidence_digest,
+    finding_id: item.finding_id
+  }));
+  if (accepted.length === 0 || accepted.some((item) => !currentOccurrences.has(acceptedOccurrenceKey(item)))) return void 0;
+  accepted.sort(compareAcceptedOccurrencesForGate);
+  const history = triage.review_round_history;
+  const currentReviewDigest = reviews.reviews[0]?.evidence_digest;
+  if (history === void 0 || currentReviewDigest === void 0 || history.length < REVIEW_PUSH_THROUGH_MIN_ATTEMPT || history.some((entry, index) => entry.attempt > state.attempt || index > 0 && history[index - 1].attempt >= entry.attempt) || !history.some((entry) => entry.attempt === state.attempt && entry.review_evidence_digest === currentReviewDigest)) {
+    return void 0;
+  }
+  return Object.freeze({
+    attempt: state.attempt,
+    review_round_count: parseSafeInteger(history.length),
+    subject_digest: subject.subject_digest,
+    context: Object.freeze({
+      minimum_attempt: REVIEW_PUSH_THROUGH_MIN_ATTEMPT,
+      current_evidence_set_digest: reviews.current_evidence_set.set_digest,
+      triage_result_digest: retained.get("triage").reference.result_digest,
+      accepted_occurrences: Object.freeze(accepted)
+    })
+  });
+}
+function exactOccurrenceSet(left, right) {
+  if (left.length !== right.length) return false;
+  const leftKeys = new Set(left.map(acceptedOccurrenceKey));
+  if (leftKeys.size !== left.length) return false;
+  const rightKeys = new Set(right.map(acceptedOccurrenceKey));
+  return rightKeys.size === right.length && [...leftKeys].every((key) => rightKeys.has(key));
+}
+function reviewPushThroughAuthorityMatchesCandidate(state, candidate, authority) {
+  return authority.task_id === state.task_id && authority.phase_instance === state.phase_instance && authority.attempt === candidate.attempt && authority.subject_digest === candidate.subject_digest && authority.current_evidence_set_digest === candidate.context.current_evidence_set_digest && authority.triage_result_digest === candidate.context.triage_result_digest && exactOccurrenceSet(authority.accepted_occurrences, candidate.context.accepted_occurrences);
+}
+function authenticatedReviewPushThroughSettlesCandidate(state, candidate, source) {
+  if (source === void 0) return false;
+  return source.values.some((value) => reviewPushThroughAuthorityMatchesCandidate(state, candidate, source.authenticate(value)));
 }
 function assertSubjectMatchesDurableState(state, retained, subject) {
   assertResolvedConstitution(subject.constitution);
@@ -38652,17 +39315,16 @@ function constitutionReviewRequired(constitution) {
 function acceptedFindingsForceReentry(state, disposition) {
   return disposition.accepted && state.step === "triage" && state.status === "succeeded";
 }
-function editorialRevisionPending(triageCurrent, disposition, subject) {
-  return triageCurrent !== void 0 && disposition.complete && triageCurrent.accepted_count === 0 && (triageCurrent.accepted_editorial_count ?? 0) > 0 && boundToSubjectExactly(triageCurrent, subject);
+function editorialRevisionPending(triageCurrent, disposition, subject, acceptedSettled) {
+  return triageCurrent !== void 0 && disposition.complete && (triageCurrent.accepted_count === 0 || acceptedSettled) && (triageCurrent.accepted_editorial_count ?? 0) > 0 && (triageCurrent.escalated_human_count ?? 0) === 0 && boundToSubjectExactly(triageCurrent, subject);
 }
 function decision2(next, flags) {
   return Object.freeze({
     next,
     reentry_required: flags?.reentry_required ?? false,
     editorial_revision_required: flags?.editorial_revision_required ?? false,
+    ...flags?.escalated_human_findings === true ? { escalated_human_findings: true } : {},
     ...flags?.policy_reentry_required === true ? { policy_reentry_required: true } : {},
-    ...flags?.effort_reentry_required === true ? { effort_reentry_required: true } : {},
-    ...flags?.effort_blockers === void 0 ? {} : { effort_blockers: flags.effort_blockers },
     adjudication_gate_pending: flags?.adjudication_gate_pending ?? false
   });
 }
@@ -38677,29 +39339,35 @@ function resolveAdjudicationGateStep(state, retained, subject, maximum) {
   }
   return decision2("adjudication-gate", { adjudication_gate_pending: pending });
 }
-function decideNextAction(state, retained, subject, current, disposition, triageCurrent, effort, maximum) {
-  if (acceptedFindingsForceReentry(state, disposition)) {
-    return effort?.recommendation.status === "blocked" ? decision2("produce", {
-      reentry_required: true,
-      effort_reentry_required: true,
-      effort_blockers: effort.recommendation.blockers
-    }) : decision2("produce", { reentry_required: true });
+function decideNextAction(state, retained, subject, current, disposition, triageCurrent, maximum, acceptedSettled) {
+  let currentEvidenceSetDigest;
+  try {
+    currentEvidenceSetDigest = deriveCurrentEvidenceSet(retained).current_evidence_set.set_digest;
+  } catch {
+    currentEvidenceSetDigest = void 0;
+  }
+  const isTriageFreshForRound = current.includes("triage") && triageCurrent !== void 0 && boundToSubjectExactly(triageCurrent, subject) && currentEvidenceSetDigest !== void 0 && triageCurrent.current_evidence_set_digest === currentEvidenceSetDigest;
+  if (isTriageFreshForRound && disposition.escalated_human && !escalationSettled(state, retained, subject)) {
+    const adjudicationStep = resolveAdjudicationGateStep(state, retained, subject, maximum);
+    if (adjudicationStep.next !== "advance") {
+      return decision2("adjudication-gate", {
+        escalated_human_findings: true,
+        adjudication_gate_pending: true
+      });
+    }
+    return decision2("advance", { escalated_human_findings: true });
+  }
+  if (isTriageFreshForRound && (acceptedFindingsForceReentry(state, disposition) && !acceptedSettled || escalationSettled(state, retained, subject) && (triageCurrent.accepted_editorial_count ?? 0) > 0)) {
+    return decision2("produce", { reentry_required: true });
   }
   if (!current.includes("counter_review")) return decision2("counter_review");
   if (constitutionReviewRequired(subject.constitution) && !current.includes("adjudicate")) {
     return decision2("produce", { reentry_required: true });
   }
   if (!current.includes("triage") || !disposition.complete) return decision2("triage");
-  if (disposition.accepted) return decision2("triage");
-  if (effort?.recommendation.status === "blocked") {
-    return decision2("produce", {
-      reentry_required: true,
-      effort_reentry_required: true,
-      effort_blockers: effort.recommendation.blockers
-    });
-  }
-  if (editorialRevisionPending(triageCurrent, disposition, subject)) {
-    if (state.phase_instance.startsWith("phase-design-")) {
+  if (disposition.accepted && !acceptedSettled) return decision2("triage");
+  if (editorialRevisionPending(triageCurrent, disposition, subject, acceptedSettled)) {
+    if (state.phase_instance !== "prd" && state.phase_instance !== "design") {
       return decision2("produce", { reentry_required: true });
     }
     return decision2("produce", { editorial_revision_required: true });
@@ -38720,8 +39388,12 @@ function assessCurrentEvidence(state, retained, subject) {
   const current = EVIDENCE_STEPS.filter((step) => currentFor(retained, step, subject, reviews));
   const stale = EVIDENCE_STEPS.filter((step) => retained.has(step) && !current.includes(step));
   const disposition = dispositionState(retained, reviews, triageCurrent);
-  const counter = reviews?.reviews[0]?.evidence;
-  const effort = state.phase_instance.startsWith("phase-design-") && counter?.assurance === "server-attested" ? counter.effort_review : void 0;
+  const pushThroughCandidate = deriveReviewPushThroughCandidate(state, retained, subject);
+  const acceptedSettled = pushThroughCandidate !== void 0 && authenticatedReviewPushThroughSettlesCandidate(
+    state,
+    pushThroughCandidate,
+    subject.review_push_through_authority
+  );
   const action3 = decideNextAction(
     state,
     retained,
@@ -38729,21 +39401,19 @@ function assessCurrentEvidence(state, retained, subject) {
     current,
     disposition,
     triageCurrent,
-    effort,
-    maximum
+    maximum,
+    acceptedSettled
   );
   const exhausted = action3.reentry_required && state.attempt >= maximum;
   return Object.freeze({
     current: Object.freeze([...current]),
     stale: Object.freeze([...stale]),
     every_finding_dispositioned: disposition.complete,
-    blocker_remains: disposition.blocker,
+    blocker_remains: disposition.blocker && (!acceptedSettled || disposition.escalated_human),
     reentry_required: action3.reentry_required,
     editorial_revision_required: action3.editorial_revision_required,
+    ...action3.escalated_human_findings === true ? { escalated_human_findings: true } : {},
     ...action3.policy_reentry_required === true ? { policy_reentry_required: true } : {},
-    ...action3.effort_reentry_required === true ? { effort_reentry_required: true } : {},
-    ...action3.effort_blockers === void 0 ? {} : { effort_blockers: action3.effort_blockers },
-    effort_currency: !state.phase_instance.startsWith("phase-design-") ? "not-required" : reviews === void 0 ? "missing-current" : effort === void 0 ? "legacy-exact" : effort.recommendation.status,
     exhausted,
     adjudication_gate_pending: action3.adjudication_gate_pending,
     next: exhausted ? "attempts-exhausted" : action3.next
@@ -39069,6 +39739,10 @@ var PRESENTATION_COPY = Object.freeze({
     title: "Automated review needs your direction",
     question: "The review did not converge within its normal attempts. What would you like to do next?"
   }),
+  "validation-override": Object.freeze({
+    title: "Decide whether to skip named validation",
+    question: "Should ArchFlow record these exact validations as not run and return implementation to its retry boundary?"
+  }),
   "constitution-edit": Object.freeze({
     title: "Review a project policy change",
     question: "Should the policy edit be undone, moved into the project baseline, or abandoned?"
@@ -39097,6 +39771,9 @@ var OPTION_COPY = Object.freeze({
   "amend-upstream": Object.freeze({ token: "update-earlier-work", label: "Update the earlier work", consequence: "Return to the affected earlier artifact and bring the plan back in line with reality." }),
   "revise-current": Object.freeze({ token: "change-current-work", label: "Change the current work", consequence: "Keep the earlier plan and revise the current artifact to match it." }),
   "retry-once": Object.freeze({ token: "try-review-again", label: "Try the review once more", consequence: "Allow one more automated review attempt without changing the work first." }),
+  "push-through-review": Object.freeze({ token: "continue-despite-review", label: "Push through this review", consequence: "Record an exception for the exact accepted findings shown here, then continue through every remaining constitution, approval, and commit boundary." }),
+  "grant-validation-override": Object.freeze({ token: "grant-validation-exception", label: "Grant the validation exception", consequence: "Record these exact validations as not run and return implementation to its ordinary retry boundary; this does not count them as passed." }),
+  "deny-validation-override": Object.freeze({ token: "deny-validation-exception", label: "Deny the validation exception", consequence: "Grant no exception and return implementation to its ordinary retry boundary so the checks can be run or a different request made." }),
   abort: Object.freeze({ token: "stop-work", label: "Stop this work", consequence: "End this workflow path without approval." }),
   "revert-edit": Object.freeze({ token: "undo-policy-change", label: "Undo the policy edit", consequence: "Restore the policy version this task originally reviewed against." }),
   "start-base-amendment": Object.freeze({ token: "update-project-policy", label: "Update the project policy", consequence: "Move the policy change into the project baseline before continuing this task." }),
@@ -39164,7 +39841,7 @@ function policyFindingReasons(findings) {
     ];
   });
 }
-function ordinaryReasons(active) {
+function ordinaryReasons(active, authenticatedDetails) {
   if (active.kind !== "artifact-approval" && active.kind !== "design-approval" && active.kind !== "commit-authorization") return void 0;
   const context2 = active.context;
   if (!("approval_trigger" in context2)) {
@@ -39199,6 +39876,12 @@ function ordinaryReasons(active) {
         text: "The pinned constitution does not authorize rule-based advancement, so this reviewed subject requires a human decision."
       }));
     }
+  }
+  if (authenticatedDetails?.escalated_findings !== void 0 && authenticatedDetails.escalated_findings.length > 0) {
+    reasons.push(Object.freeze({
+      class: "exception",
+      text: `${authenticatedDetails.escalated_findings.length} review finding${authenticatedDetails.escalated_findings.length === 1 ? " was" : "s were"} escalated for human decision.`
+    }));
   }
   reasons.push(...policyFindingReasons(context2.policy_findings));
   if (reasons.length === 0) {
@@ -39247,7 +39930,9 @@ function exceptionalReasons(active) {
       case "material-drift":
         return "The reviewed work materially diverges from approved upstream work and requires a recovery decision.";
       case "attempts-exhausted":
-        return `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.`;
+        return active.context.review_push_through === void 0 ? `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.` : `Automated review reached its limit after ${active.context.review_push_through.minimum_attempt} or more completed review rounds; continuing despite the exact accepted findings is an explicit exception.`;
+      case "validation-override":
+        return "The producer could not or should not run the named validations, and only a human may grant this recorded exception.";
       case "constitution-edit":
         return "The project constitution changed from the version this task reviewed and requires a policy decision.";
       case "restore-collision":
@@ -39266,8 +39951,8 @@ function exceptionalReasons(active) {
   })();
   return Object.freeze([Object.freeze({ class: "exception", text: text4 })]);
 }
-function presentationReasons(active) {
-  return ordinaryReasons(active) ?? exceptionalReasons(active);
+function presentationReasons(active, authenticatedDetails) {
+  return ordinaryReasons(active, authenticatedDetails) ?? exceptionalReasons(active);
 }
 function policyDetails(active) {
   if (active.kind !== "artifact-approval" && active.kind !== "design-approval" && active.kind !== "commit-authorization") return Object.freeze([]);
@@ -39284,6 +39969,22 @@ function policyDetails(active) {
     return lines;
   }));
 }
+function validationOverrideDetails(active) {
+  return Object.freeze([
+    `Producer reason: ${active.context.producer_reason}`,
+    ...active.context.displaced_validations.map((validation) => `Not run if granted: ${validation}`),
+    "Only the validations listed above are covered; every unlisted check remains required.",
+    "Granting this exception records missing verification. It does not treat any skipped validation as passed."
+  ]);
+}
+function reviewPushThroughDetails(active, authenticatedDetails) {
+  if (active.context.review_push_through === void 0) return Object.freeze([]);
+  return Object.freeze([
+    `At least ${active.context.review_push_through.minimum_attempt} distinct counter-review rounds completed before this option became available.`,
+    ...authenticatedDetails.review_push_through_findings ?? [],
+    "This exception settles only the exact ordinary accepted findings shown here. Constitution findings, review triggers, upstream drift, configured approval, verification disclosure, and commit authorization remain in force."
+  ]);
+}
 function buildHumanGatePresentation(active, authenticatedDetails = {}) {
   const request = parseActiveGate(structuredClone(active));
   if (authenticatedDetails.content_trigger !== void 0 && request.kind !== "commit-authorization") {
@@ -39292,24 +39993,35 @@ function buildHumanGatePresentation(active, authenticatedDetails = {}) {
   if (authenticatedDetails.reviewed_repositories !== void 0 && request.kind === "baseline-adoption") {
     throw new TypeError("internal invariant: baseline adoption has no reviewed repository details");
   }
+  if (authenticatedDetails.review_push_through_findings !== void 0 && request.kind !== "attempts-exhausted") {
+    throw new TypeError("internal invariant: push-through finding details require an attempts-exhausted gate");
+  }
+  if (authenticatedDetails.validation_overrides !== void 0 && request.kind !== "commit-authorization") {
+    throw new TypeError("internal invariant: validation override disclosure requires a commit-authorization gate");
+  }
   const waiver = waiverContext(request.context);
   const copy2 = waiver === void 0 ? PRESENTATION_COPY[request.kind] : Object.freeze({
     title: "Decide a policy exception",
     question: "Should this narrowly scoped policy exception be granted?"
   });
-  const reasons = presentationReasons(request);
+  const hasEscalations = authenticatedDetails.escalated_findings !== void 0 && authenticatedDetails.escalated_findings.length > 0;
+  const reasons = presentationReasons(request, authenticatedDetails);
   const details = [
     ...policyDetails(request),
+    ...request.kind === "validation-override" ? validationOverrideDetails(request) : [],
+    ...request.kind === "attempts-exhausted" ? reviewPushThroughDetails(request, authenticatedDetails) : [],
     ...request.kind === "baseline-adoption" ? baselineProjectionDetails(request.context) : [],
     ...request.kind === "commit-authorization" && authenticatedDetails.content_trigger !== void 0 ? [...authenticatedDetails.content_trigger] : [],
-    ...authenticatedDetails.reviewed_repositories ?? []
+    ...authenticatedDetails.reviewed_repositories ?? [],
+    ...authenticatedDetails.escalated_findings ?? [],
+    ...authenticatedDetails.validation_overrides ?? []
   ];
   return Object.freeze({
     class: reasons.some((reason2) => reason2.class === "exception") ? "exception" : "configured-approval",
     title: copy2.title,
-    summary: request.summary,
+    summary: hasEscalations ? `${request.summary} Review findings were escalated for human decision.` : request.summary,
     ...details.length === 0 ? {} : { details: Object.freeze(details) },
-    question: `${copy2.question} Choose an option and briefly explain why.`,
+    question: hasEscalations ? `${copy2.question} Escalated review findings require your decision. Choose an option and briefly explain why.` : `${copy2.question} Choose an option and briefly explain why.`,
     reasons,
     options: Object.freeze(presentationBindings(request).map((binding) => binding.option))
   });
@@ -39418,9 +40130,16 @@ function advanceAction(input, state) {
   const phase3 = decodePhaseInstance(state.phase_instance);
   const designPhase = phase3.kind === "design" || phase3.kind === "phase-design";
   const requiredKind = designPhase ? "design-approval" : phase3.kind === "prd" ? "artifact-approval" : phase3.kind === "phase-impl" ? "commit-authorization" : void 0;
+  if (input.escalated_human_findings === true && requiredKind !== void 0) {
+    return action("open-gate", "A human escalation requires an explicit decision before advancement.", true, state, {
+      gate_kind: requiredKind
+    });
+  }
   const legacyDesignApproval = designPhase && hasLegacyDesignApproval(input);
   const migrationApproval = designPhase && matchingApproval(input, "migration-audit");
-  const ordinaryApproved = requiredKind !== void 0 && matchingApproval(input, requiredKind);
+  const ordinaryApproved = requiredKind !== void 0 && (input.authenticated_approvals ?? []).some(
+    (approval) => approval.gate_kind === requiredKind && approval.subject_digest === input.subject_digest && (approval.current_evidence_set_digest === void 0 || input.current_evidence_set_digest === void 0 || approval.current_evidence_set_digest === input.current_evidence_set_digest)
+  );
   const autonomous = hasAcceptedNoWait(input, state) && !ordinaryApproved;
   if (designPhase && input.migration_audit_required === true) {
     return action("open-gate", "Open the reviewed migration audit for the exact imported documents and resume point.", true, state, {
@@ -39661,6 +40380,15 @@ function deriveNextAction(input) {
       gate_kind: state.open_gate.gate_kind
     });
   }
+  if (input.pending_validation_override === true) {
+    return action(
+      "open-gate",
+      "Open the requested validation override so a human can decide whether the named validations may be displaced.",
+      true,
+      state,
+      { gate_kind: "validation-override" }
+    );
+  }
   const currentProduce = state.authoritative_results.some((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
   if (!currentProduce) {
     return action("run-step", runStepDetail(state, "produce"), false, state, { step: "produce" });
@@ -39736,17 +40464,6 @@ function deriveNextAction(input) {
         { step: "produce", editorial_revision: true }
       );
     }
-    if (next === "produce" && input.assessment?.effort_reentry_required === true) {
-      const blockers = input.assessment.effort_blockers ?? [];
-      const details = blockers.map((blocker2) => blocker2.kind === "specification-gap" ? `${blocker2.component_id}: ${blocker2.question}` : `Implementation components need a clearer boundary: ${blocker2.rationale}`);
-      return action(
-        "run-step",
-        `Revise the phase design to resolve its authenticated effort-review blockers.${details.length === 0 ? "" : ` ${details.join(" ")}`}`,
-        false,
-        state,
-        { step: "produce", effort_reentry: true }
-      );
-    }
     if (next === "produce" && input.assessment?.policy_reentry_required === true) {
       return action("run-step", policyReentryDetail(input.policy_findings), false, state, {
         step: "produce",
@@ -39769,8 +40486,8 @@ var STATUS_RESOURCE_ROLES = Object.freeze([
   "prior-implementation-notes",
   "verification-transcript"
 ]);
-function phaseStatusResources(taskId, phaseInstance4) {
-  const phase3 = decodePhaseInstance(phaseInstance4);
+function phaseStatusResources(taskId, phaseInstance5) {
+  const phase3 = decodePhaseInstance(phaseInstance5);
   const task = (path2) => `.archflow/tasks/${taskId}/${path2}`;
   const runtime = (path2) => `.archflow/runtime/tasks/${taskId}/${path2}`;
   const resources = [];
@@ -39824,8 +40541,8 @@ function phaseStatusResources(taskId, phaseInstance4) {
   }
   return Object.freeze(resources.map((resource) => Object.freeze(resource)));
 }
-function phaseDocumentDefaults(taskId, phaseInstance4) {
-  const phase3 = decodePhaseInstance(phaseInstance4);
+function phaseDocumentDefaults(taskId, phaseInstance5) {
+  const phase3 = decodePhaseInstance(phaseInstance5);
   const task = (path2) => `.archflow/tasks/${taskId}/${path2}`;
   switch (phase3.kind) {
     case "prd":
@@ -39836,7 +40553,7 @@ function phaseDocumentDefaults(taskId, phaseInstance4) {
     case "design":
     case "phase-design": {
       const taskPrefix = task("");
-      const additionalDocumentPaths = phaseStatusResources(taskId, phaseInstance4).filter((resource) => resource.access === "read-write" && resource.path.startsWith(taskPrefix)).map((resource) => resource.path.slice(taskPrefix.length)).sort();
+      const additionalDocumentPaths = phaseStatusResources(taskId, phaseInstance5).filter((resource) => resource.access === "read-write" && resource.path.startsWith(taskPrefix)).map((resource) => resource.path.slice(taskPrefix.length)).sort();
       if (phase3.kind === "design") return {
         document_path: "design.md",
         additional_document_paths: additionalDocumentPaths,
@@ -39962,8 +40679,8 @@ async function filesBelow(root) {
   await walk(root);
   return Object.freeze(output.sort((left, right) => left.relative.localeCompare(right.relative)));
 }
-function phaseNumber(phaseInstance4) {
-  return /^(?:phase-design|phase-impl)-([1-9][0-9]*)$/u.exec(phaseInstance4)?.[1];
+function phaseNumber(phaseInstance5) {
+  return /^(?:phase-design|phase-impl)-([1-9][0-9]*)$/u.exec(phaseInstance5)?.[1];
 }
 async function receiptIsRecoveryBuffer(entry, state) {
   if (!/^transient\/intents\/.+\.json$/u.test(entry.relative) || entry.relative.endsWith(".request.json")) return false;
@@ -39996,8 +40713,8 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
   const currentPhase = phaseNumber(state.phase_instance);
   if (currentPhase !== void 0 && entry.relative.startsWith(`cache/phases/${currentPhase}/`)) return true;
   if (entry.relative.startsWith("cache/results/")) {
-    const digest10 = entry.relative.split("/")[2];
-    return decisionProtectedResults.has(digest10 ?? "") || retainedResultDigests(state).has(digest10 ?? "");
+    const digest12 = entry.relative.split("/")[2];
+    return decisionProtectedResults.has(digest12 ?? "") || retainedResultDigests(state).has(digest12 ?? "");
   }
   return false;
 }
@@ -40030,8 +40747,8 @@ async function decisionProtectedAuthorityResults(authority) {
   if (decisionDigests.has("*") || files.some((file2) => file2.symlink)) return /* @__PURE__ */ new Set(["*"]);
   const protectedResults = /* @__PURE__ */ new Set();
   for (const file2 of files) {
-    const digest10 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
-    if (digest10 === void 0) continue;
+    const digest12 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
+    if (digest12 === void 0) continue;
     try {
       const document2 = parseCanonicalDocument(
         await readFile8(file2.absolute),
@@ -40039,15 +40756,15 @@ async function decisionProtectedAuthorityResults(authority) {
       );
       const manifest = parseResultManifest(document2.value);
       const semantics = validateDurableSemantics({ result_manifest: document2 });
-      if (document2.digest !== digest10 || !semantics.ok) {
-        protectedResults.add(digest10);
+      if (document2.digest !== digest12 || !semantics.ok) {
+        protectedResults.add(digest12);
         continue;
       }
-      if (decisionDigests.has(digest10) || decisionDigests.has(manifest.artifact_digest)) {
-        protectedResults.add(digest10);
+      if (decisionDigests.has(digest12) || decisionDigests.has(manifest.artifact_digest)) {
+        protectedResults.add(digest12);
       }
     } catch {
-      protectedResults.add(digest10);
+      protectedResults.add(digest12);
     }
   }
   return protectedResults;
@@ -40063,8 +40780,8 @@ async function unreferencedAuthorityResults(authority, state, decisionProtectedR
     return Object.freeze([]);
   }
   return Object.freeze(files.filter((file2) => {
-    const digest10 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
-    return digest10 !== void 0 && !live.has(digest10) && !decisionProtectedResults.has(digest10);
+    const digest12 = /^([0-9a-f]{64})\.json$/u.exec(file2.relative)?.[1];
+    return digest12 !== void 0 && !live.has(digest12) && !decisionProtectedResults.has(digest12);
   }));
 }
 async function unreferencedAuthorityDecisions(authority, state) {
@@ -40083,6 +40800,8 @@ async function unreferencedAuthorityDecisions(authority, state) {
   const live = /* @__PURE__ */ new Set([
     ...state.approvals.map((entry) => entry.gate_id),
     ...state.waivers.map((entry) => entry.gate_id),
+    ...(state.validation_overrides ?? []).map((entry) => entry.gate_id),
+    ...(state.review_push_throughs ?? []).map((entry) => entry.gate_id),
     ...(state.restart_history ?? []).flatMap((restart) => [
       ...restart.cleared_waivers.map((entry) => entry.gate_id),
       ...restart.cleared_pending_human_revision === void 0 ? [] : [restart.cleared_pending_human_revision.gate_id]
@@ -40530,12 +41249,12 @@ async function discoverProjections(dependencies, authority, state, repositorySet
       recorded.push(observation.projection);
       const identity = observation.repository === void 0 ? observation.projection.path : Object.freeze({ repository: observation.repository, path: observation.projection.path });
       if (observation.reference === void 0) unrestorable.push(identity);
-      const digest10 = await currentProjectionDigest(observation.target);
-      if (digest10 !== "missing") {
+      const digest12 = await currentProjectionDigest(observation.target);
+      if (digest12 !== "missing") {
         current.push(Object.freeze({
           ...observation.repository === void 0 ? {} : { repository: observation.repository },
           path: observation.projection.path,
-          content_digest: digest10
+          content_digest: digest12
         }));
       } else if (observation.reference === void 0 && !await committedAtHead(observation.runner, authority, observation.projection.path)) {
         committedAbsent.push(identity);
@@ -40772,16 +41491,16 @@ function reconcileCurrentAuthority(value) {
   const unrestorable = indexProjectionIdentities(input.unrestorable_paths ?? []);
   const committedAbsent = indexProjectionIdentities(input.committed_absent_paths ?? []);
   for (const recorded of input.recorded_projections) {
-    const digest10 = indexedDigest(observed, recorded);
-    if (digest10 !== recorded.content_digest) {
+    const digest12 = indexedDigest(observed, recorded);
+    if (digest12 !== recorded.content_digest) {
       findings.push(Object.freeze({
         kind: "projection-mismatch",
         ...recorded.repository === void 0 ? {} : { repository: recorded.repository },
         path: recorded.path,
         recorded_digest: recorded.content_digest,
-        ...digest10 === void 0 ? {} : { observed_digest: digest10 },
-        ...digest10 === void 0 && indexedIdentity(unrestorable, recorded) ? { restore_unavailable: true } : {},
-        ...digest10 === void 0 && indexedIdentity(unrestorable, recorded) && indexedIdentity(committedAbsent, recorded) ? { committed_absent: true } : {},
+        ...digest12 === void 0 ? {} : { observed_digest: digest12 },
+        ...digest12 === void 0 && indexedIdentity(unrestorable, recorded) ? { restore_unavailable: true } : {},
+        ...digest12 === void 0 && indexedIdentity(unrestorable, recorded) && indexedIdentity(committedAbsent, recorded) ? { committed_absent: true } : {},
         next_action: "open-baseline-adoption-gate"
       }));
     }
@@ -40845,9 +41564,9 @@ var SAFE_MESSAGES = Object.freeze({
   PROCESS_FAILED: "The reviewer process failed before producing a usable result.",
   REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review."
 });
-function observationClaim(phaseInstance4, attempt) {
+function observationClaim(phaseInstance5, attempt) {
   return parseWorkspacePathClaim(
-    `diagnostics/attempts/${phaseInstance4}/dispatch-counter-review-${String(attempt)}.json`
+    `diagnostics/attempts/${phaseInstance5}/dispatch-counter-review-${String(attempt)}.json`
   );
 }
 async function readCurrentDispatchFailure(dependencies, authority, state) {
@@ -40870,10 +41589,179 @@ async function readCurrentDispatchFailure(dependencies, authority, state) {
   }
 }
 
+// src/state/validation-overrides.ts
+import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
+var authenticatedValidationOverrides = /* @__PURE__ */ new WeakSet();
+var authenticatedValidationOverrideBrand = /* @__PURE__ */ Symbol("AuthenticatedValidationOverride");
+function assertAuthenticatedValidationOverride(value) {
+  if (!authenticatedValidationOverrides.has(value)) {
+    throw new TypeError("an authenticated validation override is required");
+  }
+}
+function ordinal7(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+async function loadAuthenticatedValidationOverride(dependencies, authority, record2) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertPlainJson(record2, "validation override record");
+  const claimed = structuredClone(record2);
+  const current = await stateOrFailure(dependencies, authority);
+  if (!current.ok) return current;
+  const state = current.value.value;
+  if (state.task_id !== authority.task_id || !verifyRepositoryIdentity(state.repository_identity_digest, authority.repository_identity).ok) return issue2("STATE_INVALID", state, "validation-override-state-authority-mismatch");
+  const durable = (state.validation_overrides ?? []).find((entry) => entry.gate_id === claimed.gate_id);
+  if (durable === void 0 || !isDeepStrictEqual10(durable, claimed)) {
+    return issue2("STATE_INVALID", state, "validation-override-not-current");
+  }
+  const requestPath = await resolvePath7(
+    dependencies,
+    authority,
+    gateRequestClaim(claimed.gate_id),
+    "authority-decision"
+  );
+  const decisionPath = await resolvePath7(
+    dependencies,
+    authority,
+    gateDecisionClaim(claimed.gate_id),
+    "authority-decision"
+  );
+  if (!requestPath.ok) return requestPath;
+  if (!decisionPath.ok) return decisionPath;
+  const request = await readCanonical(requestPath.value, "validation override request", parseArchivedGateRequest);
+  const decision3 = await readCanonical(
+    decisionPath.value,
+    "validation override decision",
+    parseArchivedGateDecisionRecord
+  );
+  if (request === "missing") {
+    return issue2("STATE_INVALID", state, "validation-override-request-unavailable");
+  }
+  if (decision3 === "missing") {
+    return issue2("STATE_INVALID", state, "validation-override-decision-unavailable");
+  }
+  if (request === "invalid" || decision3 === "invalid") {
+    return issue2("STATE_INVALID", state, "validation-override-archive-invalid");
+  }
+  if (decision3.digest !== claimed.decision_digest || !validateDurableSemantics({ gate_request: request, gate_decision: decision3 }).ok || request.value.kind !== "validation-override" || decision3.value.kind !== "validation-override" || decision3.value.outcome !== "decided" || decision3.value.envelope.payload.decision !== "grant-validation-override") return issue2("STATE_INVALID", state, "validation-override-binding-invalid");
+  const requestValue = request.value;
+  const decisionValue = decision3.value;
+  const context2 = requestValue.context;
+  const evidence = requestValue.current_evidence;
+  const provenance2 = decisionValue.envelope.human_provenance;
+  const ordinalValidations = [...context2.displaced_validations].sort(ordinal7);
+  const subjectDigest = validationOverrideSubjectDigest({
+    task_id: requestValue.task_id,
+    phase_instance: requestValue.phase_instance,
+    input_fingerprint: context2.input_fingerprint,
+    governing_phase_design_digest: context2.governing_phase_design_digest,
+    displaced_validations: context2.displaced_validations
+  });
+  if (requestValue.task_id !== authority.task_id || requestValue.gate_id !== claimed.gate_id || requestValue.phase_instance !== claimed.phase_instance || requestValue.subject_digest !== claimed.subject_digest || subjectDigest !== claimed.subject_digest || context2.input_fingerprint !== claimed.input_fingerprint || context2.governing_phase_design_digest !== claimed.governing_phase_design_digest || !isDeepStrictEqual10(ordinalValidations, claimed.displaced_validations) || evidence.task_id !== authority.task_id || evidence.phase_instance !== claimed.phase_instance || evidence.input_fingerprint !== claimed.input_fingerprint || evidence.governing_phase_design_digest !== claimed.governing_phase_design_digest || evidence.request_revision !== context2.request_revision || evidence.validation_request_subject_digest !== claimed.subject_digest || decisionValue.task_id !== authority.task_id || decisionValue.gate_id !== claimed.gate_id || decisionValue.phase_instance !== claimed.phase_instance || decisionValue.subject_digest !== claimed.subject_digest || decisionValue.context_digest !== requestValue.context_digest || decisionValue.envelope.payload.reason !== claimed.human_reason || provenance2.actor_class !== "human" || provenance2.channel !== "connected-host" || provenance2.recorded_at !== claimed.decided_at || requestValue.opened_at_revision !== context2.request_revision + 1 || claimed.granted_at_revision !== requestValue.opened_at_revision + 1) return issue2("STATE_INVALID", state, "validation-override-binding-invalid");
+  const authenticated = {
+    record: deepFreezeGateJson(structuredClone(durable)),
+    request: deepFreezeGateJson(structuredClone(requestValue)),
+    decision: deepFreezeGateJson(structuredClone(decisionValue))
+  };
+  Object.defineProperty(authenticated, authenticatedValidationOverrideBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(authenticated);
+  authenticatedValidationOverrides.add(authenticated);
+  return ok13(authenticated);
+}
+function authenticatedValidationOverrideIsCurrent(override, state, governingPhaseDesignDigest) {
+  assertAuthenticatedValidationOverride(override);
+  return override.record.phase_instance === state.phase_instance && override.record.input_fingerprint === state.input_fingerprint && override.record.governing_phase_design_digest === governingPhaseDesignDigest;
+}
+
+// src/state/review-push-throughs.ts
+import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
+var authenticatedReviewPushThroughs = /* @__PURE__ */ new WeakSet();
+var authenticatedReviewPushThroughBrand = /* @__PURE__ */ Symbol("AuthenticatedReviewPushThrough");
+function assertAuthenticatedReviewPushThrough(value) {
+  if (!authenticatedReviewPushThroughs.has(value)) {
+    throw new TypeError("an authenticated review push-through is required");
+  }
+  assertAuthenticatedGateApproval(value.approval);
+}
+function reviewPushThroughAuthoritySource(values) {
+  return Object.freeze({
+    values: Object.freeze([...values]),
+    authenticate(value) {
+      const authenticated = value;
+      assertAuthenticatedReviewPushThrough(authenticated);
+      const record2 = authenticated.record;
+      return Object.freeze({
+        task_id: authenticated.approval.request.task_id,
+        phase_instance: record2.phase_instance,
+        attempt: record2.attempt,
+        subject_digest: record2.subject_digest,
+        current_evidence_set_digest: record2.current_evidence_set_digest,
+        triage_result_digest: record2.triage_result_digest,
+        accepted_occurrences: record2.accepted_occurrences
+      });
+    }
+  });
+}
+var ordinalOccurrences = (occurrences) => [...occurrences].sort((left, right) => left.review_evidence_digest < right.review_evidence_digest ? -1 : left.review_evidence_digest > right.review_evidence_digest ? 1 : left.finding_id < right.finding_id ? -1 : left.finding_id > right.finding_id ? 1 : 0);
+async function loadAuthenticatedReviewPushThrough(dependencies, authority, value) {
+  assertInternalTransactionAuthority(authority, {
+    runner: dependencies.runner,
+    environment: dependencies.environment
+  });
+  assertPlainJson(value, "review push-through record");
+  const claimed = structuredClone(value);
+  const current = await stateOrFailure(dependencies, authority);
+  if (!current.ok) return current;
+  if (current.value.value.task_id !== authority.task_id || !verifyRepositoryIdentity(current.value.value.repository_identity_digest, authority.repository_identity).ok) {
+    return issue2("STATE_INVALID", current.value.value, "review-push-through-state-authority-mismatch");
+  }
+  const durable = current.value.value.review_push_throughs?.find((record2) => record2.gate_id === claimed.gate_id);
+  if (durable === void 0 || !isDeepStrictEqual11(durable, claimed)) {
+    return issue2("STATE_INVALID", current.value.value, "review-push-through-not-current");
+  }
+  const approvalRef = current.value.value.approvals.find((approval2) => approval2.gate_id === claimed.gate_id);
+  if (approvalRef === void 0) {
+    return issue2("STATE_INVALID", current.value.value, "review-push-through-approval-missing");
+  }
+  const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approvalRef);
+  if (!loaded.ok) return loaded;
+  const approval = loaded.value;
+  const request = approval.request;
+  const decision3 = approval.decision;
+  const context2 = request.kind === "attempts-exhausted" ? request.context.review_push_through : void 0;
+  const provenance2 = decision3.envelope.human_provenance;
+  if (request.kind !== "attempts-exhausted" || context2 === void 0 || decision3.kind !== "attempts-exhausted" || decision3.envelope.payload.decision !== "push-through-review" || provenance2.actor_class !== "human" || provenance2.channel !== "connected-host" || approval.approval.decision_digest !== claimed.decision_digest || approval.approval.subject_digest !== claimed.subject_digest || approval.approval.resolved_at_revision !== claimed.resolved_at_revision || request.phase_instance !== claimed.phase_instance || request.subject_digest !== claimed.subject_digest || request.context.attempts !== claimed.attempt || context2.current_evidence_set_digest !== claimed.current_evidence_set_digest || context2.triage_result_digest !== claimed.triage_result_digest || request.current_evidence.set_digest !== claimed.current_evidence_set_digest || decision3.envelope.payload.reason !== claimed.human_reason || provenance2.recorded_at !== claimed.decided_at || !isDeepStrictEqual11(ordinalOccurrences(context2.accepted_occurrences), claimed.accepted_occurrences)) return issue2("STATE_INVALID", current.value.value, "review-push-through-binding-invalid");
+  const authenticated = {
+    record: deepFreezeGateJson(structuredClone(durable)),
+    approval
+  };
+  Object.defineProperty(authenticated, authenticatedReviewPushThroughBrand, {
+    value: true,
+    enumerable: false,
+    writable: false,
+    configurable: false
+  });
+  Object.freeze(authenticated);
+  authenticatedReviewPushThroughs.add(authenticated);
+  return ok13(authenticated);
+}
+
 // src/state/status.ts
 var ok17 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-function currentReviewedRepositoryPins(review, taskId, phaseInstance4) {
-  if (review === void 0 || review.assurance !== "server-attested" || review.task_id !== taskId || review.phase_instance !== phaseInstance4 || !("repositories" in review) || review.repositories === void 0) return void 0;
+function auditFailureStatus(error51) {
+  const parameters = error51.diagnostic.parameters;
+  const issueCode = typeof parameters.issue_code === "string" ? parameters.issue_code : "";
+  return error51.code === "IO_ERROR" || issueCode.includes("unavailable") || issueCode.includes("missing") ? "unavailable" : "invalid";
+}
+function currentReviewedRepositoryPins(review, taskId, phaseInstance5) {
+  if (review === void 0 || review.assurance !== "server-attested" || review.task_id !== taskId || review.phase_instance !== phaseInstance5 || !("repositories" in review) || review.repositories === void 0) return void 0;
   return Object.freeze(review.repositories.map((repository) => Object.freeze({
     name: repository.name,
     commit: repository.commit
@@ -40891,7 +41779,7 @@ function projectReviewedRepositoryStatus(repositories, reviewed) {
   }));
 }
 function reviewedRepositoryGateDetails(active, currentEvidence, reviewed, repositories) {
-  if (active.kind === "baseline-adoption" || !("current_evidence" in active) || active.current_evidence.set_digest !== currentEvidence.set_digest || reviewed === void 0 || // A single-repository task's evidence pins only `primary`; its gate presentation stays exactly
+  if (active.kind === "baseline-adoption" || active.kind === "validation-override" || !("current_evidence" in active) || active.current_evidence.set_digest !== currentEvidence.set_digest || reviewed === void 0 || // A single-repository task's evidence pins only `primary`; its gate presentation stays exactly
   // what it was before repository sets existed, so the lines appear only with a secondary.
   reviewed.every((repository) => repository.name === "primary")) return void 0;
   const live = new Map((repositories ?? []).map((repository) => [repository.name, repository.head]));
@@ -41088,6 +41976,13 @@ function currentReviewPredecessor(state, produceSubject) {
     input_fingerprint: declaredPredecessor.input_fingerprint
   });
 }
+async function currentGoverningPhaseDesignDigest(dependencies, authority, state) {
+  if (decodePhaseInstance(state.phase_instance).kind !== "phase-impl") return void 0;
+  const binding = expectedProduceUpstreamBindings(state).find((candidate) => candidate.artifact_kind === "phase-design");
+  if (binding === void 0) return void 0;
+  const governing = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+  return governing.ok ? governing.value.artifact_digest : void 0;
+}
 async function currentApprovedUpstreams(dependencies, authority, state, authenticated, subject) {
   let settlementPolicy;
   let settlementPolicyLoaded = false;
@@ -41163,10 +42058,12 @@ function pendingAdjudicationGates(state, constitution, retained, authenticated) 
   for (const gate of selectAdjudicationGates(constitution.rules, source.evidence)) {
     const contextDigest = computeGateContextDigest(gate.kind, gate.context);
     const exactGateApproved = currentSet !== void 0 && authenticated.some((item) => item.approval.gate_kind === gate.kind && item.approval.subject_digest === gate.subject_digest && item.request.phase_instance === state.phase_instance && item.request.context_digest === contextDigest && item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
+    item.request.kind !== "validation-override" && // a validation request is not review evidence
     item.request.current_evidence.set_digest === currentSet.set_digest && source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained));
     const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
     const ordinaryKind = state.phase_instance === "prd" ? "artifact-approval" : designPhase ? "design-approval" : state.phase_instance.startsWith("phase-impl-") ? "commit-authorization" : void 0;
-    const ordinaryApproval = gate.kind === "constitution-review" && currentSet !== void 0 && ordinaryKind !== void 0 && authenticated.some((item) => {
+    const hasActivePolicyIssues = !("policy_findings" in gate.context) || gate.context.constitution !== "pass" || gate.context.policy_findings.some((f) => f.compliance !== "pass" || f.trigger !== "not-matched");
+    const ordinaryApproval = gate.kind === "constitution-review" && hasActivePolicyIssues && currentSet !== void 0 && ordinaryKind !== void 0 && authenticated.some((item) => {
       const decision3 = item.decision.envelope.payload.decision;
       return item.approval.gate_kind === ordinaryKind && item.approval.subject_digest === gate.subject_digest && item.request.kind === ordinaryKind && item.request.phase_instance === state.phase_instance && item.request.subject_digest === gate.subject_digest && item.request.current_evidence.set_digest === currentSet.set_digest && source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained) && (decision3 === "approve" || decision3 === "authorize-commit");
     });
@@ -41469,7 +42366,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       const phaseKind2 = decodedPhase.kind;
       const counterReviewer = resolveDispatchRoute(parsedConfig, phaseKind2, "counter-reviewer");
       const testReviewer = configuredRoute(parsedConfig, phaseKind2, "test-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind2, "test-reviewer");
-      const effortReviewer = configuredRoute(parsedConfig, phaseKind2, "effort-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind2, "effort-reviewer");
+      let effortReviewer;
+      try {
+        effortReviewer = configuredRoute(parsedConfig, phaseKind2, "effort-reviewer") === void 0 ? void 0 : resolveDispatchRoute(parsedConfig, phaseKind2, "effort-reviewer");
+      } catch {
+        effortReviewer = void 0;
+      }
       const adjudicator = resolveDispatchRoute(parsedConfig, phaseKind2, "adjudicator");
       routes = Object.freeze({
         counter_reviewer: counterReviewer,
@@ -41570,7 +42472,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       if (loaded.ok) {
         if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) continue;
         authenticatedApprovals.push(loaded.value);
-        approvalFacts.push(Object.freeze({ gate_kind: approval.gate_kind, subject_digest: approval.subject_digest }));
+        approvalFacts.push(Object.freeze({
+          gate_kind: approval.gate_kind,
+          subject_digest: approval.subject_digest,
+          ..."set_digest" in loaded.value.request.current_evidence ? { current_evidence_set_digest: loaded.value.request.current_evidence.set_digest } : {}
+        }));
       } else {
         blockers.push("approval-authority-unavailable");
         approvalIssues.push(Object.freeze({
@@ -41590,6 +42496,20 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         })
       }));
     }
+  }
+  const authenticatedValidationOverrides2 = [];
+  const validationAuditFailures = /* @__PURE__ */ new Map();
+  for (const record2 of state.validation_overrides ?? []) {
+    const loaded = await loadAuthenticatedValidationOverride(dependencies, authority, record2);
+    if (loaded.ok) authenticatedValidationOverrides2.push(loaded.value);
+    else validationAuditFailures.set(record2.gate_id, auditFailureStatus(loaded.error));
+  }
+  const authenticatedReviewPushThroughs2 = [];
+  const pushThroughAuditFailures = /* @__PURE__ */ new Map();
+  for (const record2 of state.review_push_throughs ?? []) {
+    const loaded = await loadAuthenticatedReviewPushThrough(dependencies, authority, record2);
+    if (loaded.ok) authenticatedReviewPushThroughs2.push(loaded.value);
+    else pushThroughAuditFailures.set(record2.gate_id, auditFailureStatus(loaded.error));
   }
   const settlementPolicy = constitution === void 0 ? void 0 : authenticateRuleAcceptancePolicy(state, constitution);
   const acceptedSettlement = settlementPolicy === void 0 || produceSubject === void 0 ? void 0 : acceptedNoWaitSettlementWithoutOrdinaryApproval(
@@ -41806,18 +42726,28 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
   const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
   let assessment;
+  let assessmentSubject;
+  let reviewPushThroughCandidate;
   if (constitution !== void 0 && subjectDigest !== void 0) {
     const resolvedAssessment = await resolveStatusEvidenceAssessment(
       () => currentApprovedUpstreams(dependencies, authority, state, authenticatedApprovals, produceSubject),
-      (approvedUpstreamDigests) => assessCurrentEvidence(state, retained, {
-        subject_digest: subjectDigest,
-        input_fingerprint: state.input_fingerprint,
-        constitution,
-        ...reviewPredecessor === void 0 ? {} : { review_predecessor: reviewPredecessor },
-        approved_upstream_digests: approvedUpstreamDigests,
-        authenticated_gate_approvals: authenticatedApprovals,
-        ...parsedConfig?.max_attempts === void 0 ? {} : { max_attempts: parsedConfig.max_attempts }
-      })
+      (approvedUpstreamDigests) => {
+        assessmentSubject = {
+          subject_digest: subjectDigest,
+          input_fingerprint: state.input_fingerprint,
+          constitution,
+          ...reviewPredecessor === void 0 ? {} : { review_predecessor: reviewPredecessor },
+          approved_upstream_digests: approvedUpstreamDigests,
+          authenticated_gate_approvals: authenticatedApprovals,
+          ...authenticatedReviewPushThroughs2.length === 0 ? {} : {
+            review_push_through_authority: reviewPushThroughAuthoritySource(authenticatedReviewPushThroughs2)
+          },
+          ...parsedConfig?.max_attempts === void 0 ? {} : { max_attempts: parsedConfig.max_attempts }
+        };
+        const assessed = assessCurrentEvidence(state, retained, assessmentSubject);
+        reviewPushThroughCandidate = deriveReviewPushThroughCandidate(state, retained, assessmentSubject);
+        return assessed;
+      }
     );
     assessment = resolvedAssessment.assessment;
     if (resolvedAssessment.blocking_reason !== void 0) blockers.push(resolvedAssessment.blocking_reason);
@@ -41958,11 +42888,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     const findings = derived.reviews.flatMap((review) => review.evidence.findings.map((finding) => {
       const recorded = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
       return Object.freeze({
+        ...finding,
         review_evidence_digest: review.evidence_digest,
-        finding_id: finding.finding_id,
-        blocking: finding.blocking,
-        severity: finding.severity,
-        summary: finding.summary,
         ...recorded === void 0 ? {} : { disposition: recorded.disposition, rationale: recorded.rationale }
       });
     }));
@@ -41996,6 +42923,23 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       ...assessment === void 0 ? {} : { assessment }
     });
   }
+  const governingPhaseDesignDigest = await currentGoverningPhaseDesignDigest(
+    dependencies,
+    authority,
+    state
+  ).catch(() => void 0);
+  const validationProductionInput = Object.freeze({
+    phase_instance: state.phase_instance,
+    input_fingerprint: produceSubject?.artifact.input_fingerprint ?? state.input_fingerprint
+  });
+  const currentValidationOverrideDetails = governingPhaseDesignDigest === void 0 ? Object.freeze([]) : Object.freeze(authenticatedValidationOverrides2.filter((item) => authenticatedValidationOverrideIsCurrent(
+    item,
+    validationProductionInput,
+    governingPhaseDesignDigest
+  )).flatMap((item) => [
+    `Validation exception granted at ${item.record.decided_at}: ${item.record.human_reason}`,
+    ...item.request.context.displaced_validations.map((validation) => `Not run: ${validation}`)
+  ]));
   let activeGate;
   let openGate;
   let gateBindingBlocker;
@@ -42056,6 +43000,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
             );
           }
           let reviewedRepositoryDetails;
+          let escalatedFindingDetails;
+          let reviewPushThroughFindingDetails;
           if (evidence.available) {
             reviewedRepositoryDetails = reviewedRepositoryGateDetails(
               activeGate,
@@ -42063,10 +43009,33 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
               reviewedRepositories,
               repositories
             );
+            const escalated = evidence.findings.filter((f) => f.disposition === "escalated-human");
+            if (escalated.length > 0) {
+              escalatedFindingDetails = escalated.map((f) => `Escalated finding ${f.finding_id}: ${f.summary} (rationale: ${f.rationale ?? ""})`);
+            }
+            if (activeGate.kind === "attempts-exhausted" && activeGate.context.review_push_through !== void 0) {
+              const roundCount2 = retained.get("triage")?.manifest.source_artifact;
+              const completedRounds = roundCount2?.artifact_kind === "triage" ? roundCount2.evidence.review_round_history?.length : void 0;
+              reviewPushThroughFindingDetails = [
+                ...completedRounds === void 0 ? [] : [`Completed counter-review rounds: ${completedRounds}.`],
+                ...activeGate.context.review_push_through.accepted_occurrences.map((occurrence) => {
+                  const finding = evidence.findings.find((candidate) => candidate.review_evidence_digest === occurrence.review_evidence_digest && candidate.finding_id === occurrence.finding_id);
+                  if (finding === void 0 || finding.disposition !== "accepted") {
+                    throw new TypeError("push-through presentation finding is not the current accepted occurrence");
+                  }
+                  const taxonomy = "claim_type" in finding ? `${finding.claim_type}/${finding.confidence}` : `${finding.severity}/${finding.blocking ? "blocking" : "advisory"}`;
+                  const falsifier = "falsifier" in finding ? finding.falsifier : "Legacy finding: no structured falsifier was recorded.";
+                  return `Accepted finding ${finding.finding_id} (${taxonomy}): ${finding.summary} Falsifier: ${falsifier}`;
+                })
+              ];
+            }
           }
           openGate = gateStatus(activeGate, {
             ...triggerDetails === void 0 ? {} : { content_trigger: triggerDetails },
-            ...reviewedRepositoryDetails === void 0 ? {} : { reviewed_repositories: reviewedRepositoryDetails }
+            ...reviewedRepositoryDetails === void 0 ? {} : { reviewed_repositories: reviewedRepositoryDetails },
+            ...escalatedFindingDetails === void 0 ? {} : { escalated_findings: escalatedFindingDetails },
+            ...reviewPushThroughFindingDetails === void 0 ? {} : { review_push_through_findings: reviewPushThroughFindingDetails },
+            ...activeGate.kind !== "commit-authorization" || currentValidationOverrideDetails.length === 0 ? {} : { validation_overrides: currentValidationOverrideDetails }
           });
         } catch {
           blockers.push("content-trigger-presentation-invalid");
@@ -42127,6 +43096,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   const nextActionInput = {
     repository_initialized: true,
     state,
+    ...state.pending_validation_override === void 0 ? {} : { pending_validation_override: true },
     config_verified: config2.verified,
     ...config2.verified !== true && config2.issue !== void 0 ? { config_issue: config2.issue } : {},
     ...statusReconciliation === void 0 ? {} : { reconciliation_findings: statusReconciliation.findings },
@@ -42139,6 +43109,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     ...upstreamDocumentDrift.length === 0 ? {} : { upstream_document_drift: Object.freeze([...upstreamDocumentDrift]) },
     ...policyFindings === void 0 ? {} : { policy_findings: policyFindings },
     evidence_available: evidence.available,
+    ...evidence.available ? { current_evidence_set_digest: evidence.current_evidence.set_digest } : {},
+    ...assessment?.escalated_human_findings === true ? { escalated_human_findings: true } : {},
     ...subjectDigest === void 0 ? {} : { subject_digest: subjectDigest },
     authenticated_approvals: approvalFacts,
     ...acceptedSettlement === void 0 ? {} : { accepted_no_wait_settlement: acceptedSettlement },
@@ -42225,6 +43197,63 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     if (observed !== void 0) dispatchFailure = projectDispatchFailureObservation(observed);
   } catch {
   }
+  const validationOverrides = (state.validation_overrides ?? []).map((record2) => {
+    const authenticated = authenticatedValidationOverrides2.find((item) => item.record.gate_id === record2.gate_id);
+    if (authenticated === void 0) {
+      return Object.freeze({
+        phase_instance: record2.phase_instance,
+        gate_id: record2.gate_id,
+        status: validationAuditFailures.get(record2.gate_id) ?? "unavailable"
+      });
+    }
+    const current = governingPhaseDesignDigest !== void 0 && authenticatedValidationOverrideIsCurrent(
+      authenticated,
+      validationProductionInput,
+      governingPhaseDesignDigest
+    );
+    return Object.freeze({
+      phase_instance: record2.phase_instance,
+      gate_id: record2.gate_id,
+      status: "granted",
+      current,
+      reason: record2.human_reason,
+      decided_at: record2.decided_at,
+      input_fingerprint: record2.input_fingerprint,
+      governing_phase_design_digest: record2.governing_phase_design_digest,
+      displaced_validations: Object.freeze([...authenticated.record.displaced_validations])
+    });
+  });
+  const reviewPushThroughs = (state.review_push_throughs ?? []).map((record2) => {
+    const authenticated = authenticatedReviewPushThroughs2.find((item) => item.record.gate_id === record2.gate_id);
+    if (authenticated === void 0) {
+      return Object.freeze({
+        phase_instance: record2.phase_instance,
+        gate_id: record2.gate_id,
+        attempt: record2.attempt,
+        status: pushThroughAuditFailures.get(record2.gate_id) ?? "unavailable"
+      });
+    }
+    const facts = reviewPushThroughAuthoritySource([authenticated]).authenticate(authenticated);
+    const current = reviewPushThroughCandidate !== void 0 && reviewPushThroughAuthorityMatchesCandidate(state, reviewPushThroughCandidate, facts);
+    const requestContext = authenticated.approval.request.kind === "attempts-exhausted" ? authenticated.approval.request.context.review_push_through : void 0;
+    if (requestContext === void 0) {
+      return Object.freeze({
+        phase_instance: record2.phase_instance,
+        gate_id: record2.gate_id,
+        attempt: record2.attempt,
+        status: "invalid"
+      });
+    }
+    return Object.freeze({
+      phase_instance: record2.phase_instance,
+      gate_id: record2.gate_id,
+      attempt: record2.attempt,
+      status: current ? "current" : "historical",
+      reason: record2.human_reason,
+      decided_at: record2.decided_at,
+      accepted_occurrences: Object.freeze([...requestContext.accepted_occurrences])
+    });
+  });
   const reviewPolicy = await loadCanonicalRubricForPhaseKind(
     decodePhaseInstance(state.phase_instance).kind
   );
@@ -42257,6 +43286,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     ...baselineAdoptionInput === void 0 ? {} : { baseline_adoption_gate: baselineAdoptionInput },
     ...milestoneRecoveryFacts === void 0 ? {} : { milestone_recovery: milestoneRecoveryFacts },
     workspace,
+    ...validationOverrides.length === 0 ? {} : { validation_overrides: Object.freeze(validationOverrides) },
+    ...reviewPushThroughs.length === 0 ? {} : { review_push_throughs: Object.freeze(reviewPushThroughs) },
     blocking_reasons: Object.freeze([...new Set(blockers)]),
     next_action: nextAction
   });
@@ -42365,12 +43396,6 @@ function governingRecommendationPhase(state) {
   }
   return void 0;
 }
-var registryDriftExplanation = (kind) => ({
-  "registry-created": "The hazard registry was created after this recommendation was reviewed.",
-  "registry-removed": "The hazard registry was removed after this recommendation was reviewed.",
-  "registry-changed": "The hazard registry changed after this recommendation was reviewed.",
-  "registry-unreadable": "The current hazard registry could not be read or parsed; the authenticated recommendation remains available."
-})[kind];
 async function currentImplementationRecommendation(dependencies, authority, details) {
   const phase3 = governingRecommendationPhase(details.state);
   if (details.state === void 0 || phase3 === void 0) {
@@ -42379,12 +43404,12 @@ async function currentImplementationRecommendation(dependencies, authority, deta
       "Implementation effort advice does not apply at the current workflow position."
     );
   }
-  const phaseInstance4 = encodePhaseInstance({
+  const phaseInstance5 = encodePhaseInstance({
     kind: "phase-design",
     phase: parsePositiveSafePhaseNumber(phase3)
   });
-  const hasProduce = details.state.authoritative_results.some((reference) => reference.phase_instance === phaseInstance4 && reference.step === "produce");
-  const hasReview = details.state.authoritative_results.some((reference) => reference.phase_instance === phaseInstance4 && reference.step === "counter_review");
+  const hasProduce = details.state.authoritative_results.some((reference) => reference.phase_instance === phaseInstance5 && reference.step === "produce");
+  const hasReview = details.state.authoritative_results.some((reference) => reference.phase_instance === phaseInstance5 && reference.step === "counter_review");
   if (!hasProduce || !hasReview) {
     return unavailableImplementationRecommendation(
       "not-produced",
@@ -42398,7 +43423,7 @@ async function currentImplementationRecommendation(dependencies, authority, deta
   const loaded = await loadGoverningPhaseDesignEffortEvidence(
     { load_retained_manifest: dependencies.load_retained_manifest },
     details.state,
-    phaseInstance4
+    phaseInstance5
   );
   if (!loaded.ok) throw new TypeError("governing effort evidence is unavailable or invalid");
   const { produce, review, assessment } = loaded.value;
@@ -42416,60 +43441,8 @@ async function currentImplementationRecommendation(dependencies, authority, deta
       phase3
     );
   }
-  if (review.assurance !== "server-attested" || assessment === void 0) {
-    return unavailableImplementationRecommendation(
-      "legacy-evidence",
-      "The exact authenticated review predates structured implementation-effort evidence.",
-      phase3
-    );
-  }
-  if (produce.artifact.artifact_kind !== "document") {
-    throw new TypeError("governing phase-design produce artifact is not a document");
-  }
-  const projection = await readProduceProjection(
-    dependencies.runner,
-    authority,
-    produce,
-    produce.artifact.document_path
-  );
-  if (!projection.ok) {
-    const issue4 = projection.error.diagnostic.parameters.issue_code;
-    if (issue4 === "produce-projection-not-current" || issue4 === "produce-projection-unavailable") {
-      return unavailableImplementationRecommendation(
-        "subject-stale",
-        "The retained effort assessment describes earlier phase-design bytes and is not current.",
-        phase3
-      );
-    }
-    throw new TypeError("governing phase-design projection is unavailable");
-  }
-  const repositoryNames = assessment.reviewer.repositories.map((repository) => repository.name);
-  const manifest = extractPhaseDesignComponentManifest(
-    new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes),
-    repositoryNames
-  );
-  if (phaseDesignComponentManifestDigest(manifest) !== assessment.component_manifest_digest) {
-    throw new TypeError("governing effort assessment component manifest binding disagrees");
-  }
-  let drift;
-  try {
-    const live = await captureHazardRegistryInput(async () => {
-      try {
-        return new Uint8Array(await readFile11(join9(dependencies.runner.location.worktreeRoot, ".archflow", "hazards.yaml")));
-      } catch (error51) {
-        if (error51.code === "ENOENT") return void 0;
-        throw error51;
-      }
-    }, repositoryNames, manifest);
-    drift = compareHazardRegistryInput(assessment.hazard_registry_digest, live, manifest);
-  } catch {
-    drift = "registry-unreadable";
-  }
-  return implementationRecommendationFromAssessment(
-    assessment,
-    phase3,
-    drift === void 0 ? void 0 : { kind: drift, explanation: registryDriftExplanation(drift) }
-  );
+  if (review.assurance !== "server-attested" || assessment === void 0) return defaultImplementationRecommendation();
+  return implementationRecommendationFromAssessment(assessment, phase3);
 }
 function workflowPosition(phase3) {
   const decoded = decodePhaseInstance(phase3);
@@ -42525,24 +43498,65 @@ function materializeJson(value, label) {
   assertPlainJson(value, label);
   return structuredClone(value);
 }
+function computeTaxonomyDenialRates(ledger) {
+  const occurrences = /* @__PURE__ */ new Map();
+  for (const candidate of ledger) {
+    const entry = triageDispositionLedgerEntrySchema.parse(candidate);
+    occurrences.set(`${entry.review_evidence_digest}:${entry.finding_id}`, entry);
+  }
+  const rates = {};
+  for (const claimType of CLAIM_TYPES) {
+    for (const confidence of CONFIDENCE_LEVELS) {
+      const key = `${claimType}:${confidence}`;
+      const cell = [...occurrences.values()].filter((entry) => "claim_type" in entry && entry.claim_type === claimType && entry.confidence === confidence);
+      rates[key] = cell.length === 0 ? 0 : cell.filter((entry) => entry.disposition === "rejected").length / cell.length;
+    }
+  }
+  return Object.freeze(rates);
+}
 function reviewRounds(details) {
   if (details.status.evidence?.available !== true) return Object.freeze([]);
   const current = deriveCurrentEvidenceSet(details.retained);
   const triage = details.retained.get("triage")?.manifest.source_artifact;
+  const emptyPartitions = () => Object.fromEntries(
+    CLAIM_TYPES.flatMap((claimType) => CONFIDENCE_LEVELS.map((confidence) => [`${claimType}:${confidence}`, 0]))
+  );
   const rounds = /* @__PURE__ */ new Map();
-  const bump = (attempt, blocking, accepted) => {
-    const round = rounds.get(attempt) ?? { findings: 0, blocking: 0, accepted: 0 };
-    round.findings += 1;
-    if (blocking) round.blocking += 1;
-    if (accepted) round.accepted += 1;
+  const roundAt = (attempt) => {
+    const round = rounds.get(attempt) ?? {
+      findings: 0,
+      blocking: 0,
+      accepted: 0,
+      partitions: emptyPartitions()
+    };
     rounds.set(attempt, round);
+    return round;
+  };
+  const setVersion = (round, version4, label) => {
+    if (round.version !== void 0 && round.version !== version4) {
+      throw new TypeError(`${label} mixes V1 and V2 review findings`);
+    }
+    round.version = version4;
   };
   const isAccepted = (disposition) => disposition === "accepted" || disposition === "accepted-editorial";
   const currentAttempt = details.status.attempt;
   if (triage?.artifact_kind === "triage") {
+    for (const entry of triage.evidence.review_round_history ?? []) {
+      roundAt(entry.attempt);
+    }
     for (const entry of triage.evidence.disposition_ledger ?? []) {
       if (currentAttempt !== void 0 && entry.attempt === currentAttempt) continue;
-      bump(entry.attempt, entry.blocking === true, isAccepted(entry.disposition));
+      const round = roundAt(entry.attempt);
+      round.findings += 1;
+      if (isAccepted(entry.disposition)) round.accepted += 1;
+      if ("claim_type" in entry) {
+        setVersion(round, "2", `review attempt ${entry.attempt}`);
+        const key = `${entry.claim_type}:${entry.confidence}`;
+        round.partitions[key] = (round.partitions[key] ?? 0) + 1;
+      } else {
+        setVersion(round, "1", `review attempt ${entry.attempt}`);
+        if ("blocking" in entry && entry.blocking) round.blocking += 1;
+      }
     }
   }
   if (currentAttempt !== void 0) {
@@ -42552,15 +43566,27 @@ function reviewRounds(details) {
         dispositions.set(`${disposition.review_evidence_digest}:${disposition.finding_id}`, disposition.disposition);
       }
     }
-    rounds.set(currentAttempt, { findings: 0, blocking: 0, accepted: 0 });
+    const versions = new Set(current.reviews.map((review) => review.evidence.schema_version));
+    if (versions.size !== 1) throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 evidence`);
+    const round = roundAt(currentAttempt);
+    setVersion(round, current.reviews[0].evidence.schema_version, `active review attempt ${currentAttempt}`);
     for (const review of current.reviews) {
       for (const finding of review.evidence.findings) {
         const disposition = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
-        bump(currentAttempt, finding.blocking, disposition !== void 0 && isAccepted(disposition));
+        round.findings += 1;
+        if (disposition !== void 0 && isAccepted(disposition)) round.accepted += 1;
+        if ("claim_type" in finding) {
+          if (round.version !== "2") throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 findings`);
+          const key = `${finding.claim_type}:${finding.confidence}`;
+          round.partitions[key] = (round.partitions[key] ?? 0) + 1;
+        } else {
+          if (round.version !== "1") throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 findings`);
+          if (finding.blocking) round.blocking += 1;
+        }
       }
     }
   }
-  return Object.freeze([...rounds.entries()].sort(([left], [right]) => left - right).map(([attempt, round]) => Object.freeze({ attempt, ...round })));
+  return Object.freeze([...rounds.entries()].sort(([left], [right]) => left - right).map(([attempt, round]) => Object.freeze(round.version === "2" ? { attempt, findings: round.findings, partition_counts: Object.freeze(round.partitions), accepted: round.accepted } : { attempt, findings: round.findings, blocking: round.blocking, accepted: round.accepted })));
 }
 function fullFindings(details) {
   if (details.status.evidence?.available !== true) return Object.freeze([]);
@@ -42570,7 +43596,10 @@ function fullFindings(details) {
   if (triage?.artifact_kind === "triage") {
     for (const disposition of triage.evidence.dispositions) {
       const key = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
-      dispositions.set(key, disposition.disposition === "rejected" ? Object.freeze({ disposition: "rejected", rationale: disposition.rationale, evidence: disposition.evidence }) : Object.freeze({ disposition: disposition.disposition, rationale: disposition.rationale, revision_intent: disposition.revision_intent }));
+      dispositions.set(
+        key,
+        disposition.disposition === "rejected" ? Object.freeze({ disposition: "rejected", rationale: disposition.rationale, evidence: disposition.evidence }) : disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial" ? Object.freeze({ disposition: disposition.disposition, rationale: disposition.rationale, revision_intent: disposition.revision_intent }) : disposition.disposition === "deferred" && disposition.evidence !== void 0 ? Object.freeze({ disposition: "deferred", rationale: disposition.rationale, evidence: disposition.evidence }) : Object.freeze({ disposition: disposition.disposition, rationale: disposition.rationale })
+      );
     }
   }
   return Object.freeze(current.reviews.flatMap((review) => review.evidence.findings.map((finding) => Object.freeze(publicFindingV1Schema.parse({
@@ -42589,7 +43618,7 @@ function archiveBinds(state, request, decision3) {
 function transitionCarriesDecision(outcome, decision3) {
   if (decision3.outcome !== "decided" || outcome === null || Array.isArray(outcome) || typeof outcome !== "object") return false;
   const descriptor = Object.getOwnPropertyDescriptor(outcome, "decision");
-  return descriptor?.enumerable === true && "value" in descriptor && isDeepStrictEqual10(descriptor.value, decision3.envelope);
+  return descriptor?.enumerable === true && "value" in descriptor && isDeepStrictEqual12(descriptor.value, decision3.envelope);
 }
 function decisionReenters(record2) {
   if (record2.outcome !== "decided") return false;
@@ -42686,10 +43715,10 @@ async function deriveArchiveEnrichments(dependencies, authority, details) {
       } : {}
     }) });
   }
-  if (!commonTransitionBinding || request.value.request_digest !== transition.request_digest || request.value.intent_id !== transition.intent_id || transition.operation !== "gate" || payload.decision !== "waiver-requested" || !isWaiverOriginRequest(request.value) || !("eligible_waivers" in request.value.context) || !request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual10(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)) {
+  if (!commonTransitionBinding || request.value.request_digest !== transition.request_digest || request.value.intent_id !== transition.intent_id || transition.operation !== "gate" || payload.decision !== "waiver-requested" || !isWaiverOriginRequest(request.value) || !("eligible_waivers" in request.value.context) || !request.value.context.eligible_waivers.some((eligible) => isDeepStrictEqual12(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation)) {
     return Object.freeze({});
   }
-  const scope3 = request.value.context.eligible_waivers.find((eligible) => isDeepStrictEqual10(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation).scope;
+  const scope3 = request.value.context.eligible_waivers.find((eligible) => isDeepStrictEqual12(eligible.rule, payload.rule) && eligible.scope.operation === payload.operation).scope;
   return Object.freeze({ pending_waiver_origin: Object.freeze({
     origin_gate_id: request.value.gate_id,
     origin_decision_digest: decision3.digest,
@@ -42716,6 +43745,8 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
     authority,
     detailed.value
   );
+  const triageArtifact = detailed.value.retained.get("triage")?.manifest.source_artifact;
+  const ledger = triageArtifact?.artifact_kind === "triage" ? triageArtifact.evidence.disposition_ledger ?? [] : [];
   return ok18(computeSemanticStatusSnapshot(status, {
     repository_identity_digest: authority.repository_identity_digest,
     ...state === void 0 ? {} : { state },
@@ -42730,7 +43761,10 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
     },
     full_findings: fullFindings(detailed.value),
     review_rounds: reviewRounds(detailed.value),
+    taxonomy_denial_rates: computeTaxonomyDenialRates(ledger),
     implementation_recommendation: implementationRecommendation,
+    ...status.validation_overrides === void 0 ? {} : { validation_overrides: status.validation_overrides },
+    ...status.review_push_throughs === void 0 ? {} : { review_push_throughs: status.review_push_throughs },
     ...archives,
     reopen_impacts: state === void 0 ? Object.freeze([]) : reopenImpacts(state, status)
   }));
@@ -42772,9 +43806,20 @@ function computeSemanticStatusSnapshot(status, enrichments) {
     status: statusJson,
     full_findings: Object.freeze(findings),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) => Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))))),
+    taxonomy_denial_rates: Object.freeze({ ...enrichments.taxonomy_denial_rates }),
     implementation_recommendation: Object.freeze(implementationRecommendationV1Schema.parse(
       materializeJson(enrichments.implementation_recommendation, "implementation recommendation")
     )),
+    ...enrichments.validation_overrides === void 0 ? {} : {
+      validation_overrides: Object.freeze(enrichments.validation_overrides.map((entry) => Object.freeze(publicValidationOverrideAuditV1Schema.parse(
+        materializeJson(entry, "validation override audit")
+      ))))
+    },
+    ...enrichments.review_push_throughs === void 0 ? {} : {
+      review_push_throughs: Object.freeze(enrichments.review_push_throughs.map((entry) => Object.freeze(publicReviewPushThroughAuditV1Schema.parse(
+        materializeJson(entry, "review push-through audit")
+      ))))
+    },
     ...enrichments.pending_waiver_origin === void 0 ? {} : {
       pending_waiver_origin: materializeJson(enrichments.pending_waiver_origin, "pending waiver origin")
     },
@@ -43222,7 +44267,7 @@ function projectSemanticStatus(snapshot2, invocation) {
   let reopen;
   if (invocation?.intent === "reopen") {
     reopen = reopenImpactFor(snapshot2, invocation);
-    const safe = status.state === "active" && status.open_gate === void 0 && status.blocking_reasons.length === 0 && (status.reconciliation?.findings.length ?? 0) === 0;
+    const safe = status.state === "active" && status.open_gate === void 0 && snapshot2.state?.pending_validation_override === void 0 && status.blocking_reasons.length === 0 && (status.reconciliation?.findings.length ?? 0) === 0;
     shape = reopen !== void 0 && safe ? Object.freeze({
       condition: "awaiting-client",
       headline: "Earlier planning work can be reopened",
@@ -43270,7 +44315,14 @@ function projectSemanticStatus(snapshot2, invocation) {
     ...shape.findings !== true ? {} : { findings: snapshot2.full_findings },
     ...context2 === void 0 ? {} : { review_context: context2 },
     ...strength === void 0 ? {} : { review_strength: strength },
+    taxonomy_denial_rates: snapshot2.taxonomy_denial_rates,
     implementation_recommendation: snapshot2.implementation_recommendation,
+    ...snapshot2.validation_overrides === void 0 ? {} : {
+      validation_overrides: snapshot2.validation_overrides
+    },
+    ...snapshot2.review_push_throughs === void 0 ? {} : {
+      review_push_throughs: snapshot2.review_push_throughs
+    },
     ...shape.presentation === void 0 ? {} : { presentation: shape.presentation },
     ...status.dispatch_failure === void 0 ? {} : { dispatch_failure: status.dispatch_failure },
     ...status.repositories === void 0 ? {} : { repositories: status.repositories },
@@ -43280,12 +44332,12 @@ function projectSemanticStatus(snapshot2, invocation) {
 }
 
 // src/init/diagnostics.ts
-import { readFile as readFile13, stat as stat4 } from "node:fs/promises";
-import { join as join13 } from "node:path";
+import { readFile as readFile12, stat as stat4 } from "node:fs/promises";
+import { join as join12 } from "node:path";
 
 // src/dispatch/cli.ts
 import { stat as stat3, writeFile } from "node:fs/promises";
-import { join as join10 } from "node:path";
+import { join as join9 } from "node:path";
 
 // src/dispatch/process.ts
 import { spawn } from "node:child_process";
@@ -43532,7 +44584,7 @@ var CODEX_DISABLED_FEATURES = Object.freeze([
 function withLocalBinOnPath(workspace) {
   const home = workspace.env.HOME;
   if (home === void 0 || home === "") return workspace.env;
-  const localBin = join10(home, ".local", "bin");
+  const localBin = join9(home, ".local", "bin");
   const path2 = workspace.env.PATH;
   if (path2 === void 0) return Object.freeze({ ...workspace.env, PATH: localBin });
   if (path2.split(":").includes(localBin)) return workspace.env;
@@ -43560,7 +44612,8 @@ function projectSchemaNode(value, adapter2) {
   const projected = {};
   for (const [key, child] of Object.entries(value)) {
     if (HOST_SCHEMA_METADATA.has(key) || key.startsWith("x-archflow-") || key === "allOf" || adapter2 === "claude-cli" && CLAUDE_UNSUPPORTED_SCHEMA_KEYWORDS.has(key) || adapter2 === "codex-cli" && key === "uniqueItems") continue;
-    projected[key] = projectSchemaNode(child, adapter2);
+    const targetKey = adapter2 === "codex-cli" && key === "oneOf" ? "anyOf" : key;
+    projected[targetKey] = projectSchemaNode(child, adapter2);
   }
   return projected;
 }
@@ -43605,26 +44658,28 @@ function boundSubjectNode(property, value, adapter2) {
     maxItems: value.length
   };
 }
-function hostFindingSchema(value) {
+function hostEffortComponentSchema(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  const finding = value;
-  const properties = finding.properties;
+  const component = value;
+  const properties = component.properties;
   if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
-  const base2 = properties;
-  const branch = (severities, blocking) => {
-    const selected = {
-      ...base2,
-      severity: { type: "string", enum: [...severities] },
-      blocking: { type: "boolean", const: blocking }
-    };
-    return { type: "object", additionalProperties: false, properties: selected, required: Object.keys(selected) };
+  const base2 = { ...properties };
+  delete base2.blocker;
+  const unblocked = {
+    type: "object",
+    additionalProperties: false,
+    properties: base2,
+    required: Object.keys(base2)
+  };
+  const blocked = {
+    type: "object",
+    additionalProperties: false,
+    properties,
+    required: Object.keys(properties)
   };
   return {
     type: "object",
-    anyOf: [
-      branch(["blocker"], true),
-      branch(["major", "minor"], false)
-    ]
+    anyOf: [unblocked, blocked]
   };
 }
 function hostTaskSlugSchema(value) {
@@ -43648,12 +44703,31 @@ function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
   if (definitions !== null && typeof definitions === "object" && !Array.isArray(definitions)) {
     const named = definitions;
     const common3 = { ...named, taskSlug: hostTaskSlugSchema(named.taskSlug) };
-    root = {
-      ...root,
-      $defs: resultKind === "review" ? { ...common3, finding: hostFindingSchema(common3.finding) } : common3
-    };
+    root = { ...root, $defs: common3 };
   }
-  const bindingKeys = resultKind === "review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"] : resultKind === "effort-review" ? ["task_id", "phase_instance", "subject_digest", "input_fingerprint", "component_manifest_digest", "hazard_registry_digest", "policy_id"] : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_review_envelope_digest"];
+  if (resultKind === "effort-review") {
+    const rawProperties = root.properties;
+    if (rawProperties !== null && typeof rawProperties === "object" && !Array.isArray(rawProperties)) {
+      const propertiesObj = rawProperties;
+      const components = propertiesObj.components;
+      if (components !== null && typeof components === "object" && !Array.isArray(components)) {
+        const items = components.items;
+        if (items !== void 0) {
+          root = {
+            ...root,
+            properties: {
+              ...propertiesObj,
+              components: {
+                ...components,
+                items: hostEffortComponentSchema(items)
+              }
+            }
+          };
+        }
+      }
+    }
+  }
+  const bindingKeys = resultKind === "review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"] : resultKind === "effort-review" ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "policy_id"] : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_review_envelope_digest"];
   if (subject !== void 0) {
     const properties = root.properties;
     if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
@@ -43893,7 +44967,7 @@ var claudeAdapter = Object.freeze({
     if (route2.effort === "ultra") {
       return fail17(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
-    const mcpConfigPath = join10(workspace.root, "empty-mcp.json");
+    const mcpConfigPath = join9(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
     const argv = Object.freeze([
       "-p",
@@ -43988,8 +45062,8 @@ var codexAdapter = Object.freeze({
       return fail17(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
-    const schemaPath = join10(workspace.root, `${envelope.result_kind}.schema.json`);
-    const outputPath = join10(workspace.root, `${envelope.result_kind}-final-output.json`);
+    const schemaPath = join9(workspace.root, `${envelope.result_kind}.schema.json`);
+    const outputPath = join9(workspace.root, `${envelope.result_kind}-final-output.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
@@ -44109,7 +45183,7 @@ var antigravityAdapter = Object.freeze({
       return fail17(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
-    const schemaPath = join10(workspace.root, `${envelope.result_kind}.schema.json`);
+    const schemaPath = join9(workspace.root, `${envelope.result_kind}.schema.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes);
@@ -44184,7 +45258,7 @@ function preflightAdapter(adapterId, workspace) {
 // src/dispatch/workspace.ts
 import { chmod as chmod2, lstat as lstat10, mkdir as mkdir4, mkdtemp, realpath as realpath4, rm as rm2, symlink as symlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute4, join as join11, relative as relative5, resolve } from "node:path";
+import { isAbsolute as isAbsolute4, join as join10, relative as relative5, resolve } from "node:path";
 
 // src/review/envelopes.ts
 var ReviewEnvelopeError = class extends Error {
@@ -44223,7 +45297,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp(join11(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp(join10(realTemporaryRoot, "archflow-dispatch-"));
   try {
     const sourceHome = resolve(process.env.HOME ?? homedir());
     const env = {
@@ -44231,7 +45305,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
       TMPDIR: root,
       // A shared workspace serves both adapters of one review; each CLI ignores the other's
       // variable, and a single-adapter list produces exactly the env it produced before.
-      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join11(sourceHome, ".codex")) } : {},
+      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join10(sourceHome, ".codex")) } : {},
       ...adapters.includes("claude-cli") && process.env.CLAUDE_CONFIG_DIR !== void 0 ? { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) } : {}
     };
     for (const name of FORWARDED_ENVIRONMENT) {
@@ -44253,8 +45327,8 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir5, open as open6, readFile as readFile12, rename as rename3, unlink as unlink3 } from "node:fs/promises";
-import { basename as basename4, dirname as dirname6, join as join12 } from "node:path";
+import { mkdir as mkdir5, open as open6, readFile as readFile11, rename as rename3, unlink as unlink3 } from "node:fs/promises";
+import { basename as basename4, dirname as dirname6, join as join11 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
 var CODEX_STARTUP_TIMEOUT_SEC = 30;
@@ -44333,14 +45407,14 @@ function runCommand(command, argv, cwd, environment) {
 }
 async function readOptional(path2) {
   try {
-    return await readFile12(path2, "utf8");
+    return await readFile11(path2, "utf8");
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;
   }
 }
 async function replaceHostConfig(path2, source) {
-  const temporary = join12(dirname6(path2), `.${basename4(path2)}.${process.pid}.${randomUUID2()}.tmp`);
+  const temporary = join11(dirname6(path2), `.${basename4(path2)}.${process.pid}.${randomUUID2()}.tmp`);
   let handle;
   try {
     handle = await open6(temporary, "wx", 420);
@@ -44395,7 +45469,7 @@ function claudeGetDiagnostic(output) {
   };
 }
 async function registerClaudeProject(input) {
-  const path2 = join12(input.working_directory, ".mcp.json");
+  const path2 = join11(input.working_directory, ".mcp.json");
   try {
     const beforeSource = await readOptional(path2);
     const before = parseMcpJson(beforeSource);
@@ -44511,7 +45585,7 @@ function codexGetDiagnostic(output) {
   }
 }
 async function registerCodexProject(input) {
-  const path2 = join12(input.working_directory, ".codex", "config.toml");
+  const path2 = join11(input.working_directory, ".codex", "config.toml");
   try {
     const before = await readOptional(path2) ?? "";
     const range = managedBlockRange(before);
@@ -44558,8 +45632,8 @@ async function registerCodexProject(input) {
 async function registerAntigravityConfig(input) {
   const home = input.environment?.HOME ?? process.env.HOME ?? "";
   if (!home) return ioFailure3("antigravity-registration");
-  const configDir = join12(home, ".gemini", "config");
-  const path2 = join12(configDir, "mcp_config.json");
+  const configDir = join11(home, ".gemini", "config");
+  const path2 = join11(configDir, "mcp_config.json");
   try {
     const beforeSource = await readOptional(path2);
     const before = parseMcpJson(beforeSource);
@@ -44731,7 +45805,7 @@ function codexTimeoutFinding(source) {
 }
 async function readHostConfig(path2) {
   try {
-    return await readFile13(path2, "utf8");
+    return await readFile12(path2, "utf8");
   } catch {
     return void 0;
   }
@@ -44768,8 +45842,8 @@ async function collectInitDiagnostics(input) {
   const [claude, codex, claudeHostConfig, codexHostConfig, runtimeDirectory, ignoredAssets] = await Promise.all([
     diagnoseAdapter("claude-cli", input.working_directory),
     diagnoseAdapter("codex-cli", input.working_directory),
-    readHostConfig(join13(input.working_directory, ".mcp.json")),
-    readHostConfig(join13(input.working_directory, ".codex", "config.toml")),
+    readHostConfig(join12(input.working_directory, ".mcp.json")),
+    readHostConfig(join12(input.working_directory, ".codex", "config.toml")),
     diagnoseRuntimeDirectory(input.working_directory),
     diagnoseIgnoredGeneratedAssets(input.working_directory)
   ]);
@@ -44846,12 +45920,12 @@ async function runInit(input) {
 }
 
 // src/init/legacy-upgrade.ts
-import { lstat as lstat11, readdir as readdir5, readFile as readFile16, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
-import { isAbsolute as isAbsolute6, join as join17, relative as relative7, sep as sep5 } from "node:path";
+import { lstat as lstat11, readdir as readdir5, readFile as readFile15, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
+import { isAbsolute as isAbsolute6, join as join16, relative as relative7, sep as sep5 } from "node:path";
 
 // src/state/initialization.ts
 import { mkdir as mkdir6, mkdtemp as mkdtemp2, rename as rename4, rm as rm3, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname as dirname7, isAbsolute as isAbsolute5, join as join15, relative as relative6 } from "node:path";
+import { dirname as dirname7, isAbsolute as isAbsolute5, join as join14, relative as relative6 } from "node:path";
 
 // src/state/request.ts
 function subjectFor(call, authority, inputFingerprint) {
@@ -44891,6 +45965,20 @@ function subjectFor(call, authority, inputFingerprint) {
           }
         };
       }
+      if (call.input.operation === "request_validation_override") {
+        return {
+          ...common3,
+          tool: call.name,
+          operation: "request-validation-override",
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            step: call.input.step,
+            status: call.input.status,
+            reason: call.input.reason,
+            validation_override_request: call.input.validation_override_request
+          }
+        };
+      }
       if (call.input.operation !== void 0) {
         const operation = {
           refresh_milestone_baseline: "refresh-milestone-baseline",
@@ -44902,7 +45990,12 @@ function subjectFor(call, authority, inputFingerprint) {
           ...common3,
           tool: call.name,
           operation,
-          operation_fields: { phase_instance: call.input.phase_instance, step: call.input.step, status: call.input.status }
+          operation_fields: {
+            phase_instance: call.input.phase_instance,
+            step: call.input.step,
+            status: call.input.status,
+            intent_id: call.input.intent_id
+          }
         };
       }
       if (call.input.artifact === void 0) {
@@ -44971,25 +46064,25 @@ function identifyTransactionRequest(call, authority, recomputedInputFingerprint)
 }
 
 // src/state/legacy-stage.ts
-import { readFile as readFile14 } from "node:fs/promises";
-import { join as join14 } from "node:path";
+import { readFile as readFile13 } from "node:fs/promises";
+import { join as join13 } from "node:path";
 function importRoot(authority, initialization) {
-  return join14(authority.workspace_root, "cache", "imports", initialization.import_digest);
+  return join13(authority.workspace_root, "cache", "imports", initialization.import_digest);
 }
 async function readStagedLegacyConfig(authority, initialization) {
   try {
-    const bytes = new Uint8Array(await readFile14(join14(importRoot(authority, initialization), "config.yaml")));
+    const bytes = new Uint8Array(await readFile13(join13(importRoot(authority, initialization), "config.yaml")));
     const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
-    const digest10 = sha256Bytes(bytes);
-    if (digest10 !== initialization.config_digest) return void 0;
-    return Object.freeze({ bytes, digest: digest10, parsed });
+    const digest12 = sha256Bytes(bytes);
+    if (digest12 !== initialization.config_digest) return void 0;
+    return Object.freeze({ bytes, digest: digest12, parsed });
   } catch {
     return void 0;
   }
 }
 async function readStagedLegacyPayload(authority, initialization, reference) {
   try {
-    const bytes = new Uint8Array(await readFile14(join14(importRoot(authority, initialization), "payload", reference.legacy_path)));
+    const bytes = new Uint8Array(await readFile13(join13(importRoot(authority, initialization), "payload", reference.legacy_path)));
     if (bytes.byteLength !== reference.byte_count || sha256Bytes(bytes) !== reference.digest) return void 0;
     return bytes;
   } catch {
@@ -45108,7 +46201,9 @@ function initialState(call, artifact, parsedConfig, repositorySet) {
     policy_base_commit: initialization.policy_base_commit,
     authoritative_results: [],
     approvals: [],
-    waivers: []
+    waivers: [],
+    validation_overrides: [],
+    review_push_throughs: []
   };
   return ok20(withLastSeenConfig(state, parsedConfig, repositorySet));
 }
@@ -45184,9 +46279,9 @@ async function installLegacyDestination(request, initialization, initializationB
   const references = new Map(initialization.staged_payload_refs.map((entry) => [entry.legacy_path, entry]));
   let temporary;
   try {
-    temporary = await mkdtemp2(join15(request.authority.workspace_root, ".adopt-"));
-    await mkdir6(join15(temporary, "authority"), { recursive: true });
-    await writeFile3(join15(temporary, "config.yaml"), config2.bytes, { flag: "wx", mode: 420 });
+    temporary = await mkdtemp2(join14(request.authority.workspace_root, ".adopt-"));
+    await mkdir6(join14(temporary, "authority"), { recursive: true });
+    await writeFile3(join14(temporary, "config.yaml"), config2.bytes, { flag: "wx", mode: 420 });
     for (const entry of initialization.mapping) {
       const reference = references.get(entry.legacy_path);
       if (reference === void 0) return contract("legacy-mapping-payload-missing");
@@ -45194,12 +46289,12 @@ async function installLegacyDestination(request, initialization, initializationB
       if (bytes === void 0) return contract("legacy-staged-payload-invalid");
       const prefix = `.archflow/tasks/${initialization.task_id}/`;
       const relativeDestination = entry.destination_path.slice(prefix.length);
-      const target2 = join15(temporary, relativeDestination);
+      const target2 = join14(temporary, relativeDestination);
       await mkdir6(dirname7(target2), { recursive: true });
       await writeFile3(target2, bytes, { flag: "wx", mode: 420 });
     }
-    await writeFile3(join15(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
-    await writeFile3(join15(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
+    await writeFile3(join14(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
+    await writeFile3(join14(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
     await rename4(temporary, request.authority.task_root);
     temporary = void 0;
     return ok20(void 0);
@@ -45553,8 +46648,8 @@ async function resolveInitializationPolicyBase(runner, commit, context2) {
 }
 
 // src/init/legacy-upgrade-stage.ts
-import { readdir as readdir4, readFile as readFile15 } from "node:fs/promises";
-import { join as join16 } from "node:path";
+import { readdir as readdir4, readFile as readFile14 } from "node:fs/promises";
+import { join as join15 } from "node:path";
 var legacyUpgradeStageDescriptorV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
@@ -45567,25 +46662,25 @@ function parseLegacyUpgradeStageDescriptor(value) {
   assertPlainJson(value, "legacy upgrade stage descriptor");
   return legacyUpgradeStageDescriptorV1Schema.parse(structuredClone(value));
 }
-var ordinal9 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
-function expectedManifestPath(taskId, digest10) {
-  return `.archflow/runtime/tasks/${taskId}/cache/imports/${digest10}/manifest.json`;
+var ordinal8 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+function expectedManifestPath(taskId, digest12) {
+  return `.archflow/runtime/tasks/${taskId}/cache/imports/${digest12}/manifest.json`;
 }
 async function inspectLegacyUpgradeStage(importsRoot, taskId) {
   let digests;
   try {
-    digests = (await readdir4(importsRoot)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort(ordinal9);
+    digests = (await readdir4(importsRoot)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort(ordinal8);
   } catch {
     return Object.freeze({ kind: "absent" });
   }
   if (digests.length === 0) return Object.freeze({ kind: "absent" });
   const matches = [];
-  for (const digest10 of digests) {
+  for (const digest12 of digests) {
     try {
       const descriptor = parseLegacyUpgradeStageDescriptor(
-        JSON.parse(await readFile15(join16(importsRoot, digest10, "stage.json"), "utf8"))
+        JSON.parse(await readFile14(join15(importsRoot, digest12, "stage.json"), "utf8"))
       );
-      if (descriptor.task_id === taskId && descriptor.import_digest === digest10 && descriptor.manifest_path === expectedManifestPath(taskId, digest10)) {
+      if (descriptor.task_id === taskId && descriptor.import_digest === digest12 && descriptor.manifest_path === expectedManifestPath(taskId, digest12)) {
         matches.push(descriptor);
       }
     } catch {
@@ -45609,7 +46704,7 @@ async function inspectLegacyUpgradeStage(importsRoot, taskId) {
 var decoder5 = new TextDecoder("utf-8", { fatal: true });
 var ok23 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail22 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var ordinal10 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal9 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ioError3(context2) {
   return createProjectError("IO_ERROR", { operation: context2.operation, attempt: context2.attempt });
 }
@@ -45681,9 +46776,9 @@ async function enumerateSource(sourceRoot, excluded, context2) {
     } catch {
       return fail22(ioError3(context2));
     }
-    entries.sort((left, right) => ordinal10(left.name, right.name));
+    entries.sort((left, right) => ordinal9(left.name, right.name));
     for (const entry of entries) {
-      const absolute = join17(directory, entry.name);
+      const absolute = join16(directory, entry.name);
       const relativePath = relative7(sourceRoot, absolute).split(sep5).join("/");
       if (excluded.has(relativePath)) continue;
       if (entry.isDirectory()) {
@@ -45710,7 +46805,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       const resolved = await resolveLegacySourcePath({ sourceRoot, claim, context: context2 });
       if (!resolved.ok) return resolved;
       try {
-        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile16(resolved.value.absolute)) }));
+        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile15(resolved.value.absolute)) }));
       } catch {
         return fail22(ioError3(context2));
       }
@@ -45718,7 +46813,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
     return ok23(void 0);
   };
   const walked = await walk(sourceRoot);
-  return walked.ok ? ok23(Object.freeze({ files: Object.freeze(files), skipped: Object.freeze(skipped.sort(ordinal10)) })) : walked;
+  return walked.ok ? ok23(Object.freeze({ files: Object.freeze(files), skipped: Object.freeze(skipped.sort(ordinal9)) })) : walked;
 }
 async function stageLegacyUpgrade(input) {
   const taskId = parseTaskSlug(input.task_id);
@@ -45743,7 +46838,7 @@ async function stageLegacyUpgrade(input) {
         observed_digest: canonicalJsonDigest({ schema_version: "1", root: sourceRepository.value.location.worktreeRoot })
       }));
     }
-    const destinationRoot = join17(runner.location.worktreeRoot, ".archflow", "tasks", taskId);
+    const destinationRoot = join16(runner.location.worktreeRoot, ".archflow", "tasks", taskId);
     if (isInside2(sourceRoot, destinationRoot) || isInside2(destinationRoot, sourceRoot)) {
       return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-source-destination-overlap" }));
     }
@@ -45752,7 +46847,7 @@ async function stageLegacyUpgrade(input) {
     }
     let configBytes;
     try {
-      configBytes = new Uint8Array(await readFile16(join17(runner.location.worktreeRoot, ".archflow", "config.yaml")));
+      configBytes = new Uint8Array(await readFile15(join16(runner.location.worktreeRoot, ".archflow", "config.yaml")));
     } catch {
       return fail22(createProjectError("CONFIG_INVALID", { issue_code: "archflow-initialization-required" }));
     }
@@ -45800,8 +46895,8 @@ async function stageLegacyUpgrade(input) {
       legacy_path: file2.legacy_path,
       digest: sha256Bytes(file2.bytes),
       byte_count: parseSafeInteger(file2.bytes.byteLength)
-    })).sort((left, right) => ordinal10(left.legacy_path, right.legacy_path));
-    const mapping = selected.value.files.map((file2) => mappedEntry(file2.legacy_path, taskId)).filter((entry) => entry !== void 0).sort((left, right) => ordinal10(left.destination_path, right.destination_path));
+    })).sort((left, right) => ordinal9(left.legacy_path, right.legacy_path));
+    const mapping = selected.value.files.map((file2) => mappedEntry(file2.legacy_path, taskId)).filter((entry) => entry !== void 0).sort((left, right) => ordinal9(left.destination_path, right.destination_path));
     if (mapping.some((entry, index) => index > 0 && mapping[index - 1].destination_path === entry.destination_path)) {
       return fail22(createProjectError("PATH_INVALID", { task_id: taskId, path_class: "document" }));
     }
@@ -45857,7 +46952,7 @@ async function stageLegacyUpgrade(input) {
       schema_version: "1",
       initialization,
       resume_phase: resume.value,
-      excluded: [...excluded].sort(ordinal10)
+      excluded: [...excluded].sort(ordinal9)
     });
     const operation = input.operation ?? "stage";
     if (operation === "stage" && input.approved_preview_digest !== void 0 && input.approved_preview_digest !== previewDigest) {
@@ -45890,11 +46985,11 @@ async function stageLegacyUpgrade(input) {
     }
     const manifestPath = manifestTarget.value.repositoryRelative;
     stagedPaths.push(manifestPath);
-    stagedPaths.sort(ordinal10);
+    stagedPaths.sort(ordinal9);
     const unmapped = [
       ...selected.value.files.filter((file2) => mappedEntry(file2.legacy_path, taskId) === void 0).map((file2) => file2.legacy_path),
       ...selected.value.skipped
-    ].sort(ordinal10);
+    ].sort(ordinal9);
     const draftSources = mapping.filter((entry) => entry.disposition === "draft").map((entry) => Object.freeze({
       destination_path: entry.destination_path,
       staged_path: stagedByLegacy.get(entry.legacy_path)
@@ -45920,7 +47015,7 @@ async function stageLegacyUpgrade(input) {
       }).bytes, false);
       stagedPaths.push(stageTarget.value.repositoryRelative);
     }
-    stagedPaths.sort(ordinal10);
+    stagedPaths.sort(ordinal9);
     return ok23(Object.freeze({
       initialization,
       audit_context: Object.freeze({
@@ -45934,7 +47029,7 @@ async function stageLegacyUpgrade(input) {
         imported_documents: Object.freeze(mapping.map((entry) => Object.freeze({
           path: entry.destination_path,
           content_digest: stagedRefs.find((reference) => reference.legacy_path === entry.legacy_path).digest
-        })).sort((left, right) => ordinal10(left.path, right.path))),
+        })).sort((left, right) => ordinal9(left.path, right.path))),
         target_ref: targetRef,
         baseline_commit: codeCommit,
         commit_message: commitMessage
@@ -45963,12 +47058,12 @@ async function discardLegacyUpgrade(input) {
   const discovered = await discoverWorktree(createGitRunner({ cwd: input.working_directory }), context2);
   if (!discovered.ok) return discovered;
   const root = discovered.value.location.worktreeRoot;
-  const digest10 = String(input.import_digest);
-  if (!/^[a-f0-9]{64}$/u.test(digest10)) {
+  const digest12 = String(input.import_digest);
+  if (!/^[a-f0-9]{64}$/u.test(digest12)) {
     return fail22(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-import-digest-invalid" }));
   }
-  const destination = join17(root, ".archflow", "tasks", taskId);
-  if (await exists(join17(destination, "state.json"))) {
+  const destination = join16(root, ".archflow", "tasks", taskId);
+  if (await exists(join16(destination, "state.json"))) {
     return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
   }
   if (await exists(destination)) {
@@ -45978,17 +47073,17 @@ async function discardLegacyUpgrade(input) {
     }
     if (entries.includes("config.yaml")) {
       const [actual, template] = await Promise.all([
-        readFile16(join17(destination, "config.yaml")),
-        readFile16(join17(root, ".archflow", "config.yaml"))
+        readFile15(join16(destination, "config.yaml")),
+        readFile15(join16(root, ".archflow", "config.yaml"))
       ]);
       if (!actual.equals(template)) {
         return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-config-modified" }));
       }
-      await rm4(join17(destination, "config.yaml"));
+      await rm4(join16(destination, "config.yaml"));
       await rmdir3(destination).catch(() => void 0);
     }
   }
-  await rm4(join17(root, ".archflow", "runtime", "tasks", taskId, "cache", "imports", digest10), { recursive: true, force: true });
+  await rm4(join16(root, ".archflow", "runtime", "tasks", taskId, "cache", "imports", digest12), { recursive: true, force: true });
   return ok23(Object.freeze({ discarded: true }));
 }
 async function adoptLegacyUpgrade(input) {
@@ -46008,7 +47103,7 @@ async function adoptLegacyUpgrade(input) {
   const services2 = created.value;
   try {
     const inspected = await inspectLegacyUpgradeStage(
-      join17(services2.authority.workspace_root, "cache", "imports"),
+      join16(services2.authority.workspace_root, "cache", "imports"),
       taskId
     );
     if (inspected.kind !== "current") {
@@ -46018,8 +47113,8 @@ async function adoptLegacyUpgrade(input) {
       }));
     }
     const descriptor = inspected.descriptor;
-    const manifestBytes = new Uint8Array(await readFile16(
-      join17(services2.authority.workspace_root, "cache", "imports", descriptor.import_digest, "manifest.json")
+    const manifestBytes = new Uint8Array(await readFile15(
+      join16(services2.authority.workspace_root, "cache", "imports", descriptor.import_digest, "manifest.json")
     ));
     const manifest = parseCanonicalDocument(manifestBytes, "staged legacy import manifest");
     const initialization = parseLegacyImportInitialization(manifest.value);
@@ -46067,7 +47162,7 @@ async function adoptLegacyUpgrade(input) {
 // src/contracts/automation-status.ts
 var nonBlank5 = external_exports.string().min(1).regex(/\S/u);
 var boundedText3 = nonBlank5.max(4096);
-var digest9 = sha256DigestV1Schema;
+var digest11 = sha256DigestV1Schema;
 var revision = safeIntegerV1Schema;
 var AUTOMATION_SKILLS = [
   "archflow-upgrade",
@@ -46199,7 +47294,7 @@ var positionlessBlockedV1Schema = external_exports.object({
 var commonShape = {
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
-  observation_id: digest9,
+  observation_id: digest11,
   state_revision: revision.nullable(),
   position: workflowPositionV1Schema
 };
@@ -46230,10 +47325,12 @@ var automationStatusWithoutIdV1Schema = external_exports.xor([
 var commonShapeV2 = {
   schema_version: external_exports.literal("2"),
   task_id: taskSlugV1Schema,
-  observation_id: digest9,
+  observation_id: digest11,
   state_revision: revision.nullable(),
   position: workflowPositionV1Schema,
-  implementation_recommendation: implementationRecommendationV1Schema
+  implementation_recommendation: implementationRecommendationV1Schema,
+  validation_overrides: external_exports.array(publicValidationOverrideAuditV1Schema).optional(),
+  review_push_throughs: external_exports.array(publicReviewPushThroughAuditV1Schema).optional()
 };
 var positionlessCommonShapeV2 = { ...commonShapeV2, position: external_exports.null() };
 var withoutIdCommonShapeV2 = {
@@ -46241,7 +47338,9 @@ var withoutIdCommonShapeV2 = {
   task_id: taskSlugV1Schema,
   state_revision: revision.nullable(),
   position: workflowPositionV1Schema,
-  implementation_recommendation: implementationRecommendationV1Schema
+  implementation_recommendation: implementationRecommendationV1Schema,
+  validation_overrides: external_exports.array(publicValidationOverrideAuditV1Schema).optional(),
+  review_push_throughs: external_exports.array(publicReviewPushThroughAuditV1Schema).optional()
 };
 var positionlessWithoutIdCommonShapeV2 = { ...withoutIdCommonShapeV2, position: external_exports.null() };
 var automationStatusV2Schema = external_exports.xor([
@@ -46261,10 +47360,10 @@ var automationStatusWithoutIdV2Schema = external_exports.xor([
   external_exports.object({ ...withoutIdCommonShapeV2, condition: external_exports.literal("complete"), next_action: noneActionV1Schema }).strict()
 ]);
 var authorityV1Schema = external_exports.discriminatedUnion("kind", [
-  external_exports.object({ kind: external_exports.literal("readable"), repository_identity_digest: digest9, state_document_digest: digest9, live_config_digest: digest9.nullable(), semantic_snapshot_digest: digest9 }).strict(),
-  external_exports.object({ kind: external_exports.literal("absent"), repository_identity_digest: digest9, live_config_digest: digest9.nullable() }).strict(),
-  external_exports.object({ kind: external_exports.literal("staged"), repository_identity_digest: digest9, classification: external_exports.enum(["current", "restart-required"]), identity_digest: digest9, live_config_digest: digest9.nullable() }).strict(),
-  external_exports.object({ kind: external_exports.literal("unreadable"), repository_identity_digest: digest9, classification: external_exports.enum(["invalid", "noncanonical"]), identity_digest: digest9, live_config_digest: digest9.nullable() }).strict()
+  external_exports.object({ kind: external_exports.literal("readable"), repository_identity_digest: digest11, state_document_digest: digest11, live_config_digest: digest11.nullable(), semantic_snapshot_digest: digest11 }).strict(),
+  external_exports.object({ kind: external_exports.literal("absent"), repository_identity_digest: digest11, live_config_digest: digest11.nullable() }).strict(),
+  external_exports.object({ kind: external_exports.literal("staged"), repository_identity_digest: digest11, classification: external_exports.enum(["current", "restart-required"]), identity_digest: digest11, live_config_digest: digest11.nullable() }).strict(),
+  external_exports.object({ kind: external_exports.literal("unreadable"), repository_identity_digest: digest11, classification: external_exports.enum(["invalid", "noncanonical"]), identity_digest: digest11, live_config_digest: digest11.nullable() }).strict()
 ]);
 function createAutomationStatusV1(document2, authority) {
   assertPlainJson(document2, "automation status without observation id");
@@ -46573,7 +47672,13 @@ function projectAutomationStatusV2(snapshot2, view) {
   let document2 = {
     ...v1Document,
     schema_version: "2",
-    implementation_recommendation: view.implementation_recommendation
+    implementation_recommendation: view.implementation_recommendation,
+    ...view.validation_overrides === void 0 ? {} : {
+      validation_overrides: view.validation_overrides
+    },
+    ...view.review_push_throughs === void 0 ? {} : {
+      review_push_throughs: view.review_push_throughs
+    }
   };
   if (view.dispatch_failure?.role === "effort-reviewer" && document2.condition === "awaiting-human") {
     document2 = {
@@ -46600,8 +47705,7 @@ function assertNeverCondition(condition) {
 var NOT_APPLICABLE_RECOMMENDATION = Object.freeze({
   status: "unavailable",
   reason: "not-applicable",
-  explanation: "Implementation recommendation is not applicable without readable phase-design workflow authority.",
-  actual_implementation_route: Object.freeze({ status: "not-recorded" })
+  explanation: "Implementation recommendation is not applicable without readable phase-design workflow authority."
 });
 function identityDigest(value) {
   return canonicalJsonDigest(value);
@@ -46693,7 +47797,7 @@ function unreadableTaskAutomationStatusV2(taskId, unreadable) {
 }
 
 // src/local/status-classification.ts
-import { join as join18 } from "node:path";
+import { join as join17 } from "node:path";
 var ok24 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function action2(code2, detail, human, commands, input) {
   return Object.freeze({ code: code2, detail, human_required: human, ...commands === void 0 ? {} : { commands }, ...input === void 0 ? {} : { input } });
@@ -46706,7 +47810,7 @@ async function stagedUpgradeStatus(input) {
     attempt: parseSafeInteger(1)
   });
   if (!discovered.ok) return void 0;
-  const imports = join18(discovered.value.location.worktreeRoot, ".archflow", "runtime", "tasks", input.task_id, "cache", "imports");
+  const imports = join17(discovered.value.location.worktreeRoot, ".archflow", "runtime", "tasks", input.task_id, "cache", "imports");
   const inspected = await inspectLegacyUpgradeStage(imports, input.task_id);
   if (inspected.kind === "absent") return void 0;
   if (inspected.kind === "current") {
@@ -46843,7 +47947,7 @@ function createInvocationContext(connection, seed, signal) {
 }
 
 // src/state/transaction.ts
-import { isDeepStrictEqual as isDeepStrictEqual11 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual13 } from "node:util";
 import { isAbsolute as isAbsolute7, relative as relative8, resolve as resolvePath8 } from "node:path";
 var MAX_RECEIPT_BYTES = 1024 * 1024;
 var resultInstallations = /* @__PURE__ */ new WeakMap();
@@ -46950,7 +48054,8 @@ function operationFor2(call) {
           recover_milestone_authority: "recover-milestone-authority",
           recover_approval_trigger_authority: "recover-approval-trigger-authority",
           refresh_stale_baseline: "refresh-stale-baseline",
-          set_commit_authority: "set-commit-authority"
+          set_commit_authority: "set-commit-authority",
+          request_validation_override: "request-validation-override"
         }[call.input.operation];
       }
       const artifact = call.input.artifact;
@@ -47005,8 +48110,8 @@ function assertPreserved(current, next) {
   if (next.task_id !== current.task_id || next.repository_identity_digest !== current.repository_identity_digest || next.initialization_digest !== current.initialization_digest || next.config_digest !== current.config_digest || next.workflow_digest !== current.workflow_digest || !isPolicyUpdate && (next.constitution_digest !== current.constitution_digest || next.policy_base_commit !== current.policy_base_commit)) {
     throw new TypeError("next state draft changed a transaction-substrate identity or pin");
   }
-  const gateAuthorityPreserved = isDeepStrictEqual11(next.open_gate, current.open_gate) && isDeepStrictEqual11(next.approvals, current.approvals) && isDeepStrictEqual11(next.waivers, current.waivers);
-  const restartHistoryChanged = !isDeepStrictEqual11(next.restart_history, current.restart_history);
+  const gateAuthorityPreserved = isDeepStrictEqual13(next.open_gate, current.open_gate) && isDeepStrictEqual13(next.approvals, current.approvals) && isDeepStrictEqual13(next.waivers, current.waivers);
+  const restartHistoryChanged = !isDeepStrictEqual13(next.restart_history, current.restart_history);
   if ((!gateAuthorityPreserved || restartHistoryChanged) && !isExactPlanningRestartDraft(current, next) && !isExactMilestoneRecoveryDraft(current, next)) {
     throw new TypeError("next state draft changed gate authority");
   }
@@ -47215,7 +48320,7 @@ function materializePlan(value) {
   if (hasInstallation) expected.push("result_installation");
   expected.sort();
   const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual11(keys.sort(), expected)) {
+  if (keys.some((key) => typeof key !== "string") || !isDeepStrictEqual13(keys.sort(), expected)) {
     throw new TypeError("prepared transaction has unexpected or missing slots");
   }
   const expectation = ownDataField2(value, "expectation", "prepared transaction");
@@ -47242,7 +48347,11 @@ function expectedInstallationSource(call, source) {
       if (call.input.artifact === void 0) {
         throw new TypeError("evidence result installation requires an archflow_state artifact");
       }
-      const { disposition_ledger: _ledger, ...preparedEvidence } = source.evidence;
+      const {
+        disposition_ledger: _ledger,
+        review_round_history: _roundHistory,
+        ...preparedEvidence
+      } = source.evidence;
       if (canonicalJsonDigest(call.input.artifact) !== canonicalJsonDigest({ ...source, evidence: preparedEvidence })) {
         throw new TypeError("evidence result installation source does not match the archflow_state artifact");
       }
@@ -47284,7 +48393,7 @@ function validateInstallationFacts(request, current, identified, nextState, fact
   const manifest = facts.prepared.manifest.value;
   const reference = facts.reference;
   const nextReference = nextState.authoritative_results.find((entry) => entry.phase_instance === reference.phase_instance && entry.step === reference.step);
-  if (!isDeepStrictEqual11(nextReference, reference)) {
+  if (!isDeepStrictEqual13(nextReference, reference)) {
     throw new TypeError("result installation reference does not match the prepared transaction");
   }
   if (reference.input_fingerprint !== identified.input_fingerprint) {
@@ -47815,7 +48924,7 @@ async function runStateTransaction(dependencies, request, prepare) {
 }
 
 // src/state/transitions.ts
-import { isDeepStrictEqual as isDeepStrictEqual12 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual14 } from "node:util";
 var ok26 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function restartInvalid(input, issue4) {
   void issue4;
@@ -47833,7 +48942,7 @@ function planPlanningRestart(value) {
   assertPlainJson(value, "planning restart input");
   const input = structuredClone(value);
   const current = input.current;
-  if (current.terminal !== void 0 || current.open_gate !== void 0 || input.reason.trim() === "" || !isStrictlyEarlierPlanningPhase(input.target_phase_instance, current.phase_instance)) return restartInvalid(input, "target-not-strictly-earlier-planning-phase");
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || current.pending_validation_override !== void 0 || input.reason.trim() === "" || !isStrictlyEarlierPlanningPhase(input.target_phase_instance, current.phase_instance)) return restartInvalid(input, "target-not-strictly-earlier-planning-phase");
   if ((current.restart_history ?? []).some((record3) => record3.restart_id === input.restart_id)) {
     return restartInvalid(input, "restart-id-already-recorded");
   }
@@ -48095,7 +49204,14 @@ function pendingHumanRevisionMatches(input) {
   if (input.current.attempt !== pending.attempt) return false;
   if (input.target.status !== "succeeded") return declaration === void 0;
   if (declaration === void 0 || input.result_reference === void 0 || input.resulting_subject_digest === void 0 || input.resulting_subject_digest === pending.predecessor_subject_digest) return false;
-  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) => isDeepStrictEqual12(expected, observed)));
+  return pending.evidence.every((expected) => input.current.authoritative_results.some((observed) => isDeepStrictEqual14(expected, observed)));
+}
+function pendingValidationOverrideMatches(input) {
+  const requested = input.pending_validation_override;
+  if (input.current.pending_validation_override !== void 0) return false;
+  if (requested === void 0) return true;
+  const phase3 = decodePhaseInstance(input.current.phase_instance);
+  return phase3.kind === "phase-impl" && input.current.terminal === void 0 && input.current.open_gate === void 0 && input.current.step === "produce" && input.current.status === "running" && input.target.phase_instance === input.current.phase_instance && input.target.step === "produce" && input.target.status === "failed" && input.target.attempt === input.current.attempt && input.target.input_fingerprint === input.current.input_fingerprint && requested.phase_instance === input.current.phase_instance && requested.input_fingerprint === input.current.input_fingerprint && requested.request_revision === input.current.revision + 1;
 }
 function withResultReference(current, reference) {
   if (reference === void 0) return current;
@@ -48119,17 +49235,17 @@ function hasAuthenticatedCommittedOutput(input) {
 }
 function hasAuthenticatedRuleAcceptance(input) {
   const accepted = input.authenticated_rule_acceptance;
-  const digest10 = input.completion_subject_digest;
-  if (accepted === void 0 || digest10 === void 0) return false;
+  const digest12 = input.completion_subject_digest;
+  if (accepted === void 0 || digest12 === void 0) return false;
   assertAuthenticatedRuleAcceptancePolicy(accepted.policy);
   const settlement = acceptedNoWaitSettlementWithoutOrdinaryApproval(
     accepted.policy,
     input.current,
-    digest10,
+    digest12,
     input.current.phase_instance,
     input.authenticated_gate_approvals ?? []
   );
-  return settlement !== void 0 && isDeepStrictEqual12(settlement, accepted.settlement);
+  return settlement !== void 0 && isDeepStrictEqual14(settlement, accepted.settlement);
 }
 function planStateTransition(value) {
   const {
@@ -48170,7 +49286,7 @@ function planStateTransition(value) {
   if ((decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedCombinedDesignApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
   if (decodedCurrent.kind === "design" && crossesPhase && ruleAccepted && input.derived_planned_final_phase === void 0) return invalid(input, from, to);
   const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledDocumentProduceExitMovement(input);
-  if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input)) {
+  if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input) || !pendingValidationOverrideMatches(input)) {
     return invalid(input, from, to);
   }
   const {
@@ -48222,9 +49338,10 @@ function planStateTransition(value) {
     ...humanRevisionHistory === void 0 ? {} : { human_revision_history: humanRevisionHistory },
     ...!completingHumanRevision && pendingHumanRevision !== void 0 ? { pending_human_revision: pendingHumanRevision } : {},
     ...plannedFinalPhase === void 0 || plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) },
-    ...ruleSettlements === void 0 ? {} : { rule_settlements: ruleSettlements }
+    ...ruleSettlements === void 0 ? {} : { rule_settlements: ruleSettlements },
+    ...input.pending_validation_override === void 0 ? {} : { pending_validation_override: Object.freeze(input.pending_validation_override) }
   });
-  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual12(draft.authoritative_results, input.current.authoritative_results)) {
+  if (input.result_reference === void 0 && input.constitution_result_reference === void 0 && !isDeepStrictEqual14(draft.authoritative_results, input.current.authoritative_results)) {
     throw new TypeError("transition planning changed authoritative results");
   }
   return ok26(draft);
@@ -48242,6 +49359,16 @@ function planningRestartId(requestDigest, intentId) {
 function completedPlanningRestartMatches(state, input) {
   const restart = state.restart_history?.find((record2) => record2.restart_id === input.restart_id);
   return restart !== void 0 && restart.source_phase_instance === input.source_phase_instance && restart.target_phase_instance === input.target_phase_instance && restart.reason === input.reason && state.revision === restart.restarted_at_revision && state.phase_instance === restart.target_phase_instance && state.step === "produce" && state.status === "running" && state.attempt === 1 && state.input_fingerprint === input.input_fingerprint;
+}
+
+// src/state/milestone-recovery.ts
+var SEMANTIC_RECOVERY_INTENT = /^afop-([0-9a-f]{64})-recover-milestone-authority$/u;
+function semanticMilestoneRecoveryId(intentId) {
+  const match = SEMANTIC_RECOVERY_INTENT.exec(intentId);
+  return match === null ? void 0 : parsePathSafeId(`milestone-recovery-${match[1].slice(0, 32)}`);
+}
+function milestoneRecoveryId(requestDigest, intentId) {
+  return intentId === void 0 ? parsePathSafeId(`milestone-recovery-${requestDigest.slice(0, 32)}`) : semanticMilestoneRecoveryId(intentId) ?? parsePathSafeId(`milestone-recovery-${requestDigest.slice(0, 32)}`);
 }
 
 // src/state/planned-final-phase.ts
@@ -48302,8 +49429,8 @@ function plannedFinalPhaseFromRecordedPayloads(taskId, payloads, storedPlannedFi
   if (recorded === void 0 || storedPlannedFinalPhase === void 0) return void 0;
   return plannedFinalPhaseFromDesign(recorded.bytes);
 }
-function derivedFinalPhaseBelowCurrentPhase(derived, phaseInstance4) {
-  const decoded = decodePhaseInstance(phaseInstance4);
+function derivedFinalPhaseBelowCurrentPhase(derived, phaseInstance5) {
+  const decoded = decodePhaseInstance(phaseInstance5);
   return (decoded.kind === "phase-impl" || decoded.kind === "phase-design") && derived < Number(decoded.phase);
 }
 
@@ -48409,8 +49536,8 @@ async function refreshStaleBaselineGate(dependencies, authority, expectedRevisio
 
 // src/mcp/diagnostics.ts
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname as dirname8, join as join19 } from "node:path";
-var INTERNAL_ERROR_LOG = join19(".archflow", "runtime", "diagnostics", "internal-errors.log");
+import { dirname as dirname8, join as join18 } from "node:path";
+var INTERNAL_ERROR_LOG = join18(".archflow", "runtime", "diagnostics", "internal-errors.log");
 function reportInternalError(correlationId, error51) {
   const detail = error51 instanceof Error ? error51.stack ?? error51.message : String(error51);
   const record2 = `archflow INTERNAL_ERROR correlation_id=${correlationId}
@@ -48501,9 +49628,9 @@ async function openHandlerSession(call, context2) {
   }
   const host = context2.connection.initialization_candidates.host;
   if (host === "unknown") return fail24(createProjectError("UNSUPPORTED_HOST", { host }));
-  const phaseInstance4 = state?.phase_instance ?? suppliedPhase;
-  if (phaseInstance4 === void 0) throw new TypeError("phase instance is unavailable");
-  const phase_kind = decodePhaseInstance(phaseInstance4).kind;
+  const phaseInstance5 = state?.phase_instance ?? suppliedPhase;
+  if (phaseInstance5 === void 0) throw new TypeError("phase instance is unavailable");
+  const phase_kind = decodePhaseInstance(phaseInstance5).kind;
   let config2;
   try {
     config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
@@ -48981,6 +50108,15 @@ async function settleApprovalRules(services2, repositorySet, current, prospectiv
       authenticated,
       produce
     );
+    const authenticatedPushThroughs = [];
+    for (const pushThrough of current.review_push_throughs ?? []) {
+      const loaded = await loadAuthenticatedReviewPushThrough(
+        services2.dependencies,
+        services2.authority,
+        pushThrough
+      );
+      if (loaded.ok) authenticatedPushThroughs.push(loaded.value);
+    }
     const legacyInitialization = await loadLegacyImportInitialization(
       services2.dependencies,
       services2.authority,
@@ -48998,10 +50134,14 @@ async function settleApprovalRules(services2, repositorySet, current, prospectiv
         constitution: constitution.value,
         approved_upstream_digests: approvedUpstreams,
         authenticated_gate_approvals: authenticated,
+        ...authenticatedPushThroughs.length === 0 ? {} : {
+          review_push_through_authority: reviewPushThroughAuthoritySource(authenticatedPushThroughs)
+        },
         ...predecessor === void 0 ? {} : { review_predecessor: predecessor },
         ...config2.parsed.max_attempts === void 0 ? {} : { max_attempts: config2.parsed.max_attempts }
       }
     );
+    if (assessment.escalated_human_findings === true) return void 0;
     if (assessment.next !== "advance") {
       if (assessment.next !== "adjudication-gate") return void 0;
       const pending = pendingAdjudicationGates(
@@ -49050,9 +50190,10 @@ async function handleState(call, context2) {
     const triggerRecoveryInput = call.input.operation === "recover_approval_trigger_authority" ? call.input : void 0;
     const staleBaselineInput = call.input.operation === "refresh_stale_baseline" ? call.input : void 0;
     const commitAuthorityInput = call.input.operation === "set_commit_authority" ? call.input : void 0;
-    const artifact = restartInput === void 0 && refreshInput === void 0 && recoveryInput === void 0 && triggerRecoveryInput === void 0 && staleBaselineInput === void 0 && commitAuthorityInput === void 0 ? call.input.artifact : void 0;
+    const validationOverrideInput = call.input.operation === "request_validation_override" ? call.input : void 0;
+    const artifact = restartInput === void 0 && refreshInput === void 0 && recoveryInput === void 0 && triggerRecoveryInput === void 0 && staleBaselineInput === void 0 && commitAuthorityInput === void 0 && validationOverrideInput === void 0 ? call.input.artifact : void 0;
     if (services2.state === void 0) {
-      if (restartInput !== void 0 || refreshInput !== void 0 || recoveryInput !== void 0 || triggerRecoveryInput !== void 0 || staleBaselineInput !== void 0 || commitAuthorityInput !== void 0) {
+      if (restartInput !== void 0 || refreshInput !== void 0 || recoveryInput !== void 0 || triggerRecoveryInput !== void 0 || staleBaselineInput !== void 0 || commitAuthorityInput !== void 0 || validationOverrideInput !== void 0) {
         return fail25(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services2.dependencies, {
@@ -49187,7 +50328,7 @@ async function handleState(call, context2) {
               to: "milestone-recovery"
             }));
           }
-          const recoveryId = parsePathSafeId(`milestone-recovery-${identified.request_digest}`);
+          const recoveryId = milestoneRecoveryId(identified.request_digest, recoveryInput.intent_id);
           const planned = planMilestoneRecovery({
             current: current.value,
             recovery_id: recoveryId,
@@ -49564,6 +50705,74 @@ async function handleState(call, context2) {
         let derivedPlannedFinalPhase;
         let settlementEvidence;
         let settlementProduce;
+        let pendingValidationOverride;
+        if (validationOverrideInput !== void 0) {
+          const state = current.value;
+          const phase3 = decodePhaseInstance(state.phase_instance);
+          if (phase3.kind !== "phase-impl" || state.phase_instance !== validationOverrideInput.phase_instance || state.step !== "produce" || state.status !== "running" || state.terminal !== void 0 || state.open_gate !== void 0 || state.pending_validation_override !== void 0 || state.input_fingerprint !== validationOverrideInput.input_fingerprint) {
+            return fail25(createProjectError("TRANSITION_INVALID", {
+              phase_instance: validationOverrideInput.phase_instance,
+              from: `${state.step}-${state.status}`,
+              to: "produce-failed-validation-override"
+            }));
+          }
+          const authenticated = [];
+          for (const approval of state.approvals) {
+            const loaded = await loadAuthenticatedGateApproval(
+              services2.dependencies,
+              services2.authority,
+              approval
+            );
+            if (!loaded.ok) return loaded;
+            if (authenticatedApprovalIsEligibleAfterLatestRestart(state, loaded.value)) {
+              authenticated.push(loaded.value);
+            }
+          }
+          let approvedUpstreams;
+          try {
+            approvedUpstreams = await currentApprovedUpstreams(
+              services2.dependencies,
+              services2.authority,
+              state,
+              authenticated,
+              void 0
+            );
+          } catch {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "validation-override-governing-authority-invalid"
+            }));
+          }
+          const binding = expectedProduceUpstreamBindings(state).find((candidate) => candidate.artifact_kind === "phase-design");
+          if (binding === void 0) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "validation-override-governing-phase-design-missing"
+            }));
+          }
+          const governing = await loadProduceUpstreamSubject(
+            services2.dependencies,
+            services2.authority,
+            state,
+            binding
+          );
+          if (!governing.ok) return governing;
+          if (!approvedUpstreams.includes(governing.value.artifact_digest)) {
+            return fail25(createProjectError("STATE_INVALID", {
+              phase_instance: state.phase_instance,
+              issue_code: "validation-override-governing-phase-design-unapproved"
+            }));
+          }
+          pendingValidationOverride = Object.freeze({
+            phase_instance: state.phase_instance,
+            input_fingerprint: state.input_fingerprint,
+            governing_phase_design_digest: governing.value.artifact_digest,
+            displaced_validations: validationOverrideInput.validation_override_request.displaced_validations,
+            producer_reason: validationOverrideInput.reason,
+            request_digest: identified.request_digest,
+            request_revision: parseSafeInteger(state.revision + 1)
+          });
+        }
         if (artifact?.artifact_kind === "document" || artifact?.artifact_kind === "implementation-output") {
           if (retainedBytes === void 0 || scanner === void 0) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
@@ -50010,6 +51219,9 @@ async function handleState(call, context2) {
           },
           ...authenticatedRuleAcceptance === void 0 ? {} : {
             authenticated_rule_acceptance: authenticatedRuleAcceptance
+          },
+          ...pendingValidationOverride === void 0 ? {} : {
+            pending_validation_override: pendingValidationOverride
           }
         };
         let next = planStateTransition(transitionInput);
@@ -50433,7 +51645,7 @@ async function readInput(command, path2) {
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
-  }) : await readFile17(path2);
+  }) : await readFile16(path2);
   if (bytes.byteLength === 0) throw missingPayload();
   try {
     return JSON.parse(bytes.toString("utf8"));

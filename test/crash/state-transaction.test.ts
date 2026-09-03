@@ -64,13 +64,14 @@ type Fixture = Readonly<{
   authority: TransactionAuthority;
   dependencies: TransactionDependencies;
   call: Extract<ParsedToolCall, { name: "archflow_state" }>;
+  validation: boolean;
   prepare: () => Readonly<{
     callback: Parameters<typeof runStateTransaction<"archflow_state">>[2];
     calls: () => number;
   }>;
 }>;
 
-async function fixture(settleReceipt?: RuleSettlementV1): Promise<Fixture> {
+async function fixture(settleReceipt?: RuleSettlementV1, validation = false): Promise<Fixture> {
   const repository = await mkdtemp(join(tmpdir(), "archflow-transaction-crash-"));
   roots.push(repository);
   execFileSync("git", ["-c", "init.defaultBranch=main", "init", "-q"], { cwd: repository, env: gitEnvironment });
@@ -147,9 +148,28 @@ async function fixture(settleReceipt?: RuleSettlementV1): Promise<Fixture> {
     input_fingerprint: inputFingerprint,
     phase_instance: context.phase_instance,
     step: "produce",
-    status: "succeeded",
+    status: validation ? "failed" : "succeeded",
+    ...(validation ? {
+      operation: "request_validation_override",
+      reason: "device lab unavailable",
+      validation_override_request: { displaced_validations: ["hardware suite"] },
+    } : {}),
   });
-  const requestDigest = computeRequestDigest({
+  const requestDigest = computeRequestDigest(validation ? {
+    schema_version: "1",
+    tool: "archflow_state",
+    repository_identity_digest: authority.repository_identity_digest,
+    task_identity_digest: authority.task_identity_digest,
+    operation: "request-validation-override",
+    operation_fields: {
+      phase_instance: context.phase_instance,
+      step: "produce",
+      status: "failed",
+      reason: "device lab unavailable",
+      validation_override_request: { displaced_validations: ["hardware suite"] },
+    },
+    input_fingerprint: inputFingerprint,
+  } : {
     schema_version: "1",
     tool: "archflow_state",
     repository_identity_digest: authority.repository_identity_digest,
@@ -176,7 +196,7 @@ async function fixture(settleReceipt?: RuleSettlementV1): Promise<Fixture> {
       const success = {
         path: parseTaskPathClaim("state.json"),
         revision: (current.value.revision + 1) as TaskStateV1["revision"],
-        status: "succeeded" as const,
+        status: validation ? "failed" as const : "succeeded" as const,
       };
       const value: PreparedTransaction<"archflow_state"> = {
         expectation: createInternalResultExpectation({
@@ -193,7 +213,18 @@ async function fixture(settleReceipt?: RuleSettlementV1): Promise<Fixture> {
         result: validateProjectResultStructure(call, { schema_version: "1", ok: true, value: success }),
         next_state: {
           ...nextState,
-          status: "succeeded",
+          status: validation ? "failed" : "succeeded",
+          ...(validation ? {
+            pending_validation_override: {
+              phase_instance: current.value.phase_instance,
+              input_fingerprint: current.value.input_fingerprint,
+              governing_phase_design_digest: "9".repeat(64) as TaskStateV1["input_fingerprint"],
+              displaced_validations: ["hardware suite"],
+              producer_reason: "device lab unavailable",
+              request_digest: requestDigest,
+              request_revision: (current.value.revision + 1) as TaskStateV1["revision"],
+            },
+          } : {}),
           ...(settleReceipt === undefined ? {} : { rule_settlements: [settleReceipt] }),
         },
       };
@@ -201,7 +232,7 @@ async function fixture(settleReceipt?: RuleSettlementV1): Promise<Fixture> {
     };
     return { callback, calls: () => calls };
   };
-  return { repository, taskRoot, authority, dependencies, call, prepare };
+  return { repository, taskRoot, authority, dependencies, call, prepare, validation };
 }
 
 async function run(
@@ -223,7 +254,7 @@ type CrashCutPoint = string;
 function startCrashChild(input: Fixture, cutPoint: CrashCutPoint): ChildProcess {
   const child = spawn(process.execPath, [
     childProgram.pathname,
-    "run-crash-transaction",
+    input.validation ? "run-crash-validation-transaction" : "run-crash-transaction",
     input.taskRoot,
     input.call.input.intent_id,
     String(input.call.input.expected_revision),
@@ -277,9 +308,22 @@ async function expectAuthorityAtPriorOrNext(input: Fixture, resultExpected: bool
   if (observed.document.value.revision === 1) {
     expect(observed.document.value.last_transition).toBeUndefined();
     expect(observed.document.value.authoritative_results).toEqual([]);
+    expect(observed.document.value.pending_validation_override).toBeUndefined();
   } else {
     expect(observed.document.value.last_transition?.intent_id).toBe("crash-intent");
     expect(observed.document.value.authoritative_results).toHaveLength(resultExpected ? 1 : 0);
+    if (input.validation) {
+      expect(observed.document.value).toMatchObject({
+        step: "produce", status: "failed", attempt: 1,
+        pending_validation_override: {
+          governing_phase_design_digest: "9".repeat(64),
+          displaced_validations: ["hardware suite"],
+          producer_reason: "device lab unavailable",
+          request_revision: 2,
+        },
+        last_transition: { operation: "request-validation-override" },
+      });
+    }
   }
   return observed.document.value.revision;
 }
@@ -315,6 +359,22 @@ function childEvent(child: ChildProcess, type: "entered" | "failed" | "cut" | "r
 }
 
 describe("state transaction crash boundaries", () => {
+  for (const cutPoint of ["receipt-temp", "receipt-link", "state-replace-before", "state-replace-after"] as const) {
+    it(`installs a validation request atomically across real SIGKILL at ${cutPoint}`, async () => {
+      const input = await fixture(undefined, true);
+      await killAtRealCut(input, cutPoint);
+      const observedRevision = await expectAuthorityAtPriorOrNext(input, false);
+      await clearAbandonedLock(input);
+      const retryCall = parseToolCall("archflow_state", {
+        ...input.call.input,
+        expected_revision: observedRevision,
+      });
+      const restarted = await run(input, createAtomicWriter(), input.prepare(), retryCall);
+      expect(restarted.result).toMatchObject({ ok: true, value: { state: { value: { revision: 2 } } } });
+      await expectAuthorityAtPriorOrNext(input, false);
+    });
+  }
+
   for (const cutPoint of ["result-payload-link", "result-manifest-link"] as const) {
     it(`leaves installed result material non-authoritative at ${cutPoint} and safely retries`, async () => {
       const input = await fixture();

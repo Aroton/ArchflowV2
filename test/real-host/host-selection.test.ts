@@ -131,6 +131,7 @@ let scratchBin = "";
 let codexHome = "";
 let installedEnvironment: NodeJS.ProcessEnv = { ...process.env };
 let developerSkillsBefore = "";
+let developerClaudeProjectsBefore: string[] = [];
 let claudeJourneyCapable = false;
 let claudeCapabilityNote = "";
 let codexJourneyCapable = false;
@@ -199,6 +200,8 @@ function taskState(root: string, task: string): HostEvidence["journey"]["task_st
 }
 
 function runClaude(prompt: string, cwd: string): HostRun {
+  const developerHome = process.env.HOME;
+  if (developerHome === undefined) throw new Error("HOME is required to preserve Claude authentication");
   const configPath = join(installationRoot, "claude-mcp.json");
   writeFileSync(configPath, `${JSON.stringify({
     mcpServers: { archflow: { type: "stdio", command: join(scratchBin, "archflow-mcp"), args: [], timeout: 3_600_000 } },
@@ -216,7 +219,18 @@ function runClaude(prompt: string, cwd: string): HostRun {
     "--effort", CLAUDE_EFFORT,
     "--permission-mode", "auto",
     prompt,
-  ], { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: TIMEOUT });
+  ], {
+    cwd,
+    env: {
+      ...process.env,
+      ...gitIdentity,
+      HOME: scratchHome,
+      CLAUDE_CONFIG_DIR: join(developerHome, ".claude"),
+    },
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    timeout: TIMEOUT,
+  });
   const calls = new Map<string, HostToolCall>();
   const messages: string[] = [];
   for (const line of (result.stdout ?? "").split("\n")) {
@@ -428,6 +442,11 @@ if (REAL_HOSTS_AVAILABLE) {
     join(developerHome, ".claude", "skills"),
     join(developerHome, ".agents", "skills"),
   ]);
+  const claudeState = join(developerHome, ".claude.json");
+  if (existsSync(claudeState)) {
+    const projects = (JSON.parse(readFileSync(claudeState, "utf8")) as { projects?: Record<string, unknown> }).projects ?? {};
+    developerClaudeProjectsBefore = Object.keys(projects).filter((path) => path.includes("archflow-host-selection")).sort();
+  }
   installationRoot = mkdtempSync(join(tmpdir(), "archflow-host-selection-"));
   checkoutRoot = join(installationRoot, "checkout");
   scratchHome = join(installationRoot, "home");
@@ -474,12 +493,13 @@ afterAll(() => {
   if (REAL_HOSTS_AVAILABLE && developerHome !== undefined) {
     expect(digestTree([join(developerHome, ".claude", "skills"), join(developerHome, ".agents", "skills")]))
       .toBe(developerSkillsBefore);
-    // Headless --no-session-persistence sessions must not leave the scratch directories in the
-    // developer's remembered Claude project state either.
+    // The real credential directory is reused, but HOME is scratch-isolated so headless runs must
+    // not add project records to the developer's remembered Claude state.
     const claudeState = join(developerHome, ".claude.json");
     if (existsSync(claudeState)) {
       const projects = (JSON.parse(readFileSync(claudeState, "utf8")) as { projects?: Record<string, unknown> }).projects ?? {};
-      expect(Object.keys(projects).filter((path) => path.includes("archflow-host-selection"))).toEqual([]);
+      expect(Object.keys(projects).filter((path) => path.includes("archflow-host-selection")).sort())
+        .toEqual(developerClaudeProjectsBefore);
     }
   }
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });

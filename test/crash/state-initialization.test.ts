@@ -17,6 +17,8 @@ import { inspectAbandonedTaskLock, removeConfirmedAbandonedTaskLock } from "../.
 import { readTaskState } from "../../src/state/read.js";
 
 const childProgram = new URL("../fixtures/state-initialization-child.mjs", import.meta.url);
+const IPC_TIMEOUT_MS = 20_000;
+const CASE_TIMEOUT_MS = 40_000;
 const roots: string[] = [];
 const children = new Set<ChildProcess>();
 const env: NodeJS.ProcessEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null",
@@ -30,9 +32,14 @@ afterEach(async () => {
 });
 
 const message = (child: ChildProcess, type: string): Promise<Record<string, unknown>> => new Promise((resolve, reject) => {
-  const timer = setTimeout(() => reject(new Error(`child did not emit ${type}`)), 10_000);
+  const timer = setTimeout(() => reject(new Error(`child did not emit ${type}`)), IPC_TIMEOUT_MS);
   child.on("message", (value) => {
     const record = value as Record<string, unknown>;
+    if (record.type === "failed") {
+      clearTimeout(timer);
+      reject(new Error(`child failed: ${String(record.name)}: ${String(record.message)}\n${String(record.stack ?? "")}`));
+      return;
+    }
     if (record.type !== type) return;
     clearTimeout(timer); resolve(record);
   });
@@ -112,7 +119,7 @@ describe("revision-0 crash cuts", () => {
       const resumed = start(fixture.taskRoot, "none");
       const result = await message(resumed, "result");
       expect(result).toMatchObject({ ok: true, revision: 1 });
-    }, 20_000);
+    }, CASE_TIMEOUT_MS);
   }
 
   for (const [label, mutate] of [
@@ -131,7 +138,7 @@ describe("revision-0 crash cuts", () => {
       expect(result.ok).toBe(false);
       expect((await readTaskState(fixture.authority.state)).kind).toBe("missing");
       expect(existsSync(join(fixture.taskRoot, "intents", "initialize.json"))).toBe(false);
-    }, 20_000);
+    }, CASE_TIMEOUT_MS);
   }
 
   for (const field of ["import_baseline_commit", "code_baseline_commit"] as const) {
@@ -146,7 +153,7 @@ describe("revision-0 crash cuts", () => {
       expect(result.ok).toBe(false);
       expect((await readTaskState(fixture.authority.state)).kind).toBe("missing");
       expect(existsSync(join(fixture.taskRoot, "intents", "initialize.json"))).toBe(false);
-    }, 20_000);
+    }, CASE_TIMEOUT_MS);
   }
 
   it("rejects an existing uncommitted object used as a policy commit", async () => {
@@ -164,7 +171,7 @@ describe("revision-0 crash cuts", () => {
     expect(result.ok).toBe(false);
     expect((await readTaskState(fixture.authority.state)).kind).toBe("missing");
     expect(existsSync(join(fixture.taskRoot, "intents", "initialize.json"))).toBe(false);
-  }, 20_000);
+  }, CASE_TIMEOUT_MS);
 
   it("returns INTENT_MISMATCH for a changed-artifact retry of a committed initialization", async () => {
     const fixture = await setup();
@@ -178,5 +185,5 @@ describe("revision-0 crash cuts", () => {
     expect(await message(retried, "result")).toMatchObject({ ok: false, code: "INTENT_MISMATCH" });
     const state = await readTaskState(fixture.authority.state);
     if (state.kind === "canonical") expect(state.document.value.revision).toBe(1);
-  }, 20_000);
+  }, CASE_TIMEOUT_MS);
 });

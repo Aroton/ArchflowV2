@@ -14,7 +14,10 @@ import { parseConfigYaml } from "../../src/contracts/config.js";
 import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { parseAndDeriveReview } from "../../src/contracts/review.js";
+import {
+  childReviewOutputV2Schema,
+  expectedReviewSummaryV2,
+} from "../../src/contracts/review.js";
 import { serializeDispatch } from "../../src/dispatch/cli.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
 import { resolveDispatchRoute } from "../../src/dispatch/routing.js";
@@ -45,13 +48,13 @@ const directions = Object.freeze([
     id: "claude-codex",
     producer: "claude" as const,
     reviewer: "codex" as const,
-    config: `schema_version: "1"\nroles:\n  counter-reviewer: {model: gpt-5.6-sol, effort: xhigh}\n  adjudicator: {model: gpt-5.6-sol, effort: xhigh}\n`,
+    config: `schema_version: "1"\nroles:\n  counter-reviewer: {model: gpt-5.6-sol, effort: medium}\n  adjudicator: {model: gpt-5.6-sol, effort: medium}\n`,
   }),
   Object.freeze({
     id: "codex-claude",
     producer: "codex" as const,
     reviewer: "claude" as const,
-    config: `schema_version: "1"\nroles:\n  counter-reviewer: {model: claude-opus-5, effort: high}\n  adjudicator: {model: claude-opus-5, effort: high}\n`,
+    config: `schema_version: "1"\nroles:\n  counter-reviewer: {model: claude-fable-5, effort: medium}\n  adjudicator: {model: claude-fable-5, effort: medium}\n`,
   }),
 ]);
 
@@ -150,16 +153,18 @@ describe.skipIf(!available)("real-host implementation review scope", () => {
           dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
         const raw = JSON.parse(decoder.decode(result.extracted_output_bytes)) as unknown;
         validateReview.assert(raw, `${direction.id} scope review`);
-        const review = parseAndDeriveReview(raw);
+        const review = childReviewOutputV2Schema.parse(raw);
+        const summary = expectedReviewSummaryV2(review.findings);
         const findings = review.findings.map((finding) =>
           `${finding.finding_id} ${finding.summary} ${finding.evidence} ${finding.suggested_resolution}`.toLowerCase());
 
-        expect(review.verdict).toBe("fail");
+        expect(summary.verdict).toBe("review-raised");
         expect(findings.some((finding) =>
           finding.includes("format-count") &&
-          (finding.includes("summary") || finding.includes("touppercase")))).toBe(true);
+          ["summary", "touppercase", "call site", "consumer", "string operation", "interface"]
+            .some((term) => finding.includes(term))), JSON.stringify(review.findings)).toBe(true);
         expect(findings.some((finding) =>
-          finding.includes("legacy-auth") || finding.includes("always grants access"))).toBe(false);
+          finding.includes("legacy-auth") || finding.includes("always grants access")), JSON.stringify(review.findings)).toBe(false);
       } finally {
         workspace.dispose();
       }

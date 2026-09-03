@@ -141,6 +141,24 @@ export async function captureHazardRegistryInput(
   return createHazardRegistryInput("present", registry, manifest);
 }
 
+/** Captures the registry for the silent phase-wide selector without requiring authored components. */
+export async function captureHazardRegistrySnapshot(
+  readRegistry: () => Promise<Uint8Array | undefined>,
+  resolvedRepositoryNames: readonly ("primary" | RepositoryName)[],
+): Promise<Omit<HazardRegistryInputV1, "components">> {
+  const bytes = await readRegistry();
+  const state = bytes === undefined ? "absent" as const : "present" as const;
+  const registry = bytes === undefined
+    ? { schema_version: "1" as const, hazards: [] }
+    : parseHazardRegistryYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), resolvedRepositoryNames);
+  return Object.freeze({
+    schema_version: "1",
+    state,
+    registry_digest: canonicalJsonDigest({ schema_version: "1", state, registry }),
+    hazards: Object.freeze([...registry.hazards]),
+  });
+}
+
 export type HazardRegistryDriftV1 =
   | "registry-created"
   | "registry-removed"

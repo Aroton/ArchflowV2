@@ -13,9 +13,9 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 // deliberately, never casually: a changed digest is changed review policy for every
 // installed bundle, and it fails in-flight tasks' input fingerprints closed.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
-  "prd-v1": "8d1c0a25544d39435895472d7d1942f70886ef4073260b07343610f387714d6d",
-  "design-v3": "1de3ef4ed22d5698493eb7a6376ebdf493763c1ba39e821fa8e875f9095a8c8e",
-  "implementation-v1": "37ccf2e8223156f213f503caf8c1927b801a024332421a3c2f2c44ad300e1825",
+  "prd-v1": "12cc3aabf922af560474a8869ddb792e42926979052860b80b2cc013237530a6",
+  "design-v3": "bb840e3ec194160c05b0ff21eb46fe4ef2ab7bd689c6cc0c883d97b1fc4b0dd8",
+  "implementation-v1": "b82ccf0d94b2faf63ca90111e4190f806184b68a6e9a699957879b9781dc8c8a",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];
@@ -97,6 +97,14 @@ describe("canonical counter-review rubrics", () => {
       const confidence = rubric.rubric.criteria.find((criterion) => criterion.id === "reviewer-confidence");
       expect(confidence?.blocking).toBe(false);
       expect(confidence?.text).toContain("escalate-");
+    }
+  });
+
+  it("keeps legacy finding vocabulary out of criterion prose while retaining parser policy keys", async () => {
+    for (const selected of [await loadTestRubric("prd"), await loadTestRubric("design"), await loadTestRubric("phase-impl")]) {
+      expect(selected.rubric.criteria.every((criterion) => typeof criterion.blocking === "boolean")).toBe(true);
+      const prose = selected.rubric.criteria.map((criterion) => criterion.text).join("\n");
+      expect(prose).not.toMatch(/\b(?:severity|critical|major|minor|blocker|blocking)\b/iu);
     }
   });
 
