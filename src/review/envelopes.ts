@@ -11,7 +11,11 @@ import {
 } from "../contracts/evidence.js";
 import { parsePhaseInstanceId, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import { MODEL_FAMILIES, type ModelFamily } from "../contracts/review.js";
+import {
+  MODEL_FAMILIES,
+  type LegacyConfirmationAssignmentV1,
+  type ModelFamily,
+} from "../contracts/review.js";
 import { parseRubricV1, type RubricV1 } from "../contracts/rubric.js";
 import { parseEffortEnvelopeV2, type EffortEnvelopeV2 } from "../contracts/effort-review.js";
 
@@ -158,6 +162,10 @@ export type ReviewAssignmentV1 = {
   readonly reviewer_id: string;
   readonly focus: ReviewFocus;
   readonly criterion_ids: readonly string[];
+  /** Present only on the primary general assignment. Presence, including `[]`, owns the census. */
+  readonly expected_upstream_digests?: readonly Sha256Digest[];
+  /** Exact archived accepted occurrences this assignment must confirm during remediation. */
+  readonly legacy_confirmations?: readonly LegacyConfirmationAssignmentV1[];
 };
 
 /**
@@ -176,8 +184,17 @@ export type ReviewEnvelopeSeed = Readonly<
 export const REVIEW_INSTRUCTION =
   "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Be contentious: actively seek counterexamples across stated assumptions, edge conditions, lifecycle transitions, ordering, recovery, resource and latency bounds, and cross-section arithmetic. Trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A suspicion is welcome only when it names a plausible material consequence and a concrete settling observation; 'cost-free' means it is not suppressed for low confidence, not that speculative noise bypasses materiality. A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
 
-export const REVIEW_ASSIGNMENT_INSTRUCTION =
-  "Assess only the rubric criteria named by assignment.criterion_ids, using assignment.focus as the boundary of your review. Do not report findings owned by another assignment. You may cite evidence outside your focus when it proves an assigned finding, but do not turn that evidence into an additional out-of-scope finding.";
+export const GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION =
+  "This is the general review assignment. Assess only the criteria present in rubric.criteria and return only general findings for those criteria. Do not report test-review, constitution, effort, or server-attribution findings. When assignment.expected_upstream_digests is present, return the exact approved-upstream alignment census it names, including an empty census for an empty list. When assignment.legacy_confirmations is present, confirm exactly those archived findings through the separate legacy confirmation channel.";
+
+export const TEST_REVIEW_ASSIGNMENT_INSTRUCTION =
+  "This is the test review assignment. Assess only the criteria present in rubric.criteria and return only test-coverage findings for those criteria. Do not prescribe production-code, architecture, constitution, drift, effort, authority, or server-attribution changes. When assignment.legacy_confirmations is present, confirm exactly those archived test findings through the separate legacy confirmation channel.";
+
+export const RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION =
+  "This is a responsibility-only remediation assignment. rubric.criteria is empty, so ordinary findings are forbidden and findings must be empty. When assignment.expected_upstream_digests is present, return its exact complete alignment census; that census is the entire alignment deliverable. When assignment.legacy_confirmations is present, return exactly those confirmation results through the legacy confirmation channel; an unresolved confirmation stays in that channel under its assigned criterion. Do not return an unverifiable, escalate, or other ordinary finding. Read the artifact and pinned context only to complete these exact responsibilities, never as a new full review.";
+
+/** @deprecated The assigned envelope now selects one role-specific fixed instruction. */
+export const REVIEW_ASSIGNMENT_INSTRUCTION = GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION;
 
 /** The active finding vocabulary shared by document and implementation reviews. */
 export const REVIEW_TAXONOMY_INSTRUCTION =
@@ -197,7 +214,7 @@ export const PRIOR_TRIAGE_INSTRUCTION =
 
 /** Additional constitution-review scope when the artifact is an implementation output. */
 export const CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION =
-  "For this implementation phase, judge rules, triggers, and approved-upstream drift only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, triggered, or drifted result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
+  "For this implementation phase, judge rule compliance and triggers only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, or triggered result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
 
 export type DispatchEnvelope = Readonly<{
   readonly result_kind: "review" | "effort-review" | "adjudication";
@@ -220,15 +237,15 @@ export type AdjudicationSubject = {
   readonly subject_digest: Sha256Digest;
   readonly input_fingerprint: Sha256Digest;
   readonly pinned_constitution_digest: Sha256Digest;
-  readonly approved_upstream_digests: readonly Sha256Digest[];
+  /** Archived V1 observation seam; fresh V2 subjects omit it. */
+  readonly approved_upstream_digests?: readonly Sha256Digest[];
   readonly source_review_envelope_digest: Sha256Digest;
   readonly invocation_id: string;
   readonly result_id: string;
 };
 
 export type AdjudicationRuleInput = {
-  readonly id: string;
-  readonly version: number;
+  readonly slot: string;
   readonly text: string;
   readonly review_trigger?: string;
   readonly enforced_by: readonly string[];
@@ -242,7 +259,6 @@ export type AdjudicationUpstreamInput = {
 export type AdjudicationEnvelopeInput = {
   readonly artifact: string;
   readonly rules: readonly AdjudicationRuleInput[];
-  readonly approved_upstreams: readonly AdjudicationUpstreamInput[];
   readonly source_review_envelope_digest: Sha256Digest;
   readonly workspace?: ReviewWorkspaceBinding;
   readonly subject: AdjudicationSubject;
@@ -342,7 +358,7 @@ function validateAdjudicationSubject(value: AdjudicationSubject): AdjudicationSu
     "subject_digest",
     "input_fingerprint",
     "pinned_constitution_digest",
-    "approved_upstream_digests",
+    ...(value.approved_upstream_digests === undefined ? [] : ["approved_upstream_digests"]),
     "source_review_envelope_digest",
     "invocation_id",
     "result_id",
@@ -350,11 +366,11 @@ function validateAdjudicationSubject(value: AdjudicationSubject): AdjudicationSu
   if (value.role !== "adjudication" || value.step !== "adjudicate") {
     throw new TypeError("adjudication subject must bind the adjudication step");
   }
-  const approvedUpstreamDigests = value.approved_upstream_digests.map(parseSha256Digest);
-  if (new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length ||
-      approvedUpstreamDigests.some((digest, index) => index > 0 && approvedUpstreamDigests[index - 1]! >= digest)) {
-    throw new TypeError("approved_upstream_digests must be sorted and unique");
-  }
+  const approvedUpstreamDigests = value.approved_upstream_digests?.map(parseSha256Digest);
+  if (approvedUpstreamDigests !== undefined && (
+    new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length ||
+    approvedUpstreamDigests.some((digest, index) => index > 0 && approvedUpstreamDigests[index - 1]! >= digest)
+  )) throw new TypeError("approved_upstream_digests must be sorted and unique");
   return {
     task_id: parseTaskSlug(value.task_id),
     phase_instance: parsePhaseInstanceId(value.phase_instance),
@@ -363,7 +379,7 @@ function validateAdjudicationSubject(value: AdjudicationSubject): AdjudicationSu
     subject_digest: parseSha256Digest(value.subject_digest),
     input_fingerprint: parseSha256Digest(value.input_fingerprint),
     pinned_constitution_digest: parseSha256Digest(value.pinned_constitution_digest),
-    approved_upstream_digests: approvedUpstreamDigests,
+    ...(approvedUpstreamDigests === undefined ? {} : { approved_upstream_digests: approvedUpstreamDigests }),
     source_review_envelope_digest: parseSha256Digest(value.source_review_envelope_digest),
     invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
     result_id: parseEvidenceId(value.result_id, "result_id"),
@@ -444,15 +460,22 @@ function validateAssignment(
   value: ReviewAssignmentV1,
   rubric: RubricV1,
 ): ReviewAssignmentV1 {
-  exactFields(value, ["reviewer_id", "focus", "criterion_ids"], "review assignment");
-  if (!EVIDENCE_ID.test(value.reviewer_id)) {
-    throw new TypeError("review assignment reviewer_id must use the evidence identifier vocabulary");
-  }
+  const expectedFields = [
+    "reviewer_id", "focus", "criterion_ids",
+    ...(value.expected_upstream_digests === undefined ? [] : ["expected_upstream_digests"]),
+    ...(value.legacy_confirmations === undefined ? [] : ["legacy_confirmations"]),
+  ];
+  exactFields(value, expectedFields, "review assignment");
   if (!(REVIEW_FOCUSES as readonly string[]).includes(value.focus)) {
     throw new TypeError("review assignment focus is invalid");
   }
-  if (!Array.isArray(value.criterion_ids) || value.criterion_ids.length === 0) {
-    throw new TypeError("review assignment must name at least one rubric criterion");
+  const stableGeneralId = /^general(?:-[1-9][0-9]*)?$/u;
+  if ((value.focus === "general" && !stableGeneralId.test(value.reviewer_id)) ||
+      (value.focus === "tests" && value.reviewer_id !== "test")) {
+    throw new TypeError("review assignment reviewer_id must use the stable identifier vocabulary for its focus");
+  }
+  if (!Array.isArray(value.criterion_ids)) {
+    throw new TypeError("review assignment criterion_ids must be an array");
   }
   const allowed = rubric.criteria.map((criterion) => criterion.id);
   const selected = value.criterion_ids.map((criterion) => parseNonBlank(criterion, "review assignment criterion"));
@@ -463,7 +486,61 @@ function validateAssignment(
   if (canonical.some((criterion, index) => criterion !== selected[index])) {
     throw new TypeError("review assignment criteria must follow canonical rubric order");
   }
-  return Object.freeze({ reviewer_id: value.reviewer_id, focus: value.focus, criterion_ids: Object.freeze(selected) });
+
+  let expectedUpstreamDigests: readonly Sha256Digest[] | undefined;
+  if (value.expected_upstream_digests !== undefined) {
+    if (value.focus !== "general" || (value.reviewer_id !== "general" && value.reviewer_id !== "general-1")) {
+      throw new TypeError("approved-upstream alignment belongs only to the primary general assignment");
+    }
+    if (!Array.isArray(value.expected_upstream_digests)) {
+      throw new TypeError("expected_upstream_digests must be an array");
+    }
+    expectedUpstreamDigests = Object.freeze(value.expected_upstream_digests.map(parseSha256Digest));
+    if (new Set(expectedUpstreamDigests).size !== expectedUpstreamDigests.length ||
+        expectedUpstreamDigests.some((digest, index) => index > 0 && expectedUpstreamDigests![index - 1]! >= digest)) {
+      throw new TypeError("expected_upstream_digests must be sorted and unique");
+    }
+  }
+
+  let legacyConfirmations: readonly LegacyConfirmationAssignmentV1[] | undefined;
+  if (value.legacy_confirmations !== undefined) {
+    if (!Array.isArray(value.legacy_confirmations) || value.legacy_confirmations.length === 0) {
+      throw new TypeError("legacy_confirmations must be a non-empty array");
+    }
+    legacyConfirmations = Object.freeze(value.legacy_confirmations.map((confirmation) => {
+      exactFields(confirmation, ["finding_id", "criterion_ids"], "legacy confirmation assignment");
+      if (!EVIDENCE_ID.test(confirmation.finding_id)) {
+        throw new TypeError("legacy confirmation finding_id must use the evidence identifier vocabulary");
+      }
+      if (!Array.isArray(confirmation.criterion_ids) || confirmation.criterion_ids.length === 0) {
+        throw new TypeError("legacy confirmation must name at least one permitted criterion");
+      }
+      const criteria = confirmation.criterion_ids.map((criterion: string) =>
+        parseNonBlank(criterion, "legacy confirmation criterion"));
+      if (new Set(criteria).size !== criteria.length || criteria.some((criterion: string) => !allowed.includes(criterion))) {
+        throw new TypeError("legacy confirmation criteria must be unique members of the rubric");
+      }
+      const canonicalCriteria = allowed.filter((criterion) => criteria.includes(criterion));
+      if (canonicalCriteria.some((criterion, index) => criterion !== criteria[index])) {
+        throw new TypeError("legacy confirmation criteria must follow canonical rubric order");
+      }
+      return Object.freeze({ finding_id: confirmation.finding_id, criterion_ids: Object.freeze(criteria) });
+    }));
+    const findingIds = legacyConfirmations.map((confirmation) => confirmation.finding_id);
+    if (new Set(findingIds).size !== findingIds.length) {
+      throw new TypeError("legacy confirmation finding_ids must be unique");
+    }
+  }
+  if (selected.length === 0 && expectedUpstreamDigests === undefined && legacyConfirmations === undefined) {
+    throw new TypeError("review assignment must name a rubric criterion or a present responsibility");
+  }
+  return Object.freeze({
+    reviewer_id: value.reviewer_id,
+    focus: value.focus,
+    criterion_ids: Object.freeze(selected),
+    ...(expectedUpstreamDigests === undefined ? {} : { expected_upstream_digests: expectedUpstreamDigests }),
+    ...(legacyConfirmations === undefined ? {} : { legacy_confirmations: legacyConfirmations }),
+  });
 }
 
 function parseEncoding(value: unknown): "utf8" | "base64" {
@@ -518,20 +595,21 @@ function validateContext(values: readonly PinnedContextEntry[]): readonly Pinned
 }
 
 function validateRules(values: readonly AdjudicationRuleInput[]): readonly AdjudicationRuleInput[] {
+  if (!Array.isArray(values) || values.length === 0) {
+    throw new TypeError("adjudication rules must be a non-empty array");
+  }
   const rules = values.map((value) => {
     const expected = value.review_trigger === undefined
-      ? ["id", "version", "text", "enforced_by"]
-      : ["id", "version", "text", "review_trigger", "enforced_by"];
+      ? ["slot", "text", "enforced_by"]
+      : ["slot", "text", "review_trigger", "enforced_by"];
     exactFields(value, expected, "adjudication rule");
-    if (!EVIDENCE_ID.test(value.id)) throw new TypeError("rule id must use the evidence identifier vocabulary");
-    if (!Number.isSafeInteger(value.version) || value.version < 1) {
-      throw new TypeError("rule version must be a positive safe integer");
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(value.slot)) {
+      throw new TypeError("rule slot must use the opaque slot vocabulary");
     }
-    const enforcedBy = value.enforced_by.map((mechanism) => parseNonBlank(mechanism, "enforced_by entry"));
+    const enforcedBy = value.enforced_by.map((mechanism: string) => parseNonBlank(mechanism, "enforced_by entry"));
     if (new Set(enforcedBy).size !== enforcedBy.length) throw new TypeError("enforced_by entries must be unique");
     return {
-      id: value.id,
-      version: value.version,
+      slot: value.slot,
       text: parseNonBlank(value.text, "rule text"),
       ...(value.review_trigger === undefined
         ? {}
@@ -539,9 +617,9 @@ function validateRules(values: readonly AdjudicationRuleInput[]): readonly Adjud
       enforced_by: enforcedBy,
     };
   });
-  const keys = rules.map((rule) => `${rule.id}:${String(rule.version)}`);
-  if (new Set(keys).size !== keys.length || keys.some((key, index) => index > 0 && keys[index - 1]! >= key)) {
-    throw new TypeError("adjudication rules must be sorted and unique");
+  const slots = rules.map((rule) => rule.slot);
+  if (new Set(slots).size !== slots.length) {
+    throw new TypeError("adjudication rule slots must be unique");
   }
   return rules;
 }
@@ -608,21 +686,23 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
   if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
   const workspace = snapshot.workspace === undefined ? undefined : validateWorkspace(snapshot.workspace);
   const parsedRubric = parseRubricV1(snapshot.rubric);
+  const assignment = snapshot.assignment === undefined
+    ? undefined
+    : validateAssignment(snapshot.assignment, parsedRubric);
   const rubric = {
     schema_version: parsedRubric.schema_version,
     kind: parsedRubric.kind,
     mode: parsedRubric.mode,
-    criteria: parsedRubric.criteria.map((criterion) => ({
+    criteria: parsedRubric.criteria.filter((criterion) =>
+      assignment === undefined || assignment.criterion_ids.includes(criterion.id)).map((criterion) => ({
       id: criterion.id,
       text: criterion.text,
       blocking: criterion.blocking,
     })),
   } as const;
-  const assignment = snapshot.assignment === undefined
-    ? undefined
-    : validateAssignment(snapshot.assignment, parsedRubric);
 
   const context = validateContext(snapshot.context);
+  const responsibilityOnly = assignment !== undefined && assignment.criterion_ids.length === 0;
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
@@ -633,11 +713,21 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
     instructions: {
-      review: parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
+      review: responsibilityOnly
+        ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION
+        : parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
       taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
-      ...(assignment === undefined ? {} : { assignment: REVIEW_ASSIGNMENT_INSTRUCTION }),
+      ...(assignment === undefined
+        ? {}
+        : { assignment: responsibilityOnly
+          ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION
+          : assignment.focus === "general"
+            ? GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION
+            : TEST_REVIEW_ASSIGNMENT_INSTRUCTION }),
       ...(context.some((entry) => entry.kind === "prior-triage")
-        ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION }
+        ? { prior_triage: responsibilityOnly
+          ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION
+          : PRIOR_TRIAGE_INSTRUCTION }
         : {}),
     },
     ...(workspace === undefined ? {} : { workspace }),
@@ -660,36 +750,27 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
   exactFields(
     snapshot,
     workspace === undefined
-      ? ["artifact", "rules", "approved_upstreams", "source_review_envelope_digest", "subject"]
-      : ["artifact", "rules", "approved_upstreams", "source_review_envelope_digest", "workspace", "subject"],
+      ? ["artifact", "rules", "source_review_envelope_digest", "subject"]
+      : ["artifact", "rules", "source_review_envelope_digest", "workspace", "subject"],
     "adjudication envelope input",
   );
   if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
   const rules = validateRules(snapshot.rules);
-  const approvedUpstreams = validateUpstreams(snapshot.approved_upstreams);
   const subject = validateAdjudicationSubject(snapshot.subject);
   const sourceEvidenceSetDigest = parseSha256Digest(snapshot.source_review_envelope_digest);
   if (sourceEvidenceSetDigest !== subject.source_review_envelope_digest) {
     throw new TypeError("source_review_envelope_digest must match the adjudication subject");
   }
-  const upstreamDigests = approvedUpstreams.map((upstream) => upstream.upstream_digest);
-  if (upstreamDigests.length !== subject.approved_upstream_digests.length ||
-      upstreamDigests.some((digest, index) => digest !== subject.approved_upstream_digests[index])) {
-    throw new TypeError("approved upstreams must match the adjudication subject");
-  }
-
   const envelope = {
-    schema_version: "1",
+    schema_version: "2",
     artifact: snapshot.artifact,
     rules,
-    approved_upstreams: approvedUpstreams,
     source_review_envelope_digest: sourceEvidenceSetDigest,
     ...(workspace === undefined ? {} : { workspace }),
     instructions: {
-      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version. Do not omit, duplicate, or invent rules.",
-      drift_coverage: "Return exactly one drift finding for every supplied approved upstream, using its upstream_digest. Do not omit, duplicate, or invent upstreams. Use drift=aligned with an empty affected_claim_ids array when no approved claim is affected; otherwise name every affected claim using lowercase kebab-case IDs.",
+      rule_coverage: "Return exactly one judgment for every supplied opaque rule slot. Use each slot exactly once as a judgments object key; do not omit, duplicate, or invent slots, and do not return rule identity or rollups.",
       enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
-      uncertainty: "Report uncertain compliance only when the artifact, approved upstreams, and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
+      uncertainty: "Report uncertain compliance only when the artifact and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
       trigger: "A rule's review_trigger names a condition the repository wants a human to look at. Report trigger=matched only when that condition is directly evidenced by the artifact, its co-produced documents, or the supplied repository snapshot, and trigger=uncertain only when those genuinely leave it open. Workflow mechanics the server owns—gate authority, approvals, commits, and dispatch outcomes—are never evidence for a trigger; report not-matched. A rule with no review_trigger is always not-matched, with trigger_evidence stating that the rule declares no trigger.",
       ...(workspace !== undefined && (
         workspace.kind === "read-only-produced-repository-snapshot" ||

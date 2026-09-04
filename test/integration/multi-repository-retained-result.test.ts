@@ -7,23 +7,26 @@ import { canonicalDocument, canonicalJsonDigest, parseGitOid, sha256Bytes } from
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import type { ImplementationOutputV1 } from "../../src/contracts/durable-implementation-output.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import { parseRepositoryPathClaim, parseTaskPathClaim } from "../../src/contracts/path-claims.js";
-import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
+import { computeGateContextDigest, computeInputFingerprint } from "../../src/contracts/fingerprints.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
+import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
 import { handleCounterReview } from "../../src/mcp/handlers/counter-review.js";
+import { prepareDocumentResult, prepareImplementationResult } from "../../src/mcp/handlers/state-results.js";
 import { loadTestRubric } from "../helpers/rubrics.js";
 import { createGitRunner, preflightGit } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
 import { resolveRepositorySet } from "../../src/repository/repository-set.js";
-import { prepareImplementationResult } from "../../src/mcp/handlers/state-results.js";
 import { createAtomicWriter } from "../../src/state/atomic.js";
 import { createInternalTransactionAuthority } from "../../src/state/authority.js";
 import { resolvePinnedConstitution } from "../../src/state/constitution.js";
+import { buildDocumentArtifact } from "../../src/state/document-artifact.js";
 import { buildImplementationOutput } from "../../src/state/implementation-manifest.js";
-import { ensureResultDirectory } from "../../src/state/layout.js";
-import { readRetainedResult } from "../../src/state/production.js";
+import { openDurableGate } from "../../src/state/gates.js";
+import { ensurePayloadParent, ensureResultDirectory } from "../../src/state/layout.js";
+import { createProductionServices, readRetainedResult } from "../../src/state/production.js";
 import { installSnapshot } from "../../src/state/snapshots.js";
 import {
   prepareResultInstallation,
@@ -31,6 +34,8 @@ import {
   secondaryProjectionPlansMatchRepositorySet,
 } from "../../src/state/transaction.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
+import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
+import { resolveInterfaceGateDecision } from "../helpers/resolve-interface-gate.js";
 
 afterAll(cleanupTemporaryRepositories);
 
@@ -386,16 +391,118 @@ describe("multi-repository retained implementation result", () => {
 
   // Mutates the secondary and the durable state; keep it last.
   it("refuses pre-dispatch counter-review once a secondary HEAD advances past the retained result", async () => {
+    // Phase implementation now resolves and authenticates its phase-design upstream before it
+    // materializes repository views. This fixture used to omit that authority entirely, causing
+    // the upstream loader to stop before the secondary-drift assertion could be exercised.
+    const phaseDesignPhase = encodePhaseInstance({
+      kind: "phase-design", phase: parsePositiveSafePhaseNumber(1),
+    });
+    const phaseDesignPath = parseTaskPathClaim("phases/1/design.md");
+    const designPath = parseTaskPathClaim("design.md");
+    h.primary.write(`.archflow/tasks/${h.task}/${phaseDesignPath}`, "approved phase design\n");
+    h.primary.write(`.archflow/tasks/${h.task}/${designPath}`, "approved task design\n");
+    const phaseDesignArtifact = await buildDocumentArtifact(h.discovered, h.authority, {
+      phase_instance: phaseDesignPhase,
+      step: "produce",
+      document_path: phaseDesignPath,
+      additional_document_paths: [designPath],
+      declared_inputs: [],
+      input_fingerprint: h.state.value.input_fingerprint,
+    });
+    if (!phaseDesignArtifact.ok) throw new Error(phaseDesignArtifact.error.code);
+    const phaseDesignPrepared = await prepareDocumentResult({
+      services: { authority: h.authority, runner: h.discovered } as Parameters<typeof prepareDocumentResult>[0]["services"],
+      artifact: phaseDesignArtifact.value,
+      result_id: parseSafeId("retained-phase-design"),
+      retained_task_bytes: h.prepared.prepared.manifest.value.accounting.result_bytes,
+      measured_at_revision: parseSafeInteger(3),
+      scanner: h.scanner,
+    });
+    if (!phaseDesignPrepared.ok) throw new Error(phaseDesignPrepared.error.code);
+    await ensureResultDirectory(h.authority, phaseDesignPrepared.value.reference.result_digest);
+    for (const payload of phaseDesignPrepared.value.prepared.payloads) {
+      await ensurePayloadParent(h.authority, phaseDesignPrepared.value.reference.result_digest, payload.target.absolute as never);
+    }
+    const phaseDesignInstalled = await installSnapshot(
+      createAtomicWriter(), phaseDesignPrepared.value.prepared, phaseDesignPrepared.value.manifest_target,
+      h.discovered.location.worktreeRoot as never,
+    );
+    if (!phaseDesignInstalled.ok) throw new Error(phaseDesignInstalled.error.code);
+    const authoritativeResults = [phaseDesignPrepared.value.reference, h.prepared.reference];
+    const approvalBase: TaskStateV1 = {
+      ...h.state.value,
+      revision: parseSafeInteger(3),
+      step: "triage",
+      status: "succeeded",
+      authoritative_results: authoritativeResults,
+    };
+    writeFileSync(h.authority.state.absolute, canonicalDocument(approvalBase).bytes);
+    const approvalServices = await createProductionServices({
+      working_directory: h.primary.path,
+      task_id: h.task,
+      operation: parseSafeCode("retained-phase-design-approval"),
+    });
+    if (!approvalServices.ok) throw new Error(approvalServices.error.code);
+    const upstreamDigest = phaseDesignPrepared.value.prepared.manifest.value.artifact_digest;
+    const approvalEvidence = currentEvidenceSetRef([{
+      role: "counter-review",
+      evidence_digest: sha256Bytes(new TextEncoder().encode("retained-upstream-counter-review")),
+      assurance: "server-attested",
+      producer_family: "claude",
+      reviewer_family: "codex",
+    }]);
+    const approvalContext = {
+      artifact_kind: "phase-design" as const,
+      ...ordinaryApprovalFacts("phase-design", upstreamDigest),
+    };
+    const opened = await openDurableGate(approvalServices.value.dependencies, {
+      authority: approvalServices.value.authority,
+      expected_revision: approvalBase.revision,
+      intent_id: parsePathSafeId("retained-phase-design-approval"),
+      request_digest: sha256Bytes(new TextEncoder().encode("retained-phase-design-approval-request")),
+      input_fingerprint: approvalBase.input_fingerprint,
+      phase_instance: h.phase,
+      summary: "Approve retained phase design",
+      subject_digest: upstreamDigest,
+      current_evidence: approvalEvidence,
+      kind: "artifact-approval",
+      context: approvalContext,
+    });
+    if (!opened.ok) throw new Error(JSON.stringify(opened));
+    writeFileSync(join(approvalServices.value.authority.workspace_root, "cache", "gates", "gate.decision"), canonicalDocument({
+      schema_version: "1",
+      gate_id: opened.value.gate_id,
+      task_id: h.task,
+      phase_instance: h.phase,
+      kind: "artifact-approval",
+      subject_digest: upstreamDigest,
+      context_digest: computeGateContextDigest("artifact-approval", approvalContext),
+      human_provenance: {
+        schema_version: "1", actor_class: "human", assurance: "declared-local-trace",
+        channel: "archflow-local", decision_event_id: "retained-phase-design-decision",
+        helper_invocation_id: "retained-phase-design-helper", recorded_at: "2026-09-03T12:00:00.000Z",
+      },
+      payload: { decision: "approve", reason: "Approved fixture phase design" },
+    }).bytes);
+    const resolved = await resolveInterfaceGateDecision(
+      approvalServices.value.dependencies, approvalServices.value.authority, opened.value.gate_id,
+    );
+    if (!resolved.ok || !("state" in resolved.value)) throw new Error(JSON.stringify(resolved));
+
     const reviewFingerprint = computeInputFingerprint({
       schema_version: "1", workflow_digest: sha256Bytes(h.workflow),
       constitution_digest: h.constitution.digest, artifact_identities: [], upstream_identities: [],
       rubric_digest: (await loadTestRubric("phase-impl")).rubric_digest,
       phase_instance: h.phase, declared_inputs: [],
     });
-    writeFileSync(h.authority.state.absolute, canonicalDocument({
-      ...h.state.value, revision: parseSafeInteger(3), step: "counter_review", status: "running",
-      input_fingerprint: reviewFingerprint, authoritative_results: [h.prepared.reference],
-    } as TaskStateV1).bytes);
+    const reviewState: TaskStateV1 = {
+      ...resolved.value.state.value,
+      step: "counter_review",
+      status: "running",
+      input_fingerprint: reviewFingerprint,
+      authoritative_results: authoritativeResults,
+    };
+    writeFileSync(h.authority.state.absolute, canonicalDocument(reviewState).bytes);
     h.secondary.commitAll("secondary descendant before review dispatch");
     const connection = connectionContextFactory.captureStartup({
       connection_id: "retained-secondary-staleness",
@@ -405,7 +512,7 @@ describe("multi-repository retained implementation result", () => {
     });
     const staleReview = await handleCounterReview(parseToolCall("archflow_counter_review", {
       schema_version: "1", task_id: h.task, intent_id: "retained-secondary-stale",
-      expected_revision: 3, input_fingerprint: reviewFingerprint, artifact_path: "prd.md",
+      expected_revision: reviewState.revision, input_fingerprint: reviewFingerprint, artifact_path: "prd.md",
     }), createInvocationContext(connection, {
       invocation_id: "retained-secondary-stale",
       transport_metadata: { request_id: "retained-secondary-stale-request", operation: "tools/call" },

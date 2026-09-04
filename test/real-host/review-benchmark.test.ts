@@ -16,6 +16,7 @@ import { mintReviewObservation, serializeDispatch } from "../../src/dispatch/cli
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
 import { resolveDispatchRoute } from "../../src/dispatch/routing.js";
 import { buildReviewEnvelope } from "../../src/review/envelopes.js";
+import { reviewAssignment } from "../../src/review/rubrics.js";
 import {
   benchmarkEnabled,
   realHostsAvailable,
@@ -248,7 +249,14 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
               invocation_id: parseSafeId(`invocation-${runId}`),
               result_id: parseSafeId(`result-${runId}`),
             };
-            const envelope = buildReviewEnvelope({ artifact, rubric, context: [], subject });
+            const assignment = reviewAssignment(
+              "general",
+              "general",
+              "design",
+              rubric,
+              { expected_upstream_digests: [] },
+            );
+            const envelope = buildReviewEnvelope({ artifact, rubric, assignment, context: [], subject });
             const dispatched = await serializeDispatch(() =>
               dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
 
@@ -266,6 +274,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
                 repository_identity_digest: workspace.initialization.repository_identity_digest,
                 commit: workspace.initialization.code_baseline_commit,
               }],
+              assignment: { ...assignment, routing_role: "counter-reviewer" },
               envelope_input_digest: envelope.digest,
               extracted_output_bytes: dispatched.extracted_output_bytes,
             });
@@ -292,7 +301,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
                 cli_version: evidence.cli_version,
               },
               verdict: evidence.verdict,
-              ...(evidence.schema_version === "2"
+              ...(evidence.schema_version !== "1"
                 ? { total_findings: evidence.total_findings, partition_counts: evidence.partition_counts }
                 : { blocking_count: evidence.blocking_count }),
               findings: evidence.findings,

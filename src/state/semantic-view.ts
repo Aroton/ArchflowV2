@@ -119,6 +119,12 @@ function reviewContext(status: TaskStatusV1): PublicReviewContextV1 | undefined 
       reviewer_id: run.reviewer_id,
       focus: run.focus,
       criterion_ids: Object.freeze([...run.criterion_ids]),
+      ...(!("expected_upstream_digests" in run) || run.expected_upstream_digests === undefined
+        ? {}
+        : { expected_upstream_digests: Object.freeze([...run.expected_upstream_digests]) }),
+      ...(!("legacy_confirmations" in run) || run.legacy_confirmations === undefined
+        ? {}
+        : { legacy_confirmation_finding_ids: Object.freeze(run.legacy_confirmations.map((item) => item.finding_id)) }),
     }))
     : undefined;
   return Object.freeze({
@@ -535,6 +541,9 @@ export function projectSemanticStatus(
     resources: snapshot.revision_checkpoint === undefined ? publicResources(status) : Object.freeze([]),
     next_action: nextAction,
     ...(shape.findings !== true ? {} : { findings: snapshot.full_findings }),
+    ...((snapshot.finding_history?.length ?? 0) === 0
+      ? {}
+      : { finding_history: snapshot.finding_history }),
     ...(context === undefined ? {} : { review_context: context }),
     ...(strength === undefined ? {} : { review_strength: strength }),
     taxonomy_denial_rates: snapshot.taxonomy_denial_rates,

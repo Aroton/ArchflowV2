@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { adjudicationEvidenceSchema, rawAdjudicationSchema } from "../../src/contracts/adjudication.js";
+import { adjudicationEvidenceSchema, rawAdjudicationV2Schema } from "../../src/contracts/adjudication.js";
 import {
   childReviewOutputV2Schema,
   expectedReviewSummaryV2,
+  rawReviewOutputV3Schema,
   rawReviewSchema,
   reviewEvidenceSchema,
   type ChildReviewOutputV2,
@@ -12,10 +13,6 @@ import { rawEffortSelectionV2Schema } from "../../src/contracts/effort-review.js
 import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 const json = async (url: URL) => JSON.parse(await readFile(url, "utf8")) as unknown;
-const adjudicationOutput = (value: unknown): unknown => {
-  const { constitution: _constitution, drift: _drift, matched_rule_versions: _matched, uncertain_rule_versions: _uncertain, ...output } = value as Record<string, unknown>;
-  return output;
-};
 const schema = async (name: string) => await json(new URL(`../../src/contracts/schemas/v1/${name}.schema.json`, import.meta.url)) as object;
 const durableV2 = (child: unknown): Record<string, unknown> => {
   const parsed = childReviewOutputV2Schema.parse(child) as ChildReviewOutputV2;
@@ -26,7 +23,17 @@ const referenceStems = ["primitives", "path-claim", "review", "adjudication", "e
 const validator = async (name: string) =>
   createJsonSchemaValidator(await schema(name), await Promise.all(referenceStems.filter((stem) => stem !== name).map(schema)));
 describe("review and adjudication schema agreement", () => {
-  it("accepts the same child-review corpus without mutation", async () => { const value = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)); const before = structuredClone(value); expect(assertZodAgreement(value, await validator("review"), childReviewOutputV2Schema)).toBe(value); expect(value).toEqual(before); });
+  it("accepts a fresh role-specific child-review without mutation", async () => {
+    const value = {
+      schema_version: "3", task_id: "demo", phase_instance: "phase-impl-1", step: "counter_review", role: "counter-review",
+      subject_digest: "1".repeat(64), input_fingerprint: "2".repeat(64), rubric_digest: "3".repeat(64), producer_family: "claude",
+      findings: [{ finding_id: "unsafe-path", criterion_id: "correctness", claim_type: "defect", confidence: "certain", falsifier: "Prove confinement.", summary: "Path escapes.", evidence: "Traversal succeeds.", suggested_resolution: "Reject traversal." }],
+      upstream_alignment: [],
+    };
+    const before = structuredClone(value);
+    expect(assertZodAgreement(value, await validator("review"), rawReviewOutputV3Schema)).toEqual(value);
+    expect(value).toEqual(before);
+  });
   it("accepts the same strict profile-only effort-selector corpus without mutation", async () => {
     const value = {
       schema_version: "2", task_id: "demo", phase_instance: "phase-design-1",
@@ -38,8 +45,17 @@ describe("review and adjudication schema agreement", () => {
     expect(assertZodAgreement(value, await validator("effort-review"), rawEffortSelectionV2Schema)).toEqual(value);
     expect(value).toEqual(before);
   });
-  it("accepts the reduced adjudication output without mutation", async () => { const value = adjudicationOutput(await json(new URL("../fixtures/contracts/adjudication/valid.json", import.meta.url))); const before = structuredClone(value); expect(assertZodAgreement(value, await validator("adjudication"), rawAdjudicationSchema)).toEqual(value); expect(value).toEqual(before); });
-  it("rejects closed child-shape substitutions", async () => { const value = await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)) as Record<string, unknown>; const reviewValidator = await validator("review"); expect(() => assertZodAgreement({ ...value, authority: true }, reviewValidator, childReviewOutputV2Schema)).toThrow(); });
+  it("accepts the judgments-only adjudication output without mutation", async () => {
+    const value = { schema_version: "2", judgments: { "slot-a": { compliance: "pass", rationale: "Guard present.", trigger: "not-matched", trigger_evidence: "No matching change." } } };
+    const before = structuredClone(value);
+    expect(assertZodAgreement(value, await validator("adjudication"), rawAdjudicationV2Schema)).toEqual(value);
+    expect(value).toEqual(before);
+  });
+  it("rejects closed child-shape substitutions", async () => {
+    const value = { schema_version: "3", task_id: "demo", phase_instance: "design", step: "counter_review", role: "counter-review", subject_digest: "1".repeat(64), input_fingerprint: "2".repeat(64), rubric_digest: "3".repeat(64), producer_family: "claude", findings: [] };
+    const reviewValidator = await validator("review");
+    expect(() => assertZodAgreement({ ...value, authority: true }, reviewValidator, rawReviewOutputV3Schema)).toThrow();
+  });
 
   it("agrees across every evidence variant without mutation", async () => {
     const review = durableV2(await json(new URL("../fixtures/contracts/review/valid.json", import.meta.url)));

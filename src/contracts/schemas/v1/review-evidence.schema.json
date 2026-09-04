@@ -1459,6 +1459,743 @@
           "additionalProperties": false
         }
       ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "3"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/phaseInstance"
+        },
+        "step": {
+          "type": "string",
+          "const": "counter_review"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "counter-review"
+          ]
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+        },
+        "rubric_digest": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+        },
+        "producer_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex",
+            "gemini"
+          ]
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "finding_id": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                  },
+                  "claim_type": {
+                    "type": "string",
+                    "enum": [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  "falsifier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "\\S"
+                  },
+                  "summary": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "evidence": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "suggested_resolution": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "criterion_id": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                  },
+                  "reviewer_id": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                  },
+                  "reviewer_focus": {
+                    "type": "string",
+                    "const": "general"
+                  },
+                  "routing_role": {
+                    "type": "string",
+                    "const": "counter-reviewer"
+                  }
+                },
+                "required": [
+                  "finding_id",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "summary",
+                  "evidence",
+                  "suggested_resolution",
+                  "criterion_id",
+                  "reviewer_id",
+                  "reviewer_focus",
+                  "routing_role"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "finding_id": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                  },
+                  "criterion_id": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                  },
+                  "claim_type": {
+                    "type": "string",
+                    "enum": [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  "falsifier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "\\S"
+                  },
+                  "required_behavior_or_risk_boundary": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "coverage_or_oracle_problem": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "consequence": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "proposed_verification_change": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "reviewer_id": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                  },
+                  "reviewer_focus": {
+                    "type": "string",
+                    "const": "tests"
+                  },
+                  "routing_role": {
+                    "type": "string",
+                    "const": "test-reviewer"
+                  }
+                },
+                "required": [
+                  "finding_id",
+                  "criterion_id",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "required_behavior_or_risk_boundary",
+                  "coverage_or_oracle_problem",
+                  "consequence",
+                  "proposed_verification_change",
+                  "reviewer_id",
+                  "reviewer_focus",
+                  "routing_role"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "advisory",
+            "review-raised"
+          ]
+        },
+        "total_findings": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "partition_counts": {
+          "type": "object",
+          "properties": {
+            "defect:certain": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "defect:likely": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "defect:suspicion": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "risk:certain": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "risk:likely": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "risk:suspicion": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "gap:certain": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "gap:likely": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "gap:suspicion": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "preference:certain": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "preference:likely": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "preference:suspicion": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "defect:certain",
+            "defect:likely",
+            "defect:suspicion",
+            "risk:certain",
+            "risk:likely",
+            "risk:suspicion",
+            "gap:certain",
+            "gap:likely",
+            "gap:suspicion",
+            "preference:certain",
+            "preference:likely",
+            "preference:suspicion"
+          ],
+          "additionalProperties": false
+        },
+        "upstream_alignment": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "upstream_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "drift": {
+                "type": "string",
+                "enum": [
+                  "aligned",
+                  "incidental",
+                  "material"
+                ]
+              },
+              "affected_claim_ids": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                }
+              },
+              "rationale": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+              }
+            },
+            "required": [
+              "upstream_digest",
+              "drift",
+              "affected_claim_ids",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "drift": {
+          "type": "string",
+          "enum": [
+            "aligned",
+            "incidental",
+            "material"
+          ]
+        },
+        "assurance": {
+          "type": "string",
+          "const": "server-attested"
+        },
+        "adapter": {
+          "type": "string",
+          "enum": [
+            "claude-cli",
+            "codex-cli",
+            "antigravity-cli"
+          ]
+        },
+        "cli_version": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+        },
+        "model_family": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex",
+            "gemini"
+          ]
+        },
+        "model": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ]
+        },
+        "invocation_id": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+        },
+        "envelope_input_digest": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+        },
+        "observed_output_digest": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+        },
+        "result_id": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+        },
+        "provider": {
+          "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+        },
+        "route_source": {
+          "type": "object",
+          "properties": {
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "configured",
+                "invocation-declared",
+                "route-override"
+              ]
+            },
+            "displaced": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "configured",
+                    "invocation-declared"
+                  ]
+                },
+                "model": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                },
+                "effort": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max",
+                    "ultra"
+                  ]
+                },
+                "provider": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                }
+              },
+              "required": [
+                "source",
+                "model",
+                "effort"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "provenance"
+          ],
+          "additionalProperties": false
+        },
+        "route_override": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+            },
+            "pinned_model": {
+              "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+            },
+            "pinned_effort": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            "pinned_provider": {
+              "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "repositories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "primary"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+                  }
+                ]
+              },
+              "repository_identity_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "commit": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+              }
+            },
+            "required": [
+              "name",
+              "repository_identity_digest",
+              "commit"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reviewer_runs": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reviewer_id": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "routing_role": {
+                "type": "string",
+                "enum": [
+                  "counter-reviewer",
+                  "test-reviewer"
+                ]
+              },
+              "criterion_ids": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                }
+              },
+              "expected_upstream_digests": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+                }
+              },
+              "legacy_confirmations": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "finding_id": {
+                      "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                    },
+                    "criterion_ids": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                      }
+                    }
+                  },
+                  "required": [
+                    "finding_id",
+                    "criterion_ids"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "rubric_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "model_family": {
+                "type": "string",
+                "enum": [
+                  "claude",
+                  "codex",
+                  "gemini"
+                ]
+              },
+              "model": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+              },
+              "effort": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max",
+                  "ultra"
+                ]
+              },
+              "adapter": {
+                "type": "string",
+                "enum": [
+                  "claude-cli",
+                  "codex-cli",
+                  "antigravity-cli"
+                ]
+              },
+              "cli_version": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+              },
+              "invocation_id": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+              },
+              "envelope_input_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "observed_output_digest": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/digest"
+              },
+              "finding_ids": {
+                "type": "array",
+                "items": {
+                  "$ref": "urn:archflow:schema:v1:review#/$defs/id"
+                }
+              },
+              "provider": {
+                "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+              },
+              "route_source": {
+                "type": "object",
+                "properties": {
+                  "provenance": {
+                    "type": "string",
+                    "enum": [
+                      "configured",
+                      "invocation-declared",
+                      "route-override"
+                    ]
+                  },
+                  "displaced": {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "configured",
+                          "invocation-declared"
+                        ]
+                      },
+                      "model": {
+                        "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max",
+                          "ultra"
+                        ]
+                      },
+                      "provider": {
+                        "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "model",
+                      "effort"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "provenance"
+                ],
+                "additionalProperties": false
+              },
+              "route_override": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "pinned_model": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  },
+                  "pinned_effort": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  "pinned_provider": {
+                    "$ref": "urn:archflow:schema:v1:review#/$defs/nonBlank"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "reviewer_id",
+              "focus",
+              "routing_role",
+              "criterion_ids",
+              "rubric_digest",
+              "model_family",
+              "model",
+              "effort",
+              "adapter",
+              "cli_version",
+              "invocation_id",
+              "envelope_input_digest",
+              "observed_output_digest",
+              "finding_ids",
+              "route_source"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "effort_review": {
+          "$ref": "urn:archflow:schema:v1:effort-assessment"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "phase_instance",
+        "step",
+        "role",
+        "subject_digest",
+        "input_fingerprint",
+        "rubric_digest",
+        "producer_family",
+        "findings",
+        "verdict",
+        "total_findings",
+        "partition_counts",
+        "assurance",
+        "adapter",
+        "cli_version",
+        "model_family",
+        "model",
+        "effort",
+        "invocation_id",
+        "envelope_input_digest",
+        "observed_output_digest",
+        "result_id",
+        "route_source",
+        "repositories",
+        "reviewer_runs"
+      ],
+      "additionalProperties": false
     }
   ]
 }

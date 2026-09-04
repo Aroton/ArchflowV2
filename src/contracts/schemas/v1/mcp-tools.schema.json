@@ -801,6 +801,224 @@
                 ],
                 "additionalProperties": false
               },
+              "alignment": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "evaluated"
+                      },
+                      "drift": {
+                        "type": "string",
+                        "enum": [
+                          "aligned",
+                          "incidental",
+                          "material"
+                        ]
+                      },
+                      "upstream_count": {
+                        "$ref": "#/$defs/integer"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "drift",
+                      "upstream_count"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "not-run"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "const": "prd-has-no-approved-upstream-plan"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "constitution": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "evaluated"
+                      },
+                      "path": {
+                        "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                      },
+                      "constitution": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail",
+                          "uncertain"
+                        ]
+                      },
+                      "triggers": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/rule"
+                        }
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "path",
+                      "constitution",
+                      "triggers"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "not-run"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "const": "no-active-constitution-rules"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "request_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "required": [
+              "path",
+              "verdict",
+              "total_findings",
+              "partition_counts",
+              "alignment",
+              "constitution",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              "verdict": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "advisory",
+                  "review-raised"
+                ]
+              },
+              "total_findings": {
+                "$ref": "#/$defs/integer"
+              },
+              "partition_counts": {
+                "type": "object",
+                "properties": {
+                  "defect:certain": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "defect:likely": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "defect:suspicion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "risk:certain": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "risk:likely": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "risk:suspicion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "gap:certain": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "gap:likely": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "gap:suspicion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "preference:certain": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "preference:likely": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "preference:suspicion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "defect:certain",
+                  "defect:likely",
+                  "defect:suspicion",
+                  "risk:certain",
+                  "risk:likely",
+                  "risk:suspicion",
+                  "gap:certain",
+                  "gap:likely",
+                  "gap:suspicion",
+                  "preference:certain",
+                  "preference:likely",
+                  "preference:suspicion"
+                ],
+                "additionalProperties": false
+              },
               "constitution": {
                 "anyOf": [
                   {

@@ -164,11 +164,22 @@ else {
     api: existsSync(join(target, "api", "api.ts")), apiAuthority: existsSync(join(target, "api", ".archflow")) }));
   ${options.remove === true && secondary !== undefined ? `rmSync(${JSON.stringify(secondary.path)}, { recursive: true, force: true });` : ""}
   ${options.drift === true && secondary !== undefined ? `writeFileSync(${JSON.stringify(join(secondary.path, "drift.txt"))}, "drift\\n"); execFileSync("git", ["add", "."], { cwd: ${JSON.stringify(secondary.path)} }); execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "drift"], { cwd: ${JSON.stringify(secondary.path)} });` : ""}
-  const subject = envelope.subject; const output = { task_id: subject.task_id,
+  const subject = envelope.subject; const assignment = envelope.assignment;
+  const output = { schema_version: "3", task_id: subject.task_id,
     phase_instance: subject.phase_instance, step: "counter_review", role: "counter-review",
     subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
     rubric_digest: subject.rubric_digest, producer_family: subject.producer_family,
-    findings: [], matched_rule_versions: [] };
+    findings: [],
+    ...(Object.hasOwn(assignment, "expected_upstream_digests") ? {
+      upstream_alignment: assignment.expected_upstream_digests.map((upstream_digest) => ({
+        upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "Fixture found no drift."
+      }))
+    } : {}),
+    ...(Object.hasOwn(assignment, "legacy_confirmations") ? {
+      legacy_confirmations: assignment.legacy_confirmations.map(({ finding_id }) => ({
+        finding_id, status: "resolved", evidence: "Fixture confirms the accepted revision."
+      }))
+    } : {}) };
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }

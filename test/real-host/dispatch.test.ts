@@ -6,8 +6,7 @@ import { delimiter, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import reviewOutputSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
-import adjudicationOutputSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
-import { parseAndDeriveAdjudication } from "../../src/contracts/adjudication.js";
+import { createRawAdjudicationV2Schema, parseAndDeriveAdjudicationV2 } from "../../src/contracts/adjudication.js";
 import { canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseConfigYaml } from "../../src/contracts/config.js";
 import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
@@ -19,6 +18,7 @@ import { mintAdjudicationObservation, mintReviewObservation, serializeDispatch }
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
 import { resolveDispatchRoute } from "../../src/dispatch/routing.js";
 import { buildAdjudicationEnvelope, buildReviewEnvelope } from "../../src/review/envelopes.js";
+import { reviewAssignment } from "../../src/review/rubrics.js";
 import { REAL_HOST_TEST_TIMEOUT_MS, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
 import { createTaskWorkspace } from "../helpers/task-workspace.js";
 
@@ -57,7 +57,6 @@ const rubric = parseRubricV1({
 const rubricDigest = canonicalJsonDigest(rubric as unknown as PlainJsonValue);
 const PHASE = parsePhaseInstanceId("prd");
 const validateReview = createJsonSchemaValidator<Record<string, unknown>>(reviewOutputSchema);
-const validateAdjudication = createJsonSchemaValidator<Record<string, unknown>>(adjudicationOutputSchema);
 
 const directions = Object.freeze([
   Object.freeze({
@@ -166,25 +165,13 @@ function safeFailureDiagnostic(observation: HostObservation): string {
 }
 
 function adjudicationSemanticDiagnostic(value: unknown): string {
-  try {
-    parseAndDeriveAdjudication(value);
-    return "normative parser accepted output";
-  } catch (error) {
-    const issues = error !== null && typeof error === "object" && "issues" in error && Array.isArray(error.issues)
-      ? error.issues as Array<Readonly<{ message?: unknown }>>
-      : [];
-    const reasons = issues.map((issue) => issue.message).filter((message): message is string => typeof message === "string");
-    const record = value !== null && typeof value === "object" && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : {};
-    const ruleFindings = Array.isArray(record.rule_findings) ? record.rule_findings : [];
-    const safeRules = ruleFindings.map((finding) => {
-      if (finding === null || typeof finding !== "object" || Array.isArray(finding)) return "invalid-finding";
-      const item = finding as Record<string, unknown>;
-      return `${String(item.rule_id)}:${String(item.rule_version)} compliance=${String(item.compliance)} trigger=${String(item.trigger)}`;
-    });
-    return `reason=${reasons.join(" | ") || (error instanceof Error ? error.message : "unknown")}; constitution=${String(record.constitution)} drift=${String(record.drift)} matched=${Array.isArray(record.matched_rule_versions) ? record.matched_rule_versions.length : "invalid"} uncertain=${Array.isArray(record.uncertain_rule_versions) ? record.uncertain_rule_versions.length : "invalid"} rules=[${safeRules.join("; ")}]`;
-  }
+  const record = value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const judgments = record.judgments !== null && typeof record.judgments === "object" && !Array.isArray(record.judgments)
+    ? Object.keys(record.judgments as Record<string, unknown>)
+    : [];
+  return `schema_version=${String(record.schema_version)} judgment_slots=[${judgments.join(",")}]`;
 }
 
 describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
@@ -229,7 +216,14 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           invocation_id: parseSafeId(`invocation-${direction.task}`),
           result_id: parseSafeId(`result-${direction.task}`),
         };
-        const envelope = buildReviewEnvelope({ artifact, rubric, context: [], subject });
+        const assignment = reviewAssignment(
+          "general",
+          "general",
+          "prd",
+          rubric,
+          { expected_upstream_digests: [] },
+        );
+        const envelope = buildReviewEnvelope({ artifact, rubric, assignment, context: [], subject });
         const dispatch = createDispatchCoordinator({
           authority: workspace.services.authority,
           dependencies: workspace.services.dependencies,
@@ -287,6 +281,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
             repository_identity_digest: workspace.initialization.repository_identity_digest,
             commit: workspace.initialization.code_baseline_commit,
           }],
+          assignment: { ...assignment, routing_role: "counter-reviewer" },
           envelope_input_digest: envelope.digest,
           extracted_output_bytes: result.succeeded.extracted_output_bytes,
         });
@@ -348,20 +343,18 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           subject_digest: sha256Bytes(encoder.encode(artifact)),
           input_fingerprint: canonicalJsonDigest({ adjudication: direction.name }),
           pinned_constitution_digest: canonicalJsonDigest({ constitution: "pinned-test" }),
-          approved_upstream_digests: [],
           source_review_envelope_digest: sourceEvidenceSetDigest,
           invocation_id: parseSafeId(`invocation-${taskId}`),
           result_id: parseSafeId(`result-${taskId}`),
         };
+        const ruleSlots = [{ slot: "slot-1", rule_id: "human-approval", rule_version: 1 }] as const;
         const envelope = buildAdjudicationEnvelope({
           artifact,
           rules: [{
-            id: "human-approval",
-            version: 1,
+            slot: "slot-1",
             text: "A commit requires explicit human approval.",
             enforced_by: [],
           }],
-          approved_upstreams: [],
           source_review_envelope_digest: sourceEvidenceSetDigest,
           subject,
         });
@@ -378,7 +371,8 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
         const result = await withObservedHost(command, async (readObservation) => {
           try {
             const succeeded = await serializeDispatch(() =>
-              dispatch(route, envelope, adjudicationOutputSchema as PlainJsonValue));
+              dispatch(route, envelope, JSON.parse(JSON.stringify(createRawAdjudicationV2Schema(ruleSlots)
+                .toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue));
             const [observation, attempts] = await Promise.all([
               readObservation(), attemptRecords(workspace.root, workspace.taskId),
             ]);
@@ -407,7 +401,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
         });
         const rawOutput = JSON.parse(decoder.decode(result.succeeded.extracted_output_bytes)) as unknown;
         try {
-          validateAdjudication.assert(rawOutput, `${direction.name} adjudication output`);
+          parseAndDeriveAdjudicationV2(rawOutput, ruleSlots);
         } catch (error) {
           throw new Error(`${direction.name} adjudication failed normative post-validation: ${adjudicationSemanticDiagnostic(rawOutput)}`, { cause: error });
         }
@@ -423,6 +417,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           }],
           envelope_input_digest: envelope.digest,
           extracted_output_bytes: result.succeeded.extracted_output_bytes,
+          rule_slots: ruleSlots,
         });
         expect(observed.evidence).toMatchObject({
           assurance: "server-attested", adapter: route.adapter,

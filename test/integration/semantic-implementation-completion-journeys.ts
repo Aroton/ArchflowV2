@@ -97,49 +97,68 @@ function generateOutput(envelope, countPath, findingsByReview, script) {
   const subject = envelope.subject;
   if (subject.role === "counter-review") {
     let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
+    const assignment = envelope.assignment;
+    const isGeneral = assignment === undefined || assignment.focus === "general";
     const all = findingsByReview; const findings = all[Math.min(count, all.length - 1)] ?? [];
-    const v2Findings = findings.map((finding) => "claim_type" in finding ? finding : ({
-      finding_id: finding.finding_id, claim_type: finding.blocking === true ? "defect" : "preference",
-      confidence: "certain", falsifier: "Inspect the cited fixture evidence to settle this finding.",
+    const criterionIds = assignment?.criterion_ids ?? envelope.rubric.criteria.map((criterion) => criterion.id);
+    const selected = isGeneral && criterionIds.length > 0 ? findings : [];
+    const v3Findings = selected.map((finding) => ({
+      finding_id: finding.finding_id,
+      criterion_id: typeof finding.criterion_id === "string" && criterionIds.includes(finding.criterion_id)
+        ? finding.criterion_id : criterionIds[0],
+      claim_type: "claim_type" in finding ? finding.claim_type : finding.blocking === true ? "defect" : "preference",
+      confidence: "confidence" in finding ? finding.confidence : "certain",
+      falsifier: "falsifier" in finding ? finding.falsifier : "Inspect the cited fixture evidence to settle this finding.",
       summary: finding.summary, evidence: finding.evidence, suggested_resolution: finding.suggested_resolution,
     }));
-    writeFileSync(countPath, String(count + 1));
-    return { task_id: subject.task_id, phase_instance: subject.phase_instance,
+    if (isGeneral) writeFileSync(countPath, String(count + 1));
+    const legacyConfirmations = assignment?.legacy_confirmations?.map((confirmation) => ({
+      finding_id: confirmation.finding_id, status: "resolved", evidence: "The accepted revision intent is present."
+    }));
+    const resolved = (script.resolveAtReview ?? null) !== null && (count + 1) >= (script.resolveAtReview ?? 0);
+    const implementation = subject.phase_instance.indexOf("phase-impl-") === 0 && !resolved;
+    const upstreamAlignment = assignment !== undefined && Object.prototype.hasOwnProperty.call(assignment, "expected_upstream_digests")
+      ? assignment.expected_upstream_digests.map((digest, index) =>
+          script.materialDrift === true && implementation && index === 0
+            ? { upstream_digest: digest, drift: "material", affected_claim_ids: ["claim-verified-behavior"],
+                rationale: "The approved upstream plan no longer matches the implemented reality." }
+            : { upstream_digest: digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." })
+      : undefined;
+    if (!isGeneral) {
+      return { schema_version: "3", task_id: subject.task_id, phase_instance: subject.phase_instance,
+        step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
+        input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
+        producer_family: subject.producer_family, findings: [],
+        ...(legacyConfirmations === undefined ? {} : { legacy_confirmations: legacyConfirmations }) };
+    }
+    return { schema_version: "3", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings: v2Findings, matched_rule_versions: [] };
+      producer_family: subject.producer_family, findings: v3Findings,
+      ...(legacyConfirmations === undefined ? {} : { legacy_confirmations: legacyConfirmations }),
+      ...(upstreamAlignment === undefined ? {} : { upstream_alignment: upstreamAlignment }) };
   } else {
     const adjCountPath = countPath + "-adjudicate";
     let reviews = 0; try { reviews = Number(readFileSync(adjCountPath, "utf8")); } catch {}
     writeFileSync(adjCountPath, String(reviews + 1));
     const resolved = (script.resolveAtReview ?? null) !== null && (reviews + 1) >= (script.resolveAtReview ?? 0);
     const implementation = subject.phase_instance.indexOf("phase-impl-") === 0 && !resolved;
-    const pass = (rule) => ({ rule_id: rule.id, rule_version: rule.version, compliance: "pass",
+    const pass = () => ({ compliance: "pass",
       rationale: "The work respects this rule.", trigger: "not-matched",
       trigger_evidence: "No review trigger matched." });
-    const rule_findings = envelope.rules.map((rule, index) => (
+    const judgments = Object.fromEntries(envelope.rules.map((rule, index) => [rule.slot,
       script.failingRule === true && implementation && index === 0
-        ? { rule_id: rule.id, rule_version: rule.version, compliance: "fail",
+        ? { compliance: "fail",
             rationale: "The implementation departs from the approved plan.",
             trigger: "matched",
             trigger_evidence: "The approved phase design requires an update before this work advances." }
         : script.failingCompliance === true && implementation && index === 0
-          ? { rule_id: rule.id, rule_version: rule.version, compliance: "fail",
+          ? { compliance: "fail",
               rationale: "The implementation records a human decision the workflow never recorded.",
               trigger: "not-matched", trigger_evidence: "This rule declares no review trigger." }
-          : pass(rule)));
-    const drift_findings = script.materialDrift === true && implementation && subject.approved_upstream_digests.length > 0
-      ? [{ upstream_digest: subject.approved_upstream_digests[0], drift: "material",
-          affected_claim_ids: ["claim-verified-behavior"],
-          rationale: "The approved upstream plan no longer matches the implemented reality." }]
-      : subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest, drift: "aligned",
-          affected_claim_ids: [], rationale: "No upstream drift." }));
-    return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-      step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
-      pinned_constitution_digest: subject.pinned_constitution_digest,
-      approved_upstream_digests: subject.approved_upstream_digests,
-      source_review_envelope_digest: subject.source_review_envelope_digest,
-      rule_findings, drift_findings };
+          : pass()
+    ]));
+    return { schema_version: "2", judgments };
   }
 }
 `;
@@ -818,9 +837,9 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       expect(view.next_action.kind).toBe("review");
       view = await applied(h, invocation, view);
       expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-      expect(view.findings?.map((finding) => finding.finding_id)).toEqual(["impl-blocking-gap"]);
+      expect(view.findings?.map((finding) => finding.finding_id)).toEqual(["general-impl-blocking-gap"]);
       view = await applied(h, invocation, view, { kind: "triage", dispositions: [{
-        finding_id: "impl-blocking-gap", disposition: "accepted",
+        finding_id: "general-impl-blocking-gap", disposition: "accepted",
         rationale: "The reviewer identified a material verification gap.",
         revision_intent: "Export an observable constant.",
       }] });
@@ -923,7 +942,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       view = await applied(h, invocation, view);
       expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
       view = await applied(h, invocation, view, { kind: "triage", dispositions: [{
-        finding_id: "repeated-verification-gap",
+        finding_id: "general-repeated-verification-gap",
         disposition: "accepted",
         rationale: "The reviewer identified a material gap.",
         revision_intent: "Rework the verification.",
@@ -944,7 +963,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(view.presentation).toMatchObject({ class: "exception" });
     expect(view.presentation?.options.map((option) => option.token)).toContain("continue-despite-review");
     expect(view.presentation?.details).toEqual(expect.arrayContaining([
-      expect.stringMatching(/Accepted finding repeated-verification-gap \(defect\/certain\)/u),
+      expect.stringMatching(/Accepted finding general-repeated-verification-gap \(defect\/certain\)/u),
       expect.stringMatching(/Falsifier:/u),
     ]));
 
@@ -962,7 +981,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       attempt: 3,
       status: "current",
       reason: "The exact repeated finding has had sufficient human review; retain all policy and commit checks.",
-      accepted_occurrences: [expect.objectContaining({ finding_id: "repeated-verification-gap" })],
+      accepted_occurrences: [expect.objectContaining({ finding_id: "general-repeated-verification-gap" })],
     })]);
 
     const durable = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));

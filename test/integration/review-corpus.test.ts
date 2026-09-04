@@ -6,7 +6,11 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
-import { parseAdjudicationEvidence, parseAndDeriveAdjudication } from "../../src/contracts/adjudication.js";
+import {
+  parseAdjudicationEvidence,
+  parseAndDeriveAdjudication,
+  type AdjudicationRuleSlotV1,
+} from "../../src/contracts/adjudication.js";
 import {
   parseConstitutionRuleV1,
   type ConstitutionRegistry,
@@ -21,8 +25,9 @@ import type { DispatchWorkspace } from "../../src/dispatch/workspace.js";
 import {
   AdjudicationServiceError,
   crossCheckRuleFindings,
-  selectAdjudicationGate,
-  selectAdjudicationGates,
+  policyReviewFacts,
+  ruleSlotsForEnvelope,
+  selectPolicyReviewGates,
 } from "../../src/review/adjudication.js";
 import type { AdjudicationSubject, DispatchEnvelope, DispatchSubject } from "../../src/review/envelopes.js";
 
@@ -160,10 +165,52 @@ function adjudicationSubject(output: Record<string, unknown>): AdjudicationSubje
     subject_digest: parseSha256Digest(output.subject_digest),
     input_fingerprint: parseSha256Digest(output.input_fingerprint),
     pinned_constitution_digest: parseSha256Digest(output.pinned_constitution_digest),
-    approved_upstream_digests: (output.approved_upstream_digests as unknown[]).map(parseSha256Digest),
     source_review_envelope_digest: parseSha256Digest(output.source_review_envelope_digest),
     invocation_id: "corpus-adjudication-invocation",
     result_id: "corpus-adjudication-result",
+  };
+}
+
+function reviewV3Output(
+  output: Record<string, unknown>,
+  upstreamAlignment: readonly Record<string, unknown>[] = [],
+): Record<string, unknown> {
+  return {
+    schema_version: "3",
+    task_id: output.task_id,
+    phase_instance: output.phase_instance,
+    step: output.step,
+    role: output.role,
+    subject_digest: output.subject_digest,
+    input_fingerprint: output.input_fingerprint,
+    rubric_digest: output.rubric_digest,
+    producer_family: output.producer_family,
+    findings: (output.findings as readonly Record<string, unknown>[]).map((finding) => ({
+      ...finding,
+      criterion_id: "substantive-correctness",
+    })),
+    upstream_alignment: upstreamAlignment,
+  };
+}
+
+function adjudicationV2Output(
+  output: Record<string, unknown>,
+  slots: readonly AdjudicationRuleSlotV1[],
+): Record<string, unknown> {
+  const findings = output.rule_findings as readonly Record<string, unknown>[];
+  return {
+    schema_version: "2",
+    judgments: Object.fromEntries(slots.flatMap((slot) => {
+      const finding = findings.find((candidate) =>
+        candidate.rule_id === slot.rule_id && candidate.rule_version === slot.rule_version);
+      if (finding === undefined) return [];
+      return [[slot.slot, {
+        compliance: finding.compliance,
+        rationale: finding.rationale,
+        trigger: finding.trigger,
+        trigger_evidence: finding.trigger_evidence,
+      }]];
+    })),
   };
 }
 
@@ -209,13 +256,22 @@ describe("deterministic fake-CLI review corpus", () => {
         route: route(reviewer),
         repositories,
         envelope_input_digest: parseSha256Digest("d".repeat(64)),
-        extracted_output_bytes: extracted,
+        extracted_output_bytes: new TextEncoder().encode(JSON.stringify(reviewV3Output(
+          JSON.parse(new TextDecoder().decode(extracted)) as Record<string, unknown>,
+        ))),
+        assignment: {
+          reviewer_id: "general",
+          focus: "general",
+          routing_role: "counter-reviewer",
+          criterion_ids: ["substantive-correctness"],
+          expected_upstream_digests: [],
+        },
       });
       expect(result.evidence.verdict).toBe(scenario.expected_verdict);
       expect(result.evidence.model_family).toBe(reviewer);
       expect(result.evidence.producer_family).toBe(scenario.producer_family);
       expect(result.evidence.findings.map((finding) => finding.finding_id)).toEqual(
-        scenario.expected_verdict === "review-raised" ? ["seeded-defect"] : [],
+        scenario.expected_verdict === "review-raised" ? ["general-seeded-defect"] : [],
       );
     }
   });
@@ -236,58 +292,94 @@ describe("deterministic fake-CLI review corpus", () => {
         `corpus:adjudication-scenarios.json#${scenario.name}`,
         "adjudication",
       );
-      const result = mintAdjudicationObservation({
+      const transported = JSON.parse(new TextDecoder().decode(extracted)) as Record<string, unknown>;
+      const registry = registryFor(document, scenario);
+      const slots = ruleSlotsForEnvelope(registry);
+      const adjudicationBytes = new TextEncoder().encode(JSON.stringify(adjudicationV2Output(transported, slots)));
+      const mintAdjudication = () => mintAdjudicationObservation({
         subject: adjudicationSubject(scenario.output),
         adapter: "codex-cli",
         cli_version: "0.146.0",
         route: route("codex"),
         repositories,
         envelope_input_digest: parseSha256Digest("d".repeat(64)),
-        extracted_output_bytes: extracted,
+        extracted_output_bytes: adjudicationBytes,
+        rule_slots: slots,
       });
+      if (scenario.expected_cross_check === "invalid") {
+        expect(mintAdjudication).toThrow();
+        continue;
+      }
+      const result = mintAdjudication();
       expect(result.evidence.assurance).toBe("server-attested");
       expect(result.evidence.rule_findings).toHaveLength(
         (scenario.output.rule_findings as unknown[]).length,
       );
-      expect(result.evidence.drift).toBe(scenario.output.drift);
-      if (scenario.expected_cross_check === "valid") {
-        const registry = registryFor(document, scenario);
-        expect(crossCheckRuleFindings(registry, result.evidence)).toBe(result.evidence);
-        const gate = selectAdjudicationGate(registry, result.evidence);
-        expect(gate?.kind).toBe(scenario.expected_gate ?? undefined);
-        if (scenario.name === "compliance-and-trigger-share-one-gate") {
-          // One rule failing on both axes costs exactly one human decision, and that decision
-          // must disclose both axes and offer a waiver on each.
-          expect(selectAdjudicationGates(registry, result.evidence)).toHaveLength(1);
-          expect(gate).toMatchObject({
-            kind: "constitution-review",
-            context: {
-              constitution: "fail",
-              failed_rules: [{ rule_id: "plain-rule", rule_version: 1 }],
-              matched_trigger_rules: [{ rule_id: "plain-rule", rule_version: 1 }],
-              eligible_waivers: [
-                { rule: { rule_id: "plain-rule" }, scope: { operation: "adjudication-failure" } },
-                { rule: { rule_id: "plain-rule" }, scope: { operation: "review-trigger" } },
-              ],
+      expect(result.evidence.schema_version).toBe("2");
+      expect(crossCheckRuleFindings(registry, result.evidence)).toBe(result.evidence);
+
+      const alignmentSource = {
+        task_id: scenario.output.task_id,
+        phase_instance: scenario.output.phase_instance,
+        step: "counter_review",
+        role: "counter-review",
+        subject_digest: scenario.output.subject_digest,
+        input_fingerprint: scenario.output.input_fingerprint,
+        rubric_digest: "e".repeat(64),
+        producer_family: "claude",
+        findings: [],
+      };
+      const approvedUpstreams = (scenario.output.approved_upstream_digests as unknown[]).map(parseSha256Digest);
+      const review = mintReviewObservation({
+        subject: reviewSubject(alignmentSource),
+        adapter: "codex-cli",
+        cli_version: "0.146.0",
+        route: route("codex"),
+        repositories,
+        envelope_input_digest: parseSha256Digest("d".repeat(64)),
+        extracted_output_bytes: new TextEncoder().encode(JSON.stringify(reviewV3Output(
+          alignmentSource,
+          scenario.output.drift_findings as readonly Record<string, unknown>[],
+        ))),
+        assignment: {
+          reviewer_id: "general",
+          focus: "general",
+          routing_role: "counter-reviewer",
+          criterion_ids: ["substantive-correctness"],
+          expected_upstream_digests: approvedUpstreams,
+        },
+      }).evidence;
+      const facts = policyReviewFacts(review, result.evidence, true);
+      expect(facts.alignment.result).toBe(scenario.output.drift);
+      const gates = selectPolicyReviewGates(registry, facts);
+      const gate = gates[0];
+      expect(gate?.kind).toBe(scenario.expected_gate ?? undefined);
+      if (scenario.name === "compliance-and-trigger-share-one-gate") {
+        // One rule failing on both axes costs exactly one human decision, and that decision
+        // must disclose both axes and offer a waiver on each.
+        expect(gates).toHaveLength(1);
+        expect(gate).toMatchObject({
+          kind: "constitution-review",
+          context: {
+            constitution: "fail",
+            failed_rules: [{ rule_id: "plain-rule", rule_version: 1 }],
+            matched_trigger_rules: [{ rule_id: "plain-rule", rule_version: 1 }],
+            eligible_waivers: [
+              { rule: { rule_id: "plain-rule" }, scope: { operation: "adjudication-failure" } },
+              { rule: { rule_id: "plain-rule" }, scope: { operation: "review-trigger" } },
+            ],
+          },
+        });
+      }
+      if (scenario.expected_first_upstream !== undefined) {
+        expect(gate).toMatchObject({
+          kind: "material-drift",
+          context: {
+            affected_upstream: {
+              digest: scenario.expected_first_upstream,
             },
-          });
-        }
-        if (scenario.expected_first_upstream !== undefined) {
-          expect(gate).toMatchObject({
-            kind: "material-drift",
-            context: {
-              affected_upstream: {
-                digest: scenario.expected_first_upstream,
-              },
-            },
-          });
-        }
-      } else {
-        expect(() => crossCheckRuleFindings(
-          registryFor(document, scenario),
-          result.evidence,
-          "codex-cli",
-        )).toThrowError(AdjudicationServiceError);
+          },
+        });
       }
     }
   });

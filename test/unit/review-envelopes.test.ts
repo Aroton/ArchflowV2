@@ -9,7 +9,9 @@ import {
   REVIEW_TAXONOMY_INSTRUCTION,
   CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION,
   REVIEW_INSTRUCTION,
-  REVIEW_ASSIGNMENT_INSTRUCTION,
+  GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION,
+  RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION,
+  TEST_REVIEW_ASSIGNMENT_INSTRUCTION,
   MULTI_REPOSITORY_VIEW_NOTE,
   PRODUCED_REPOSITORY_VIEW_NOTE,
   REPOSITORY_VIEW_NOTE,
@@ -60,7 +62,6 @@ const adjudicationSubject = (): AdjudicationSubject => ({
   subject_digest: digest("a"),
   input_fingerprint: digest("b"),
   pinned_constitution_digest: digest("c"),
-  approved_upstream_digests: [digest("d")],
   source_review_envelope_digest: digest("e"),
   invocation_id: "invocation-14",
   result_id: "result-14",
@@ -69,15 +70,10 @@ const adjudicationSubject = (): AdjudicationSubject => ({
 const adjudicationInput = (): AdjudicationEnvelopeInput => ({
   artifact: "# Adjudication Subject\n\nImplemented artifact.\n",
   rules: [{
-    id: "safe-paths",
-    version: 2,
+    slot: "rule-slot-1",
     text: "Only mutate declared safe paths.",
     review_trigger: "A declared path is violated.",
     enforced_by: ["path-contract"],
-  }],
-  approved_upstreams: [{
-    upstream_digest: digest("d"),
-    artifact: "# Approved architecture\n",
   }],
   source_review_envelope_digest: digest("e"),
   subject: adjudicationSubject(),
@@ -145,7 +141,7 @@ describe("review dispatch envelopes", () => {
     expect(visible.instructions).toEqual({
       review: IMPLEMENTATION_REVIEW_INSTRUCTION,
       taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
-      assignment: REVIEW_ASSIGNMENT_INSTRUCTION,
+      assignment: TEST_REVIEW_ASSIGNMENT_INSTRUCTION,
     });
     expect(assigned.digest).not.toBe(bare.digest);
     expect(() => buildReviewEnvelope({
@@ -174,6 +170,80 @@ describe("review dispatch envelopes", () => {
       ...twoCriteria,
       assignment: { reviewer_id: "test", focus: "tests", criterion_ids: ["second", "first"] },
     })).toThrow(/canonical rubric order/iu);
+  });
+
+  it("filters assigned rubric criteria and seals exact responsibility-only assignments", () => {
+    const priorTriage = {
+      kind: "prior-triage",
+      label: "responsibility-only-triage",
+      status: "pinned",
+      content_digest: digest("e"),
+      encoding: "utf8",
+      content: '{"record_kind":"prior-triage","dispositions":[]}\n',
+    } as const;
+    const twoCriteria = {
+      ...input(),
+      context: [priorTriage],
+      rubric: {
+        ...input().rubric,
+        criteria: [
+          { id: "substantive-correctness", text: "General criterion.", blocking: true },
+          { id: "test-quality", text: "Test criterion.", blocking: true },
+        ],
+      },
+    };
+    const alignmentOnly = json(buildReviewEnvelope({
+      ...twoCriteria,
+      assignment: {
+        reviewer_id: "general",
+        focus: "general",
+        criterion_ids: [],
+        expected_upstream_digests: [],
+      },
+    }).bytes);
+    expect(alignmentOnly.rubric).toMatchObject({ criteria: [] });
+    expect(alignmentOnly.assignment).toEqual({
+      reviewer_id: "general",
+      focus: "general",
+      criterion_ids: [],
+      expected_upstream_digests: [],
+    });
+    expect(alignmentOnly.instructions).toEqual({
+      review: RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION,
+      taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
+      assignment: RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION,
+      prior_triage: RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION,
+    });
+    expect(RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION).toContain("ordinary findings are forbidden");
+    expect(RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION).toContain("findings must be empty");
+    expect(RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION).not.toContain("one scoped unverifiable");
+
+    const confirmationOnly = json(buildReviewEnvelope({
+      ...twoCriteria,
+      assignment: {
+        reviewer_id: "test",
+        focus: "tests",
+        criterion_ids: [],
+        legacy_confirmations: [{ finding_id: "old-finding", criterion_ids: ["test-quality"] }],
+      },
+    }).bytes);
+    expect(confirmationOnly.rubric).toMatchObject({ criteria: [] });
+    expect(confirmationOnly.instructions).toEqual({
+      review: RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION,
+      taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
+      assignment: RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION,
+      prior_triage: RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION,
+    });
+    expect(() => buildReviewEnvelope({
+      ...twoCriteria,
+      assignment: { reviewer_id: "general", focus: "general", criterion_ids: [] },
+    })).toThrow(/criterion or a present responsibility/iu);
+    expect(() => buildReviewEnvelope({
+      ...twoCriteria,
+      assignment: {
+        reviewer_id: "test", focus: "tests", criterion_ids: [], expected_upstream_digests: [],
+      },
+    })).toThrow(/primary general/iu);
   });
 
   it("carries an optional validated workspace binding that participates in the digest", () => {
@@ -408,11 +478,10 @@ describe("review dispatch envelopes", () => {
     expect(first.result_kind).toBe("adjudication");
     expect(first.bytes).toEqual(second.bytes);
     expect(first.digest).toBe(second.digest);
-    expect(text).toMatch(/^\{\n  "schema_version": "1",/u);
+    expect(text).toMatch(/^\{\n  "schema_version": "2",/u);
     expect(visible).toMatchObject({
       artifact: adjudicationInput().artifact,
-      rules: [{ id: "safe-paths", version: 2, enforced_by: ["path-contract"] }],
-      approved_upstreams: [{ upstream_digest: digest("d"), artifact: "# Approved architecture\n" }],
+      rules: [{ slot: "rule-slot-1", enforced_by: ["path-contract"] }],
       source_review_envelope_digest: digest("e"),
       subject: { role: "adjudication", step: "adjudicate" },
     });
@@ -433,7 +502,7 @@ describe("review dispatch envelopes", () => {
 
     const review = buildReviewEnvelope(input());
     expect(json(review.bytes)).not.toHaveProperty("rules");
-    expect(json(review.bytes)).not.toHaveProperty("approved_upstreams");
+    expect(json(first.bytes)).not.toHaveProperty("approved_upstreams");
     for (const digest_kind of [
       "gate-identity",
       "gate-context",

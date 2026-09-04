@@ -398,11 +398,36 @@ export async function openDurableGate(
           input.authority.context,
         );
         if (!constitution.ok) return constitution;
+        const authenticatedApprovals: AuthenticatedGateApproval[] = [];
+        for (const approval of current.value.approvals) {
+          const loaded = await loadAuthenticatedGateApproval(
+            dependencies,
+            input.authority,
+            approval,
+          );
+          if (!loaded.ok) return loaded;
+          if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+          authenticatedApprovals.push(loaded.value);
+        }
+        let approvedUpstreams: readonly Sha256Digest[];
+        try {
+          approvedUpstreams = await currentApprovedUpstreams(
+            dependencies,
+            input.authority,
+            current.value,
+            authenticatedApprovals,
+            produce.value,
+          );
+        } catch {
+          return issue("STATE_INVALID", current.value, "review-push-through-upstream-authority-unavailable");
+        }
         const predecessor = currentReviewPredecessor(current.value, produce.value);
         const subject = {
           subject_digest: produce.value.artifact_digest,
           input_fingerprint: current.value.input_fingerprint,
           constitution: constitution.value,
+          approved_upstream_digests: approvedUpstreams,
+          authenticated_gate_approvals: authenticatedApprovals,
           ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
           ...(live.value.config.max_attempts === undefined ? {} : {
             max_attempts: live.value.config.max_attempts,
@@ -1198,11 +1223,27 @@ async function closedStateForRecord(
       authority.context,
     );
     if (!constitution.ok) return constitution;
+    const authenticatedApprovals: AuthenticatedGateApproval[] = [];
+    for (const approval of current.value.approvals) {
+      const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+      if (!loaded.ok) return loaded;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+      authenticatedApprovals.push(loaded.value);
+    }
+    const approvedUpstreams = await currentApprovedUpstreams(
+      dependencies,
+      authority,
+      current.value,
+      authenticatedApprovals,
+      produce.value,
+    );
     const predecessor = currentReviewPredecessor(current.value, produce.value);
     const candidate = deriveReviewPushThroughCandidate(current.value, retained.value, {
       subject_digest: produce.value.artifact_digest,
       input_fingerprint: current.value.input_fingerprint,
       constitution: constitution.value,
+      approved_upstream_digests: approvedUpstreams,
+      authenticated_gate_approvals: authenticatedApprovals,
       ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
     });
     if (
@@ -1243,20 +1284,6 @@ async function closedStateForRecord(
       review_push_throughs: reviewPushThroughs,
     } as TaskStateV1);
 
-    const authenticatedApprovals: AuthenticatedGateApproval[] = [];
-    for (const approval of current.value.approvals) {
-      const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
-      if (!loaded.ok) return loaded;
-      if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
-      authenticatedApprovals.push(loaded.value);
-    }
-    const approvedUpstreams = await currentApprovedUpstreams(
-      dependencies,
-      authority,
-      current.value,
-      authenticatedApprovals,
-      produce.value,
-    );
     const config = await dependencies.read_config(authority.config);
     if (config.kind !== "valid") {
       return issue("STATE_INVALID", current.value, "review-push-through-settlement-config-unavailable");

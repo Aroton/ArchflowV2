@@ -38,7 +38,7 @@ import { createRetainedChildOutputStore } from "../../dispatch/retained-child-ou
 import { readHeadCommit } from "../../repository/git.js";
 import type { RootBoundGitRunner } from "../../repository/identity.js";
 import { unavailableRepositoryView, type RepositorySet } from "../../repository/repository-set.js";
-import { rulesForEnvelope } from "../../review/adjudication.js";
+import { rulesForEnvelope, ruleSlotsForEnvelope } from "../../review/adjudication.js";
 import { runCounterReview, type ConstitutionReviewPlan, type EffortReviewPlan } from "../../review/counter-review.js";
 import { loadCanonicalRubricForPhaseKind } from "../../review/rubrics.js";
 import {
@@ -180,11 +180,11 @@ async function deriveApprovedUpstreams(
     producer_phase: TaskStateV1["phase_instance"];
   }>[];
 }>>> {
-  const resolvedConstitution = await resolvePinnedConstitution(
-    services.runner, durable.policy_base_commit, services.authority.context,
-  );
-  if (!resolvedConstitution.ok) return resolvedConstitution;
-  const settlementPolicy = authenticateRuleAcceptancePolicy(durable, resolvedConstitution.value);
+  // Human and migration authority do not depend on constitution resolution. Load policy only if
+  // one upstream actually needs the authenticated no-wait capability; a rule-less repository is
+  // therefore neither an authority failure nor an implicit approval.
+  let settlementPolicy: ReturnType<typeof authenticateRuleAcceptancePolicy>;
+  let settlementPolicyLoaded = false;
   const derived: AdjudicationUpstreamInput[] = [];
   const authorities: Array<Readonly<{
     subject_digest: AdjudicationUpstreamInput["upstream_digest"];
@@ -254,6 +254,14 @@ async function deriveApprovedUpstreams(
         break;
       }
     }
+    if (!approved && !settlementPolicyLoaded && "reference" in upstream.value) {
+      settlementPolicyLoaded = true;
+      const resolvedConstitution = await resolvePinnedConstitution(
+        services.runner, durable.policy_base_commit, services.authority.context,
+      );
+      if (!resolvedConstitution.ok) return resolvedConstitution;
+      settlementPolicy = authenticateRuleAcceptancePolicy(durable, resolvedConstitution.value);
+    }
     if (!approved && settlementPolicy !== undefined && "reference" in upstream.value) {
       approved = acceptedNoWaitSettlement(
         settlementPolicy,
@@ -264,7 +272,8 @@ async function deriveApprovedUpstreams(
     }
     if (!approved) {
       return fail(createProjectError("STATE_INVALID", {
-        phase_instance: durable.phase_instance, issue_code: "upstream-approval-missing",
+        phase_instance: durable.phase_instance,
+        issue_code: "approved-upstream-authority-unavailable",
       }));
     }
     seenOwners.add(upstreamDigest);
@@ -486,6 +495,15 @@ export async function handleCounterReview(
       }
     }
 
+    // Alignment is owned by the primary general review for every non-PRD subject. Resolve its
+    // exact upstream bytes and authority before resolving whether a constitution child will run.
+    // Human/import approval therefore remains independently checkable; only a needed no-wait
+    // settlement asks the loader to resolve its authenticated policy capability.
+    const upstreams = session.value.phase_kind === "prd"
+      ? ok(Object.freeze({ inputs: Object.freeze([]), authorities: Object.freeze([]) }))
+      : await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
+    if (!upstreams.ok) return upstreams;
+    const approvedUpstreamDigests = requireApprovedUpstreamDigests(upstreams.value.authorities);
     // The server, not the caller, decides whether the constitution review runs: it resolves the
     // pinned constitution itself and dispatches the second review exactly when active rules exist.
     const constitution = await resolvePinnedConstitution(
@@ -582,13 +600,6 @@ export async function handleCounterReview(
 
     let constitutionPlan: ConstitutionReviewPlan | undefined;
     if (activeRules) {
-      const upstreams = await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
-      if (!upstreams.ok) return upstreams;
-      // `deriveApprovedUpstreams` has already authenticated every human/import/settlement arm with
-      // its exact producer phase. Do not collapse that proof and re-scan digest-only approvals.
-      const approvedUpstreamDigests = requireApprovedUpstreamDigests(
-        upstreams.value.authorities,
-      );
       const constitutionResultId = stableId("adjudication-result", call.input.intent_id);
       const constitutionCoordinator = createDispatchCoordinator({
         authority: services.authority, dependencies: services.dependencies, host: session.value.host,
@@ -600,8 +611,7 @@ export async function handleCounterReview(
         registry: constitution.value.rules,
         pinned_constitution_digest: constitution.value.digest,
         rules: rulesForEnvelope(constitution.value.rules),
-        approved_upstreams: upstreams.value.inputs,
-        approved_upstream_digests: approvedUpstreamDigests,
+        rule_slots: ruleSlotsForEnvelope(constitution.value.rules),
         invocation_id: stableId("adjudication-invocation", call.input.intent_id),
         result_id: constitutionResultId,
         workspace: workspaceBinding,
@@ -702,6 +712,9 @@ export async function handleCounterReview(
         },
       },
       projection_digest: produceProjectionSetDigest(projections.value),
+      ...(session.value.phase_kind === "prd"
+        ? {}
+        : { approved_upstream_digests: approvedUpstreamDigests }),
       ...(priorTriage.value === undefined ? {} : { prior_triage: priorTriage.value }),
       ...(constitutionPlan === undefined ? {} : { constitution: constitutionPlan }),
       ...(effortPlan === undefined ? {} : { effort: effortPlan }),

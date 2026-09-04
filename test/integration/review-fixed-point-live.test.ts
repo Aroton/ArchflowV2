@@ -61,7 +61,11 @@ const rubric = {
   schema_version: "1",
   kind: "implementation",
   mode: "adversarial",
-  criteria: [{ id: "correctness", text: "Check the implementation.", blocking: true }],
+  criteria: [
+    { id: "substantive-correctness", text: "Check the implementation.", blocking: true },
+    { id: "verification-evidence", text: "Check the verification evidence.", blocking: true },
+    { id: "test-quality", text: "Check test quality.", blocking: true },
+  ],
 } as const;
 
 async function fixture(options: Readonly<{ activeConstitution?: boolean }> = {}) {
@@ -584,22 +588,30 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
+  const assignment = envelope.assignment;
   const output = subject.role === "counter-review" ? {
+    schema_version: "3",
     task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-    producer_family: subject.producer_family, findings: [], matched_rule_versions: []
+    producer_family: subject.producer_family, findings: [],
+    ...(Object.hasOwn(assignment, "expected_upstream_digests") ? {
+      upstream_alignment: assignment.expected_upstream_digests.map((upstream_digest) => ({
+        upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found."
+      }))
+    } : {}),
+    ...(Object.hasOwn(assignment, "legacy_confirmations") ? {
+      legacy_confirmations: assignment.legacy_confirmations.map(({ finding_id }) => ({
+        finding_id, status: "resolved", evidence: "Accepted revision intent is present."
+      }))
+    } : {})
   } : {
-    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-    step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
-    pinned_constitution_digest: subject.pinned_constitution_digest,
-    approved_upstream_digests: subject.approved_upstream_digests,
-    source_review_envelope_digest: subject.source_review_envelope_digest,
-    rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
+    schema_version: "2",
+    judgments: Object.fromEntries(envelope.rules.map((rule) => [rule.slot, {
       compliance: "pass",
       rationale: "Checked retained implementation evidence.",
-      trigger: "not-matched", trigger_evidence: "No review trigger matched." })),
-    drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({ upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." }))
+      trigger: "not-matched", trigger_evidence: "No review trigger matched."
+    }]))
   };
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
@@ -649,6 +661,13 @@ else {
       const directReviews = await loadCurrentReviewSet({ read_state: afterCounter.value.dependencies.read_state,
         load_retained_manifest: afterCounter.value.dependencies.load_retained_manifest! }, afterCounter.value.authority, phase);
       if (!directReviews.ok) throw new Error(`direct reviews: ${JSON.stringify(directReviews)}`);
+      const mergedReview = directReviews.value.reviews[0]?.evidence;
+      expect(mergedReview).toMatchObject({ schema_version: "3", assurance: "server-attested" });
+      if (mergedReview?.assurance !== "server-attested") throw new Error("server-attested review unavailable");
+      expect(mergedReview.reviewer_runs).toMatchObject([
+        { reviewer_id: "general", focus: "general", routing_role: "counter-reviewer", model: "gpt-fixture" },
+        { reviewer_id: "test", focus: "tests", routing_role: "test-reviewer", model: "gpt-5.6-luna", effort: "xhigh" },
+      ]);
       const current = directReviews.value.current_evidence_set;
       await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "triage-running", expected_revision: 7,
         phase_instance: phase, step: "triage", status: "running", input_fingerprint: nonProduceFingerprint }, "triage-running");
@@ -728,6 +747,7 @@ else {
         await writeFile(artifactPath, "after\n");
         const dispatched = JSON.parse(new TextDecoder().decode(envelope.bytes));
         return { cli_version: "fixture-1", extracted_output_bytes: canonicalJsonBytes({
+          schema_version: "3",
           task_id: dispatched.subject.task_id,
           phase_instance: dispatched.subject.phase_instance,
           step: "counter_review",
@@ -737,7 +757,16 @@ else {
           rubric_digest: dispatched.subject.rubric_digest,
           producer_family: dispatched.subject.producer_family,
           findings: [],
-          matched_rule_versions: [],
+          ...(Object.hasOwn(dispatched.assignment, "expected_upstream_digests") ? {
+            upstream_alignment: dispatched.assignment.expected_upstream_digests.map((upstream_digest: string) => ({
+              upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No drift in fixture."
+            })),
+          } : {}),
+          ...(Object.hasOwn(dispatched.assignment, "legacy_confirmations") ? {
+            legacy_confirmations: dispatched.assignment.legacy_confirmations.map((confirmation: { finding_id: string }) => ({
+              finding_id: confirmation.finding_id, status: "resolved", evidence: "Revision confirmed."
+            })),
+          } : {}),
         }) };
       },
       reobserve_projection_digest: async () => ({
@@ -752,6 +781,7 @@ else {
       phase_kind: "phase-impl",
       producer_family: "claude",
       measured_at_revision: parseSafeInteger(4),
+      approved_upstream_digests: [],
       repositories: Object.freeze([Object.freeze({
         name: "primary",
         repository_identity_digest: "a".repeat(64) as never,

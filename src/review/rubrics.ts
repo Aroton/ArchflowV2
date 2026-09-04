@@ -31,24 +31,58 @@ export function reviewCriterionIds(
   phaseKind: CounterReviewPhaseKind,
   rubric: RubricV1,
   focus: ReviewFocus,
-  specialistActive: boolean,
+  _specialistActive?: boolean,
 ): readonly string[] {
   const all = rubric.criteria.map((criterion) => criterion.id);
   const tests = TEST_CRITERIA[phaseKind] ?? [];
   if (focus === "tests") return Object.freeze(all.filter((criterion) => tests.includes(criterion)));
-  return Object.freeze(specialistActive ? all.filter((criterion) => !tests.includes(criterion)) : all);
+  // Scope is a property of the phase and rubric, never of route availability. Otherwise an
+  // unavailable specialist silently widens the general review and changes the same assignment's
+  // meaning across retries.
+  return Object.freeze(all.filter((criterion) => !tests.includes(criterion)));
 }
+
+export type ReviewAssignmentOptions = Readonly<{
+  /** Override the ordinary criterion channel, primarily for bounded remediation subsets. */
+  criterion_ids?: readonly string[];
+  /** Presence, including `[]`, assigns approved-upstream alignment to the primary general run. */
+  expected_upstream_digests?: NonNullable<ReviewAssignmentV1["expected_upstream_digests"]>;
+  /** Exact criterion-less archive occurrences assigned for bounded confirmation. */
+  legacy_confirmations?: NonNullable<ReviewAssignmentV1["legacy_confirmations"]>;
+}>;
 
 export function reviewAssignment(
   reviewerId: string,
   focus: ReviewFocus,
   phaseKind: CounterReviewPhaseKind,
   rubric: RubricV1,
-  specialistActive: boolean,
+  legacySpecialistActiveOrOptions?: boolean | ReviewAssignmentOptions,
 ): ReviewAssignmentV1 {
-  const criterionIds = reviewCriterionIds(phaseKind, rubric, focus, specialistActive);
-  if (criterionIds.length === 0) throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind}`);
-  return Object.freeze({ reviewer_id: reviewerId, focus, criterion_ids: criterionIds });
+  const options = typeof legacySpecialistActiveOrOptions === "boolean"
+    ? undefined
+    : legacySpecialistActiveOrOptions;
+  if (options?.legacy_confirmations !== undefined && options.legacy_confirmations.length === 0) {
+    throw new TypeError("legacy_confirmations must be non-empty when present");
+  }
+  const criterionIds = Object.freeze([...(options?.criterion_ids ?? reviewCriterionIds(phaseKind, rubric, focus))]);
+  if (criterionIds.length === 0 && options?.expected_upstream_digests === undefined &&
+      options?.legacy_confirmations === undefined) {
+    throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind} without a present responsibility`);
+  }
+  return Object.freeze({
+    reviewer_id: reviewerId,
+    focus,
+    criterion_ids: criterionIds,
+    ...(options?.expected_upstream_digests === undefined
+      ? {}
+      : { expected_upstream_digests: Object.freeze([...options.expected_upstream_digests]) }),
+    ...(options?.legacy_confirmations === undefined
+      ? {}
+      : { legacy_confirmations: Object.freeze(options.legacy_confirmations.map((confirmation) => Object.freeze({
+        finding_id: confirmation.finding_id,
+        criterion_ids: Object.freeze([...confirmation.criterion_ids]),
+      }))) }),
+  });
 }
 
 const PHASE_KIND_RUBRIC_FILES: Readonly<Record<CounterReviewPhaseKind, Readonly<{

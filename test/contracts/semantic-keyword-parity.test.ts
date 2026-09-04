@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { rawAdjudicationSchema } from "../../src/contracts/adjudication.js";
 import { parseSha256Digest } from "../../src/contracts/evidence.js";
 import { gateInputSchema, resultExpectationDataSchema, waiverInputSchema } from "../../src/contracts/mcp-tools.js";
 import {
@@ -38,11 +37,6 @@ const ordinaryGateFixture = (name: string): unknown => {
     },
   };
 };
-const adjudicationOutput = (value: unknown): Record<string, unknown> => {
-  const { constitution: _constitution, drift: _drift, matched_rule_versions: _matched, uncertain_rule_versions: _uncertain, ...output } = value as Record<string, unknown>;
-  return output;
-};
-
 const MCP_REFERENCE_STEMS = [
   "primitives", "project-error", "rubric", "path-claim", "evidence-slots",
   "gate-contract", "gate-decision", "durable-primitives", "task-state", "task-initialization",
@@ -50,8 +44,6 @@ const MCP_REFERENCE_STEMS = [
   "review", "review-evidence", "adjudication", "triage",
 ] as const;
 
-const sharedReferences = [schema("primitives"), schema("path-claim")];
-const adjudicationValidator = createJsonSchemaValidator<unknown>(schema("adjudication"), sharedReferences);
 const mcpValidator = createJsonSchemaValidator<unknown>(schema("mcp-tools"), MCP_REFERENCE_STEMS.map(schema));
 const expectationValidator = createJsonSchemaValidator<unknown>(schema("result-expectation"), [schema("mcp-tools"), ...MCP_REFERENCE_STEMS.map(schema)]);
 
@@ -66,17 +58,6 @@ type KeywordCase = {
 };
 
 const CASES: readonly KeywordCase[] = [
-  {
-    keyword: "x-archflow-adjudication-semantics",
-    json: adjudicationValidator,
-    zod: rawAdjudicationSchema,
-    jsonKeywordRetired: true,
-    valid: adjudicationOutput(fixture("adjudication/valid")),
-    invalid: [["duplicate rule findings", (() => {
-      const value = adjudicationOutput(fixture("adjudication/valid"));
-      return { ...value, rule_findings: [...value.rule_findings as unknown[], ...value.rule_findings as unknown[]] };
-    })()]],
-  },
   {
     keyword: "x-archflow-mcp-semantics on the gate input",
     json: mcpValidator,

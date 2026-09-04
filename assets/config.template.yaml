@@ -12,7 +12,8 @@ roles:
     model: gpt-5.6-sol
     effort: medium
   # Used only for phase-design and phase-impl. Older task configs without this
-  # role continue to run the general reviewer against the full rubric.
+  # role receive this shipped Luna/xhigh route as the final fallback; general
+  # reviewers never inherit the test-owned criteria.
   test-reviewer:
     model: gpt-5.6-luna
     effort: xhigh

@@ -68,6 +68,6 @@ describe("counter-review V2 aggregation", () => {
     expect(() => aggregateActiveReviewerFindings([
       { tag: "general", schema_version: "2", findings: [finding("fresh", "defect", "likely")] },
       { tag: "test", schema_version: "1", findings: [legacy] },
-    ])).toThrow(/active review schema version 2/iu);
+    ])).toThrow(/active review schema/iu);
   });
 });

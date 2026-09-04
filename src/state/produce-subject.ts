@@ -144,9 +144,8 @@ export async function loadProduceUpstreamSubject(
     const constitution = await resolvePinnedConstitution(
       dependencies.runner, state.policy_base_commit, authority.context,
     );
-    settlementPolicy = constitution.ok
-      ? authenticateRuleAcceptancePolicy(state, constitution.value)
-      : undefined;
+    if (!constitution.ok) return constitution;
+    settlementPolicy = authenticateRuleAcceptancePolicy(state, constitution.value);
   }
   const approvedOwners = candidateOwners.filter((candidate) =>
     candidate.human_approved ||

@@ -242,6 +242,257 @@
       "items": {
         "anyOf": [
           {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "review_evidence_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "finding_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "disposition": {
+                    "type": "string",
+                    "enum": [
+                      "accepted",
+                      "accepted-editorial",
+                      "rejected",
+                      "escalated-human",
+                      "deferred"
+                    ]
+                  },
+                  "attempt": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "revision_intent": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "suggested_resolution": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "claim_type": {
+                    "type": "string",
+                    "enum": [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  "falsifier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "criterion_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "reviewer_focus": {
+                    "type": "string",
+                    "const": "general"
+                  },
+                  "routing_role": {
+                    "type": "string",
+                    "const": "counter-reviewer"
+                  },
+                  "disposition_evidence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "review_evidence_digest",
+                  "finding_id",
+                  "disposition",
+                  "attempt",
+                  "evidence",
+                  "summary",
+                  "suggested_resolution",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "reviewer_id",
+                  "criterion_id",
+                  "reviewer_focus",
+                  "routing_role"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "review_evidence_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "finding_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "disposition": {
+                    "type": "string",
+                    "enum": [
+                      "accepted",
+                      "accepted-editorial",
+                      "rejected",
+                      "escalated-human",
+                      "deferred"
+                    ]
+                  },
+                  "attempt": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "revision_intent": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "suggested_resolution": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "claim_type": {
+                    "type": "string",
+                    "enum": [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  "falsifier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "criterion_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "reviewer_focus": {
+                    "type": "string",
+                    "const": "tests"
+                  },
+                  "routing_role": {
+                    "type": "string",
+                    "const": "test-reviewer"
+                  },
+                  "required_behavior_or_risk_boundary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "coverage_or_oracle_problem": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "consequence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "proposed_verification_change": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "disposition_evidence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "review_evidence_digest",
+                  "finding_id",
+                  "disposition",
+                  "attempt",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "reviewer_id",
+                  "criterion_id",
+                  "reviewer_focus",
+                  "routing_role",
+                  "required_behavior_or_risk_boundary",
+                  "coverage_or_oracle_problem",
+                  "consequence",
+                  "proposed_verification_change"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          {
             "type": "object",
             "properties": {
               "review_evidence_digest": {

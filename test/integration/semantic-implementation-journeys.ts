@@ -88,6 +88,7 @@ const FINDING = {
   evidence: "src/example-behavior.ts returns a result for non-finite input without any documented rule.",
   suggested_resolution: "Reject non-finite input explicitly and record a fresh verification transcript.",
 } as const;
+const FRESH_FINDING_ID = `general-${FINDING.finding_id}`;
 
 /** Performs the client work the migrated implementation skill directs between semantic calls. */
 function writeClientImplementationWork(
@@ -276,12 +277,12 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
     expect(reviewed.value.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-    expect(reviewed.value.findings?.map((finding) => finding.finding_id)).toEqual([FINDING.finding_id]);
+    expect(reviewed.value.findings?.map((finding) => finding.finding_id)).toEqual([FRESH_FINDING_ID]);
     expect(readFileSync(work.sourceAbsolute, "utf8")).toBe(SOURCE_BYTES);
     expect(gitHead(workspace)).toBe(baseline);
 
     const triaged = await h.apply(invocation, reviewed.value, { kind: "triage", dispositions: [{
-      finding_id: FINDING.finding_id,
+      finding_id: FRESH_FINDING_ID,
       disposition: "accepted",
       rationale: "The reviewer identified a real behavioral gap in the implemented function.",
       revision_intent: "Reject non-finite input explicitly and re-verify with a fresh transcript.",

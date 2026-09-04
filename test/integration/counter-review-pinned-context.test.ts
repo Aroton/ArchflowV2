@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -6,10 +6,13 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { canonicalDocument, canonicalJsonDigest, parseGitOid, sha256Bytes } from "../../src/contracts/canonical.js";
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { computeInputFingerprint } from "../../src/contracts/fingerprints.js";
+import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
+import { currentEvidenceSetRef } from "../../src/contracts/trust.js";
 import { encodePhaseInstance, type PhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseTaskPathClaim } from "../../src/contracts/path-claims.js";
+import type { ReviewEvidence } from "../../src/contracts/review.js";
 import { handleCounterReview, resolveRepositoryViewCommit } from "../../src/mcp/handlers/counter-review.js";
 import { parseToolCall } from "../../src/contracts/mcp-tools.js";
 import { REPOSITORY_VIEW_NOTE } from "../../src/review/envelopes.js";
@@ -169,6 +172,58 @@ Preserve explicit human review gates.
   const authoritativeResults = options.phase === "prd"
     ? [prd.reference]
     : [design!.reference, prd.reference];
+  const upstreamApproval = (() => {
+    if (options.approveUpstream !== true) return undefined;
+    const gateId = parsePathSafeId("gate-prd-approval");
+    const gateContext = {
+      artifact_kind: "prd" as const,
+      constitution: "pass" as const,
+      policy_findings: [],
+      eligible_waivers: [],
+      approval_trigger: {
+        kind: "rule-settlement" as const,
+        settlement: { subject_digest: prdArtifactDigest, config_digest: configDigest, settled_at_revision: parseSafeInteger(6) },
+        conclusion: { wait: true as const, match: { kind: "subject" as const, subject: "prd" as const } },
+        rule_authority: "authenticated" as const,
+      },
+    };
+    const contextDigest = computeGateContextDigest("artifact-approval", gateContext);
+    const evidence = currentEvidenceSetRef([{
+      role: "counter-review", evidence_digest: canonicalJsonDigest({ fixture: "prd-review" }),
+      assurance: "server-attested", producer_family: "claude", reviewer_family: "codex",
+    }]);
+    const request = {
+      schema_version: "1", gate_id: gateId, intent_id: "prd-approval-intent",
+      request_digest: canonicalJsonDigest({ fixture: "prd-approval-request" }), task_id: TASK,
+      phase_instance: PRD_PHASE, summary: "Approve the PRD", subject_digest: prdArtifactDigest,
+      context_digest: contextDigest, current_evidence: evidence, opened_at_revision: parseSafeInteger(5),
+      kind: "artifact-approval", context: gateContext,
+      allowed_decisions: ["approve", "revise", "reject", "waiver-requested", "cancel"],
+    } as const;
+    const envelope = {
+      schema_version: "1", gate_id: gateId, task_id: TASK, phase_instance: PRD_PHASE,
+      kind: "artifact-approval", subject_digest: prdArtifactDigest, context_digest: contextDigest,
+      human_provenance: {
+        schema_version: "1", actor_class: "human", assurance: "declared-local-trace", channel: "archflow-local",
+        decision_event_id: "prd-approval-decision", helper_invocation_id: "prd-approval-helper",
+        recorded_at: "2026-09-03T12:00:00.000Z",
+      },
+      payload: { decision: "approve", reason: "The PRD was reviewed." },
+    } as const;
+    const decision = {
+      schema_version: "1", gate_id: gateId, task_id: TASK, phase_instance: PRD_PHASE,
+      kind: "artifact-approval", subject_digest: prdArtifactDigest, context_digest: contextDigest,
+      outcome: "decided", envelope,
+    } as const;
+    const archive = join(authority.value.task_root, "authority", "decisions", gateId);
+    mkdirSync(archive, { recursive: true });
+    writeFileSync(join(archive, "request.json"), canonicalDocument(request as never).bytes);
+    writeFileSync(join(archive, "decision.json"), canonicalDocument(decision as never).bytes);
+    return {
+      gate_id: gateId, gate_kind: "artifact-approval" as const, subject_digest: prdArtifactDigest,
+      decision_digest: canonicalJsonDigest(decision as never), resolved_at_revision: parseSafeInteger(6),
+    };
+  })();
   const state: TaskStateV1 = {
     schema_version: "1",
     task_id: TASK,
@@ -185,15 +240,7 @@ Preserve explicit human review gates.
     constitution_digest: constitution.value.digest,
     policy_base_commit: policyBaseCommit,
     authoritative_results: authoritativeResults,
-    approvals: options.approveUpstream === true
-      ? [{
-          gate_id: "gate-prd-approval" as never,
-          gate_kind: "artifact-approval",
-          subject_digest: prdArtifactDigest,
-          decision_digest: canonicalJsonDigest({ fixture: "prd-approval" }),
-          resolved_at_revision: parseSafeInteger(6),
-        }]
-      : [],
+    approvals: upstreamApproval === undefined ? [] : [upstreamApproval],
     // The settle-time receipt shape the settling transaction writes: bound to the producing
     // step's phase instance and the retained manifest's artifact digest, at a past revision.
     ...(options.upstreamReceipt === true ? {
@@ -233,24 +280,26 @@ else {
   const subject = envelope.subject;
   let output;
   if (subject.role === "counter-review") {
+    const assignment = envelope.assignment;
     output = {
-      task_id: subject.task_id, phase_instance: subject.phase_instance,
+      schema_version: "3", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings: [], matched_rule_versions: []
+      producer_family: subject.producer_family, findings: [],
+      ...(assignment?.legacy_confirmations === undefined ? {} : { legacy_confirmations: assignment.legacy_confirmations.map((confirmation) => ({
+        finding_id: confirmation.finding_id, status: "resolved", evidence: "The revision intent is satisfied."
+      })) }),
+      ...(assignment !== undefined && Object.prototype.hasOwnProperty.call(assignment, "expected_upstream_digests")
+        ? { upstream_alignment: assignment.expected_upstream_digests.map((digest) => ({ upstream_digest: digest,
+            drift: "aligned", affected_claim_ids: [], rationale: "The artifact remains aligned with this approved upstream." })) }
+        : {})
     };
   } else {
     output = {
-      schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-      step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
-      pinned_constitution_digest: subject.pinned_constitution_digest,
-      approved_upstream_digests: subject.approved_upstream_digests,
-      source_review_envelope_digest: subject.source_review_envelope_digest,
-      rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
+      schema_version: "2", judgments: Object.fromEntries(envelope.rules.map((rule) => [rule.slot, {
         compliance: "pass", rationale: "The document respects this rule.", trigger: "not-matched",
-        trigger_evidence: "No review trigger matched." })),
-      drift_findings: subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest,
-        drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." }))
+        trigger_evidence: "No review trigger matched."
+      }]))
     };
   }
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
@@ -288,6 +337,21 @@ function capturedEnvelope(path: string): {
   subject?: Record<string, unknown>;
 } {
   return JSON.parse(readFileSync(path, "utf8")) as ReturnType<typeof capturedEnvelope>;
+}
+
+function retainedReviewEvidence(repositoryRoot: string): ReviewEvidence {
+  const state = JSON.parse(readFileSync(join(repositoryRoot, `.archflow/tasks/${TASK}/state.json`), "utf8")) as TaskStateV1;
+  const reference = [...state.authoritative_results].reverse()
+    .find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "counter_review");
+  if (reference === undefined) throw new Error("retained counter-review reference unavailable");
+  const manifest = JSON.parse(readFileSync(
+    join(repositoryRoot, `.archflow/tasks/${TASK}/authority/results/${reference.result_digest}.json`),
+    "utf8",
+  )) as { source_artifact?: { artifact_kind?: string; evidence?: ReviewEvidence } };
+  if (manifest.source_artifact?.artifact_kind !== "review-evidence" || manifest.source_artifact.evidence === undefined) {
+    throw new Error("retained review evidence unavailable");
+  }
+  return manifest.source_artifact.evidence;
 }
 
 const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
@@ -394,18 +458,25 @@ Future tasks should use this revised policy.
     activateFixtureCli(h);
 
     const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("ask-undeclared"));
-    expect(result).toMatchObject({ schema_version: "1", ok: true, value: { verdict: "pass" } });
+    expect(result, JSON.stringify(result)).toMatchObject({ schema_version: "1", ok: true, value: { verdict: "pass" } });
     const context = capturedEnvelope(h.envelopePath).context;
     expect(context).toHaveLength(1);
     expect(context[0]).toMatchObject({ kind: "user-ask", label: "ask.md", status: "unavailable" });
   });
 
-  it("pins the approved upstream PRD plus mechanical evidence into the design review envelope", async () => {
+  it("pins one approved upstream and attests its exact nonzero alignment census with no active rules", async () => {
     const h = await fixture({ phase: "design", approveUpstream: true });
     activateFixtureCli(h);
 
     const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("upstream-pinned"));
-    expect(result).toMatchObject({ schema_version: "1", ok: true, value: { verdict: "pass" } });
+    expect(result, JSON.stringify(result)).toMatchObject({ schema_version: "1", ok: true, value: { verdict: "pass" } });
+    if (!result.ok) return;
+    const evidence = retainedReviewEvidence(h.repository.path);
+    if (evidence.schema_version !== "3") throw new Error("fresh Review V3 evidence unavailable");
+    const primary = evidence.reviewer_runs.find((run) => run.reviewer_id === "general");
+    expect(evidence.upstream_alignment).toHaveLength(1);
+    expect(evidence.upstream_alignment?.map((entry) => entry.upstream_digest))
+      .toEqual(primary?.expected_upstream_digests);
     const envelope = capturedEnvelope(h.envelopePath);
     expect(envelope.workspace).toMatchObject({
       kind: "read-only-repository-checkout",
@@ -440,6 +511,118 @@ Future tasks should use this revised policy.
     expect(() => readFileSync(h.envelopePath)).toThrow();
   });
 
+  it("fails before dispatch when the retained upstream produce result is missing", async () => {
+    const h = await fixture({ phase: "design", approveUpstream: true });
+    activateFixtureCli(h);
+    const statePath = join(h.repository.path, `.archflow/tasks/${TASK}/state.json`);
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as TaskStateV1;
+    writeFileSync(statePath, canonicalDocument({
+      ...state,
+      authoritative_results: state.authoritative_results.filter((reference) => reference.phase_instance !== PRD_PHASE),
+    }).bytes);
+
+    const result = await handleCounterReview(
+      parseToolCall("archflow_counter_review", h.args),
+      h.invocation("upstream-result-missing"),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "current-upstream-produce-result-missing" } } },
+    });
+    expect(() => readFileSync(h.envelopePath)).toThrow();
+  });
+
+  it.each([
+    ["unavailable", "produce-projection-unavailable"],
+    ["changed", "produce-projection-not-current"],
+  ] as const)("fails before dispatch when retained upstream projection bytes are %s", async (label, issueCode) => {
+    const h = await fixture({ phase: "design", approveUpstream: true });
+    activateFixtureCli(h);
+    const projection = join(h.repository.path, `.archflow/tasks/${TASK}/prd.md`);
+    if (label === "unavailable") rmSync(projection);
+    else writeFileSync(projection, "changed after produce\n");
+
+    const result = await handleCounterReview(
+      parseToolCall("archflow_counter_review", h.args),
+      h.invocation(`upstream-projection-${label}`),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: issueCode } } },
+    });
+    expect(() => readFileSync(h.envelopePath)).toThrow();
+  });
+
+  it("reviews an imported migration upstream with a nonzero census and no active rules", async () => {
+    const h = await fixture({ phase: "design" });
+    activateFixtureCli(h);
+    const statePath = join(h.repository.path, `.archflow/tasks/${TASK}/state.json`);
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as TaskStateV1;
+    const initialization = canonicalDocument({
+      schema_version: "1",
+      artifact_kind: "legacy-import-initialization",
+      task_id: TASK,
+      repository_identity_digest: state.repository_identity_digest,
+      source_identity_digest: canonicalJsonDigest({ source: "legacy-fixture" }),
+      import_digest: canonicalJsonDigest({ import: "legacy-fixture" }),
+      import_baseline_commit: state.policy_base_commit,
+      code_baseline_commit: state.policy_base_commit,
+      policy_base_commit: state.policy_base_commit,
+      constitution_digest: state.constitution_digest,
+      workflow_digest: state.workflow_digest,
+      config_digest: state.config_digest,
+      canonical_paths: {
+        task_root: `.archflow/tasks/${TASK}`,
+        config: `.archflow/tasks/${TASK}/config.yaml`,
+        state: `.archflow/tasks/${TASK}/state.json`,
+        workflow: ".archflow/workflow.yaml",
+        constitution_root: ".archflow/constitution",
+      },
+      mapping: [{
+        legacy_path: "legacy/prd.md",
+        destination_path: `.archflow/tasks/${TASK}/prd.md`,
+        phase_instance: PRD_PHASE,
+        disposition: "historical",
+      }],
+      staged_payload_refs: [{
+        legacy_path: "legacy/prd.md",
+        digest: sha256Bytes(PRD_BYTES),
+        byte_count: parseSafeInteger(PRD_BYTES.byteLength),
+      }],
+      resume_phase: DESIGN_PHASE,
+    });
+    mkdirSync(join(h.repository.path, `.archflow/tasks/${TASK}/authority`), { recursive: true });
+    writeFileSync(join(h.repository.path, `.archflow/tasks/${TASK}/authority/initialization.json`), initialization.bytes);
+    writeFileSync(statePath, canonicalDocument({
+      ...state,
+      initialization_digest: initialization.digest,
+      authoritative_results: state.authoritative_results.filter((reference) => reference.phase_instance !== PRD_PHASE),
+      approvals: [],
+    }).bytes);
+
+    const result = await handleCounterReview(
+      parseToolCall("archflow_counter_review", h.args),
+      h.invocation("imported-upstream-no-active-rules"),
+    );
+
+    expect(result, JSON.stringify(result)).toMatchObject({
+      ok: true,
+      value: {
+        verdict: "pass",
+        constitution: { status: "not-run", reason: "no-active-constitution-rules" },
+        alignment: { status: "evaluated", drift: "aligned", upstream_count: 1 },
+      },
+    });
+    if (!result.ok) return;
+    const evidence = retainedReviewEvidence(h.repository.path);
+    expect(evidence).toMatchObject({
+      schema_version: "3",
+      upstream_alignment: [expect.objectContaining({ drift: "aligned" })],
+    });
+  });
+
   it("refuses to pin a settlement-only upstream", async () => {
     const h = await fixture({ phase: "design", upstreamReceipt: true });
     activateFixtureCli(h);
@@ -462,5 +645,30 @@ Future tasks should use this revised policy.
       ok: false,
       error: { code: "STATE_INVALID", diagnostic: { parameters: { issue_code: "upstream-approval-missing" } } },
     });
+  });
+
+  it("reports an invalid pinned policy before suggesting upstream approval recovery", async () => {
+    const h = await fixture({ phase: "design", upstreamReceipt: true, activeRule: true });
+    activateFixtureCli(h);
+    h.repository.write(".archflow/constitution/00-process.md", "not constitution frontmatter\n");
+    h.repository.git("add", "--", ".archflow/constitution/00-process.md");
+    h.repository.git("commit", "-m", "corrupt pinned policy fixture");
+    const statePath = join(h.repository.path, `.archflow/tasks/${TASK}/state.json`);
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as TaskStateV1;
+    writeFileSync(statePath, canonicalDocument({
+      ...state,
+      policy_base_commit: parseGitOid(h.repository.git("rev-parse", "HEAD")),
+    }).bytes);
+
+    const result = await handleCounterReview(
+      parseToolCall("archflow_counter_review", h.args),
+      h.invocation("upstream-invalid-policy"),
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "POLICY_BASE_INVALID" } });
+    expect(result).not.toMatchObject({
+      error: { diagnostic: { parameters: { issue_code: "approved-upstream-authority-unavailable" } } },
+    });
+    expect(() => readFileSync(h.envelopePath)).toThrow();
   });
 });

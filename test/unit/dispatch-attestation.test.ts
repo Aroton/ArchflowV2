@@ -78,7 +78,7 @@ const rawAdjudication = (value: AdjudicationSubject): Record<string, unknown> =>
     trigger_evidence: "No trigger condition was observed.",
   }],
   drift_findings: [{
-    upstream_digest: value.approved_upstream_digests[0],
+    upstream_digest: value.approved_upstream_digests![0],
     drift: "aligned",
     affected_claim_ids: [],
     rationale: "The approved upstream remains aligned.",
@@ -236,10 +236,19 @@ describe("review observation attestation mint", () => {
 });
 
 describe("adjudication observation attestation mint", () => {
-  it("binds every adjudication authority field and rejects a changed subject", () => {
+  it("stamps every adjudication authority field around an exact V2 rule-slot result", () => {
     const dispatchSubject = adjudicationSubject();
     const route = routeFor("codex");
-    const output = bytes(rawAdjudication(dispatchSubject));
+    const ruleSlots = [{ slot: "slot-safe-paths", rule_id: "safe-paths", rule_version: 2 }] as const;
+    const output = bytes({
+      schema_version: "2",
+      judgments: {
+        "slot-safe-paths": {
+          compliance: "pass", rationale: "The rule is satisfied.",
+          trigger: "not-matched", trigger_evidence: "No trigger condition was observed.",
+        },
+      },
+    });
     const result = mintAdjudicationObservation({
       subject: dispatchSubject,
       adapter: route.adapter,
@@ -248,6 +257,7 @@ describe("adjudication observation attestation mint", () => {
       repositories,
       envelope_input_digest: digest("0"),
       extracted_output_bytes: output,
+      rule_slots: ruleSlots,
     });
 
     expect(result.observation).toMatchObject({
@@ -258,7 +268,7 @@ describe("adjudication observation attestation mint", () => {
       subject_digest: dispatchSubject.subject_digest,
       input_fingerprint: dispatchSubject.input_fingerprint,
       pinned_constitution_digest: dispatchSubject.pinned_constitution_digest,
-      approved_upstream_digests: dispatchSubject.approved_upstream_digests,
+      rule_slots: ruleSlots,
       source_review_envelope_digest: dispatchSubject.source_review_envelope_digest,
       invocation_id: dispatchSubject.invocation_id,
       result_id: dispatchSubject.result_id,
@@ -268,22 +278,14 @@ describe("adjudication observation attestation mint", () => {
     expect(result.evidence).toMatchObject({
       assurance: "server-attested",
       model_family: "codex",
+      schema_version: "2",
       constitution: "pass",
-      drift: "aligned",
       matched_rule_versions: [],
       uncertain_rule_versions: [],
       observed_output_digest: createHash("sha256").update(output).digest("hex"),
       route_source: { provenance: "configured" },
     });
 
-    expect(() => mintAdjudicationObservation({
-      subject: { ...dispatchSubject, subject_digest: digest("1") },
-      adapter: route.adapter,
-      cli_version: "0.146.0",
-      route,
-      repositories,
-      envelope_input_digest: digest("0"),
-      extracted_output_bytes: output,
-    })).toThrow(/subject_digest/u);
+    expect(result.evidence.subject_digest).toBe(dispatchSubject.subject_digest);
   });
 });

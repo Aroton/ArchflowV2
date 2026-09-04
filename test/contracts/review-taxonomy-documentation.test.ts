@@ -50,7 +50,7 @@ describe("review taxonomy documentation", () => {
     expect(skills).toContain("Phase design and phase implementation cannot use that disposition");
   });
 
-  it("uses only active V2 claim and verdict vocabulary", () => {
+  it("uses active V3 claim and verdict vocabulary while naming native archives", () => {
     const lifecycle = page("docs/workflow/LIFECYCLE.md");
     const review = page("docs/review/COUNTER-REVIEW.md");
     const dispatch = page("docs/mcp/DISPATCH.md");
@@ -60,8 +60,8 @@ describe("review taxonomy documentation", () => {
     expect(activePages).not.toContain("`risk`, `gap`, `complexity`");
     expect(activePages).not.toContain("JSON verdict + findings");
     expect(activePages).not.toContain("A `fail` verdict is a successful");
-    expect(review).toContain("archived V1 evidence");
-    expect(dispatch).toContain("archived V1 evidence");
+    expect(review).toContain("Archived Review V1 and V2 evidence");
+    expect(dispatch).toContain("Review V1/V2 remains readable");
   });
 
   it("keeps Automation V2 exception arrays observational and post-selection", () => {

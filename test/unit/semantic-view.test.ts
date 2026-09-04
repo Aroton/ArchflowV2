@@ -7,7 +7,7 @@ import {
   createHazardRegistryInput,
 } from "../../src/contracts/hazard-registry.js";
 import type { PhaseDesignComponentManifestV1 } from "../../src/contracts/component-manifest.js";
-import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import type {
@@ -26,6 +26,7 @@ import {
   computeSemanticStatusSnapshot,
   computeTaxonomyDenialRates,
   governingRecommendationPhase,
+  publicFindingHistoryFromLedger,
 } from "../../src/state/semantic-status.js";
 import { projectSemanticStatus, semanticOfferToken } from "../../src/state/semantic-view.js";
 import type { TaskStatusV1 } from "../../src/state/status.js";
@@ -139,6 +140,51 @@ describe("semantic status projection", () => {
     const view = projectSemanticStatus(snapshot(status, { taxonomy_denial_rates: rates }), invocation).view;
     expect(view.taxonomy_denial_rates).toEqual(rates);
     expect(Object.keys(view.taxonomy_denial_rates ?? {})).toHaveLength(12);
+  });
+
+  it("exposes superseded V3 test detail and attribution from authenticated history", () => {
+    const status = fullStatus(action("run-step", { step: "produce" }));
+    const finding = {
+      finding_id: "test-oracle-gap",
+      reviewer_id: "test",
+      reviewer_focus: "tests",
+      routing_role: "test-reviewer",
+      criterion_id: "test-quality",
+      claim_type: "gap",
+      confidence: "certain",
+      falsifier: "Run the boundary test and observe whether it detects the regression.",
+      required_behavior_or_risk_boundary: "The recovery branch must remain covered.",
+      coverage_or_oracle_problem: "The prior oracle accepted the broken recovery value.",
+      consequence: "A regression can ship undetected.",
+      proposed_verification_change: "Assert the recovered value and failure branch.",
+      current_disposition: {
+        disposition: "accepted",
+        rationale: "The missing oracle is material.",
+        revision_intent: "Add the exact recovery assertion.",
+      },
+    } as const satisfies PublicFindingV1;
+    const reconstructed = publicFindingHistoryFromLedger([{
+      review_evidence_digest: digestB,
+      finding_id: finding.finding_id,
+      disposition: "accepted",
+      attempt: parseSafeInteger(1),
+      rationale: finding.current_disposition.rationale,
+      revision_intent: finding.current_disposition.revision_intent,
+      claim_type: finding.claim_type,
+      confidence: finding.confidence,
+      falsifier: finding.falsifier,
+      reviewer_id: finding.reviewer_id,
+      reviewer_focus: finding.reviewer_focus,
+      routing_role: finding.routing_role,
+      criterion_id: finding.criterion_id,
+      required_behavior_or_risk_boundary: finding.required_behavior_or_risk_boundary,
+      coverage_or_oracle_problem: finding.coverage_or_oracle_problem,
+      consequence: finding.consequence,
+      proposed_verification_change: finding.proposed_verification_change,
+    }]);
+    expect(reconstructed).toEqual([finding]);
+    const view = projectSemanticStatus(snapshot(status, { finding_history: [finding] }), invocation).view;
+    expect(view.finding_history).toEqual([finding]);
   });
 
   it("copies authenticated effort advice without changing the action or offer", () => {

@@ -19,10 +19,6 @@ import { parseConfigYaml } from "../../src/contracts/config.js";
 import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
-import {
-  childReviewOutputV2Schema,
-  expectedReviewSummaryV2,
-} from "../../src/contracts/review.js";
 import { parseRubricV1 } from "../../src/contracts/rubric.js";
 import { mintReviewObservation, serializeDispatch } from "../../src/dispatch/cli.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
@@ -34,6 +30,7 @@ import {
 } from "../../src/dispatch/workspace.js";
 import { resolveRepositorySet } from "../../src/repository/repository-set.js";
 import { buildReviewEnvelope } from "../../src/review/envelopes.js";
+import { reviewAssignment } from "../../src/review/rubrics.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import { REAL_HOST_TEST_TIMEOUT_MS, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
 import { createTaskWorkspace } from "../helpers/task-workspace.js";
@@ -214,9 +211,17 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
           invocation_id: parseSafeId(`invocation-${direction.task}`),
           result_id: parseSafeId(`result-${direction.task}`),
         };
+        const assignment = reviewAssignment(
+          "general",
+          "general",
+          "design",
+          rubric,
+          { expected_upstream_digests: [] },
+        );
         const envelope = buildReviewEnvelope({
           artifact: DESIGN_UNDER_REVIEW,
           rubric,
+          assignment,
           context: [],
           subject,
           workspace: projectRepositoryWorkspaceBinding(repositoryViews),
@@ -250,8 +255,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
 
         const rawOutput = JSON.parse(decoder.decode(succeeded.extracted_output_bytes)) as unknown;
         validateReview.assert(rawOutput, `${direction.name} output`);
-        const output = childReviewOutputV2Schema.parse(rawOutput);
-        const summary = expectedReviewSummaryV2(output.findings);
 
         const observed = mintReviewObservation({
           subject,
@@ -259,6 +262,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
           cli_version: succeeded.cli_version,
           route,
           repositories: reviewedRepositories,
+          assignment: { ...assignment, routing_role: "counter-reviewer" },
           envelope_input_digest: envelope.digest,
           extracted_output_bytes: succeeded.extracted_output_bytes,
         });
@@ -279,11 +283,11 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
         // Reviewer prose is not a contract. Either outcome satisfies the journey: the reviewer read
         // the secondary and cited it, or it returned a verdict while the evidence still carries the
         // `api` pin asserted above. Record which one happened instead of failing on wording.
-        const texts = findingTexts(output);
+        const texts = findingTexts(observed.evidence);
         const citedSecondary = texts.some((text) => text.includes(SECONDARY_CITATION) || text.includes(SECONDARY_FUNCTION));
-        expect(["pass", "advisory", "review-raised"]).toContain(summary.verdict);
+        expect(["pass", "advisory", "review-raised"]).toContain(observed.evidence.verdict);
         console.info(
-          `[real-host] ${direction.name}: verdict=${summary.verdict} findings=${String(output.findings.length)} cited-secondary=${String(citedSecondary)}${citedSecondary ? "" : ` (no finding cited ${SECONDARY_CITATION}; api pin still attested)`}`,
+          `[real-host] ${direction.name}: verdict=${observed.evidence.verdict} findings=${String(observed.evidence.findings.length)} cited-secondary=${String(citedSecondary)}${citedSecondary ? "" : ` (no finding cited ${SECONDARY_CITATION}; api pin still attested)`}`,
         );
       } finally {
         workspace.dispose();

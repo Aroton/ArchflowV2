@@ -1,4 +1,5 @@
 import { canonicalJsonDigest } from "../canonical.js";
+import { assertPlainJson } from "../plain-json.js";
 import {
   parseAdjudicationEvidence,
   type AdjudicationEvidence,
@@ -24,18 +25,22 @@ import {
 } from "./trust-brands.js";
 
 export function createReviewObservationCapability(binding: ObservationBindingByKind["review"]): ObservationCapability<"review"> {
+  assertPlainJson(binding, "review observation binding");
+  const materialized = structuredClone(binding);
   const copiedBinding = deepFreeze({
-    ...structuredClone(binding),
-    repositories: parseReviewedRepositoriesV1(binding.repositories),
+    ...materialized,
+    repositories: parseReviewedRepositoriesV1(materialized.repositories),
   });
   const capability = Object.freeze({ kind: copiedBinding.kind }) as ObservationCapability<"review">;
   registerObservationCapability(capability, copiedBinding);
   return capability;
 }
 export function createAdjudicationObservationCapability(binding: ObservationBindingByKind["adjudication"]): ObservationCapability<"adjudication"> {
+  assertPlainJson(binding, "adjudication observation binding");
+  const materialized = structuredClone(binding);
   const copiedBinding = deepFreeze({
-    ...structuredClone(binding),
-    repositories: parseReviewedRepositoriesV1(binding.repositories),
+    ...materialized,
+    repositories: parseReviewedRepositoriesV1(materialized.repositories),
   });
   const capability = Object.freeze({ kind: copiedBinding.kind }) as ObservationCapability<"adjudication">;
   registerObservationCapability(capability, copiedBinding);

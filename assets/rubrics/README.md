@@ -21,11 +21,12 @@ before use.
 - Criterion order is significant. The rubric digest and the review contract
   both depend on it; keep `schema_version` quoted (`"1"`) so YAML parses it as
   a string.
-- Phase design and implementation may partition their ordered criteria between
-  a general reviewer and the configured `test-reviewer`. The specialist owns
+- Phase design and implementation partition their ordered criteria between
+  general reviewers and a dedicated `test-reviewer`. The specialist owns
   `test-strategy` for phase design and `verification-evidence` plus
-  `test-quality` for implementation; without that route, general review owns
-  the complete rubric.
+  `test-quality` for implementation. Older configurations with no explicit
+  route use the shipped Luna/xhigh default; general review never inherits the
+  test-owned criteria.
 - Changing any digested byte changes the rubric digest, which folds into
   in-flight tasks' input fingerprints: a mid-task edit fails those tasks closed
   with `INPUT_FINGERPRINT_MISMATCH` on their next review-cycle step. Edit

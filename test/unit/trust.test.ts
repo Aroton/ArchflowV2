@@ -106,6 +106,48 @@ describe("invocation-scoped observation trust", () => {
       expect(() => observationSource.observeReview(capability, new TextEncoder().encode(JSON.stringify({ ...raw, ...extra })))).toThrow();
     }
   });
+
+  it("mints fresh V3 review evidence with server-owned attribution, run scope, and zero-upstream alignment", () => {
+    const raw = {
+      schema_version: "3", task_id: TASK, phase_instance: phase, step: "counter_review", role: "counter-review",
+      subject_digest: digest("a"), input_fingerprint: digest("b"), rubric_digest: digest("c"), producer_family: "claude",
+      findings: [{
+        finding_id: "unsafe-path", criterion_id: "correctness", claim_type: "defect", confidence: "certain",
+        falsifier: "Prove traversal is rejected.", summary: "Path escapes.", evidence: "Traversal is accepted.",
+        suggested_resolution: "Reject traversal.",
+      }],
+      upstream_alignment: [],
+    } as const;
+    const capability = createTestObservationCapability<"review">({
+      kind: "review", task_id: TASK, phase_instance: phase, role: "counter-review", subject_digest: digest("a"),
+      input_fingerprint: digest("b"), invocation_id: "invocation-1", envelope_input_digest: digest("d"),
+      result_id: "result-1", adapter: "codex-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5",
+      effort: "high", route_source: { provenance: "configured" }, repositories, rubric_digest: digest("c"),
+      producer_family: "claude",
+      assignment: { reviewer_id: "general", focus: "general", routing_role: "counter-reviewer", criterion_ids: ["correctness"], expected_upstream_digests: [] },
+    });
+    const evidence = observationSource.observeReview(capability, new TextEncoder().encode(JSON.stringify(raw))).evidence;
+    expect(evidence).toMatchObject({ schema_version: "3", drift: "aligned", reviewer_runs: [{ reviewer_id: "general", expected_upstream_digests: [] }] });
+    if (evidence.schema_version !== "3") throw new Error("expected V3 evidence");
+    expect(evidence.findings[0]).toMatchObject({
+      finding_id: "general-unsafe-path", reviewer_id: "general", reviewer_focus: "general",
+      routing_role: "counter-reviewer", criterion_id: "correctness",
+    });
+  });
+
+  it("mints fresh V2 adjudication evidence from exact server-owned rule slots", () => {
+    const capability = createTestObservationCapability<"adjudication">({
+      kind: "adjudication", task_id: TASK, phase_instance: phase, role: "adjudication", subject_digest: digest("a"),
+      input_fingerprint: digest("b"), invocation_id: "invocation-adjudication", envelope_input_digest: digest("d"),
+      result_id: "result-adjudication", adapter: "codex-cli", cli_version: "1.0.0", family: "codex", model: "gpt-5",
+      effort: "high", route_source: { provenance: "configured" }, repositories, pinned_constitution_digest: digest("c"),
+      source_review_envelope_digest: digest("e"), rule_slots: [{ slot: "slot-a", rule_id: "safe-paths", rule_version: 1 }],
+    });
+    const raw = { schema_version: "2", judgments: { "slot-a": { compliance: "pass", rationale: "Guard present.", trigger: "not-matched", trigger_evidence: "No matching change." } } };
+    const evidence = observationSource.observeAdjudication(capability, new TextEncoder().encode(JSON.stringify(raw))).evidence;
+    expect(evidence).toMatchObject({ schema_version: "2", constitution: "pass", rule_findings: [{ rule_id: "safe-paths", rule_version: 1 }] });
+    expect(evidence).not.toHaveProperty("drift_findings");
+  });
 });
 
 describe("identity-backed authority", () => {

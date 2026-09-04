@@ -37354,7 +37354,7 @@ var reviewedRepositoriesV1Schema2 = external_exports.array(reviewedRepositoryV1S
 });
 function parseReviewedRepositoriesV1(value) {
   assertPlainJson(value, "reviewed repositories");
-  return reviewedRepositoriesV1Schema2.parse(value);
+  return reviewedRepositoriesV1Schema2.parse(structuredClone(value));
 }
 var ruleVersionRefSchema = external_exports.object({ rule_id: id, rule_version: safePositive }).strict();
 var legacyReviewFindingV1Schema = external_exports.object({
@@ -37378,6 +37378,42 @@ var reviewFindingV2Schema = external_exports.object({
   evidence: nonBlank,
   suggested_resolution: nonBlank
 }).strict();
+var rawGeneralReviewFindingV3Schema = reviewFindingV2Schema.safeExtend({
+  criterion_id: id
+}).strict();
+var rawTestReviewFindingV3Schema = external_exports.object({
+  finding_id: id,
+  criterion_id: id,
+  claim_type: external_exports.enum(CLAIM_TYPES),
+  confidence: external_exports.enum(CONFIDENCE_LEVELS),
+  falsifier: boundedNonBlank,
+  required_behavior_or_risk_boundary: nonBlank,
+  coverage_or_oracle_problem: nonBlank,
+  consequence: nonBlank,
+  proposed_verification_change: nonBlank
+}).strict();
+var upstreamAlignmentV1StructuralSchema = external_exports.object({
+  upstream_digest: digest3,
+  drift: external_exports.enum(["aligned", "incidental", "material"]),
+  affected_claim_ids: external_exports.array(id),
+  rationale: nonBlank
+}).strict();
+var upstreamAlignmentV1Schema = upstreamAlignmentV1StructuralSchema.superRefine((entry, context2) => {
+  if (entry.drift === "aligned" !== (entry.affected_claim_ids.length === 0)) {
+    context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "aligned upstreams have no affected claims; non-aligned upstreams must identify claims" });
+  }
+  if (new Set(entry.affected_claim_ids).size !== entry.affected_claim_ids.length) {
+    context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "affected claim ids must be unique" });
+  }
+});
+var legacyConfirmationAssignmentV1Schema = external_exports.object({
+  finding_id: id,
+  criterion_ids: external_exports.array(id).min(1)
+}).strict().superRefine((assignment, context2) => {
+  if (new Set(assignment.criterion_ids).size !== assignment.criterion_ids.length) {
+    context2.addIssue({ code: "custom", path: ["criterion_ids"], message: "legacy confirmation criteria must be unique" });
+  }
+});
 var findingPartitionShape = Object.fromEntries(
   CLAIM_TYPES.flatMap((claimType) => CONFIDENCE_LEVELS.map((confidence) => [`${claimType}:${confidence}`, safeCount]))
 );
@@ -37393,6 +37429,181 @@ var rawReviewCommonShape = {
   producer_family: external_exports.enum(MODEL_FAMILIES),
   matched_rule_versions: external_exports.array(ruleVersionRefSchema)
 };
+var rawReviewV3CommonShape = {
+  task_id: taskSlug2,
+  phase_instance: phaseInstance2,
+  step: external_exports.literal("counter_review"),
+  role: external_exports.enum(REVIEW_ROLES),
+  subject_digest: digest3,
+  input_fingerprint: digest3,
+  rubric_digest: digest3,
+  producer_family: external_exports.enum(MODEL_FAMILIES)
+};
+function exactCriterionSchema(criterionIds) {
+  criterionIds.forEach((criterionId) => id.parse(criterionId));
+  if (new Set(criterionIds).size !== criterionIds.length) throw new TypeError("criterion_ids must be unique");
+  if (criterionIds.length === 0) return external_exports.never();
+  return external_exports.enum(criterionIds);
+}
+function generalFindingSchemaFor(criteria) {
+  return external_exports.object({
+    finding_id: id,
+    criterion_id: criteria,
+    claim_type: external_exports.enum(CLAIM_TYPES),
+    confidence: external_exports.enum(CONFIDENCE_LEVELS),
+    falsifier: boundedNonBlank,
+    summary: nonBlank,
+    evidence: nonBlank,
+    suggested_resolution: nonBlank
+  }).strict();
+}
+function testFindingSchemaFor(criteria) {
+  return external_exports.object({
+    finding_id: id,
+    criterion_id: criteria,
+    claim_type: external_exports.enum(CLAIM_TYPES),
+    confidence: external_exports.enum(CONFIDENCE_LEVELS),
+    falsifier: boundedNonBlank,
+    required_behavior_or_risk_boundary: nonBlank,
+    coverage_or_oracle_problem: nonBlank,
+    consequence: nonBlank,
+    proposed_verification_change: nonBlank
+  }).strict();
+}
+function validateOutputSchemaOptions(options) {
+  assertPlainJson(options, "review output schema options");
+  const materialized = structuredClone(options);
+  exactCriterionSchema(materialized.criterion_ids);
+  if (materialized.expected_upstream_digests !== void 0) {
+    materialized.expected_upstream_digests.forEach((value) => digest3.parse(value));
+    if (new Set(materialized.expected_upstream_digests).size !== materialized.expected_upstream_digests.length || materialized.expected_upstream_digests.some((value, index) => index > 0 && materialized.expected_upstream_digests[index - 1] >= value)) {
+      throw new TypeError("expected_upstream_digests must be sorted and unique");
+    }
+  }
+  if (materialized.legacy_confirmations !== void 0) {
+    if (materialized.legacy_confirmations.length === 0) throw new TypeError("legacy_confirmations must not be empty when present");
+    const parsed = external_exports.array(legacyConfirmationAssignmentV1Schema).parse(materialized.legacy_confirmations);
+    if (new Set(parsed.map((entry) => entry.finding_id)).size !== parsed.length) throw new TypeError("legacy confirmation finding ids must be unique");
+  }
+  if (materialized.criterion_ids.length === 0 && materialized.expected_upstream_digests === void 0 && materialized.legacy_confirmations === void 0) {
+    throw new TypeError("a review output schema requires criteria, alignment, or legacy confirmation responsibility");
+  }
+  return materialized;
+}
+function generalLegacyConfirmationSchema(options) {
+  const assignments = options.legacy_confirmations;
+  if (assignments === void 0) return void 0;
+  const findingIds = assignments.map((entry) => entry.finding_id);
+  const criterionIds = [...new Set(assignments.flatMap((entry) => [...entry.criterion_ids]))];
+  const findingIdSchema = external_exports.enum(findingIds);
+  const resolved = external_exports.object({ finding_id: findingIdSchema, status: external_exports.literal("resolved"), evidence: nonBlank }).strict();
+  const unresolved = generalFindingSchemaFor(exactCriterionSchema(criterionIds)).safeExtend({ finding_id: findingIdSchema, status: external_exports.literal("unresolved") }).strict();
+  return external_exports.discriminatedUnion("status", [resolved, unresolved]);
+}
+function testLegacyConfirmationSchema(options) {
+  const assignments = options.legacy_confirmations;
+  if (assignments === void 0) return void 0;
+  const findingIds = assignments.map((entry) => entry.finding_id);
+  const criterionIds = [...new Set(assignments.flatMap((entry) => [...entry.criterion_ids]))];
+  const findingIdSchema = external_exports.enum(findingIds);
+  const resolved = external_exports.object({ finding_id: findingIdSchema, status: external_exports.literal("resolved"), evidence: nonBlank }).strict();
+  const unresolved = testFindingSchemaFor(exactCriterionSchema(criterionIds)).safeExtend({ finding_id: findingIdSchema, status: external_exports.literal("unresolved") }).strict();
+  return external_exports.discriminatedUnion("status", [resolved, unresolved]);
+}
+function validateLegacyConfirmationCoverage(confirmations, assignments, context2) {
+  const expected = assignments.map((entry) => entry.finding_id);
+  const actual = confirmations.map((entry) => entry.finding_id);
+  if (actual.length !== expected.length || new Set(actual).size !== actual.length || expected.some((value) => !actual.includes(value))) {
+    context2.addIssue({ code: "custom", path: ["legacy_confirmations"], message: "legacy confirmations must exactly cover assigned findings" });
+    return;
+  }
+  confirmations.forEach((confirmation, index) => {
+    if (confirmation.status !== "unresolved") return;
+    const assignment = assignments.find((entry) => entry.finding_id === confirmation.finding_id);
+    if (assignment === void 0 || confirmation.criterion_id === void 0 || !assignment.criterion_ids.includes(confirmation.criterion_id)) {
+      context2.addIssue({ code: "custom", path: ["legacy_confirmations", index, "criterion_id"], message: "legacy confirmation criterion is outside its assignment" });
+    }
+  });
+}
+function validateAlignmentCoverage(alignment, expected, context2) {
+  const actual = alignment.map((entry) => entry.upstream_digest);
+  if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
+    context2.addIssue({ code: "custom", path: ["upstream_alignment"], message: "upstream alignment must exactly cover expected upstream digests in canonical order" });
+  }
+}
+function createGeneralReviewOutputV3Schema(options) {
+  const materialized = validateOutputSchemaOptions(options);
+  const criteria = exactCriterionSchema(materialized.criterion_ids);
+  const confirmation = generalLegacyConfirmationSchema(materialized);
+  const shape = {
+    schema_version: external_exports.literal("3"),
+    ...rawReviewV3CommonShape,
+    findings: materialized.criterion_ids.length === 0 ? external_exports.array(rawGeneralReviewFindingV3Schema).max(0) : external_exports.array(generalFindingSchemaFor(criteria)),
+    ...materialized.expected_upstream_digests === void 0 ? {} : { upstream_alignment: external_exports.array(upstreamAlignmentV1Schema) },
+    ...confirmation === void 0 ? {} : { legacy_confirmations: external_exports.array(confirmation) }
+  };
+  return external_exports.object(shape).strict().superRefine((review, context2) => {
+    const findingIds = review.findings.map((finding) => finding.finding_id);
+    if (new Set(findingIds).size !== findingIds.length) context2.addIssue({ code: "custom", path: ["findings"], message: "review finding ids must be unique" });
+    if (materialized.expected_upstream_digests !== void 0 && "upstream_alignment" in review) {
+      validateAlignmentCoverage(review.upstream_alignment, materialized.expected_upstream_digests, context2);
+    }
+    if (materialized.legacy_confirmations !== void 0 && "legacy_confirmations" in review) {
+      validateLegacyConfirmationCoverage(review.legacy_confirmations, materialized.legacy_confirmations, context2);
+    }
+  });
+}
+function createTestReviewOutputV3Schema(options) {
+  const materialized = validateOutputSchemaOptions(options);
+  const criteria = exactCriterionSchema(materialized.criterion_ids);
+  const confirmation = testLegacyConfirmationSchema(materialized);
+  const shape = {
+    schema_version: external_exports.literal("3"),
+    ...rawReviewV3CommonShape,
+    findings: materialized.criterion_ids.length === 0 ? external_exports.array(rawTestReviewFindingV3Schema).max(0) : external_exports.array(testFindingSchemaFor(criteria)),
+    ...confirmation === void 0 ? {} : { legacy_confirmations: external_exports.array(confirmation) }
+  };
+  return external_exports.object(shape).strict().superRefine((review, context2) => {
+    const findingIds = review.findings.map((finding) => finding.finding_id);
+    if (new Set(findingIds).size !== findingIds.length) context2.addIssue({ code: "custom", path: ["findings"], message: "review finding ids must be unique" });
+    if (materialized.legacy_confirmations !== void 0 && "legacy_confirmations" in review) {
+      validateLegacyConfirmationCoverage(review.legacy_confirmations, materialized.legacy_confirmations, context2);
+    }
+  });
+}
+function parseGeneralReviewOutputV3(value, options) {
+  assertPlainJson(value, "general review output");
+  return createGeneralReviewOutputV3Schema(options).parse(structuredClone(value));
+}
+function parseTestReviewOutputV3(value, options) {
+  assertPlainJson(value, "test review output");
+  return createTestReviewOutputV3Schema(options).parse(structuredClone(value));
+}
+var resolvedLegacyConfirmationV1Schema = external_exports.object({ finding_id: id, status: external_exports.literal("resolved"), evidence: nonBlank }).strict();
+var unresolvedGeneralLegacyConfirmationV1Schema = rawGeneralReviewFindingV3Schema.safeExtend({ status: external_exports.literal("unresolved") }).strict();
+var unresolvedTestLegacyConfirmationV1Schema = rawTestReviewFindingV3Schema.safeExtend({ status: external_exports.literal("unresolved") }).strict();
+var generalLegacyConfirmationV1Schema = external_exports.discriminatedUnion("status", [resolvedLegacyConfirmationV1Schema, unresolvedGeneralLegacyConfirmationV1Schema]);
+var testLegacyConfirmationV1Schema = external_exports.discriminatedUnion("status", [resolvedLegacyConfirmationV1Schema, unresolvedTestLegacyConfirmationV1Schema]);
+var rawGeneralReviewOutputV3Schema = external_exports.object({
+  schema_version: external_exports.literal("3"),
+  ...rawReviewV3CommonShape,
+  findings: external_exports.array(rawGeneralReviewFindingV3Schema),
+  upstream_alignment: external_exports.array(upstreamAlignmentV1Schema).optional(),
+  legacy_confirmations: external_exports.array(generalLegacyConfirmationV1Schema).optional()
+}).strict();
+var rawTestReviewOutputV3Schema = external_exports.object({
+  schema_version: external_exports.literal("3"),
+  ...rawReviewV3CommonShape,
+  findings: external_exports.array(rawTestReviewFindingV3Schema),
+  legacy_confirmations: external_exports.array(testLegacyConfirmationV1Schema).optional()
+}).strict();
+var rawReviewOutputV3Schema = external_exports.object({
+  schema_version: external_exports.literal("3"),
+  ...rawReviewV3CommonShape,
+  findings: external_exports.array(external_exports.union([rawGeneralReviewFindingV3Schema, rawTestReviewFindingV3Schema])),
+  upstream_alignment: external_exports.array(upstreamAlignmentV1Schema).optional(),
+  legacy_confirmations: external_exports.array(external_exports.union([generalLegacyConfirmationV1Schema, testLegacyConfirmationV1Schema])).optional()
+}).strict();
 function validateUniqueReviewMembers(review, context2) {
   const findingIds = /* @__PURE__ */ new Set();
   review.findings.forEach((finding, index) => {
@@ -37514,6 +37725,77 @@ var reviewerRunV1Schema = external_exports.object({
     context2.addIssue({ code: "custom", path: ["finding_ids"], message: "reviewer run findings must be unique" });
   }
 });
+var reviewerRunV2Schema = external_exports.object({
+  reviewer_id: id,
+  focus: external_exports.enum(REVIEW_RUN_FOCUSES),
+  routing_role: external_exports.enum(REVIEW_RUN_ROLES),
+  criterion_ids: external_exports.array(id),
+  expected_upstream_digests: external_exports.array(digest3).optional(),
+  legacy_confirmations: external_exports.array(legacyConfirmationAssignmentV1Schema).min(1).optional(),
+  rubric_digest: digest3,
+  model_family: external_exports.enum(MODEL_FAMILIES),
+  model: nonBlank,
+  effort: external_exports.enum(EFFORT_VALUES),
+  adapter: external_exports.enum(ADAPTER_IDS),
+  cli_version: nonBlank,
+  invocation_id: id,
+  envelope_input_digest: digest3,
+  observed_output_digest: digest3,
+  finding_ids: external_exports.array(id),
+  provider: nonBlank.optional(),
+  route_source: routeSourceRecordSchema,
+  route_override: routeOverrideRecordSchema2.optional()
+}).strict().superRefine((run, context2) => {
+  for (const [field, values] of [
+    ["criterion_ids", run.criterion_ids],
+    ["expected_upstream_digests", run.expected_upstream_digests ?? []],
+    ["finding_ids", run.finding_ids]
+  ]) {
+    if (new Set(values).size !== values.length) context2.addIssue({ code: "custom", path: [field], message: `${field} must be unique` });
+  }
+  if (run.expected_upstream_digests?.some((value, index) => index > 0 && run.expected_upstream_digests[index - 1] >= value)) {
+    context2.addIssue({ code: "custom", path: ["expected_upstream_digests"], message: "expected upstream digests must use canonical order" });
+  }
+  if (run.legacy_confirmations !== void 0 && new Set(run.legacy_confirmations.map((entry) => entry.finding_id)).size !== run.legacy_confirmations.length) {
+    context2.addIssue({ code: "custom", path: ["legacy_confirmations"], message: "legacy confirmation finding ids must be unique" });
+  }
+  if (run.criterion_ids.length === 0 && run.expected_upstream_digests === void 0 && run.legacy_confirmations === void 0) {
+    context2.addIssue({ code: "custom", path: ["criterion_ids"], message: "a reviewer run requires criteria, alignment, or legacy confirmation responsibility" });
+  }
+  if (run.focus === "general" && run.routing_role !== "counter-reviewer") {
+    context2.addIssue({ code: "custom", path: ["routing_role"], message: "general runs use the counter-reviewer route" });
+  }
+  if (run.focus === "tests" && run.routing_role !== "test-reviewer") {
+    context2.addIssue({ code: "custom", path: ["routing_role"], message: "test runs use the test-reviewer route" });
+  }
+  if (run.focus === "tests" && run.expected_upstream_digests !== void 0) {
+    context2.addIssue({ code: "custom", path: ["expected_upstream_digests"], message: "test runs cannot own upstream alignment" });
+  }
+});
+var generalReviewFindingV3Schema = rawGeneralReviewFindingV3Schema.safeExtend({
+  reviewer_id: id,
+  reviewer_focus: external_exports.literal("general"),
+  routing_role: external_exports.literal("counter-reviewer")
+}).strict();
+var testReviewFindingV3Schema = rawTestReviewFindingV3Schema.safeExtend({
+  reviewer_id: id,
+  reviewer_focus: external_exports.literal("tests"),
+  routing_role: external_exports.literal("test-reviewer")
+}).strict();
+var reviewFindingV3Schema = external_exports.discriminatedUnion("reviewer_focus", [
+  generalReviewFindingV3Schema,
+  testReviewFindingV3Schema
+]);
+function reviewFindingDisplayDetail(finding) {
+  if ("reviewer_focus" in finding && finding.reviewer_focus === "tests") {
+    return Object.freeze({
+      summary: finding.required_behavior_or_risk_boundary,
+      evidence: `${finding.coverage_or_oracle_problem} Consequence: ${finding.consequence}`,
+      suggested_resolution: finding.proposed_verification_change
+    });
+  }
+  return Object.freeze({ summary: finding.summary, evidence: finding.evidence, suggested_resolution: finding.suggested_resolution });
+}
 var provenanceFields = {
   model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
   model: nonBlank,
@@ -37570,6 +37852,85 @@ var serverAttestedReviewV2Schema = rawReviewV2StructuralSchema.safeExtend({
   validateUniqueReviewMembers(review, context2);
   validateReviewerRuns(review, context2);
 });
+var serverAttestedReviewV3StructuralSchema = external_exports.object({
+  schema_version: external_exports.literal("3"),
+  ...rawReviewV3CommonShape,
+  findings: external_exports.array(reviewFindingV3Schema),
+  verdict: external_exports.enum(REVIEW_VERDICTS),
+  total_findings: safeCount,
+  partition_counts: findingPartitionCountsSchema,
+  upstream_alignment: external_exports.array(upstreamAlignmentV1Schema).optional(),
+  drift: external_exports.enum(["aligned", "incidental", "material"]).optional(),
+  assurance: external_exports.literal("server-attested"),
+  adapter: external_exports.enum(ADAPTER_IDS),
+  cli_version: nonBlank,
+  model_family: external_exports.enum(MODEL_FAMILIES),
+  model: nonBlank,
+  effort: external_exports.enum(EFFORT_VALUES),
+  invocation_id: id,
+  envelope_input_digest: digest3,
+  observed_output_digest: digest3,
+  result_id: id,
+  provider: nonBlank.optional(),
+  route_source: routeSourceRecordSchema,
+  route_override: routeOverrideRecordSchema2.optional(),
+  repositories: reviewedRepositoriesV1Schema2,
+  reviewer_runs: external_exports.array(reviewerRunV2Schema).min(1),
+  effort_review: external_exports.lazy(() => effortEvidenceSchema).optional()
+}).strict();
+function expectedUpstreamDrift(alignment) {
+  return alignment.some((entry) => entry.drift === "material") ? "material" : alignment.some((entry) => entry.drift === "incidental") ? "incidental" : "aligned";
+}
+function validateServerAttestedReviewV3(review, context2) {
+  const findingIds = review.findings.map((finding) => finding.finding_id);
+  if (new Set(findingIds).size !== findingIds.length) context2.addIssue({ code: "custom", path: ["findings"], message: "review finding ids must be unique" });
+  const expectedSummary = expectedReviewSummaryV2(review.findings);
+  if (review.verdict !== expectedSummary.verdict) context2.addIssue({ code: "custom", path: ["verdict"], message: `review verdict must be ${expectedSummary.verdict}` });
+  if (review.total_findings !== expectedSummary.total_findings) context2.addIssue({ code: "custom", path: ["total_findings"], message: `review total_findings must be ${expectedSummary.total_findings}` });
+  for (const key of Object.keys(expectedSummary.partition_counts)) {
+    if (review.partition_counts[key] !== expectedSummary.partition_counts[key]) context2.addIssue({ code: "custom", path: ["partition_counts", key], message: `review partition count must be ${expectedSummary.partition_counts[key]}` });
+  }
+  const reviewerIds = review.reviewer_runs.map((run) => run.reviewer_id);
+  if (new Set(reviewerIds).size !== reviewerIds.length) context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer run ids must be unique" });
+  const runFindingIds = review.reviewer_runs.flatMap((run) => run.finding_ids);
+  if (runFindingIds.length !== findingIds.length || new Set(runFindingIds).size !== runFindingIds.length || findingIds.some((findingId) => !runFindingIds.includes(findingId))) {
+    context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "reviewer runs must partition review findings exactly" });
+  }
+  review.findings.forEach((finding, index) => {
+    const owners = review.reviewer_runs.filter((run) => run.finding_ids.includes(finding.finding_id));
+    const owner = owners[0];
+    if (owners.length !== 1 || owner === void 0) return;
+    const confirmation = owner.legacy_confirmations?.find((entry) => entry.finding_id === finding.finding_id);
+    if (finding.reviewer_id !== owner.reviewer_id || finding.reviewer_focus !== owner.focus || finding.routing_role !== owner.routing_role || !owner.criterion_ids.includes(finding.criterion_id) && !(confirmation?.criterion_ids.includes(finding.criterion_id) ?? false)) {
+      context2.addIssue({ code: "custom", path: ["findings", index], message: "finding attribution and criterion must match its reviewer run" });
+    }
+    if (confirmation === void 0 && !finding.finding_id.startsWith(`${owner.reviewer_id}-`)) {
+      context2.addIssue({ code: "custom", path: ["findings", index, "finding_id"], message: "finding id prefix must match its reviewer run" });
+    }
+  });
+  const alignmentRuns = review.reviewer_runs.filter((run) => run.expected_upstream_digests !== void 0);
+  if (review.upstream_alignment === void 0 !== (review.drift === void 0)) {
+    context2.addIssue({ code: "custom", path: ["upstream_alignment"], message: "upstream alignment and drift must be present together" });
+  }
+  if (review.upstream_alignment === void 0) {
+    if (alignmentRuns.length !== 0) context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "alignment owner requires an upstream census" });
+  } else {
+    if (alignmentRuns.length !== 1 || alignmentRuns[0] !== review.reviewer_runs[0] || alignmentRuns[0]?.focus !== "general") {
+      context2.addIssue({ code: "custom", path: ["reviewer_runs"], message: "only the primary general reviewer run may own upstream alignment" });
+    } else {
+      const expected = alignmentRuns[0].expected_upstream_digests;
+      const actual = review.upstream_alignment.map((entry) => entry.upstream_digest);
+      if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
+        context2.addIssue({ code: "custom", path: ["upstream_alignment"], message: "upstream alignment must exactly cover the primary reviewer plan" });
+      }
+    }
+    const expectedDrift = expectedUpstreamDrift(review.upstream_alignment);
+    if (review.drift !== expectedDrift) context2.addIssue({ code: "custom", path: ["drift"], message: `review drift must be ${expectedDrift}` });
+  }
+}
+var serverAttestedReviewV3Schema = serverAttestedReviewV3StructuralSchema.superRefine((review, context2) => {
+  validateServerAttestedReviewV3(review, context2);
+});
 var degradedReviewV1Schema = rawReviewV1StructuralSchema.safeExtend(degradedFields).strict().superRefine((review, context2) => {
   validateUniqueReviewMembers(review, context2);
   const expected = expectedLegacyReviewSummary(review.findings);
@@ -37582,10 +37943,10 @@ var degradedReviewV2Schema = rawReviewV2StructuralSchema.safeExtend(degradedFiel
 });
 var v1EvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewV1Schema, degradedReviewV1Schema]);
 var v2EvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewV2Schema, degradedReviewV2Schema]);
-var reviewEvidenceSchema = external_exports.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema]);
+var reviewEvidenceSchema = external_exports.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema, serverAttestedReviewV3Schema]);
 function parseReviewEvidence(value) {
   assertPlainJson(value, "review evidence");
-  const parsed = reviewEvidenceSchema.parse(value);
+  const parsed = reviewEvidenceSchema.parse(structuredClone(value));
   return parsed;
 }
 var referencedReviewWrapperSchema = external_exports.object({ evidence_digest: digest3, evidence: external_exports.unknown() }).strict();
@@ -37931,7 +38292,7 @@ function createJsonLineFramer() {
     retained = retained.slice(offset);
     offset = 0;
   };
-  const fail28 = () => {
+  const fail29 = () => {
     retained = new Uint8Array();
     offset = 0;
     fatalPending = true;
@@ -37940,7 +38301,7 @@ function createJsonLineFramer() {
     if (stopped || fatalPending || chunk.byteLength === 0) return;
     compact();
     if (retained.byteLength + chunk.byteLength > MAX_FRAME_BYTES + 2) {
-      fail28();
+      fail29();
       return;
     }
     const combined = new Uint8Array(retained.byteLength + chunk.byteLength);
@@ -37958,7 +38319,7 @@ function createJsonLineFramer() {
     const lineFeed = retained.indexOf(LINE_FEED, offset);
     if (lineFeed === -1) {
       if (retained.byteLength - offset > MAX_FRAME_BYTES) {
-        fail28();
+        fail29();
         return next();
       }
       return void 0;
@@ -37968,7 +38329,7 @@ function createJsonLineFramer() {
     const frameBytes = retained.subarray(offset, end);
     offset = lineFeed + 1;
     if (frameBytes.byteLength > MAX_FRAME_BYTES) {
-      fail28();
+      fail29();
       return next();
     }
     try {
@@ -37976,7 +38337,7 @@ function createJsonLineFramer() {
       return { kind: "json", value: JSON.parse(source) };
     } catch (error51) {
       if (error51 instanceof TypeError && frameBytes.byteLength !== 0) {
-        fail28();
+        fail29();
         return next();
       }
       return nonfatalParseError();
@@ -37991,7 +38352,7 @@ function createJsonLineFramer() {
       try {
         new TextDecoder("utf-8", { fatal: true }).decode(partial2);
       } catch {
-        fail28();
+        fail29();
         return next();
       }
       retained = new Uint8Array();
@@ -38044,7 +38405,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
       onBackpressureChange(value);
       return true;
     } catch (error51) {
-      fail28(asError(error51, "Backpressure notification failed"));
+      fail29(asError(error51, "Backpressure notification failed"));
       return false;
     }
   }
@@ -38085,7 +38446,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
       }
     }
   }
-  function fail28(error51) {
+  function fail29(error51) {
     shutDown(error51, true);
   }
   function finish(pending, error51) {
@@ -38094,7 +38455,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
     }
     if (error51 != null) {
       pending.completed.reject(error51);
-      fail28(error51);
+      fail29(error51);
       return;
     }
     incomplete.delete(pending);
@@ -38135,7 +38496,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
           pending.completed.reject(writeError);
           incomplete.delete(pending);
           incompleteBytes -= pending.entry.frame.byteLength;
-          fail28(writeError);
+          fail29(writeError);
           break;
         }
         if (!accepted && !closed) {
@@ -38155,7 +38516,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
     }
   }
   function handleOutputError(error51) {
-    fail28(asError(error51, "Output stream failed"));
+    fail29(asError(error51, "Output stream failed"));
   }
   output.on("drain", handleDrain);
   output.on("error", handleOutputError);
@@ -38177,7 +38538,7 @@ function createSendQueue(output, onBackpressureChange, onFatal) {
         const overflowError = new Error("Send queue capacity exceeded");
         admitted.reject(overflowError);
         completed.reject(overflowError);
-        fail28(overflowError);
+        fail29(overflowError);
         return receipt;
       }
       const pending = {
@@ -38395,6 +38756,37 @@ var publicFindingV2Schema = external_exports.object({
   suggested_resolution: nonBlank2,
   current_disposition: findingDispositionV1Schema.optional()
 }).strict();
+var publicFindingAttributionV3Shape = {
+  reviewer_id: nonBlank2,
+  criterion_id: nonBlank2
+};
+var publicGeneralFindingV3Schema = external_exports.object({
+  finding_id: nonBlank2,
+  claim_type: external_exports.enum(CLAIM_TYPES),
+  confidence: external_exports.enum(CONFIDENCE_LEVELS),
+  falsifier: boundedText2,
+  summary: nonBlank2,
+  evidence: nonBlank2,
+  suggested_resolution: nonBlank2,
+  ...publicFindingAttributionV3Shape,
+  reviewer_focus: external_exports.literal("general"),
+  routing_role: external_exports.literal("counter-reviewer"),
+  current_disposition: findingDispositionV1Schema.optional()
+}).strict();
+var publicTestFindingV3Schema = external_exports.object({
+  finding_id: nonBlank2,
+  claim_type: external_exports.enum(CLAIM_TYPES),
+  confidence: external_exports.enum(CONFIDENCE_LEVELS),
+  falsifier: boundedText2,
+  required_behavior_or_risk_boundary: nonBlank2,
+  coverage_or_oracle_problem: nonBlank2,
+  consequence: nonBlank2,
+  proposed_verification_change: nonBlank2,
+  ...publicFindingAttributionV3Shape,
+  reviewer_focus: external_exports.literal("tests"),
+  routing_role: external_exports.literal("test-reviewer"),
+  current_disposition: findingDispositionV1Schema.optional()
+}).strict();
 var legacyPublicFindingV1Schema = external_exports.object({
   finding_id: nonBlank2,
   severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
@@ -38407,13 +38799,25 @@ var legacyPublicFindingV1Schema = external_exports.object({
   if (finding.blocking !== (finding.severity === "blocker")) context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
 });
 var publicFindingV1Schema = external_exports.union([
+  publicGeneralFindingV3Schema,
+  publicTestFindingV3Schema,
   publicFindingV2Schema,
   legacyPublicFindingV1Schema
 ]);
 var publicConstitutionRuleV1Schema = external_exports.object({ id: nonBlank2, version: positiveSafePhaseNumberV1Schema, text: nonBlank2, review_trigger: nonBlank2.optional(), enforced_by: external_exports.array(nonBlank2).min(1).optional() }).strict();
 var rubricCriterionV1Schema = external_exports.object({ id: nonBlank2, text: nonBlank2, blocking: external_exports.boolean() }).strict();
 var publicRubricV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), kind: external_exports.enum(["artifact", "implementation"]), mode: external_exports.literal("adversarial"), criteria: external_exports.array(rubricCriterionV1Schema).min(1) }).strict();
-var publicReviewAssignmentV1Schema = external_exports.object({ reviewer_id: nonBlank2, focus: external_exports.enum(["general", "tests"]), criterion_ids: external_exports.array(nonBlank2).min(1) }).strict();
+var publicReviewAssignmentV1Schema = external_exports.object({
+  reviewer_id: nonBlank2,
+  focus: external_exports.enum(["general", "tests"]),
+  criterion_ids: external_exports.array(nonBlank2),
+  expected_upstream_digests: external_exports.array(digest5).optional(),
+  legacy_confirmation_finding_ids: external_exports.array(nonBlank2).min(1).optional()
+}).strict().superRefine((assignment, context2) => {
+  if (assignment.criterion_ids.length === 0 && assignment.expected_upstream_digests === void 0 && assignment.legacy_confirmation_finding_ids === void 0) {
+    context2.addIssue({ code: "custom", path: ["criterion_ids"], message: "empty assignment criteria require an explicit responsibility" });
+  }
+});
 var publicReviewContextV1Schema = external_exports.object({ rubric: publicRubricV1Schema, assignments: external_exports.array(publicReviewAssignmentV1Schema).min(1).optional(), active_rules: external_exports.array(publicConstitutionRuleV1Schema) }).strict();
 var roundCount = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 var publicReviewRoundV2Schema = external_exports.object({
@@ -38569,6 +38973,7 @@ var workflowViewV1Schema = external_exports.object({
   resources: external_exports.array(workflowResourceV1Schema),
   next_action: semanticNextActionV1Schema,
   findings: external_exports.array(publicFindingV1Schema).optional(),
+  finding_history: external_exports.array(publicFindingV1Schema).optional(),
   taxonomy_denial_rates: taxonomyDenialRatesV1Schema.optional(),
   review_context: publicReviewContextV1Schema.optional(),
   review_strength: publicReviewStrengthV1Schema.optional(),
@@ -43038,6 +43443,224 @@ var mcp_tools_schema_default = {
       },
       success: {
         anyOf: [
+          {
+            type: "object",
+            properties: {
+              path: {
+                $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
+              verdict: {
+                type: "string",
+                enum: [
+                  "pass",
+                  "advisory",
+                  "review-raised"
+                ]
+              },
+              total_findings: {
+                $ref: "#/$defs/integer"
+              },
+              partition_counts: {
+                type: "object",
+                properties: {
+                  "defect:certain": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "defect:likely": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "defect:suspicion": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "risk:certain": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "risk:likely": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "risk:suspicion": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "gap:certain": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "gap:likely": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "gap:suspicion": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "preference:certain": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "preference:likely": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  },
+                  "preference:suspicion": {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 9007199254740991
+                  }
+                },
+                required: [
+                  "defect:certain",
+                  "defect:likely",
+                  "defect:suspicion",
+                  "risk:certain",
+                  "risk:likely",
+                  "risk:suspicion",
+                  "gap:certain",
+                  "gap:likely",
+                  "gap:suspicion",
+                  "preference:certain",
+                  "preference:likely",
+                  "preference:suspicion"
+                ],
+                additionalProperties: false
+              },
+              alignment: {
+                anyOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      status: {
+                        type: "string",
+                        const: "evaluated"
+                      },
+                      drift: {
+                        type: "string",
+                        enum: [
+                          "aligned",
+                          "incidental",
+                          "material"
+                        ]
+                      },
+                      upstream_count: {
+                        $ref: "#/$defs/integer"
+                      }
+                    },
+                    required: [
+                      "status",
+                      "drift",
+                      "upstream_count"
+                    ],
+                    additionalProperties: false
+                  },
+                  {
+                    type: "object",
+                    properties: {
+                      status: {
+                        type: "string",
+                        const: "not-run"
+                      },
+                      reason: {
+                        type: "string",
+                        const: "prd-has-no-approved-upstream-plan"
+                      }
+                    },
+                    required: [
+                      "status",
+                      "reason"
+                    ],
+                    additionalProperties: false
+                  }
+                ]
+              },
+              constitution: {
+                anyOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      status: {
+                        type: "string",
+                        const: "evaluated"
+                      },
+                      path: {
+                        $ref: "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                      },
+                      constitution: {
+                        type: "string",
+                        enum: [
+                          "pass",
+                          "fail",
+                          "uncertain"
+                        ]
+                      },
+                      triggers: {
+                        type: "array",
+                        items: {
+                          $ref: "#/$defs/rule"
+                        }
+                      }
+                    },
+                    required: [
+                      "status",
+                      "path",
+                      "constitution",
+                      "triggers"
+                    ],
+                    additionalProperties: false
+                  },
+                  {
+                    type: "object",
+                    properties: {
+                      status: {
+                        type: "string",
+                        const: "not-run"
+                      },
+                      reason: {
+                        type: "string",
+                        const: "no-active-constitution-rules"
+                      }
+                    },
+                    required: [
+                      "status",
+                      "reason"
+                    ],
+                    additionalProperties: false
+                  }
+                ]
+              },
+              revision: {
+                $ref: "#/$defs/integer"
+              },
+              request_digest: {
+                $ref: "#/$defs/digest"
+              }
+            },
+            required: [
+              "path",
+              "verdict",
+              "total_findings",
+              "partition_counts",
+              "alignment",
+              "constitution",
+              "revision"
+            ],
+            additionalProperties: false
+          },
           {
             type: "object",
             properties: {
@@ -50075,6 +50698,257 @@ var triage_schema_default = {
       items: {
         anyOf: [
           {
+            oneOf: [
+              {
+                type: "object",
+                properties: {
+                  review_evidence_digest: {
+                    type: "string",
+                    pattern: "^[0-9a-f]{64}$"
+                  },
+                  finding_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  disposition: {
+                    type: "string",
+                    enum: [
+                      "accepted",
+                      "accepted-editorial",
+                      "rejected",
+                      "escalated-human",
+                      "deferred"
+                    ]
+                  },
+                  attempt: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 9007199254740991
+                  },
+                  rationale: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  revision_intent: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  evidence: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  summary: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  suggested_resolution: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  claim_type: {
+                    type: "string",
+                    enum: [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  confidence: {
+                    type: "string",
+                    enum: [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  falsifier: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  reviewer_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  criterion_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  reviewer_focus: {
+                    type: "string",
+                    const: "general"
+                  },
+                  routing_role: {
+                    type: "string",
+                    const: "counter-reviewer"
+                  },
+                  disposition_evidence: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "review_evidence_digest",
+                  "finding_id",
+                  "disposition",
+                  "attempt",
+                  "evidence",
+                  "summary",
+                  "suggested_resolution",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "reviewer_id",
+                  "criterion_id",
+                  "reviewer_focus",
+                  "routing_role"
+                ],
+                additionalProperties: false
+              },
+              {
+                type: "object",
+                properties: {
+                  review_evidence_digest: {
+                    type: "string",
+                    pattern: "^[0-9a-f]{64}$"
+                  },
+                  finding_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  disposition: {
+                    type: "string",
+                    enum: [
+                      "accepted",
+                      "accepted-editorial",
+                      "rejected",
+                      "escalated-human",
+                      "deferred"
+                    ]
+                  },
+                  attempt: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 9007199254740991
+                  },
+                  rationale: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  revision_intent: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  evidence: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  summary: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  suggested_resolution: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  claim_type: {
+                    type: "string",
+                    enum: [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  confidence: {
+                    type: "string",
+                    enum: [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  falsifier: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  reviewer_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  criterion_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  reviewer_focus: {
+                    type: "string",
+                    const: "tests"
+                  },
+                  routing_role: {
+                    type: "string",
+                    const: "test-reviewer"
+                  },
+                  required_behavior_or_risk_boundary: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  coverage_or_oracle_problem: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  consequence: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  proposed_verification_change: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  disposition_evidence: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "review_evidence_digest",
+                  "finding_id",
+                  "disposition",
+                  "attempt",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "reviewer_id",
+                  "criterion_id",
+                  "reviewer_focus",
+                  "routing_role",
+                  "required_behavior_or_risk_boundary",
+                  "coverage_or_oracle_problem",
+                  "consequence",
+                  "proposed_verification_change"
+                ],
+                additionalProperties: false
+              }
+            ]
+          },
+          {
             type: "object",
             properties: {
               review_evidence_digest: {
@@ -50370,6 +51244,386 @@ var semantic_workflow_schema_default = {
     },
     publicFinding: {
       anyOf: [
+        {
+          type: "object",
+          properties: {
+            finding_id: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            claim_type: {
+              type: "string",
+              enum: [
+                "defect",
+                "risk",
+                "gap",
+                "preference"
+              ]
+            },
+            confidence: {
+              type: "string",
+              enum: [
+                "certain",
+                "likely",
+                "suspicion"
+              ]
+            },
+            falsifier: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096,
+              pattern: "\\S"
+            },
+            summary: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            evidence: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            suggested_resolution: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            reviewer_id: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            criterion_id: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            reviewer_focus: {
+              type: "string",
+              const: "general"
+            },
+            routing_role: {
+              type: "string",
+              const: "counter-reviewer"
+            },
+            current_disposition: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    disposition: {
+                      type: "string",
+                      enum: [
+                        "accepted",
+                        "accepted-editorial"
+                      ]
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    },
+                    revision_intent: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "disposition",
+                    "rationale",
+                    "revision_intent"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    disposition: {
+                      type: "string",
+                      const: "rejected"
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    },
+                    evidence: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "disposition",
+                    "rationale",
+                    "evidence"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    disposition: {
+                      type: "string",
+                      const: "escalated-human"
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "disposition",
+                    "rationale"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    disposition: {
+                      type: "string",
+                      const: "deferred"
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    },
+                    evidence: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "disposition",
+                    "rationale"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            }
+          },
+          required: [
+            "finding_id",
+            "claim_type",
+            "confidence",
+            "falsifier",
+            "summary",
+            "evidence",
+            "suggested_resolution",
+            "reviewer_id",
+            "criterion_id",
+            "reviewer_focus",
+            "routing_role"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            finding_id: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            claim_type: {
+              type: "string",
+              enum: [
+                "defect",
+                "risk",
+                "gap",
+                "preference"
+              ]
+            },
+            confidence: {
+              type: "string",
+              enum: [
+                "certain",
+                "likely",
+                "suspicion"
+              ]
+            },
+            falsifier: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096,
+              pattern: "\\S"
+            },
+            required_behavior_or_risk_boundary: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            coverage_or_oracle_problem: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            consequence: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            proposed_verification_change: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            reviewer_id: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            criterion_id: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
+            },
+            reviewer_focus: {
+              type: "string",
+              const: "tests"
+            },
+            routing_role: {
+              type: "string",
+              const: "test-reviewer"
+            },
+            current_disposition: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    disposition: {
+                      type: "string",
+                      enum: [
+                        "accepted",
+                        "accepted-editorial"
+                      ]
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    },
+                    revision_intent: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "disposition",
+                    "rationale",
+                    "revision_intent"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    disposition: {
+                      type: "string",
+                      const: "rejected"
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    },
+                    evidence: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "disposition",
+                    "rationale",
+                    "evidence"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    disposition: {
+                      type: "string",
+                      const: "escalated-human"
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "disposition",
+                    "rationale"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    disposition: {
+                      type: "string",
+                      const: "deferred"
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    },
+                    evidence: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096,
+                      pattern: "\\S"
+                    }
+                  },
+                  required: [
+                    "disposition",
+                    "rationale"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            }
+          },
+          required: [
+            "finding_id",
+            "claim_type",
+            "confidence",
+            "falsifier",
+            "required_behavior_or_risk_boundary",
+            "coverage_or_oracle_problem",
+            "consequence",
+            "proposed_verification_change",
+            "reviewer_id",
+            "criterion_id",
+            "reviewer_focus",
+            "routing_role"
+          ],
+          additionalProperties: false
+        },
         {
           $ref: "#/$defs/publicFindingV2"
         },
@@ -51577,6 +52831,12 @@ var semantic_workflow_schema_default = {
             $ref: "#/$defs/publicFinding"
           }
         },
+        finding_history: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/publicFinding"
+          }
+        },
         taxonomy_denial_rates: {
           $ref: "#/$defs/taxonomyDenialRates"
         },
@@ -51657,6 +52917,20 @@ var semantic_workflow_schema_default = {
                     ]
                   },
                   criterion_ids: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      minLength: 1,
+                      pattern: "\\S"
+                    }
+                  },
+                  expected_upstream_digests: {
+                    type: "array",
+                    items: {
+                      $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    }
+                  },
+                  legacy_confirmation_finding_ids: {
                     minItems: 1,
                     type: "array",
                     items: {
@@ -53003,6 +54277,12 @@ var semantic_workflow_schema_default = {
         $ref: "#/$defs/publicFinding"
       }
     },
+    finding_history: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/publicFinding"
+      }
+    },
     taxonomy_denial_rates: {
       $ref: "#/$defs/taxonomyDenialRates"
     },
@@ -53083,6 +54363,20 @@ var semantic_workflow_schema_default = {
                 ]
               },
               criterion_ids: {
+                type: "array",
+                items: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                }
+              },
+              expected_upstream_digests: {
+                type: "array",
+                items: {
+                  $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                }
+              },
+              legacy_confirmation_finding_ids: {
                 minItems: 1,
                 type: "array",
                 items: {
@@ -53840,6 +55134,7 @@ var nonBlank3 = external_exports.string().min(1).regex(/\S/, "must contain a non
 var id4 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 var digest6 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var taskSlug4 = createTaskSlugV1Schema();
+var opaqueSlot = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
 var ruleVersionSchema = external_exports.object({ rule_id: id4, rule_version: external_exports.number().int().positive().safe() }).strict();
 var constitutionRuleFindingSchema = ruleVersionSchema.extend({
   compliance: external_exports.enum(COMPLIANCE_RESULTS),
@@ -53847,6 +55142,55 @@ var constitutionRuleFindingSchema = ruleVersionSchema.extend({
   trigger: external_exports.enum(TRIGGER_RESULTS),
   trigger_evidence: nonBlank3
 }).strict();
+var adjudicationJudgmentV2Schema = external_exports.object({
+  compliance: external_exports.enum(COMPLIANCE_RESULTS),
+  rationale: nonBlank3,
+  trigger: external_exports.enum(TRIGGER_RESULTS),
+  trigger_evidence: nonBlank3
+}).strict();
+var rawAdjudicationV2Schema = external_exports.object({
+  schema_version: external_exports.literal("2"),
+  judgments: external_exports.record(opaqueSlot, adjudicationJudgmentV2Schema)
+}).strict();
+var adjudicationRuleSlotV1Schema = ruleVersionSchema.extend({ slot: opaqueSlot }).strict();
+function materializeRuleSlots(value) {
+  assertPlainJson(value, "adjudication rule slots");
+  const parsed = external_exports.array(adjudicationRuleSlotV1Schema).min(1).parse(structuredClone(value));
+  const slots = parsed.map((entry) => entry.slot);
+  if (new Set(slots).size !== slots.length) throw new TypeError("adjudication rule slots must be unique");
+  const ruleKeys = parsed.map((entry) => `${entry.rule_id}:${entry.rule_version}`);
+  if (new Set(ruleKeys).size !== ruleKeys.length || ruleKeys.some((value2, index) => index > 0 && ruleKeys[index - 1].localeCompare(value2) >= 0)) {
+    throw new TypeError("adjudication rule slots must follow canonical unique rule order");
+  }
+  return parsed;
+}
+function rawAdjudicationV2SchemaFromMaterializedSlots(slots) {
+  const judgments = Object.fromEntries(slots.map((entry) => [entry.slot, adjudicationJudgmentV2Schema]));
+  return external_exports.object({ schema_version: external_exports.literal("2"), judgments: external_exports.object(judgments).strict() }).strict();
+}
+function createRawAdjudicationV2Schema(slots) {
+  return rawAdjudicationV2SchemaFromMaterializedSlots(materializeRuleSlots(slots));
+}
+function parseAndDeriveAdjudicationV2(value, slots) {
+  const materializedSlots = materializeRuleSlots(slots);
+  assertPlainJson(value, "adjudication V2 output");
+  const parsed = rawAdjudicationV2SchemaFromMaterializedSlots(materializedSlots).parse(structuredClone(value));
+  const rule_findings = materializedSlots.map(({ slot, rule_id, rule_version }) => ({
+    rule_id,
+    rule_version,
+    ...parsed.judgments[slot]
+  }));
+  const constitution = rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
+  const matched_rule_versions = rule_findings.filter((finding) => finding.trigger === "matched").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
+  const uncertain_rule_versions = rule_findings.filter((finding) => finding.trigger === "uncertain").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
+  return {
+    schema_version: "2",
+    rule_findings,
+    constitution,
+    matched_rule_versions,
+    uncertain_rule_versions
+  };
+}
 var driftFindingSchema = external_exports.object({
   upstream_digest: digest6,
   drift: external_exports.enum(DRIFT_RESULTS),
@@ -53921,9 +55265,27 @@ var derivedAdjudicationSchema = rawAdjudicationSchema.safeExtend({
   if (!sameRuleSet(adjudication.matched_rule_versions, expected.matched_rule_versions)) context2.addIssue({ code: "custom", path: ["matched_rule_versions"], message: "matched_rule_versions contradict rule findings" });
   if (!sameRuleSet(adjudication.uncertain_rule_versions, expected.uncertain_rule_versions)) context2.addIssue({ code: "custom", path: ["uncertain_rule_versions"], message: "uncertain_rule_versions contradict rule findings" });
 });
+var derivedAdjudicationV2Schema = external_exports.object({
+  schema_version: external_exports.literal("2"),
+  rule_findings: external_exports.array(constitutionRuleFindingSchema),
+  constitution: external_exports.enum(CONSTITUTION_RESULTS),
+  matched_rule_versions: external_exports.array(ruleVersionSchema),
+  uncertain_rule_versions: external_exports.array(ruleVersionSchema)
+}).strict().superRefine((adjudication, context2) => {
+  const keys = adjudication.rule_findings.map(ruleKey2);
+  if (new Set(keys).size !== keys.length || keys.some((value, index) => index > 0 && keys[index - 1].localeCompare(value) >= 0)) {
+    context2.addIssue({ code: "custom", path: ["rule_findings"], message: "rule findings must use canonical unique order" });
+  }
+  const constitution = adjudication.rule_findings.some((finding) => finding.compliance === "fail") ? "fail" : adjudication.rule_findings.some((finding) => finding.compliance === "uncertain") ? "uncertain" : "pass";
+  const matched = adjudication.rule_findings.filter((finding) => finding.trigger === "matched").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
+  const uncertain = adjudication.rule_findings.filter((finding) => finding.trigger === "uncertain").map(({ rule_id, rule_version }) => ({ rule_id, rule_version }));
+  if (adjudication.constitution !== constitution) context2.addIssue({ code: "custom", path: ["constitution"], message: `constitution must be ${constitution}` });
+  if (!sameRuleSet(adjudication.matched_rule_versions, matched)) context2.addIssue({ code: "custom", path: ["matched_rule_versions"], message: "matched_rule_versions contradict rule findings" });
+  if (!sameRuleSet(adjudication.uncertain_rule_versions, uncertain)) context2.addIssue({ code: "custom", path: ["uncertain_rule_versions"], message: "uncertain_rule_versions contradict rule findings" });
+});
 function parseAndDeriveAdjudication(value) {
   assertPlainJson(value, "adjudication");
-  const parsed = canonicalizeAdjudicationFindings(rawAdjudicationTransportSchema.parse(value));
+  const parsed = canonicalizeAdjudicationFindings(rawAdjudicationTransportSchema.parse(structuredClone(value)));
   validateAdjudicationFindings(parsed);
   return { ...parsed, ...deriveAdjudicationSummaries(parsed) };
 }
@@ -53931,10 +55293,34 @@ var provenanceBase = derivedAdjudicationSchema.safeExtend({ model_family: extern
 var agentSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
 var serverSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank3, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id4, envelope_input_digest: digest6, observed_output_digest: digest6, result_id: id4, provider: nonBlank3.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema2.optional(), repositories: reviewedRepositoriesV1Schema2.optional() }).strict();
 var degradedSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank3 }).strict();
-var adjudicationEvidenceSchema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
+var adjudicationEvidenceV1Schema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
+var serverAttestedAdjudicationV2Schema = derivedAdjudicationV2Schema.safeExtend({
+  task_id: taskSlug4,
+  phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
+  step: external_exports.literal("adjudicate"),
+  subject_digest: digest6,
+  input_fingerprint: digest6,
+  pinned_constitution_digest: digest6,
+  source_review_envelope_digest: digest6,
+  assurance: external_exports.literal("server-attested"),
+  adapter: external_exports.enum(ADAPTER_IDS),
+  cli_version: nonBlank3,
+  model_family: external_exports.enum(MODEL_FAMILIES),
+  model: nonBlank3,
+  effort: external_exports.enum(EFFORT_VALUES),
+  invocation_id: id4,
+  envelope_input_digest: digest6,
+  observed_output_digest: digest6,
+  result_id: id4,
+  provider: nonBlank3.optional(),
+  route_source: routeSourceRecordSchema,
+  route_override: routeOverrideRecordSchema2.optional(),
+  repositories: reviewedRepositoriesV1Schema2
+}).strict();
+var adjudicationEvidenceSchema = external_exports.discriminatedUnion("schema_version", [adjudicationEvidenceV1Schema, serverAttestedAdjudicationV2Schema]);
 function parseAdjudicationEvidence(value) {
   assertPlainJson(value, "adjudication evidence");
-  return adjudicationEvidenceSchema.parse(value);
+  return adjudicationEvidenceSchema.parse(structuredClone(value));
 }
 var referencedAdjudicationWrapperSchema = external_exports.object({ evidence_digest: digest6, evidence: external_exports.unknown() }).strict();
 
@@ -54016,17 +55402,113 @@ function createObservation(binding, bytes, rawOutputDigest) {
   Object.defineProperty(observation, "raw_output_bytes", { enumerable: true, configurable: false, get: () => copiedBytes(storedBytes) });
   return Object.freeze(observation);
 }
+function assertReviewOutputBindings(output, binding) {
+  for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) {
+    assertEqual2(output[key], expected, key);
+  }
+}
+function stampReviewV3Findings(output, assignment) {
+  const unresolvedConfirmations = (output.legacy_confirmations ?? []).filter((confirmation) => confirmation.status === "unresolved");
+  const used = new Set(unresolvedConfirmations.map((confirmation) => confirmation.finding_id));
+  const stamp = (raw, findingId) => {
+    const { status: _status, ...finding } = raw;
+    return assignment.focus === "general" ? { ...finding, finding_id: findingId, reviewer_id: assignment.reviewer_id, reviewer_focus: "general", routing_role: "counter-reviewer" } : { ...finding, finding_id: findingId, reviewer_id: assignment.reviewer_id, reviewer_focus: "tests", routing_role: "test-reviewer" };
+  };
+  const ordinary = output.findings.map((raw) => {
+    const base2 = `${assignment.reviewer_id}-${raw.finding_id}`;
+    let findingId = base2;
+    let suffix = 2;
+    while (used.has(findingId)) {
+      findingId = `${base2}-${suffix}`;
+      suffix += 1;
+    }
+    used.add(findingId);
+    return stamp(raw, findingId);
+  });
+  return [...ordinary, ...unresolvedConfirmations.map((raw) => stamp(raw, raw.finding_id))];
+}
+function observeReviewV3(binding, assignment, bytes, rawOutputDigest) {
+  if (assignment.focus === "general" !== (assignment.routing_role === "counter-reviewer")) {
+    throw new TypeError("review assignment focus and routing role do not match");
+  }
+  const options = {
+    criterion_ids: assignment.criterion_ids,
+    ...assignment.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: assignment.expected_upstream_digests },
+    ...assignment.legacy_confirmations === void 0 ? {} : { legacy_confirmations: assignment.legacy_confirmations }
+  };
+  const decoded = decodeJson(bytes);
+  const output = assignment.focus === "general" ? parseGeneralReviewOutputV3(decoded, options) : parseTestReviewOutputV3(decoded, options);
+  assertReviewOutputBindings(output, binding);
+  const findings = stampReviewV3Findings(output, assignment);
+  const summary = expectedReviewSummaryV2(findings);
+  const reviewerRun = {
+    reviewer_id: assignment.reviewer_id,
+    focus: assignment.focus,
+    routing_role: assignment.routing_role,
+    criterion_ids: [...assignment.criterion_ids],
+    ...assignment.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: [...assignment.expected_upstream_digests] },
+    ...assignment.legacy_confirmations === void 0 ? {} : { legacy_confirmations: assignment.legacy_confirmations.map((entry) => ({ finding_id: entry.finding_id, criterion_ids: [...entry.criterion_ids] })) },
+    rubric_digest: binding.rubric_digest,
+    model_family: binding.family,
+    model: binding.model,
+    effort: binding.effort,
+    adapter: binding.adapter,
+    cli_version: binding.cli_version,
+    invocation_id: binding.invocation_id,
+    envelope_input_digest: binding.envelope_input_digest,
+    observed_output_digest: rawOutputDigest,
+    finding_ids: findings.map((finding) => finding.finding_id),
+    ...binding.provider === void 0 ? {} : { provider: binding.provider },
+    route_source: binding.route_source,
+    ...binding.route_override === void 0 ? {} : { route_override: binding.route_override }
+  };
+  const alignment = "upstream_alignment" in output ? output.upstream_alignment : void 0;
+  const candidate = {
+    schema_version: "3",
+    task_id: output.task_id,
+    phase_instance: output.phase_instance,
+    step: output.step,
+    role: output.role,
+    subject_digest: output.subject_digest,
+    input_fingerprint: output.input_fingerprint,
+    rubric_digest: output.rubric_digest,
+    producer_family: output.producer_family,
+    findings,
+    ...summary,
+    ...alignment === void 0 ? {} : { upstream_alignment: alignment, drift: expectedUpstreamDrift(alignment) },
+    assurance: "server-attested",
+    adapter: binding.adapter,
+    cli_version: binding.cli_version,
+    model_family: binding.family,
+    model: binding.model,
+    effort: binding.effort,
+    invocation_id: binding.invocation_id,
+    envelope_input_digest: binding.envelope_input_digest,
+    observed_output_digest: rawOutputDigest,
+    result_id: binding.result_id,
+    ...binding.provider === void 0 ? {} : { provider: binding.provider },
+    route_source: binding.route_source,
+    ...binding.route_override === void 0 ? {} : { route_override: binding.route_override },
+    repositories: binding.repositories,
+    reviewer_runs: [reviewerRun]
+  };
+  return copyFreezeJson(serverAttestedReviewV3Schema.parse(candidate));
+}
 var observationSource = Object.freeze({
   observeReview(capability, observedOutputBytes) {
     const binding = observationCapabilityBinding(capability, "review");
     if (binding === void 0 || capability.kind !== "review") throw new TypeError("invalid review observation capability");
     assertAdapterFamily(binding.adapter, binding.family);
     const bytes = copiedBytes(observedOutputBytes);
+    const raw_output_digest = digestBytes(bytes);
+    const observation = createObservation(binding, bytes, raw_output_digest);
+    if (binding.assignment !== void 0) {
+      const evidence2 = observeReviewV3(binding, binding.assignment, bytes, raw_output_digest);
+      return Object.freeze({ observation, evidence: evidence2 });
+    }
     const childOutput = childReviewOutputV2Schema.parse(decodeJson(bytes));
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(childOutput[key], expected, key);
     const summary = expectedReviewSummaryV2(childOutput.findings);
-    const raw_output_digest = digestBytes(bytes);
-    const observation = createObservation(binding, bytes, raw_output_digest);
     const evidence = copyFreezeJson({ schema_version: "2", ...childOutput, ...summary, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.provider === void 0 ? {} : { provider: binding.provider }, route_source: binding.route_source, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override }, repositories: binding.repositories });
     return Object.freeze({ observation, evidence });
   },
@@ -54035,11 +55517,41 @@ var observationSource = Object.freeze({
     if (binding === void 0 || capability.kind !== "adjudication") throw new TypeError("invalid adjudication observation capability");
     assertAdapterFamily(binding.adapter, binding.family);
     const bytes = copiedBytes(observedOutputBytes);
+    const raw_output_digest = digestBytes(bytes);
+    const observation = createObservation(binding, bytes, raw_output_digest);
+    if (binding.rule_slots !== void 0) {
+      if (binding.approved_upstream_digests !== void 0) throw new TypeError("fresh adjudication cannot carry archived upstream responsibilities");
+      const derived2 = parseAndDeriveAdjudicationV2(decodeJson(bytes), binding.rule_slots);
+      const evidence2 = copyFreezeJson({
+        ...derived2,
+        task_id: binding.task_id,
+        phase_instance: binding.phase_instance,
+        step: "adjudicate",
+        subject_digest: binding.subject_digest,
+        input_fingerprint: binding.input_fingerprint,
+        pinned_constitution_digest: binding.pinned_constitution_digest,
+        source_review_envelope_digest: binding.source_review_envelope_digest,
+        assurance: "server-attested",
+        adapter: binding.adapter,
+        cli_version: binding.cli_version,
+        model_family: binding.family,
+        model: binding.model,
+        effort: binding.effort,
+        invocation_id: binding.invocation_id,
+        envelope_input_digest: binding.envelope_input_digest,
+        observed_output_digest: raw_output_digest,
+        result_id: binding.result_id,
+        ...binding.provider === void 0 ? {} : { provider: binding.provider },
+        route_source: binding.route_source,
+        ...binding.route_override === void 0 ? {} : { route_override: binding.route_override },
+        repositories: binding.repositories
+      });
+      return Object.freeze({ observation, evidence: evidence2 });
+    }
+    if (binding.approved_upstream_digests === void 0) throw new TypeError("adjudication observation capability has no rule or archived upstream plan");
     const derived = parseAndDeriveAdjudication(decodeJson(bytes));
     for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["pinned_constitution_digest", binding.pinned_constitution_digest], ["source_review_envelope_digest", binding.source_review_envelope_digest]]) assertEqual2(derived[key], expected, key);
     if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
-    const raw_output_digest = digestBytes(bytes);
-    const observation = createObservation(binding, bytes, raw_output_digest);
     const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.provider === void 0 ? {} : { provider: binding.provider }, route_source: binding.route_source, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override }, repositories: binding.repositories });
     return Object.freeze({ observation, evidence });
   }
@@ -55318,6 +56830,38 @@ var triageDispositionLedgerEntryV2Schema = external_exports.object({
   confidence: external_exports.enum(CONFIDENCE_LEVELS),
   falsifier: nonBlank4
 }).strict();
+var ledgerEntryV3AttributionShape = {
+  claim_type: external_exports.enum(CLAIM_TYPES),
+  confidence: external_exports.enum(CONFIDENCE_LEVELS),
+  falsifier: nonBlank4,
+  reviewer_id: id5,
+  criterion_id: id5
+};
+var generalTriageDispositionLedgerEntryV3Schema = external_exports.object({
+  ...ledgerEntryBaseShape,
+  ...ledgerEntryV3AttributionShape,
+  reviewer_focus: external_exports.literal("general"),
+  routing_role: external_exports.literal("counter-reviewer"),
+  summary: nonBlank4,
+  evidence: nonBlank4,
+  disposition_evidence: nonBlank4.optional(),
+  suggested_resolution: nonBlank4
+}).strict();
+var testTriageDispositionLedgerEntryV3Schema = external_exports.object({
+  ...ledgerEntryBaseShape,
+  ...ledgerEntryV3AttributionShape,
+  reviewer_focus: external_exports.literal("tests"),
+  routing_role: external_exports.literal("test-reviewer"),
+  required_behavior_or_risk_boundary: nonBlank4,
+  coverage_or_oracle_problem: nonBlank4,
+  consequence: nonBlank4,
+  proposed_verification_change: nonBlank4,
+  disposition_evidence: nonBlank4.optional()
+}).strict();
+var triageDispositionLedgerEntryV3Schema = external_exports.discriminatedUnion("reviewer_focus", [
+  generalTriageDispositionLedgerEntryV3Schema,
+  testTriageDispositionLedgerEntryV3Schema
+]);
 var detailedLegacyTriageDispositionLedgerEntrySchema = external_exports.object({
   ...ledgerEntryBaseShape,
   severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
@@ -55325,6 +56869,7 @@ var detailedLegacyTriageDispositionLedgerEntrySchema = external_exports.object({
 }).strict();
 var detailLessLegacyTriageDispositionLedgerEntrySchema = external_exports.object(ledgerEntryBaseShape).strict();
 var triageDispositionLedgerEntrySchema = external_exports.union([
+  triageDispositionLedgerEntryV3Schema,
   triageDispositionLedgerEntryV2Schema,
   detailedLegacyTriageDispositionLedgerEntrySchema,
   detailLessLegacyTriageDispositionLedgerEntrySchema
@@ -55382,7 +56927,7 @@ var triageCandidateSchema = external_exports.object({
 });
 function parseTriageCandidate(value) {
   assertPlainJson(value, "review triage candidate");
-  const parsed = triageCandidateSchema.parse(value);
+  const parsed = triageCandidateSchema.parse(structuredClone(value));
   const dispositions = parsed.dispositions.map((d) => {
     if (d.disposition === "deferred") {
       const res = {
@@ -55424,7 +56969,16 @@ function validateTriage(current, candidate, dispositionLedger, reviewRoundHistor
   if (parsed.review_round_history !== void 0) {
     throw new TypeError("review_round_history is server-computed; triage candidates must not carry one");
   }
-  const parsedReviewRoundHistory = reviewRoundHistory === void 0 ? void 0 : reviewRoundHistoryV1Schema.parse(structuredClone(reviewRoundHistory));
+  let parsedDispositionLedger;
+  if (dispositionLedger !== void 0) {
+    assertPlainJson(dispositionLedger, "triage disposition ledger");
+    parsedDispositionLedger = external_exports.array(triageDispositionLedgerEntrySchema).parse(structuredClone(dispositionLedger));
+  }
+  let parsedReviewRoundHistory;
+  if (reviewRoundHistory !== void 0) {
+    assertPlainJson(reviewRoundHistory, "review round history");
+    parsedReviewRoundHistory = reviewRoundHistoryV1Schema.parse(structuredClone(reviewRoundHistory));
+  }
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
@@ -55499,7 +57053,7 @@ function validateTriage(current, candidate, dispositionLedger, reviewRoundHistor
     accepted_editorial_count: parsed.accepted_editorial_count,
     escalated_human_count: parsed.escalated_human_count,
     deferred_count: parsed.deferred_count,
-    ...dispositionLedger === void 0 ? {} : { disposition_ledger: Object.freeze(dispositionLedger.map((entry) => Object.freeze({ ...entry }))) },
+    ...parsedDispositionLedger === void 0 ? {} : { disposition_ledger: Object.freeze(parsedDispositionLedger.map((entry) => Object.freeze({ ...entry }))) },
     ...parsedReviewRoundHistory === void 0 ? {} : { review_round_history: Object.freeze(parsedReviewRoundHistory.map((entry) => Object.freeze({ ...entry }))) },
     source_evidence_digests: Object.freeze([...parsed.source_evidence_digests]),
     dispositions: Object.freeze(parsed.dispositions.map((value) => Object.freeze({ ...value })))
@@ -55757,6 +57311,21 @@ function bindParsedToolCallRequest(call, requestDigest) {
 var toolSuccessSchemas = {
   archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest9.optional() }).strict(),
   archflow_counter_review: external_exports.union([external_exports.object({
+    path: repositoryPathClaimV1Schema,
+    verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
+    total_findings: safeInteger6,
+    partition_counts: findingPartitionCountsSchema,
+    alignment: external_exports.union([
+      external_exports.object({ status: external_exports.literal("evaluated"), drift: external_exports.enum(DRIFT_RESULTS), upstream_count: safeInteger6 }).strict(),
+      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("prd-has-no-approved-upstream-plan") }).strict()
+    ]),
+    constitution: external_exports.union([
+      external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), triggers: external_exports.array(rule3) }).strict(),
+      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
+    ]),
+    revision: safeInteger6,
+    request_digest: digest9.optional()
+  }).strict(), external_exports.object({
     path: repositoryPathClaimV1Schema,
     verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
     total_findings: safeInteger6,
@@ -67329,7 +68898,8 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
       state.policy_base_commit,
       authority.context
     );
-    settlementPolicy = constitution.ok ? authenticateRuleAcceptancePolicy(state, constitution.value) : void 0;
+    if (!constitution.ok) return constitution;
+    settlementPolicy = authenticateRuleAcceptancePolicy(state, constitution.value);
   }
   const approvedOwners = candidateOwners.filter((candidate) => candidate.human_approved || settlementPolicy !== void 0 && acceptedNoWaitSettlement(
     settlementPolicy,
@@ -68354,16 +69924,31 @@ var TEST_CRITERIA = Object.freeze({
   "phase-design": Object.freeze(["test-strategy"]),
   "phase-impl": Object.freeze(["verification-evidence", "test-quality"])
 });
-function reviewCriterionIds(phaseKind2, rubric, focus, specialistActive) {
+function reviewCriterionIds(phaseKind2, rubric, focus, _specialistActive) {
   const all = rubric.criteria.map((criterion) => criterion.id);
   const tests = TEST_CRITERIA[phaseKind2] ?? [];
   if (focus === "tests") return Object.freeze(all.filter((criterion) => tests.includes(criterion)));
-  return Object.freeze(specialistActive ? all.filter((criterion) => !tests.includes(criterion)) : all);
+  return Object.freeze(all.filter((criterion) => !tests.includes(criterion)));
 }
-function reviewAssignment(reviewerId, focus, phaseKind2, rubric, specialistActive) {
-  const criterionIds = reviewCriterionIds(phaseKind2, rubric, focus, specialistActive);
-  if (criterionIds.length === 0) throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind2}`);
-  return Object.freeze({ reviewer_id: reviewerId, focus, criterion_ids: criterionIds });
+function reviewAssignment(reviewerId, focus, phaseKind2, rubric, legacySpecialistActiveOrOptions) {
+  const options = typeof legacySpecialistActiveOrOptions === "boolean" ? void 0 : legacySpecialistActiveOrOptions;
+  if (options?.legacy_confirmations !== void 0 && options.legacy_confirmations.length === 0) {
+    throw new TypeError("legacy_confirmations must be non-empty when present");
+  }
+  const criterionIds = Object.freeze([...options?.criterion_ids ?? reviewCriterionIds(phaseKind2, rubric, focus)]);
+  if (criterionIds.length === 0 && options?.expected_upstream_digests === void 0 && options?.legacy_confirmations === void 0) {
+    throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind2} without a present responsibility`);
+  }
+  return Object.freeze({
+    reviewer_id: reviewerId,
+    focus,
+    criterion_ids: criterionIds,
+    ...options?.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: Object.freeze([...options.expected_upstream_digests]) },
+    ...options?.legacy_confirmations === void 0 ? {} : { legacy_confirmations: Object.freeze(options.legacy_confirmations.map((confirmation) => Object.freeze({
+      finding_id: confirmation.finding_id,
+      criterion_ids: Object.freeze([...confirmation.criterion_ids])
+    }))) }
+  });
 }
 var PHASE_KIND_RUBRIC_FILES = Object.freeze({
   prd: Object.freeze({ file: "rubrics/prd.yaml", rubric_id: "prd-v1" }),
@@ -69640,18 +71225,22 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
 
 // src/contracts/internal/trust-mints.ts
 function createReviewObservationCapability(binding) {
+  assertPlainJson(binding, "review observation binding");
+  const materialized = structuredClone(binding);
   const copiedBinding = deepFreeze6({
-    ...structuredClone(binding),
-    repositories: parseReviewedRepositoriesV1(binding.repositories)
+    ...materialized,
+    repositories: parseReviewedRepositoriesV1(materialized.repositories)
   });
   const capability = Object.freeze({ kind: copiedBinding.kind });
   registerObservationCapability(capability, copiedBinding);
   return capability;
 }
 function createAdjudicationObservationCapability(binding) {
+  assertPlainJson(binding, "adjudication observation binding");
+  const materialized = structuredClone(binding);
   const copiedBinding = deepFreeze6({
-    ...structuredClone(binding),
-    repositories: parseReviewedRepositoriesV1(binding.repositories)
+    ...materialized,
+    repositories: parseReviewedRepositoriesV1(materialized.repositories)
   });
   const capability = Object.freeze({ kind: copiedBinding.kind });
   registerObservationCapability(capability, copiedBinding);
@@ -69700,16 +71289,23 @@ function provenanceMetadata(evidence) {
   ];
 }
 function renderReviewFinding(finding) {
+  const display = reviewFindingDisplayDetail(finding);
   if ("claim_type" in finding) {
     return [
       `### Finding ${visibleJsonString(finding.finding_id)} [${finding.claim_type}: ${finding.confidence}]`,
       prose("falsifier", finding.falsifier),
-      prose("summary", finding.summary),
-      prose("evidence", finding.evidence),
-      prose("suggested_resolution", finding.suggested_resolution)
+      ..."reviewer_id" in finding ? [
+        `reviewer_id: ${canonical(finding.reviewer_id)}`,
+        `reviewer_focus: ${canonical(finding.reviewer_focus)}`,
+        `routing_role: ${canonical(finding.routing_role)}`,
+        `criterion_id: ${canonical(finding.criterion_id)}`
+      ] : [],
+      prose("summary", display.summary),
+      prose("evidence", display.evidence),
+      prose("suggested_resolution", display.suggested_resolution)
     ];
   }
-  return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", finding.summary), prose("evidence", finding.evidence), prose("suggested_resolution", finding.suggested_resolution)];
+  return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", display.summary), prose("evidence", display.evidence), prose("suggested_resolution", display.suggested_resolution)];
 }
 function renderRouteOverride(override) {
   const displaced = override.pinned_model === void 0 ? ["pinned_route: none configured for this role"] : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`, `pinned_provider: ${optional2(override.pinned_provider)}`];
@@ -69730,7 +71326,7 @@ function renderReviewEvidence(value) {
   const evidence = value.evidence;
   const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
   if (!authenticated) throw new TypeError("authenticated review evidence is required");
-  const summaryMetadata = evidence.schema_version === "2" ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] : [["blocking_count", evidence.blocking_count]];
+  const summaryMetadata = evidence.schema_version === "2" || evidence.schema_version === "3" ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] : [["blocking_count", evidence.blocking_count]];
   const lines = ["# ArchFlow Review Evidence", ...metadata([
     ["schema_version", evidence.schema_version],
     ["task_id", evidence.task_id],
@@ -69742,7 +71338,7 @@ function renderReviewEvidence(value) {
     ["evidence_digest", value.evidence_digest],
     ["verdict", evidence.verdict],
     ...summaryMetadata,
-    ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
+    ...evidence.schema_version === "3" ? [] : [["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)]],
     ...provenanceMetadata(evidence)
   ]), "", "## Findings"];
   for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
@@ -69792,6 +71388,25 @@ function renderTriage(value) {
       if (entry.rationale !== void 0) lines.push(prose("rationale", entry.rationale));
       if (entry.revision_intent !== void 0) lines.push(prose("revision_intent", entry.revision_intent));
       if (entry.evidence !== void 0) lines.push(prose("evidence", entry.evidence));
+      if ("reviewer_focus" in entry) {
+        lines.push(
+          `reviewer_id: ${canonical(entry.reviewer_id)}`,
+          `reviewer_focus: ${canonical(entry.reviewer_focus)}`,
+          `routing_role: ${canonical(entry.routing_role)}`,
+          `criterion_id: ${canonical(entry.criterion_id)}`
+        );
+        if (entry.disposition_evidence !== void 0) {
+          lines.push(prose("disposition_evidence", entry.disposition_evidence));
+        }
+        if (entry.reviewer_focus === "tests") {
+          lines.push(
+            prose("required_behavior_or_risk_boundary", entry.required_behavior_or_risk_boundary),
+            prose("coverage_or_oracle_problem", entry.coverage_or_oracle_problem),
+            prose("consequence", entry.consequence),
+            prose("proposed_verification_change", entry.proposed_verification_change)
+          );
+        }
+      }
       if ("claim_type" in entry) {
         lines.push(`[${entry.claim_type}: ${entry.confidence}]`, prose("falsifier", entry.falsifier));
       } else if ("severity" in entry) {
@@ -69816,10 +71431,9 @@ function renderAdjudicationEvidence(value) {
     ["input_fingerprint", evidence.input_fingerprint],
     ["evidence_digest", value.evidence_digest],
     ["pinned_constitution_digest", evidence.pinned_constitution_digest],
-    ["approved_upstream_digests", evidence.approved_upstream_digests],
+    ...evidence.schema_version === "1" ? [["approved_upstream_digests", evidence.approved_upstream_digests], ["drift", evidence.drift]] : [],
     ["source_review_envelope_digest", evidence.source_review_envelope_digest],
     ["constitution", evidence.constitution],
-    ["drift", evidence.drift],
     ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
     ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
     ...provenanceMetadata(evidence)
@@ -69827,8 +71441,10 @@ function renderAdjudicationEvidence(value) {
   for (const finding of evidence.rule_findings) {
     lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence));
   }
-  lines.push("", "## Drift Findings");
-  for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
+  if (evidence.schema_version === "1") {
+    lines.push("", "## Drift Findings");
+    for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
+  }
   if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
   if (evidence.assurance === "server-attested" && evidence.route_source !== void 0) lines.push(...renderRouteSource(evidence.route_source));
   if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
@@ -69917,7 +71533,45 @@ async function computeDispositionLedger(dispositions, sources, loadRetainedResul
   }
   for (const disposition of dispositions) {
     const finding = findingDetails.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
+    const display = finding === void 0 ? void 0 : reviewFindingDisplayDetail(finding);
     const occurrenceKey = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
+    if (finding !== void 0 && "reviewer_focus" in finding) {
+      const recorded = disposition;
+      const dispositionEvidence = disposition.disposition === "rejected" || disposition.disposition === "deferred" ? recorded.evidence : void 0;
+      const common3 = {
+        review_evidence_digest: disposition.review_evidence_digest,
+        finding_id: disposition.finding_id,
+        disposition: disposition.disposition,
+        attempt: sources.attempt,
+        rationale: disposition.rationale,
+        ...recorded.revision_intent === void 0 ? {} : { revision_intent: recorded.revision_intent },
+        claim_type: finding.claim_type,
+        confidence: finding.confidence,
+        falsifier: finding.falsifier,
+        reviewer_id: finding.reviewer_id,
+        reviewer_focus: finding.reviewer_focus,
+        routing_role: finding.routing_role,
+        criterion_id: finding.criterion_id,
+        ...dispositionEvidence === void 0 ? {} : { disposition_evidence: dispositionEvidence }
+      };
+      merged.set(occurrenceKey, Object.freeze(finding.reviewer_focus === "general" ? {
+        ...common3,
+        reviewer_focus: "general",
+        routing_role: "counter-reviewer",
+        summary: finding.summary,
+        evidence: finding.evidence,
+        suggested_resolution: finding.suggested_resolution
+      } : {
+        ...common3,
+        reviewer_focus: "tests",
+        routing_role: "test-reviewer",
+        required_behavior_or_risk_boundary: finding.required_behavior_or_risk_boundary,
+        coverage_or_oracle_problem: finding.coverage_or_oracle_problem,
+        consequence: finding.consequence,
+        proposed_verification_change: finding.proposed_verification_change
+      }));
+      continue;
+    }
     merged.set(occurrenceKey, Object.freeze({
       review_evidence_digest: disposition.review_evidence_digest,
       finding_id: disposition.finding_id,
@@ -69926,9 +71580,9 @@ async function computeDispositionLedger(dispositions, sources, loadRetainedResul
       rationale: disposition.rationale,
       ...disposition.disposition === "rejected" ? { evidence: disposition.evidence } : disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial" ? {
         revision_intent: disposition.revision_intent,
-        ...finding === void 0 ? {} : { evidence: finding.evidence }
-      } : disposition.disposition === "escalated-human" ? finding === void 0 ? {} : { evidence: finding.evidence } : {
-        ...disposition.evidence !== void 0 ? { evidence: disposition.evidence } : finding !== void 0 ? { evidence: finding.evidence } : {}
+        ...display === void 0 ? {} : { evidence: display.evidence }
+      } : disposition.disposition === "escalated-human" ? display === void 0 ? {} : { evidence: display.evidence } : {
+        ...disposition.evidence !== void 0 ? { evidence: disposition.evidence } : display !== void 0 ? { evidence: display.evidence } : {}
       },
       ...finding === void 0 ? {} : {
         ..."claim_type" in finding ? {
@@ -69939,8 +71593,8 @@ async function computeDispositionLedger(dispositions, sources, loadRetainedResul
           severity: finding.severity,
           blocking: finding.blocking
         },
-        summary: finding.summary,
-        suggested_resolution: finding.suggested_resolution
+        summary: display.summary,
+        suggested_resolution: display.suggested_resolution
       }
     }));
   }
@@ -70384,13 +72038,72 @@ function crossCheckRuleFindings(registry2, adjudication, adapter2) {
   return adjudication;
 }
 function rulesForEnvelope(registry2) {
-  return Object.freeze([...registry2.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id) || left.version - right.version).map((rule4) => Object.freeze({
-    id: rule4.id,
-    version: rule4.version,
+  return Object.freeze([...registry2.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id) || left.version - right.version).map((rule4, index) => Object.freeze({
+    slot: `slot-${String(index + 1)}`,
     text: rule4.text,
     ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
     enforced_by: Object.freeze([...rule4.enforced_by ?? []])
   })));
+}
+function ruleSlotsForEnvelope(registry2) {
+  return Object.freeze([...registry2.values()].filter((rule4) => rule4.status === "active").sort((left, right) => left.id.localeCompare(right.id) || left.version - right.version).map((rule4, index) => Object.freeze({
+    slot: `slot-${String(index + 1)}`,
+    rule_id: rule4.id,
+    rule_version: rule4.version
+  })));
+}
+var alignmentResult = (findings) => findings.some((finding) => finding.drift === "material") ? "material" : findings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
+function policyReviewFacts(review, adjudication, activeRules) {
+  if (adjudication !== void 0 && review.assurance === "server-attested" && adjudication.source_review_envelope_digest !== review.envelope_input_digest) {
+    throw new TypeError("policy review evidence round bindings disagree");
+  }
+  if (review.schema_version === "3") {
+    if (review.assurance !== "server-attested") {
+      throw new TypeError("Review V3 policy facts require server-attested evidence");
+    }
+    if (adjudication !== void 0 !== activeRules || adjudication !== void 0 && adjudication.schema_version !== "2") {
+      throw new TypeError("fresh policy evidence cohort is incomplete or mixed");
+    }
+    const alignment2 = review.upstream_alignment ?? [];
+    return Object.freeze({
+      subject_digest: review.subject_digest,
+      input_fingerprint: review.input_fingerprint,
+      source_review_envelope_digest: review.envelope_input_digest,
+      constitution: adjudication === void 0 ? Object.freeze({ status: "not-run", result: "pass", rule_findings: Object.freeze([]), matched_rule_versions: Object.freeze([]), uncertain_rule_versions: Object.freeze([]) }) : Object.freeze({
+        status: "evaluated",
+        result: adjudication.constitution,
+        rule_findings: adjudication.rule_findings,
+        matched_rule_versions: adjudication.matched_rule_versions,
+        uncertain_rule_versions: adjudication.uncertain_rule_versions
+      }),
+      alignment: Object.freeze({
+        source: review.upstream_alignment === void 0 ? "not-reviewed" : "review-v3",
+        result: alignmentResult(alignment2),
+        findings: alignment2
+      })
+    });
+  }
+  if (adjudication !== void 0 !== activeRules || adjudication !== void 0 && adjudication.schema_version !== "1") {
+    throw new TypeError("archived policy evidence cohort is incomplete or mixed");
+  }
+  const alignment = adjudication?.drift_findings ?? [];
+  return Object.freeze({
+    subject_digest: review.subject_digest,
+    input_fingerprint: review.input_fingerprint,
+    source_review_envelope_digest: review.assurance === "server-attested" ? review.envelope_input_digest : void 0,
+    constitution: adjudication === void 0 ? Object.freeze({ status: "not-run", result: "pass", rule_findings: Object.freeze([]), matched_rule_versions: Object.freeze([]), uncertain_rule_versions: Object.freeze([]) }) : Object.freeze({
+      status: "evaluated",
+      result: adjudication.constitution,
+      rule_findings: adjudication.rule_findings,
+      matched_rule_versions: adjudication.matched_rule_versions,
+      uncertain_rule_versions: adjudication.uncertain_rule_versions
+    }),
+    alignment: Object.freeze({
+      source: adjudication === void 0 ? "not-reviewed" : "adjudication-v1",
+      result: adjudication?.drift ?? "aligned",
+      findings: alignment
+    })
+  });
 }
 function refs(rules2) {
   return canonicalRuleRefs(rules2.map((rule4) => Object.freeze({ rule_id: rule4.id, rule_version: rule4.version })));
@@ -70433,20 +72146,20 @@ function designApprovalPolicyContext(evidence) {
     ])
   });
 }
-function selectAdjudicationGates(registry2, evidence) {
+function selectPolicyReviewGates(registry2, evidence) {
   const gates = [];
-  const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
-  const uncertain = evidence.rule_findings.filter((item) => item.compliance === "uncertain");
+  const failed = evidence.constitution.rule_findings.filter((item) => item.compliance === "fail");
+  const uncertain = evidence.constitution.rule_findings.filter((item) => item.compliance === "uncertain");
   const failedRules = refs(failed.map((item) => registry2.get(item.rule_id)));
   const uncertainRules = refs(uncertain.map((item) => registry2.get(item.rule_id)));
-  const matchedTriggers = evidence.matched_rule_versions;
-  const uncertainTriggers = evidence.uncertain_rule_versions;
+  const matchedTriggers = evidence.constitution.matched_rule_versions;
+  const uncertainTriggers = evidence.constitution.uncertain_rule_versions;
   if (failedRules.length > 0 || uncertainRules.length > 0 || matchedTriggers.length > 0 || uncertainTriggers.length > 0) {
     gates.push(Object.freeze({
       kind: "constitution-review",
       subject_digest: evidence.subject_digest,
       context: Object.freeze({
-        constitution: evidence.constitution,
+        constitution: evidence.constitution.result,
         failed_rules: failedRules,
         uncertain_rules: uncertainRules,
         matched_trigger_rules: matchedTriggers,
@@ -70458,7 +72171,7 @@ function selectAdjudicationGates(registry2, evidence) {
       })
     }));
   }
-  const material = evidence.drift_findings.find((item) => item.drift === "material");
+  const material = evidence.alignment.findings.find((item) => item.drift === "material");
   if (material !== void 0) {
     gates.push(Object.freeze({
       kind: "material-drift",
@@ -70513,9 +72226,20 @@ function currentReviewSet(state, retained, subject) {
     const current = phaseDesign ? boundToSubjectExactly(derived, subject) : boundToSubjectOrDeclaredPredecessor(derived, subject);
     if (!current) return void 0;
     if (phaseDesign) {
-      const counter = derived.reviews[0]?.evidence;
-      const effort = counter?.assurance === "server-attested" ? counter.effort_review : void 0;
+      const counter2 = derived.reviews[0]?.evidence;
+      const effort = counter2?.assurance === "server-attested" ? counter2.effort_review : void 0;
       if (effort !== void 0 && (effort.task_id !== state.task_id || effort.phase_instance !== state.phase_instance || effort.attempt !== state.attempt || !boundToSubjectExactly(effort, subject))) return void 0;
+    }
+    const counter = derived.reviews[0]?.evidence;
+    if (counter?.schema_version === "3") {
+      const expected = state.phase_instance === "prd" ? void 0 : subject.approved_upstream_digests;
+      if (state.phase_instance !== "prd" && expected === void 0) return void 0;
+      if (expected === void 0) {
+        if (counter.upstream_alignment !== void 0) return void 0;
+      } else {
+        const actual = counter.upstream_alignment?.map((finding) => finding.upstream_digest);
+        if (actual === void 0 || actual.length !== expected.length || actual.some((digest11, index) => digest11 !== expected[index])) return void 0;
+      }
     }
     return derived;
   } catch {
@@ -70535,7 +72259,11 @@ function currentFor(retained, step, subject, reviews) {
     const adjudication = evidence;
     const currentReview = reviews.reviews[0]?.evidence;
     const currentEnvelopeDigest = currentReview !== void 0 && currentReview.assurance === "server-attested" ? currentReview.envelope_input_digest : void 0;
-    return currentEnvelopeDigest !== void 0 && adjudication.source_review_envelope_digest === currentEnvelopeDigest && adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest11, index) => digest11 === (subject.approved_upstream_digests ?? [])[index]);
+    if (currentEnvelopeDigest === void 0 || adjudication.source_review_envelope_digest !== currentEnvelopeDigest) return false;
+    if (adjudication.schema_version === "2") {
+      return currentReview?.schema_version === "3";
+    }
+    return adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest11, index) => digest11 === (subject.approved_upstream_digests ?? [])[index]);
   }
   return false;
 }
@@ -70564,20 +72292,24 @@ function decisionBindingFailure(decision3, contextDigest) {
   if (decision3.envelope.context_digest !== contextDigest) return "decision-envelope-context-digest";
   return void 0;
 }
-function evidenceBindingFailure(request, evidence, subject) {
+function evidenceBindingFailure(request, gate, evidence, subject) {
   if (request.kind === "baseline-adoption" || request.kind === "validation-override") {
     return "request-gate-kind";
   }
-  const { counter_review_digest: counterDigest, triage, adjudication } = evidence;
+  const { counter_review_digest: counterDigest, counter_review: counterReview, triage, adjudication } = evidence;
   if (counterDigest === void 0) return "counter-review-evidence-missing";
+  if (counterReview === void 0) return "counter-review-evidence-missing";
   if (triage === void 0) return "triage-evidence-missing";
-  if (adjudication === void 0) return "adjudication-evidence-missing";
   if (!boundToSubjectOrDeclaredPredecessor(triage, subject)) return "triage-not-bound-to-subject";
-  if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
-    return "adjudication-not-bound-to-subject";
-  }
-  if (adjudication.source_review_envelope_digest !== evidence.counter_review_envelope_digest) {
-    return "adjudication-evidence-set-digest";
+  const adjudicationRequired = gate.kind === "constitution-review" || counterReview.schema_version !== "3";
+  if (adjudicationRequired) {
+    if (adjudication === void 0) return "adjudication-evidence-missing";
+    if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
+      return "adjudication-not-bound-to-subject";
+    }
+    if (adjudication.source_review_envelope_digest !== evidence.counter_review_envelope_digest) {
+      return "adjudication-evidence-set-digest";
+    }
   }
   if (request.current_evidence.set_digest !== triage.current_evidence_set_digest) {
     return "triage-evidence-set-digest";
@@ -70590,7 +72322,7 @@ function evidenceBindingFailure(request, evidence, subject) {
 function gateApprovalBindingFailure(authenticated, gate, contextDigest, state, subject, evidence) {
   assertAuthenticatedGateApproval(authenticated);
   const { approval, request, decision: decision3 } = authenticated;
-  return approvalBindingFailure(approval, gate) ?? requestBindingFailure(request, gate, contextDigest, state.phase_instance) ?? decisionBindingFailure(decision3, contextDigest) ?? evidenceBindingFailure(request, evidence, subject);
+  return approvalBindingFailure(approval, gate) ?? requestBindingFailure(request, gate, contextDigest, state.phase_instance) ?? decisionBindingFailure(decision3, contextDigest) ?? evidenceBindingFailure(request, gate, evidence, subject);
 }
 function waiverPathSatisfiesGate(state, gate) {
   if (gate.kind !== "constitution-review" || !("eligible_waivers" in gate.context)) return false;
@@ -70629,6 +72361,10 @@ function adjudicationGateSatisfied(state, retained, subject, gate) {
   const contextDigest = computeGateContextDigest(gate.kind, gate.context);
   const evidence = Object.freeze({
     counter_review_digest: retained.get("counter_review")?.manifest.artifact_digest,
+    counter_review: (() => {
+      const source = retained.get("counter_review")?.manifest.source_artifact;
+      return source?.artifact_kind === "review-evidence" ? source.evidence : void 0;
+    })(),
     counter_review_envelope_digest: retainedReviewEnvelopeDigest(retained),
     triage: triageAt(retained),
     adjudication: adjudicationAt(retained)
@@ -70791,8 +72527,21 @@ function decision2(next, flags) {
   });
 }
 function resolveAdjudicationGateStep(state, retained, subject, maximum) {
-  const adjudication = adjudicationAt(retained);
-  const gates = adjudication === void 0 ? [] : selectAdjudicationGates(subject.constitution.rules, adjudication);
+  const reviews = currentReviewSet(state, retained, subject);
+  const review = reviews?.reviews[0]?.evidence;
+  if (review === void 0) return decision2("counter_review");
+  const adjudication = currentFor(retained, "adjudicate", subject, reviews) ? adjudicationAt(retained) : void 0;
+  let facts;
+  try {
+    facts = policyReviewFacts(
+      review,
+      adjudication,
+      constitutionReviewRequired(subject.constitution)
+    );
+  } catch {
+    return decision2("produce", { reentry_required: true, policy_reentry_required: true });
+  }
+  const gates = selectPolicyReviewGates(subject.constitution.rules, facts);
   const gate = gates.find((candidate) => !adjudicationGateSatisfied(state, retained, subject, candidate));
   if (gate === void 0) return decision2("advance");
   const pending = adjudicationGatePending(state, gate);
@@ -71002,6 +72751,9 @@ function configuredRoutes(config2, phaseKind2, role, host) {
     return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" })];
   } else if (role === "adjudicator" && baseRoles.adjudicator !== void 0) {
     return [baseRoles.adjudicator];
+  }
+  if (role === "test-reviewer" && (phaseKind2 === "phase-design" || phaseKind2 === "phase-impl")) {
+    return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" })];
   }
   return [];
 }
@@ -72244,25 +73996,37 @@ async function resolveStatusEvidenceAssessment(loadApprovedUpstreams, assess) {
   }
 }
 function pendingAdjudicationGates(state, constitution, retained, authenticated) {
-  const source = retained.get("adjudicate")?.manifest.source_artifact;
-  if (source?.artifact_kind !== "adjudication-evidence") return [];
+  const reviewSource = retained.get("counter_review")?.manifest.source_artifact;
+  if (reviewSource?.artifact_kind !== "review-evidence") return [];
+  const adjudicationSource = retained.get("adjudicate")?.manifest.source_artifact;
+  const adjudication = adjudicationSource?.artifact_kind === "adjudication-evidence" ? adjudicationSource.evidence : void 0;
+  let facts;
+  try {
+    facts = policyReviewFacts(
+      reviewSource.evidence,
+      adjudication,
+      [...constitution.rules.values()].some((rule4) => rule4.status === "active")
+    );
+  } catch {
+    return [];
+  }
   const pending = [];
   let currentSet;
   try {
     currentSet = deriveCurrentEvidenceSet(retained).current_evidence_set;
   } catch {
   }
-  for (const gate of selectAdjudicationGates(constitution.rules, source.evidence)) {
+  for (const gate of selectPolicyReviewGates(constitution.rules, facts)) {
     const contextDigest = computeGateContextDigest(gate.kind, gate.context);
     const exactGateApproved = currentSet !== void 0 && authenticated.some((item) => item.approval.gate_kind === gate.kind && item.approval.subject_digest === gate.subject_digest && item.request.phase_instance === state.phase_instance && item.request.context_digest === contextDigest && item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
     item.request.kind !== "validation-override" && // a validation request is not review evidence
-    item.request.current_evidence.set_digest === currentSet.set_digest && source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained));
+    item.request.current_evidence.set_digest === currentSet.set_digest && facts.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained));
     const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
     const ordinaryKind = state.phase_instance === "prd" ? "artifact-approval" : designPhase ? "design-approval" : state.phase_instance.startsWith("phase-impl-") ? "commit-authorization" : void 0;
     const hasActivePolicyIssues = !("policy_findings" in gate.context) || gate.context.constitution !== "pass" || gate.context.policy_findings.some((f) => f.compliance !== "pass" || f.trigger !== "not-matched");
     const ordinaryApproval = gate.kind === "constitution-review" && hasActivePolicyIssues && currentSet !== void 0 && ordinaryKind !== void 0 && authenticated.some((item) => {
       const decision3 = item.decision.envelope.payload.decision;
-      return item.approval.gate_kind === ordinaryKind && item.approval.subject_digest === gate.subject_digest && item.request.kind === ordinaryKind && item.request.phase_instance === state.phase_instance && item.request.subject_digest === gate.subject_digest && item.request.current_evidence.set_digest === currentSet.set_digest && source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained) && (decision3 === "approve" || decision3 === "authorize-commit");
+      return item.approval.gate_kind === ordinaryKind && item.approval.subject_digest === gate.subject_digest && item.request.kind === ordinaryKind && item.request.phase_instance === state.phase_instance && item.request.subject_digest === gate.subject_digest && item.request.current_evidence.set_digest === currentSet.set_digest && facts.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained) && (decision3 === "approve" || decision3 === "authorize-commit");
     });
     const approved = exactGateApproved || ordinaryApproval;
     let waived = false;
@@ -73026,8 +74790,9 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   }
   let policyFindings;
   if (assessment?.policy_reentry_required === true) {
-    const source = retained.get("adjudicate")?.manifest.source_artifact;
-    if (source?.artifact_kind === "adjudication-evidence") {
+    const reviewSource = retained.get("counter_review")?.manifest.source_artifact;
+    const adjudicationSource = retained.get("adjudicate")?.manifest.source_artifact;
+    if (reviewSource?.artifact_kind === "review-evidence" && constitution !== void 0) {
       const upstreamPaths2 = /* @__PURE__ */ new Map();
       if (produceSubject !== void 0) {
         try {
@@ -73040,19 +74805,28 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         } catch {
         }
       }
-      policyFindings = Object.freeze({
-        rules: Object.freeze(source.evidence.rule_findings.filter((finding) => finding.compliance !== "pass").map((finding) => Object.freeze({
-          rule_id: finding.rule_id,
-          rule_version: finding.rule_version,
-          compliance: finding.compliance,
-          rationale: finding.rationale
-        }))),
-        drift: Object.freeze(source.evidence.drift_findings.filter((finding) => finding.drift === "material").map((finding) => Object.freeze({
-          path: upstreamPaths2.get(finding.upstream_digest) ?? "an approved upstream document",
-          affected_claim_ids: Object.freeze([...finding.affected_claim_ids]),
-          rationale: finding.rationale
-        })))
-      });
+      const adjudication = adjudicationSource?.artifact_kind === "adjudication-evidence" ? adjudicationSource.evidence : void 0;
+      try {
+        const facts = policyReviewFacts(
+          reviewSource.evidence,
+          adjudication,
+          [...constitution.rules.values()].some((rule4) => rule4.status === "active")
+        );
+        policyFindings = Object.freeze({
+          rules: Object.freeze(facts.constitution.rule_findings.filter((finding) => finding.compliance !== "pass").map((finding) => Object.freeze({
+            rule_id: finding.rule_id,
+            rule_version: finding.rule_version,
+            compliance: finding.compliance,
+            rationale: finding.rationale
+          }))),
+          drift: Object.freeze(facts.alignment.findings.filter((finding) => finding.drift === "material").map((finding) => Object.freeze({
+            path: upstreamPaths2.get(finding.upstream_digest) ?? "an approved upstream document",
+            affected_claim_ids: Object.freeze([...finding.affected_claim_ids]),
+            rationale: finding.rationale
+          })))
+        });
+      } catch {
+      }
     }
   }
   let statusReconciliation;
@@ -73239,7 +75013,10 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
             );
             const escalated = evidence.findings.filter((f) => f.disposition === "escalated-human");
             if (escalated.length > 0) {
-              escalatedFindingDetails = escalated.map((f) => `Escalated finding ${f.finding_id}: ${f.summary} (rationale: ${f.rationale ?? ""})`);
+              escalatedFindingDetails = escalated.map((f) => {
+                const display = reviewFindingDisplayDetail(f);
+                return `Escalated finding ${f.finding_id}: ${display.summary} (rationale: ${f.rationale ?? ""})`;
+              });
             }
             if (activeGate.kind === "attempts-exhausted" && activeGate.context.review_push_through !== void 0) {
               const roundCount2 = retained.get("triage")?.manifest.source_artifact;
@@ -73253,7 +75030,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
                   }
                   const taxonomy = "claim_type" in finding ? `${finding.claim_type}/${finding.confidence}` : `${finding.severity}/${finding.blocking ? "blocking" : "advisory"}`;
                   const falsifier = "falsifier" in finding ? finding.falsifier : "Legacy finding: no structured falsifier was recorded.";
-                  return `Accepted finding ${finding.finding_id} (${taxonomy}): ${finding.summary} Falsifier: ${falsifier}`;
+                  const display = reviewFindingDisplayDetail(finding);
+                  return `Accepted finding ${finding.finding_id} (${taxonomy}): ${display.summary} Falsifier: ${falsifier}`;
                 })
               ];
             }
@@ -73719,11 +75497,36 @@ async function openDurableGate(dependencies, input) {
           input.authority.context
         );
         if (!constitution.ok) return constitution;
+        const authenticatedApprovals = [];
+        for (const approval of current.value.approvals) {
+          const loaded = await loadAuthenticatedGateApproval(
+            dependencies,
+            input.authority,
+            approval
+          );
+          if (!loaded.ok) return loaded;
+          if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+          authenticatedApprovals.push(loaded.value);
+        }
+        let approvedUpstreams;
+        try {
+          approvedUpstreams = await currentApprovedUpstreams(
+            dependencies,
+            input.authority,
+            current.value,
+            authenticatedApprovals,
+            produce.value
+          );
+        } catch {
+          return issue2("STATE_INVALID", current.value, "review-push-through-upstream-authority-unavailable");
+        }
         const predecessor = currentReviewPredecessor(current.value, produce.value);
         const subject = {
           subject_digest: produce.value.artifact_digest,
           input_fingerprint: current.value.input_fingerprint,
           constitution: constitution.value,
+          approved_upstream_digests: approvedUpstreams,
+          authenticated_gate_approvals: authenticatedApprovals,
           ...predecessor === void 0 ? {} : { review_predecessor: predecessor },
           ...live.value.config.max_attempts === void 0 ? {} : {
             max_attempts: live.value.config.max_attempts
@@ -74265,11 +76068,27 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       authority.context
     );
     if (!constitution.ok) return constitution;
+    const authenticatedApprovals = [];
+    for (const approval of current.value.approvals) {
+      const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
+      if (!loaded.ok) return loaded;
+      if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
+      authenticatedApprovals.push(loaded.value);
+    }
+    const approvedUpstreams = await currentApprovedUpstreams(
+      dependencies,
+      authority,
+      current.value,
+      authenticatedApprovals,
+      produce.value
+    );
     const predecessor = currentReviewPredecessor(current.value, produce.value);
     const candidate = deriveReviewPushThroughCandidate(current.value, retained.value, {
       subject_digest: produce.value.artifact_digest,
       input_fingerprint: current.value.input_fingerprint,
       constitution: constitution.value,
+      approved_upstream_digests: approvedUpstreams,
+      authenticated_gate_approvals: authenticatedApprovals,
       ...predecessor === void 0 ? {} : { review_predecessor: predecessor }
     });
     if (candidate === void 0 || request.subject_digest !== candidate.subject_digest || !("set_digest" in request.current_evidence) || request.current_evidence.set_digest !== candidate.context.current_evidence_set_digest || !isDeepStrictEqual15(request.context.review_push_through, candidate.context)) return issue2("STATE_INVALID", current.value, "review-push-through-settlement-stale");
@@ -74299,20 +76118,6 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       ...settled.value,
       review_push_throughs: reviewPushThroughs
     });
-    const authenticatedApprovals = [];
-    for (const approval of current.value.approvals) {
-      const loaded = await loadAuthenticatedGateApproval(dependencies, authority, approval);
-      if (!loaded.ok) return loaded;
-      if (!authenticatedApprovalIsEligibleAfterLatestRestart(current.value, loaded.value)) continue;
-      authenticatedApprovals.push(loaded.value);
-    }
-    const approvedUpstreams = await currentApprovedUpstreams(
-      dependencies,
-      authority,
-      current.value,
-      authenticatedApprovals,
-      produce.value
-    );
     const config2 = await dependencies.read_config(authority.config);
     if (config2.kind !== "valid") {
       return issue2("STATE_INVALID", current.value, "review-push-through-settlement-config-unavailable");
@@ -77809,7 +79614,9 @@ function reviewContext(status) {
   const recordedAssignments = status.evidence?.available === true ? status.evidence.counter_review_provenance.reviewer_runs?.map((run) => Object.freeze({
     reviewer_id: run.reviewer_id,
     focus: run.focus,
-    criterion_ids: Object.freeze([...run.criterion_ids])
+    criterion_ids: Object.freeze([...run.criterion_ids]),
+    ...!("expected_upstream_digests" in run) || run.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: Object.freeze([...run.expected_upstream_digests]) },
+    ...!("legacy_confirmations" in run) || run.legacy_confirmations === void 0 ? {} : { legacy_confirmation_finding_ids: Object.freeze(run.legacy_confirmations.map((item) => item.finding_id)) }
   })) : void 0;
   return Object.freeze({
     rubric: Object.freeze({
@@ -78231,6 +80038,7 @@ function projectSemanticStatus(snapshot, invocation) {
     resources: snapshot.revision_checkpoint === void 0 ? publicResources(status) : Object.freeze([]),
     next_action: nextAction,
     ...shape.findings !== true ? {} : { findings: snapshot.full_findings },
+    ...(snapshot.finding_history?.length ?? 0) === 0 ? {} : { finding_history: snapshot.finding_history },
     ...context2 === void 0 ? {} : { review_context: context2 },
     ...strength === void 0 ? {} : { review_strength: strength },
     taxonomy_denial_rates: snapshot.taxonomy_denial_rates,
@@ -78605,9 +80413,18 @@ function hostTaskSlugSchema(value) {
     pattern: "^[a-z0-9][a-z0-9._-]{0,63}$"
   };
 }
-function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
-  assertPlainJson(outputSchema, "CLI output schema");
-  const snapshot = structuredClone(outputSchema);
+function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject, assignment) {
+  const roleSpecificSchema = resultKind === "review" && assignment !== void 0 ? assignment.focus === "general" ? createGeneralReviewOutputV3Schema({
+    criterion_ids: assignment.criterion_ids,
+    ...assignment.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: assignment.expected_upstream_digests },
+    ...assignment.legacy_confirmations === void 0 ? {} : { legacy_confirmations: assignment.legacy_confirmations }
+  }) : createTestReviewOutputV3Schema({
+    criterion_ids: assignment.criterion_ids,
+    ...assignment.legacy_confirmations === void 0 ? {} : { legacy_confirmations: assignment.legacy_confirmations }
+  }) : void 0;
+  const roleSpecific = roleSpecificSchema === void 0 ? outputSchema : JSON.parse(JSON.stringify(roleSpecificSchema.toJSONSchema({ target: "draft-2020-12" })));
+  assertPlainJson(roleSpecific, "CLI output schema");
+  const snapshot = structuredClone(roleSpecific);
   const projected = projectSchemaNode(snapshot, adapter2);
   if (projected === null || typeof projected !== "object" || Array.isArray(projected)) {
     throw new TypeError("CLI output schema must be an object");
@@ -78651,21 +80468,34 @@ function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject) {
     for (const key of bindingKeys) {
       const hazardRegistry = key === "hazard_registry_digest" ? subject.hazard_registry : void 0;
       const value = key === "hazard_registry_digest" && hazardRegistry !== null && typeof hazardRegistry === "object" && !Array.isArray(hazardRegistry) ? hazardRegistry.registry_digest : subject[key];
-      if (value !== void 0) bound[key] = boundSubjectNode(bound[key], value, adapter2);
+      if (value !== void 0 && bound[key] !== void 0) {
+        bound[key] = boundSubjectNode(bound[key], value, adapter2);
+      }
     }
     root = { ...root, properties: bound };
   }
   return adapter2 === "codex-cli" ? codexStrictNode(root) : root;
 }
-function envelopeSubject(envelope) {
+function envelopeDocument(envelope) {
   const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
   assertPlainJson(decoded, "dispatch envelope");
   if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
-  if (envelope.result_kind === "effort-review") return decoded;
+  return decoded;
+}
+function envelopeProjection(envelope) {
+  const decoded = envelopeDocument(envelope);
+  if (envelope.result_kind === "effort-review") return Object.freeze({ subject: decoded });
   const subject = decoded.subject;
-  if (subject === void 0) return {};
+  if (subject === void 0) return Object.freeze({ subject: Object.freeze({}) });
   if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");
-  return subject;
+  const assignment = decoded.assignment;
+  if (assignment !== void 0 && (assignment === null || typeof assignment !== "object" || Array.isArray(assignment))) {
+    throw new TypeError("dispatch envelope assignment must be an object");
+  }
+  return Object.freeze({
+    subject,
+    ...assignment === void 0 ? {} : { assignment }
+  });
 }
 var dispatchQueue = Promise.resolve();
 function serializeDispatch(operation) {
@@ -78901,12 +80731,26 @@ var claudeAdapter = Object.freeze({
   ),
   async buildInvocation(envelope, route2, workspace, outputSchema) {
     assertRoute("claude-cli", route2);
-    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "claude-cli", envelopeSubject(envelope));
+    const projection = envelopeProjection(envelope);
+    const schema = projectCliOutputSchema(
+      outputSchema,
+      envelope.result_kind,
+      "claude-cli",
+      projection.subject,
+      projection.assignment
+    );
     if (route2.effort === "ultra") {
       return fail22(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
     const mcpConfigPath = join13(workspace.root, "empty-mcp.json");
     await writeFile2(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
+    const serializedSchema = JSON.stringify(schema);
+    if (Buffer.byteLength(serializedSchema, "utf8") >= MAX_ARGV_ELEMENT_BYTES) {
+      return fail22(createProjectError("PROCESS_FAILED", {
+        adapter: "claude-cli",
+        exit_class: "argument-list-too-long"
+      }));
+    }
     const argv = Object.freeze([
       "-p",
       "--safe-mode",
@@ -78922,7 +80766,7 @@ var claudeAdapter = Object.freeze({
       "--output-format",
       "json",
       "--json-schema",
-      JSON.stringify(schema),
+      serializedSchema,
       "--model",
       route2.model,
       "--effort",
@@ -78999,7 +80843,14 @@ var codexAdapter = Object.freeze({
     if (route2.provider !== void 0) {
       return fail22(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
-    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
+    const projection = envelopeProjection(envelope);
+    const schema = projectCliOutputSchema(
+      outputSchema,
+      envelope.result_kind,
+      "codex-cli",
+      projection.subject,
+      projection.assignment
+    );
     const schemaPath = join13(workspace.root, `${envelope.result_kind}.schema.json`);
     const outputPath = join13(workspace.root, `${envelope.result_kind}-final-output.json`);
     await writeFile2(schemaPath, `${JSON.stringify(schema, null, 2)}
@@ -79120,7 +80971,14 @@ var antigravityAdapter = Object.freeze({
     if (route2.provider !== void 0) {
       return fail22(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
-    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
+    const projection = envelopeProjection(envelope);
+    const schema = projectCliOutputSchema(
+      outputSchema,
+      envelope.result_kind,
+      "antigravity-cli",
+      projection.subject,
+      projection.assignment
+    );
     const schemaPath = join13(workspace.root, `${envelope.result_kind}.schema.json`);
     await writeFile2(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
@@ -79225,6 +81083,7 @@ function mintReviewObservation(input) {
     repositories: input.repositories,
     rubric_digest: input.subject.rubric_digest,
     producer_family: input.subject.producer_family,
+    ...input.assignment === void 0 ? {} : { assignment: input.assignment },
     ...input.route_override === void 0 ? {} : { route_override: input.route_override }
   };
   const capability = createReviewObservationCapability(binding);
@@ -79232,6 +81091,9 @@ function mintReviewObservation(input) {
 }
 function mintAdjudicationObservation(input) {
   assertRoute(input.adapter, input.route);
+  if (input.rule_slots === void 0) {
+    throw new TypeError("fresh adjudication observation requires exact rule slots");
+  }
   const binding = {
     kind: "adjudication",
     task_id: input.subject.task_id,
@@ -79251,7 +81113,7 @@ function mintAdjudicationObservation(input) {
     route_source: input.route_source ?? Object.freeze({ provenance: "configured" }),
     repositories: input.repositories,
     pinned_constitution_digest: input.subject.pinned_constitution_digest,
-    approved_upstream_digests: input.subject.approved_upstream_digests,
+    rule_slots: input.rule_slots,
     source_review_envelope_digest: input.subject.source_review_envelope_digest,
     ...input.route_override === void 0 ? {} : { route_override: input.route_override }
   };
@@ -80116,21 +81978,21 @@ function reviewRounds(details) {
         dispositions.set(`${disposition.review_evidence_digest}:${disposition.finding_id}`, disposition.disposition);
       }
     }
-    const versions = new Set(current.reviews.map((review) => review.evidence.schema_version));
-    if (versions.size !== 1) throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 evidence`);
+    const versions = new Set(current.reviews.map((review) => review.evidence.schema_version === "1" ? "1" : "2"));
+    if (versions.size !== 1) throw new TypeError(`active review attempt ${currentAttempt} mixes legacy and taxonomy evidence`);
     const round = roundAt(currentAttempt);
-    setVersion(round, current.reviews[0].evidence.schema_version, `active review attempt ${currentAttempt}`);
+    setVersion(round, current.reviews[0].evidence.schema_version === "1" ? "1" : "2", `active review attempt ${currentAttempt}`);
     for (const review of current.reviews) {
       for (const finding of review.evidence.findings) {
         const disposition = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
         round.findings += 1;
         if (disposition !== void 0 && isAccepted(disposition)) round.accepted += 1;
         if ("claim_type" in finding) {
-          if (round.version !== "2") throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 findings`);
+          if (round.version !== "2") throw new TypeError(`active review attempt ${currentAttempt} mixes legacy and taxonomy findings`);
           const key = `${finding.claim_type}:${finding.confidence}`;
           round.partitions[key] = (round.partitions[key] ?? 0) + 1;
         } else {
-          if (round.version !== "1") throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 findings`);
+          if (round.version !== "1") throw new TypeError(`active review attempt ${currentAttempt} mixes legacy and taxonomy findings`);
           if (finding.blocking) round.blocking += 1;
         }
       }
@@ -80158,6 +82020,88 @@ function fullFindings(details) {
       current_disposition: dispositions.get(`${review.evidence_digest}:${finding.finding_id}`)
     }
   })))));
+}
+function ledgerDisposition(entry) {
+  if (entry.rationale === void 0) return void 0;
+  if (entry.disposition === "accepted" || entry.disposition === "accepted-editorial") {
+    return entry.revision_intent === void 0 ? void 0 : Object.freeze({
+      disposition: entry.disposition,
+      rationale: entry.rationale,
+      revision_intent: entry.revision_intent
+    });
+  }
+  if (entry.disposition === "rejected") {
+    const evidence = "disposition_evidence" in entry ? entry.disposition_evidence : entry.evidence;
+    return evidence === void 0 ? void 0 : Object.freeze({
+      disposition: "rejected",
+      rationale: entry.rationale,
+      evidence
+    });
+  }
+  if (entry.disposition === "deferred") {
+    const evidence = "disposition_evidence" in entry ? entry.disposition_evidence : entry.evidence;
+    return Object.freeze({ disposition: "deferred", rationale: entry.rationale, ...evidence === void 0 ? {} : { evidence } });
+  }
+  return Object.freeze({ disposition: "escalated-human", rationale: entry.rationale });
+}
+function publicFindingHistoryFromLedger(ledger, currentReviewDigest) {
+  const findings = [];
+  for (const entry of ledger) {
+    if (entry.review_evidence_digest === currentReviewDigest) continue;
+    const currentDisposition = ledgerDisposition(entry);
+    let candidate;
+    if ("reviewer_focus" in entry) {
+      const common3 = {
+        finding_id: entry.finding_id,
+        claim_type: entry.claim_type,
+        confidence: entry.confidence,
+        falsifier: entry.falsifier,
+        reviewer_id: entry.reviewer_id,
+        reviewer_focus: entry.reviewer_focus,
+        routing_role: entry.routing_role,
+        criterion_id: entry.criterion_id,
+        ...currentDisposition === void 0 ? {} : { current_disposition: currentDisposition }
+      };
+      candidate = entry.reviewer_focus === "general" ? { ...common3, summary: entry.summary, evidence: entry.evidence, suggested_resolution: entry.suggested_resolution } : {
+        ...common3,
+        required_behavior_or_risk_boundary: entry.required_behavior_or_risk_boundary,
+        coverage_or_oracle_problem: entry.coverage_or_oracle_problem,
+        consequence: entry.consequence,
+        proposed_verification_change: entry.proposed_verification_change
+      };
+    } else if ("claim_type" in entry && entry.summary !== void 0 && entry.evidence !== void 0 && entry.suggested_resolution !== void 0) {
+      candidate = {
+        finding_id: entry.finding_id,
+        claim_type: entry.claim_type,
+        confidence: entry.confidence,
+        falsifier: entry.falsifier,
+        summary: entry.summary,
+        evidence: entry.evidence,
+        suggested_resolution: entry.suggested_resolution,
+        ...currentDisposition === void 0 ? {} : { current_disposition: currentDisposition }
+      };
+    } else if ("severity" in entry && entry.summary !== void 0 && entry.evidence !== void 0 && entry.suggested_resolution !== void 0) {
+      candidate = {
+        finding_id: entry.finding_id,
+        severity: entry.severity,
+        blocking: entry.blocking,
+        summary: entry.summary,
+        evidence: entry.evidence,
+        suggested_resolution: entry.suggested_resolution,
+        ...currentDisposition === void 0 ? {} : { current_disposition: currentDisposition }
+      };
+    } else continue;
+    findings.push(Object.freeze(publicFindingV1Schema.parse(candidate)));
+  }
+  return Object.freeze(findings);
+}
+function findingHistory(details) {
+  const triage = details.retained.get("triage")?.manifest.source_artifact;
+  if (triage?.artifact_kind !== "triage") return Object.freeze([]);
+  return publicFindingHistoryFromLedger(
+    triage.evidence.disposition_ledger ?? [],
+    details.retained.get("counter_review")?.manifest.artifact_digest
+  );
 }
 function archiveAuthenticates(request, decision3) {
   return validateDurableSemantics({ gate_request: request, gate_decision: decision3 }).ok;
@@ -80310,6 +82254,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
       legacy_import_initialization: true
     },
     full_findings: fullFindings(detailed.value),
+    finding_history: findingHistory(detailed.value),
     review_rounds: reviewRounds(detailed.value),
     taxonomy_denial_rates: computeTaxonomyDenialRates(ledger),
     implementation_recommendation: implementationRecommendation,
@@ -80340,6 +82285,7 @@ function computeSemanticStatusSnapshot(status, enrichments) {
     throw new TypeError("missing semantic status cannot carry durable state identity");
   }
   const findings = enrichments.full_findings.map((finding) => Object.freeze(publicFindingV1Schema.parse(materializeJson(finding, "semantic review finding"))));
+  const history = (enrichments.finding_history ?? []).map((finding) => Object.freeze(publicFindingV1Schema.parse(materializeJson(finding, "semantic review finding history"))));
   const snapshot = {
     schema_version: "1",
     repository_identity_digest: repositoryIdentity,
@@ -80355,6 +82301,7 @@ function computeSemanticStatusSnapshot(status, enrichments) {
     },
     status: statusJson,
     full_findings: Object.freeze(findings),
+    finding_history: Object.freeze(history),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) => Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))))),
     taxonomy_denial_rates: Object.freeze({ ...enrichments.taxonomy_denial_rates }),
     implementation_recommendation: Object.freeze(implementationRecommendationV1Schema.parse(
@@ -80417,11 +82364,13 @@ var PRODUCED_REPOSITORY_VIEW_NOTE = "Your working directory is a sealed read-onl
 var MULTI_REPOSITORY_VIEW_NOTE = "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. An entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output; review only its declared outputs and their current post-change behavior. Every other file and every entry without `snapshot_digest` is supporting evidence only. The artifact and pinned context take precedence on conflict.";
 var REVIEW_FOCUSES = ["general", "tests"];
 var REVIEW_INSTRUCTION = "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Be contentious: actively seek counterexamples across stated assumptions, edge conditions, lifecycle transitions, ordering, recovery, resource and latency bounds, and cross-section arithmetic. Trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A suspicion is welcome only when it names a plausible material consequence and a concrete settling observation; 'cost-free' means it is not suppressed for low confidence, not that speculative noise bypasses materiality. A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
-var REVIEW_ASSIGNMENT_INSTRUCTION = "Assess only the rubric criteria named by assignment.criterion_ids, using assignment.focus as the boundary of your review. Do not report findings owned by another assignment. You may cite evidence outside your focus when it proves an assigned finding, but do not turn that evidence into an additional out-of-scope finding.";
+var GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION = "This is the general review assignment. Assess only the criteria present in rubric.criteria and return only general findings for those criteria. Do not report test-review, constitution, effort, or server-attribution findings. When assignment.expected_upstream_digests is present, return the exact approved-upstream alignment census it names, including an empty census for an empty list. When assignment.legacy_confirmations is present, confirm exactly those archived findings through the separate legacy confirmation channel.";
+var TEST_REVIEW_ASSIGNMENT_INSTRUCTION = "This is the test review assignment. Assess only the criteria present in rubric.criteria and return only test-coverage findings for those criteria. Do not prescribe production-code, architecture, constitution, drift, effort, authority, or server-attribution changes. When assignment.legacy_confirmations is present, confirm exactly those archived test findings through the separate legacy confirmation channel.";
+var RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION = "This is a responsibility-only remediation assignment. rubric.criteria is empty, so ordinary findings are forbidden and findings must be empty. When assignment.expected_upstream_digests is present, return its exact complete alignment census; that census is the entire alignment deliverable. When assignment.legacy_confirmations is present, return exactly those confirmation results through the legacy confirmation channel; an unresolved confirmation stays in that channel under its assigned criterion. Do not return an unverifiable, escalate, or other ordinary finding. Read the artifact and pinned context only to complete these exact responsibilities, never as a new full review.";
 var REVIEW_TAXONOMY_INSTRUCTION = "For every finding, set claim_type to exactly one of defect, risk, gap, or preference; set confidence to exactly one of certain, likely, or suspicion; and supply a concrete falsifier of at most 4096 UTF-16 code units. A falsifier names the test command, code inspection, or other observation that would disprove the claim. If the condition is not observable from available evidence, the falsifier names the missing evidence and the outcome it would settle. Suspicion is cost-free and encouraged when that is the honest confidence. Preference is descriptive and advisory; do not force a quota or ceremonial preference when the artifact is sound. An empty findings array is the normal successful response when no reportable claim survives. Do not emit severity, critical, major, minor, blocker, or a finding-level blocking field.";
 var IMPLEMENTATION_REVIEW_INSTRUCTION = "Review only the implementation output declared by this phase: its added, modified, deleted, and renamed paths; its co-produced documents; and the current post-change behavior of those outputs. Use unchanged files, repository snapshots, pinned context, and dependencies only to verify how a declared output behaves or connects to an existing interface. They are evidence, not additional review subjects. Be contentious: actively seek counterexamples, boundary failures, latency or resource cliffs, and invalid assumptions introduced by the declared outputs. Do not report a pre-existing or unrelated defect. Every finding must name the declared output that introduced, exposed, or materially worsened the defect and explain the current concrete consequence. This is a phase-change review, not a general code review. Apply the rubric's materiality bar and return only the structured result the output schema describes.";
 var PRIOR_TRIAGE_INSTRUCTION = "This is a remediation review, not a new full review. The pinned prior-triage record contains only the latest accepted findings assigned to you. Verify each revision intent against the current artifact. Report an accepted finding only when its intent was not carried out. Report a new finding only when the remediation change itself introduced, exposed, or materially worsened a substantive defect, risk, or gap in the changed content or a directly dependent section. Do not revisit completed findings, inspect unrelated unchanged content, or apply the full rubric as a new sweep. If evidence needed for this confirmation is missing, one scoped unverifiable- or escalate- finding is allowed. Otherwise, when every intent is satisfied and no remediation regression exists, return no findings.";
-var CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION = "For this implementation phase, judge rules, triggers, and approved-upstream drift only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, triggered, or drifted result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
+var CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION = "For this implementation phase, judge rule compliance and triggers only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, or triggered result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
 function buildEffortEnvelope(value) {
   const envelope = parseEffortEnvelopeV2(value);
   return finishEnvelope("effort-review", envelope, "dispatch-envelope");
@@ -80510,7 +82459,7 @@ function validateAdjudicationSubject(value) {
     "subject_digest",
     "input_fingerprint",
     "pinned_constitution_digest",
-    "approved_upstream_digests",
+    ...value.approved_upstream_digests === void 0 ? [] : ["approved_upstream_digests"],
     "source_review_envelope_digest",
     "invocation_id",
     "result_id"
@@ -80518,10 +82467,8 @@ function validateAdjudicationSubject(value) {
   if (value.role !== "adjudication" || value.step !== "adjudicate") {
     throw new TypeError("adjudication subject must bind the adjudication step");
   }
-  const approvedUpstreamDigests = value.approved_upstream_digests.map(parseSha256Digest);
-  if (new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length || approvedUpstreamDigests.some((digest11, index) => index > 0 && approvedUpstreamDigests[index - 1] >= digest11)) {
-    throw new TypeError("approved_upstream_digests must be sorted and unique");
-  }
+  const approvedUpstreamDigests = value.approved_upstream_digests?.map(parseSha256Digest);
+  if (approvedUpstreamDigests !== void 0 && (new Set(approvedUpstreamDigests).size !== approvedUpstreamDigests.length || approvedUpstreamDigests.some((digest11, index) => index > 0 && approvedUpstreamDigests[index - 1] >= digest11))) throw new TypeError("approved_upstream_digests must be sorted and unique");
   return {
     task_id: parseTaskSlug(value.task_id),
     phase_instance: parsePhaseInstanceId(value.phase_instance),
@@ -80530,7 +82477,7 @@ function validateAdjudicationSubject(value) {
     subject_digest: parseSha256Digest(value.subject_digest),
     input_fingerprint: parseSha256Digest(value.input_fingerprint),
     pinned_constitution_digest: parseSha256Digest(value.pinned_constitution_digest),
-    approved_upstream_digests: approvedUpstreamDigests,
+    ...approvedUpstreamDigests === void 0 ? {} : { approved_upstream_digests: approvedUpstreamDigests },
     source_review_envelope_digest: parseSha256Digest(value.source_review_envelope_digest),
     invocation_id: parseEvidenceId(value.invocation_id, "invocation_id"),
     result_id: parseEvidenceId(value.result_id, "result_id")
@@ -80602,15 +82549,23 @@ function parseNonBlank(value, label) {
   return value;
 }
 function validateAssignment(value, rubric) {
-  exactFields2(value, ["reviewer_id", "focus", "criterion_ids"], "review assignment");
-  if (!EVIDENCE_ID.test(value.reviewer_id)) {
-    throw new TypeError("review assignment reviewer_id must use the evidence identifier vocabulary");
-  }
+  const expectedFields = [
+    "reviewer_id",
+    "focus",
+    "criterion_ids",
+    ...value.expected_upstream_digests === void 0 ? [] : ["expected_upstream_digests"],
+    ...value.legacy_confirmations === void 0 ? [] : ["legacy_confirmations"]
+  ];
+  exactFields2(value, expectedFields, "review assignment");
   if (!REVIEW_FOCUSES.includes(value.focus)) {
     throw new TypeError("review assignment focus is invalid");
   }
-  if (!Array.isArray(value.criterion_ids) || value.criterion_ids.length === 0) {
-    throw new TypeError("review assignment must name at least one rubric criterion");
+  const stableGeneralId = /^general(?:-[1-9][0-9]*)?$/u;
+  if (value.focus === "general" && !stableGeneralId.test(value.reviewer_id) || value.focus === "tests" && value.reviewer_id !== "test") {
+    throw new TypeError("review assignment reviewer_id must use the stable identifier vocabulary for its focus");
+  }
+  if (!Array.isArray(value.criterion_ids)) {
+    throw new TypeError("review assignment criterion_ids must be an array");
   }
   const allowed = rubric.criteria.map((criterion) => criterion.id);
   const selected = value.criterion_ids.map((criterion) => parseNonBlank(criterion, "review assignment criterion"));
@@ -80621,7 +82576,57 @@ function validateAssignment(value, rubric) {
   if (canonical2.some((criterion, index) => criterion !== selected[index])) {
     throw new TypeError("review assignment criteria must follow canonical rubric order");
   }
-  return Object.freeze({ reviewer_id: value.reviewer_id, focus: value.focus, criterion_ids: Object.freeze(selected) });
+  let expectedUpstreamDigests;
+  if (value.expected_upstream_digests !== void 0) {
+    if (value.focus !== "general" || value.reviewer_id !== "general" && value.reviewer_id !== "general-1") {
+      throw new TypeError("approved-upstream alignment belongs only to the primary general assignment");
+    }
+    if (!Array.isArray(value.expected_upstream_digests)) {
+      throw new TypeError("expected_upstream_digests must be an array");
+    }
+    expectedUpstreamDigests = Object.freeze(value.expected_upstream_digests.map(parseSha256Digest));
+    if (new Set(expectedUpstreamDigests).size !== expectedUpstreamDigests.length || expectedUpstreamDigests.some((digest11, index) => index > 0 && expectedUpstreamDigests[index - 1] >= digest11)) {
+      throw new TypeError("expected_upstream_digests must be sorted and unique");
+    }
+  }
+  let legacyConfirmations;
+  if (value.legacy_confirmations !== void 0) {
+    if (!Array.isArray(value.legacy_confirmations) || value.legacy_confirmations.length === 0) {
+      throw new TypeError("legacy_confirmations must be a non-empty array");
+    }
+    legacyConfirmations = Object.freeze(value.legacy_confirmations.map((confirmation) => {
+      exactFields2(confirmation, ["finding_id", "criterion_ids"], "legacy confirmation assignment");
+      if (!EVIDENCE_ID.test(confirmation.finding_id)) {
+        throw new TypeError("legacy confirmation finding_id must use the evidence identifier vocabulary");
+      }
+      if (!Array.isArray(confirmation.criterion_ids) || confirmation.criterion_ids.length === 0) {
+        throw new TypeError("legacy confirmation must name at least one permitted criterion");
+      }
+      const criteria = confirmation.criterion_ids.map((criterion) => parseNonBlank(criterion, "legacy confirmation criterion"));
+      if (new Set(criteria).size !== criteria.length || criteria.some((criterion) => !allowed.includes(criterion))) {
+        throw new TypeError("legacy confirmation criteria must be unique members of the rubric");
+      }
+      const canonicalCriteria = allowed.filter((criterion) => criteria.includes(criterion));
+      if (canonicalCriteria.some((criterion, index) => criterion !== criteria[index])) {
+        throw new TypeError("legacy confirmation criteria must follow canonical rubric order");
+      }
+      return Object.freeze({ finding_id: confirmation.finding_id, criterion_ids: Object.freeze(criteria) });
+    }));
+    const findingIds = legacyConfirmations.map((confirmation) => confirmation.finding_id);
+    if (new Set(findingIds).size !== findingIds.length) {
+      throw new TypeError("legacy confirmation finding_ids must be unique");
+    }
+  }
+  if (selected.length === 0 && expectedUpstreamDigests === void 0 && legacyConfirmations === void 0) {
+    throw new TypeError("review assignment must name a rubric criterion or a present responsibility");
+  }
+  return Object.freeze({
+    reviewer_id: value.reviewer_id,
+    focus: value.focus,
+    criterion_ids: Object.freeze(selected),
+    ...expectedUpstreamDigests === void 0 ? {} : { expected_upstream_digests: expectedUpstreamDigests },
+    ...legacyConfirmations === void 0 ? {} : { legacy_confirmations: legacyConfirmations }
+  });
 }
 function parseEncoding(value) {
   if (value !== "utf8" && value !== "base64") {
@@ -80683,40 +82688,29 @@ function validateContext(values) {
   });
 }
 function validateRules(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    throw new TypeError("adjudication rules must be a non-empty array");
+  }
   const rules2 = values.map((value) => {
-    const expected = value.review_trigger === void 0 ? ["id", "version", "text", "enforced_by"] : ["id", "version", "text", "review_trigger", "enforced_by"];
+    const expected = value.review_trigger === void 0 ? ["slot", "text", "enforced_by"] : ["slot", "text", "review_trigger", "enforced_by"];
     exactFields2(value, expected, "adjudication rule");
-    if (!EVIDENCE_ID.test(value.id)) throw new TypeError("rule id must use the evidence identifier vocabulary");
-    if (!Number.isSafeInteger(value.version) || value.version < 1) {
-      throw new TypeError("rule version must be a positive safe integer");
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(value.slot)) {
+      throw new TypeError("rule slot must use the opaque slot vocabulary");
     }
     const enforcedBy = value.enforced_by.map((mechanism) => parseNonBlank(mechanism, "enforced_by entry"));
     if (new Set(enforcedBy).size !== enforcedBy.length) throw new TypeError("enforced_by entries must be unique");
     return {
-      id: value.id,
-      version: value.version,
+      slot: value.slot,
       text: parseNonBlank(value.text, "rule text"),
       ...value.review_trigger === void 0 ? {} : { review_trigger: parseNonBlank(value.review_trigger, "review_trigger") },
       enforced_by: enforcedBy
     };
   });
-  const keys = rules2.map((rule4) => `${rule4.id}:${String(rule4.version)}`);
-  if (new Set(keys).size !== keys.length || keys.some((key, index) => index > 0 && keys[index - 1] >= key)) {
-    throw new TypeError("adjudication rules must be sorted and unique");
+  const slots = rules2.map((rule4) => rule4.slot);
+  if (new Set(slots).size !== slots.length) {
+    throw new TypeError("adjudication rule slots must be unique");
   }
   return rules2;
-}
-function validateUpstreams(values) {
-  const upstreams = values.map((value) => {
-    exactFields2(value, ["upstream_digest", "artifact"], "approved upstream");
-    if (typeof value.artifact !== "string") throw new TypeError("approved upstream artifact must be text");
-    return { upstream_digest: parseSha256Digest(value.upstream_digest), artifact: value.artifact };
-  });
-  const digests = upstreams.map((upstream) => upstream.upstream_digest);
-  if (new Set(digests).size !== digests.length || digests.some((digest11, index) => index > 0 && digests[index - 1] >= digest11)) {
-    throw new TypeError("approved upstreams must be sorted and unique");
-  }
-  return upstreams;
 }
 function finishEnvelope(resultKind, envelope, digestKind) {
   const bytes = utf82.encode(`${JSON.stringify(envelope, null, 2)}
@@ -80750,18 +82744,19 @@ function buildReviewEnvelope(value) {
   if (typeof snapshot.artifact !== "string") throw new TypeError("review envelope artifact must be text");
   const workspace = snapshot.workspace === void 0 ? void 0 : validateWorkspace(snapshot.workspace);
   const parsedRubric = parseRubricV1(snapshot.rubric);
+  const assignment = snapshot.assignment === void 0 ? void 0 : validateAssignment(snapshot.assignment, parsedRubric);
   const rubric = {
     schema_version: parsedRubric.schema_version,
     kind: parsedRubric.kind,
     mode: parsedRubric.mode,
-    criteria: parsedRubric.criteria.map((criterion) => ({
+    criteria: parsedRubric.criteria.filter((criterion) => assignment === void 0 || assignment.criterion_ids.includes(criterion.id)).map((criterion) => ({
       id: criterion.id,
       text: criterion.text,
       blocking: criterion.blocking
     }))
   };
-  const assignment = snapshot.assignment === void 0 ? void 0 : validateAssignment(snapshot.assignment, parsedRubric);
   const context2 = validateContext(snapshot.context);
+  const responsibilityOnly = assignment !== void 0 && assignment.criterion_ids.length === 0;
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
@@ -80772,10 +82767,10 @@ function buildReviewEnvelope(value) {
     // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
     instructions: {
-      review: parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
+      review: responsibilityOnly ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION : parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
       taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
-      ...assignment === void 0 ? {} : { assignment: REVIEW_ASSIGNMENT_INSTRUCTION },
-      ...context2.some((entry) => entry.kind === "prior-triage") ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION } : {}
+      ...assignment === void 0 ? {} : { assignment: responsibilityOnly ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION : assignment.focus === "general" ? GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION : TEST_REVIEW_ASSIGNMENT_INSTRUCTION },
+      ...context2.some((entry) => entry.kind === "prior-triage") ? { prior_triage: responsibilityOnly ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION : PRIOR_TRIAGE_INSTRUCTION } : {}
     },
     ...workspace === void 0 ? {} : { workspace },
     subject: validateSubject(snapshot.subject)
@@ -80787,33 +82782,26 @@ function buildAdjudicationEnvelope(value) {
   const workspace = snapshot.workspace === void 0 ? void 0 : validateWorkspace(snapshot.workspace);
   exactFields2(
     snapshot,
-    workspace === void 0 ? ["artifact", "rules", "approved_upstreams", "source_review_envelope_digest", "subject"] : ["artifact", "rules", "approved_upstreams", "source_review_envelope_digest", "workspace", "subject"],
+    workspace === void 0 ? ["artifact", "rules", "source_review_envelope_digest", "subject"] : ["artifact", "rules", "source_review_envelope_digest", "workspace", "subject"],
     "adjudication envelope input"
   );
   if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
   const rules2 = validateRules(snapshot.rules);
-  const approvedUpstreams = validateUpstreams(snapshot.approved_upstreams);
   const subject = validateAdjudicationSubject(snapshot.subject);
   const sourceEvidenceSetDigest = parseSha256Digest(snapshot.source_review_envelope_digest);
   if (sourceEvidenceSetDigest !== subject.source_review_envelope_digest) {
     throw new TypeError("source_review_envelope_digest must match the adjudication subject");
   }
-  const upstreamDigests = approvedUpstreams.map((upstream) => upstream.upstream_digest);
-  if (upstreamDigests.length !== subject.approved_upstream_digests.length || upstreamDigests.some((digest11, index) => digest11 !== subject.approved_upstream_digests[index])) {
-    throw new TypeError("approved upstreams must match the adjudication subject");
-  }
   const envelope = {
-    schema_version: "1",
+    schema_version: "2",
     artifact: snapshot.artifact,
     rules: rules2,
-    approved_upstreams: approvedUpstreams,
     source_review_envelope_digest: sourceEvidenceSetDigest,
     ...workspace === void 0 ? {} : { workspace },
     instructions: {
-      rule_coverage: "Return exactly one rule finding for every supplied rule, using its id as rule_id and version as rule_version. Do not omit, duplicate, or invent rules.",
-      drift_coverage: "Return exactly one drift finding for every supplied approved upstream, using its upstream_digest. Do not omit, duplicate, or invent upstreams. Use drift=aligned with an empty affected_claim_ids array when no approved claim is affected; otherwise name every affected claim using lowercase kebab-case IDs.",
+      rule_coverage: "Return exactly one judgment for every supplied opaque rule slot. Use each slot exactly once as a judgments object key; do not omit, duplicate, or invent slots, and do not return rule identity or rollups.",
       enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
-      uncertainty: "Report uncertain compliance only when the artifact, approved upstreams, and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
+      uncertainty: "Report uncertain compliance only when the artifact and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
       trigger: "A rule's review_trigger names a condition the repository wants a human to look at. Report trigger=matched only when that condition is directly evidenced by the artifact, its co-produced documents, or the supplied repository snapshot, and trigger=uncertain only when those genuinely leave it open. Workflow mechanics the server owns\u2014gate authority, approvals, commits, and dispatch outcomes\u2014are never evidence for a trigger; report not-matched. A rule with no review_trigger is always not-matched, with trigger_evidence stating that the rule declares no trigger.",
       ...workspace !== void 0 && (workspace.kind === "read-only-produced-repository-snapshot" || workspace.kind === "read-only-multi-repository-view" && workspace.repositories.some((repository) => repository.snapshot_digest !== void 0)) ? { implementation_scope: CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION } : {}
     },
@@ -81380,164 +83368,6 @@ function createRetainedChildOutputStore(context2) {
   });
 }
 
-// src/contracts/schemas/v1/adjudication.schema.json
-var adjudication_schema_default = {
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "urn:archflow:schema:v1:adjudication",
-  $defs: {
-    taskSlug: {
-      type: "string",
-      pattern: "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
-    }
-  },
-  type: "object",
-  properties: {
-    schema_version: {
-      type: "string",
-      const: "1"
-    },
-    task_id: {
-      $ref: "#/$defs/taskSlug"
-    },
-    phase_instance: {
-      type: "string",
-      pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-    },
-    step: {
-      type: "string",
-      const: "adjudicate"
-    },
-    subject_digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$"
-    },
-    input_fingerprint: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$"
-    },
-    pinned_constitution_digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$"
-    },
-    approved_upstream_digests: {
-      type: "array",
-      items: {
-        type: "string",
-        pattern: "^[0-9a-f]{64}$"
-      }
-    },
-    source_review_envelope_digest: {
-      type: "string",
-      pattern: "^[0-9a-f]{64}$"
-    },
-    rule_findings: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          rule_id: {
-            type: "string",
-            pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          rule_version: {
-            type: "integer",
-            exclusiveMinimum: 0,
-            maximum: 9007199254740991
-          },
-          compliance: {
-            type: "string",
-            enum: [
-              "pass",
-              "fail",
-              "uncertain"
-            ]
-          },
-          rationale: {
-            type: "string",
-            minLength: 1,
-            pattern: "\\S"
-          },
-          trigger: {
-            type: "string",
-            enum: [
-              "not-matched",
-              "matched",
-              "uncertain"
-            ]
-          },
-          trigger_evidence: {
-            type: "string",
-            minLength: 1,
-            pattern: "\\S"
-          }
-        },
-        required: [
-          "rule_id",
-          "rule_version",
-          "compliance",
-          "rationale",
-          "trigger",
-          "trigger_evidence"
-        ],
-        additionalProperties: false
-      }
-    },
-    drift_findings: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          upstream_digest: {
-            type: "string",
-            pattern: "^[0-9a-f]{64}$"
-          },
-          drift: {
-            type: "string",
-            enum: [
-              "aligned",
-              "incidental",
-              "material"
-            ]
-          },
-          affected_claim_ids: {
-            type: "array",
-            items: {
-              type: "string",
-              pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-            }
-          },
-          rationale: {
-            type: "string",
-            minLength: 1,
-            pattern: "\\S"
-          }
-        },
-        required: [
-          "upstream_digest",
-          "drift",
-          "affected_claim_ids",
-          "rationale"
-        ],
-        additionalProperties: false
-      }
-    }
-  },
-  required: [
-    "schema_version",
-    "task_id",
-    "phase_instance",
-    "step",
-    "subject_digest",
-    "input_fingerprint",
-    "pinned_constitution_digest",
-    "approved_upstream_digests",
-    "source_review_envelope_digest",
-    "rule_findings",
-    "drift_findings"
-  ],
-  additionalProperties: false
-};
-
 // src/contracts/schemas/v1/effort-review.schema.json
 var effort_review_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -81689,6 +83519,10 @@ var review_schema_default = {
   },
   type: "object",
   properties: {
+    schema_version: {
+      type: "string",
+      const: "3"
+    },
     task_id: {
       $ref: "#/$defs/taskSlug"
     },
@@ -81722,35 +83556,342 @@ var review_schema_default = {
         "gemini"
       ]
     },
-    matched_rule_versions: {
+    findings: {
+      type: "array",
+      items: {
+        anyOf: [
+          {
+            type: "object",
+            properties: {
+              finding_id: {
+                $ref: "#/$defs/id"
+              },
+              claim_type: {
+                type: "string",
+                enum: [
+                  "defect",
+                  "risk",
+                  "gap",
+                  "preference"
+                ]
+              },
+              confidence: {
+                type: "string",
+                enum: [
+                  "certain",
+                  "likely",
+                  "suspicion"
+                ]
+              },
+              falsifier: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096,
+                pattern: "\\S"
+              },
+              summary: {
+                $ref: "#/$defs/nonBlank"
+              },
+              evidence: {
+                $ref: "#/$defs/nonBlank"
+              },
+              suggested_resolution: {
+                $ref: "#/$defs/nonBlank"
+              },
+              criterion_id: {
+                $ref: "#/$defs/id"
+              }
+            },
+            required: [
+              "finding_id",
+              "claim_type",
+              "confidence",
+              "falsifier",
+              "summary",
+              "evidence",
+              "suggested_resolution",
+              "criterion_id"
+            ],
+            additionalProperties: false
+          },
+          {
+            type: "object",
+            properties: {
+              finding_id: {
+                $ref: "#/$defs/id"
+              },
+              criterion_id: {
+                $ref: "#/$defs/id"
+              },
+              claim_type: {
+                type: "string",
+                enum: [
+                  "defect",
+                  "risk",
+                  "gap",
+                  "preference"
+                ]
+              },
+              confidence: {
+                type: "string",
+                enum: [
+                  "certain",
+                  "likely",
+                  "suspicion"
+                ]
+              },
+              falsifier: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096,
+                pattern: "\\S"
+              },
+              required_behavior_or_risk_boundary: {
+                $ref: "#/$defs/nonBlank"
+              },
+              coverage_or_oracle_problem: {
+                $ref: "#/$defs/nonBlank"
+              },
+              consequence: {
+                $ref: "#/$defs/nonBlank"
+              },
+              proposed_verification_change: {
+                $ref: "#/$defs/nonBlank"
+              }
+            },
+            required: [
+              "finding_id",
+              "criterion_id",
+              "claim_type",
+              "confidence",
+              "falsifier",
+              "required_behavior_or_risk_boundary",
+              "coverage_or_oracle_problem",
+              "consequence",
+              "proposed_verification_change"
+            ],
+            additionalProperties: false
+          }
+        ]
+      }
+    },
+    upstream_alignment: {
       type: "array",
       items: {
         type: "object",
         properties: {
-          rule_id: {
-            $ref: "#/$defs/id"
+          upstream_digest: {
+            $ref: "#/$defs/digest"
           },
-          rule_version: {
-            type: "integer",
-            exclusiveMinimum: 0,
-            maximum: 9007199254740991
+          drift: {
+            type: "string",
+            enum: [
+              "aligned",
+              "incidental",
+              "material"
+            ]
+          },
+          affected_claim_ids: {
+            type: "array",
+            items: {
+              $ref: "#/$defs/id"
+            }
+          },
+          rationale: {
+            $ref: "#/$defs/nonBlank"
           }
         },
         required: [
-          "rule_id",
-          "rule_version"
+          "upstream_digest",
+          "drift",
+          "affected_claim_ids",
+          "rationale"
         ],
         additionalProperties: false
       }
     },
-    findings: {
+    legacy_confirmations: {
       type: "array",
       items: {
-        $ref: "#/$defs/finding"
+        anyOf: [
+          {
+            oneOf: [
+              {
+                type: "object",
+                properties: {
+                  finding_id: {
+                    $ref: "#/$defs/id"
+                  },
+                  status: {
+                    type: "string",
+                    const: "resolved"
+                  },
+                  evidence: {
+                    $ref: "#/$defs/nonBlank"
+                  }
+                },
+                required: [
+                  "finding_id",
+                  "status",
+                  "evidence"
+                ],
+                additionalProperties: false
+              },
+              {
+                type: "object",
+                properties: {
+                  finding_id: {
+                    $ref: "#/$defs/id"
+                  },
+                  claim_type: {
+                    type: "string",
+                    enum: [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  confidence: {
+                    type: "string",
+                    enum: [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  falsifier: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096,
+                    pattern: "\\S"
+                  },
+                  summary: {
+                    $ref: "#/$defs/nonBlank"
+                  },
+                  evidence: {
+                    $ref: "#/$defs/nonBlank"
+                  },
+                  suggested_resolution: {
+                    $ref: "#/$defs/nonBlank"
+                  },
+                  criterion_id: {
+                    $ref: "#/$defs/id"
+                  },
+                  status: {
+                    type: "string",
+                    const: "unresolved"
+                  }
+                },
+                required: [
+                  "finding_id",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "summary",
+                  "evidence",
+                  "suggested_resolution",
+                  "criterion_id",
+                  "status"
+                ],
+                additionalProperties: false
+              }
+            ]
+          },
+          {
+            oneOf: [
+              {
+                type: "object",
+                properties: {
+                  finding_id: {
+                    $ref: "#/$defs/id"
+                  },
+                  status: {
+                    type: "string",
+                    const: "resolved"
+                  },
+                  evidence: {
+                    $ref: "#/$defs/nonBlank"
+                  }
+                },
+                required: [
+                  "finding_id",
+                  "status",
+                  "evidence"
+                ],
+                additionalProperties: false
+              },
+              {
+                type: "object",
+                properties: {
+                  finding_id: {
+                    $ref: "#/$defs/id"
+                  },
+                  criterion_id: {
+                    $ref: "#/$defs/id"
+                  },
+                  claim_type: {
+                    type: "string",
+                    enum: [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  confidence: {
+                    type: "string",
+                    enum: [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  falsifier: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096,
+                    pattern: "\\S"
+                  },
+                  required_behavior_or_risk_boundary: {
+                    $ref: "#/$defs/nonBlank"
+                  },
+                  coverage_or_oracle_problem: {
+                    $ref: "#/$defs/nonBlank"
+                  },
+                  consequence: {
+                    $ref: "#/$defs/nonBlank"
+                  },
+                  proposed_verification_change: {
+                    $ref: "#/$defs/nonBlank"
+                  },
+                  status: {
+                    type: "string",
+                    const: "unresolved"
+                  }
+                },
+                required: [
+                  "finding_id",
+                  "criterion_id",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "required_behavior_or_risk_boundary",
+                  "coverage_or_oracle_problem",
+                  "consequence",
+                  "proposed_verification_change",
+                  "status"
+                ],
+                additionalProperties: false
+              }
+            ]
+          }
+        ]
       }
     }
   },
   required: [
+    "schema_version",
     "task_id",
     "phase_instance",
     "step",
@@ -81759,7 +83900,6 @@ var review_schema_default = {
     "input_fingerprint",
     "rubric_digest",
     "producer_family",
-    "matched_rule_versions",
     "findings"
   ],
   additionalProperties: false
@@ -83221,19 +85361,25 @@ async function loadPriorTriageRecord(dependencies, state) {
   }
   const findingsByRef = /* @__PURE__ */ new Map();
   const reviewRef = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "counter_review");
+  let sourceReview;
   if (reviewRef !== void 0) {
     const review = await dependencies.load_retained_result(reviewRef);
     if (!review.ok) return review;
     const manifest = review.value.prepared.manifest.value;
     if (manifest.source_artifact.artifact_kind === "review-evidence") {
+      sourceReview = Object.freeze({
+        evidence_digest: manifest.artifact_digest,
+        evidence: manifest.source_artifact.evidence
+      });
       for (const finding of manifest.source_artifact.evidence.findings) {
+        const display = reviewFindingDisplayDetail(finding);
         findingsByRef.set(`${manifest.artifact_digest}:${finding.finding_id}`, {
-          ...manifest.source_artifact.evidence.schema_version === "2" && "claim_type" in finding ? { claim_type: finding.claim_type, confidence: finding.confidence, falsifier: finding.falsifier } : "severity" in finding ? { severity: finding.severity, blocking: finding.blocking } : (() => {
+          ...manifest.source_artifact.evidence.schema_version !== "1" && "claim_type" in finding ? { claim_type: finding.claim_type, confidence: finding.confidence, falsifier: finding.falsifier } : "severity" in finding ? { severity: finding.severity, blocking: finding.blocking } : (() => {
             throw new TypeError("review finding does not match its native schema version");
           })(),
-          summary: finding.summary,
-          evidence: finding.evidence,
-          suggested_resolution: finding.suggested_resolution
+          summary: display.summary,
+          evidence: display.evidence,
+          suggested_resolution: display.suggested_resolution
         });
       }
     }
@@ -83242,6 +85388,7 @@ async function loadPriorTriageRecord(dependencies, state) {
     const finding = findingsByRef.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
     const recorded = disposition;
     return {
+      review_evidence_digest: disposition.review_evidence_digest,
       finding_id: disposition.finding_id,
       attempt: state.attempt,
       ...finding ?? {},
@@ -83256,9 +85403,11 @@ async function loadPriorTriageRecord(dependencies, state) {
     current_attempt: state.attempt,
     dispositions: Object.freeze(accepted),
     current: Object.freeze(accepted.map((disposition) => Object.freeze({
+      ...typeof disposition.review_evidence_digest === "string" ? { review_evidence_digest: disposition.review_evidence_digest } : {},
       finding_id: disposition.finding_id,
       disposition: disposition.disposition
-    })))
+    }))),
+    ...sourceReview === void 0 ? {} : { source_review: sourceReview }
   }));
 }
 function priorTriageContextEntry(record3, owns) {
@@ -83313,21 +85462,107 @@ function taggedFindingId(tag, totalReviewers, findingId) {
   if (totalReviewers <= 1) return findingId;
   return findingId.startsWith(`${tag}-`) ? findingId : `${tag}-${findingId}`;
 }
-function reviewerOwnsFinding(tag, totalReviewers, findingId) {
-  return totalReviewers <= 1 || findingId.startsWith(`${tag}-`);
+var LEGACY_KEYWORD_TAGS = Object.freeze([
+  "sol",
+  "fable",
+  "opus",
+  "sonnet",
+  "haiku",
+  "flash",
+  "pro"
+]);
+function sameOptionalString(left, right) {
+  return left === right;
+}
+function sameRunTuple(run, current) {
+  return run.focus === current.focus && run.routing_role === current.routing_role && run.model === current.model && sameOptionalString(run.provider, current.provider);
+}
+function runPrefixMatches(findingId, run, runCount) {
+  return runCount === 1 || findingId.startsWith(`${run.reviewer_id}-`) || run.legacy_confirmations?.some((confirmation) => confirmation.finding_id === findingId) === true;
+}
+function resolveRecordedRun(finding, runs, roster) {
+  const owningRuns = runs.filter((run2) => run2.finding_ids.includes(finding.finding_id));
+  if (owningRuns.length !== 1) {
+    return Object.freeze({ ok: false, failure: Object.freeze({ reason: "finding-run-membership-invalid" }) });
+  }
+  const run = owningRuns[0];
+  if (!runPrefixMatches(finding.finding_id, run, runs.length)) {
+    return Object.freeze({ ok: false, failure: Object.freeze({ reason: "finding-run-prefix-invalid" }) });
+  }
+  const exact = roster.filter((entry) => entry.reviewer_id === run.reviewer_id);
+  if (exact.length === 1) return Object.freeze({ ok: true, owner: exact[0] });
+  if (exact.length > 1) {
+    return Object.freeze({ ok: false, failure: Object.freeze({ reason: "reviewer-id-unavailable" }) });
+  }
+  const tuple2 = roster.filter((entry) => sameRunTuple(run, entry));
+  if (tuple2.length === 1) return Object.freeze({ ok: true, owner: tuple2[0] });
+  return Object.freeze({
+    ok: false,
+    failure: Object.freeze({ reason: tuple2.length === 0 ? "reviewer-route-unavailable" : "reviewer-route-ambiguous" })
+  });
+}
+function resolveV3(finding, runs, roster) {
+  const completeAttribution = finding.reviewer_id !== void 0 && finding.reviewer_focus !== void 0 && finding.routing_role !== void 0;
+  if (!completeAttribution || runs === void 0) {
+    return Object.freeze({ ok: false, failure: Object.freeze({ reason: "finding-attribution-invalid" }) });
+  }
+  const runOwners = runs.filter((run2) => run2.finding_ids.includes(finding.finding_id));
+  if (runOwners.length !== 1) {
+    return Object.freeze({ ok: false, failure: Object.freeze({ reason: "finding-run-membership-invalid" }) });
+  }
+  const run = runOwners[0];
+  if (run.reviewer_id !== finding.reviewer_id || run.focus !== finding.reviewer_focus || run.routing_role !== finding.routing_role || !runPrefixMatches(finding.finding_id, run, runs.length)) {
+    return Object.freeze({ ok: false, failure: Object.freeze({ reason: "finding-attribution-invalid" }) });
+  }
+  return resolveRecordedRun(finding, runs, roster);
+}
+function resolveRunlessV2(findingId, roster) {
+  const ordinal11 = /^r([1-9][0-9]*)-/u.exec(findingId);
+  if (ordinal11 !== null) {
+    return Object.freeze({
+      ok: false,
+      failure: Object.freeze({
+        reason: "legacy-ordinal-unavailable",
+        historical_position: Number(ordinal11[1])
+      })
+    });
+  }
+  const alias = LEGACY_KEYWORD_TAGS.find((tag) => findingId.startsWith(`${tag}-`));
+  if (alias !== void 0) {
+    return Object.freeze({
+      ok: false,
+      failure: Object.freeze({ reason: "legacy-alias-collision-unavailable" })
+    });
+  }
+  const primary = roster.filter((entry) => entry.focus === "general")[0];
+  return primary === void 0 ? Object.freeze({ ok: false, failure: Object.freeze({ reason: "reviewer-route-unavailable" }) }) : Object.freeze({ ok: true, owner: primary });
+}
+function resolveReviewFindingOwner(input) {
+  if (input.schema_version === "3") {
+    return resolveV3(input.finding, input.reviewer_runs, input.roster);
+  }
+  if (input.reviewer_runs !== void 0) {
+    return resolveRecordedRun(input.finding, input.reviewer_runs, input.roster);
+  }
+  if (input.schema_version === "1") {
+    const primary = input.roster.filter((entry) => entry.focus === "general")[0];
+    return primary === void 0 ? Object.freeze({ ok: false, failure: Object.freeze({ reason: "reviewer-route-unavailable" }) }) : Object.freeze({ ok: true, owner: primary });
+  }
+  return resolveRunlessV2(input.finding.finding_id, input.roster);
 }
 
 // src/review/counter-review.ts
+var fail25 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function aggregateActiveReviewerFindings(reviewers, totalReviewers = reviewers.length) {
   const findings = [];
   const findingIdsByReviewer = reviewers.map(() => []);
   const seenIds = /* @__PURE__ */ new Set();
   reviewers.forEach((reviewer, reviewerIndex) => {
-    if (reviewer.schema_version !== "2" || reviewer.findings.some((finding) => !("claim_type" in finding))) {
-      throw new TypeError("fresh counter-review observations must all use active review schema version 2");
+    if (reviewer.schema_version !== "2" && reviewer.schema_version !== "3" || reviewer.findings.some((finding) => !("claim_type" in finding))) {
+      throw new TypeError("fresh counter-review observations must use an active review schema");
     }
     for (const finding of reviewer.findings) {
-      const rawId = taggedFindingId(reviewer.tag, totalReviewers, finding.finding_id);
+      const rawId = reviewer.schema_version === "3" ? finding.finding_id : taggedFindingId(reviewer.tag, totalReviewers, finding.finding_id);
       let uniqueId = rawId;
       let disambiguator = 2;
       while (seenIds.has(uniqueId)) {
@@ -83350,6 +85585,7 @@ function adjudicationOutputIssueCode(error51) {
   if (error51 instanceof SyntaxError) return "adjudication-json-invalid";
   const issueMessages = error51 !== null && typeof error51 === "object" && "issues" in error51 && Array.isArray(error51.issues) ? error51.issues.flatMap((issue4) => issue4 !== null && typeof issue4 === "object" && "message" in issue4 && typeof issue4.message === "string" ? [issue4.message] : []) : [];
   const message = [...issueMessages, error51 instanceof Error ? error51.message : ""].join(" | ");
+  if (/judgments|slot/u.test(message)) return "adjudication-rule-slot-coverage";
   if (/exactly cover approved_upstream_digests/u.test(message)) return "adjudication-upstream-coverage";
   if (/must be sorted and unique/u.test(message)) return "adjudication-finding-duplicate";
   if (/Unrecognized key/u.test(message)) return "adjudication-unexpected-fields";
@@ -83364,33 +85600,56 @@ function reviewOutputIssueCode(error51) {
 }
 async function planCounterReviewCommit(inputs, current, call) {
   const constitutionEvidence = inputs.constitution_evidence;
+  const policyFacts = policyReviewFacts(
+    inputs.review_evidence,
+    constitutionEvidence,
+    constitutionEvidence !== void 0
+  );
   const revision = parseSafeInteger(current.value.revision + 1);
-  const constitutionOutcome = constitutionEvidence === void 0 ? Object.freeze({
+  const constitutionPath = parseRepositoryPathClaim(
+    `.archflow/runtime/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`
+  );
+  const constitutionOutcome = policyFacts.constitution.status === "not-run" ? Object.freeze({
     status: "not-run",
     reason: "no-active-constitution-rules"
   }) : Object.freeze({
     status: "evaluated",
-    path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`),
-    constitution: constitutionEvidence.constitution,
-    drift: constitutionEvidence.drift,
+    path: constitutionPath,
+    constitution: policyFacts.constitution.result,
     triggers: canonicalRuleRefs([
-      ...constitutionEvidence.matched_rule_versions,
-      ...constitutionEvidence.uncertain_rule_versions
+      ...policyFacts.constitution.matched_rule_versions,
+      ...policyFacts.constitution.uncertain_rule_versions
     ])
   });
   const commonSuccess = {
     path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${counterReviewClaim(current.value.phase_instance)}`),
-    constitution: constitutionOutcome,
     revision,
     request_digest: inputs.request_digest
   };
-  const success3 = inputs.review_evidence.schema_version === "2" ? Object.freeze({
+  const success3 = inputs.review_evidence.schema_version === "3" ? Object.freeze({
     ...commonSuccess,
+    constitution: constitutionOutcome,
+    alignment: inputs.review_evidence.upstream_alignment === void 0 ? Object.freeze({ status: "not-run", reason: "prd-has-no-approved-upstream-plan" }) : Object.freeze({
+      status: "evaluated",
+      drift: policyFacts.alignment.result,
+      upstream_count: policyFacts.alignment.findings.length
+    }),
+    verdict: inputs.review_evidence.verdict,
+    total_findings: inputs.review_evidence.total_findings,
+    partition_counts: inputs.review_evidence.partition_counts
+  }) : inputs.review_evidence.schema_version === "2" ? Object.freeze({
+    ...commonSuccess,
+    constitution: constitutionEvidence === void 0 ? constitutionOutcome : constitutionEvidence.schema_version === "1" ? Object.freeze({ ...constitutionOutcome, drift: constitutionEvidence.drift }) : (() => {
+      throw new TypeError("archived review success cannot bind fresh adjudication");
+    })(),
     verdict: inputs.review_evidence.verdict,
     total_findings: inputs.review_evidence.total_findings,
     partition_counts: inputs.review_evidence.partition_counts
   }) : Object.freeze({
     ...commonSuccess,
+    constitution: constitutionEvidence === void 0 ? constitutionOutcome : constitutionEvidence.schema_version === "1" ? Object.freeze({ ...constitutionOutcome, drift: constitutionEvidence.drift }) : (() => {
+      throw new TypeError("legacy review success cannot bind fresh adjudication");
+    })(),
     verdict: inputs.review_evidence.verdict,
     blocking_count: inputs.review_evidence.blocking_count
   });
@@ -83545,17 +85804,105 @@ async function runCounterReview(dependencies, input) {
   const totalReviewers = taggedRoutes.length;
   const sharedPriorTriage = input.envelope.context.find((entry) => entry.kind === "prior-triage");
   const priorTriage = sharedPriorTriage === void 0 ? void 0 : input.prior_triage;
-  const dispositioned = priorTriage?.current ?? [];
-  const owners = (findingId) => taggedRoutes.filter((routeEntry) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
-  const unattributed = priorTriage !== void 0 && dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
-  const reviewRoutes = priorTriage === void 0 ? taggedRoutes : unattributed ? taggedRoutes.slice(0, 1) : taggedRoutes.filter((routeEntry) => dispositioned.some((disposition) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, disposition.finding_id)));
-  const assignmentFor = (routeEntry) => unattributed && routeEntry.role === "counter-reviewer" ? reviewAssignment(routeEntry.tag, "general", phaseKind2, input.envelope.rubric, false) : routeEntry.assignment;
+  const roster = Object.freeze(taggedRoutes.map((routeEntry) => Object.freeze({
+    reviewer_id: routeEntry.assignment.reviewer_id,
+    focus: routeEntry.assignment.focus,
+    routing_role: routeEntry.role,
+    model: routeEntry.selection.route.model,
+    ...routeEntry.selection.route.provider === void 0 ? {} : { provider: routeEntry.selection.route.provider }
+  })));
+  const remediationByReviewer = /* @__PURE__ */ new Map();
+  const scopeFor = (reviewerId) => {
+    const existing = remediationByReviewer.get(reviewerId);
+    if (existing !== void 0) return existing;
+    const created = { criterion_ids: /* @__PURE__ */ new Set(), finding_ids: /* @__PURE__ */ new Set(), legacy_confirmations: [] };
+    remediationByReviewer.set(reviewerId, created);
+    return created;
+  };
+  if (priorTriage !== void 0) {
+    const source = priorTriage.source_review;
+    if (source === void 0) {
+      return fail25(createProjectError("STATE_INVALID", {
+        phase_instance: input.authority.context.phase_instance,
+        issue_code: "reviewer-ownership-source-unavailable"
+      }));
+    }
+    for (const occurrence of priorTriage.current) {
+      if (occurrence.review_evidence_digest !== source.evidence_digest) {
+        return fail25(createProjectError("STATE_INVALID", {
+          phase_instance: input.authority.context.phase_instance,
+          issue_code: "reviewer-ownership-occurrence-unavailable"
+        }));
+      }
+      const finding = source.evidence.findings.find((candidate) => candidate.finding_id === occurrence.finding_id);
+      if (finding === void 0) {
+        return fail25(createProjectError("STATE_INVALID", {
+          phase_instance: input.authority.context.phase_instance,
+          issue_code: "reviewer-ownership-finding-absent"
+        }));
+      }
+      const resolved = resolveReviewFindingOwner({
+        schema_version: source.evidence.schema_version,
+        finding,
+        ...source.evidence.assurance === "server-attested" && source.evidence.reviewer_runs !== void 0 ? { reviewer_runs: source.evidence.reviewer_runs } : {},
+        roster
+      });
+      if (!resolved.ok) {
+        const issue4 = resolved.failure.reason === "legacy-ordinal-unavailable" ? `reviewer-ownership-r${String(resolved.failure.historical_position)}-unavailable` : `reviewer-ownership-${resolved.failure.reason}`;
+        return fail25(createProjectError("STATE_INVALID", {
+          phase_instance: input.authority.context.phase_instance,
+          issue_code: issue4
+        }));
+      }
+      const scope3 = scopeFor(resolved.owner.reviewer_id);
+      scope3.finding_ids.add(finding.finding_id);
+      if (source.evidence.schema_version === "3" && "criterion_id" in finding) {
+        scope3.criterion_ids.add(finding.criterion_id);
+      } else {
+        const routeEntry = taggedRoutes.find((candidate) => candidate.assignment.reviewer_id === resolved.owner.reviewer_id);
+        if (resolved.owner.focus === "general" && !routeEntry.assignment.criterion_ids.includes("substantive-correctness")) {
+          return fail25(createProjectError("STATE_INVALID", {
+            phase_instance: input.authority.context.phase_instance,
+            issue_code: "legacy-confirmation-criterion-unavailable"
+          }));
+        }
+        const permitted = resolved.owner.focus === "tests" ? routeEntry.assignment.criterion_ids : ["substantive-correctness"];
+        scope3.legacy_confirmations.push(Object.freeze({
+          finding_id: finding.finding_id,
+          criterion_ids: Object.freeze([...permitted])
+        }));
+      }
+    }
+  }
+  const primary = generalRoutes[0];
+  if (primary === void 0) {
+    throw new TypeError("counter-review requires a primary general reviewer");
+  }
+  const reviewRoutes = priorTriage === void 0 ? taggedRoutes : taggedRoutes.filter((routeEntry) => remediationByReviewer.has(routeEntry.assignment.reviewer_id) || routeEntry === primary && input.approved_upstream_digests !== void 0);
+  const assignmentFor = (routeEntry) => {
+    const base2 = routeEntry.assignment;
+    const remediation = priorTriage === void 0 ? void 0 : remediationByReviewer.get(base2.reviewer_id);
+    let criterionIds = remediation === void 0 ? priorTriage === void 0 ? base2.criterion_ids : Object.freeze([]) : Object.freeze(base2.criterion_ids.filter((criterion) => remediation.criterion_ids.has(criterion)));
+    const expectedUpstreams = routeEntry === primary ? input.approved_upstream_digests : void 0;
+    const legacyConfirmations = remediation?.legacy_confirmations;
+    return Object.freeze({
+      reviewer_id: base2.reviewer_id,
+      focus: base2.focus,
+      criterion_ids: criterionIds,
+      ...expectedUpstreams === void 0 ? {} : { expected_upstream_digests: expectedUpstreams },
+      ...legacyConfirmations === void 0 || legacyConfirmations.length === 0 ? {} : { legacy_confirmations: Object.freeze(legacyConfirmations) }
+    });
+  };
   const envelopeFor = (routeEntry) => {
     const assignment = assignmentFor(routeEntry);
-    if (priorTriage === void 0 || unattributed) {
+    if (priorTriage === void 0) {
       return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject });
     }
-    const scoped = priorTriageContextEntry(priorTriage, (findingId) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
+    const acceptedIds = /* @__PURE__ */ new Set([
+      ...(remediationByReviewer.get(routeEntry.assignment.reviewer_id)?.legacy_confirmations ?? []).map((confirmation) => confirmation.finding_id),
+      ...remediationByReviewer.get(routeEntry.assignment.reviewer_id)?.finding_ids ?? []
+    ]);
+    const scoped = priorTriageContextEntry(priorTriage, (findingId) => acceptedIds.has(findingId));
     return buildReviewEnvelopeWithCap({
       ...input.envelope,
       assignment,
@@ -83574,7 +85921,6 @@ async function runCounterReview(dependencies, input) {
     subject_digest: input.envelope.subject.subject_digest,
     input_fingerprint: input.envelope.subject.input_fingerprint,
     pinned_constitution_digest: plan.pinned_constitution_digest,
-    approved_upstream_digests: plan.approved_upstream_digests,
     source_review_envelope_digest: envelope.digest,
     invocation_id: plan.invocation_id,
     result_id: plan.result_id
@@ -83583,7 +85929,6 @@ async function runCounterReview(dependencies, input) {
     artifact: input.envelope.artifact,
     rules: plan.rules,
     source_review_envelope_digest: envelope.digest,
-    approved_upstreams: plan.approved_upstreams,
     workspace: plan.workspace,
     subject: constitutionSubject
   });
@@ -83594,7 +85939,7 @@ async function runCounterReview(dependencies, input) {
     if (!outcome.ok) failures.push(outcome);
     return outcome;
   };
-  const reviewOp = (routeEntry, reviewEnvelope) => async () => {
+  const reviewOp = (routeEntry, reviewEnvelope, assignment) => async () => {
     const route2 = routeEntry.selection.route;
     const routeOverride = routeEntry.role === "test-reviewer" ? testReviewOverride : reviewOverride;
     const mint = (dispatched2) => mintReviewObservation({
@@ -83606,6 +85951,7 @@ async function runCounterReview(dependencies, input) {
       envelope_input_digest: reviewEnvelope.digest,
       extracted_output_bytes: dispatched2.extracted_output_bytes,
       repositories: input.repositories,
+      assignment: Object.freeze({ ...assignment, routing_role: routeEntry.role }),
       ...routeOverride === void 0 ? {} : { route_override: routeOverride }
     });
     const binding = { envelope_digest: reviewEnvelope.digest, role: routeEntry.role, selection: routeEntry.selection };
@@ -83639,7 +85985,7 @@ async function runCounterReview(dependencies, input) {
     await retained?.write(binding, dispatched);
     return { ok: true, value: { kind: "review", observation } };
   };
-  const ops = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]));
+  const ops = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index], activeAssignments[index]));
   if (effortPlan !== void 0 && parsedEffortEnvelope !== void 0 && effortEnvelope !== void 0 && effortRoute !== void 0) {
     const route2 = effortRoute.selection.route;
     const mint = (dispatched) => createEffortSelectionV2(
@@ -83699,6 +86045,7 @@ async function runCounterReview(dependencies, input) {
         envelope_input_digest: constitutionEnvelope.digest,
         extracted_output_bytes: dispatched.extracted_output_bytes,
         repositories: input.repositories,
+        rule_slots: plan.rule_slots,
         ...constitutionOverride === void 0 ? {} : { route_override: constitutionOverride }
       }).evidence,
       route2.adapter
@@ -83714,7 +86061,11 @@ async function runCounterReview(dependencies, input) {
       }
       let dispatched;
       try {
-        dispatched = await dispatchObserved("adjudicator", constitutionRoute, (selectedRoute) => plan.dispatch(selectedRoute, constitutionEnvelope, adjudication_schema_default));
+        dispatched = await dispatchObserved("adjudicator", constitutionRoute, (selectedRoute) => plan.dispatch(
+          selectedRoute,
+          constitutionEnvelope,
+          JSON.parse(JSON.stringify(createRawAdjudicationV2Schema(plan.rule_slots).toJSONSchema({ target: "draft-2020-12" })))
+        ));
       } catch (error51) {
         return { ok: false, error: error51 };
       }
@@ -83756,8 +86107,8 @@ async function runCounterReview(dependencies, input) {
   if (singleObservations.length !== reviewRoutes.length) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
   }
-  if (singleObservations.some((observation) => observation.evidence.schema_version !== "2")) {
-    throw new TypeError("fresh counter-review observations must all use active review schema version 2");
+  if (singleObservations.some((observation) => observation.evidence.schema_version !== "3")) {
+    throw new TypeError("fresh counter-review observations must all use review schema version 3");
   }
   if (effortPlan !== void 0 && effortAssessment === void 0) {
     throw new TypeError("phase-design counter-review settled without an effort assessment");
@@ -83769,15 +86120,8 @@ async function runCounterReview(dependencies, input) {
   })), totalReviewers);
   const allFindings = aggregated.findings;
   const ownedFindingIds = aggregated.finding_ids_by_reviewer;
-  const matchedMap = /* @__PURE__ */ new Map();
-  for (const obs of singleObservations) {
-    for (const ruleRef of obs.evidence.matched_rule_versions) {
-      matchedMap.set(`${ruleRef.rule_id}:${ruleRef.rule_version}`, ruleRef);
-    }
-  }
-  const mergedMatchedRules = [...matchedMap.values()].sort((a, b) => a.rule_id.localeCompare(b.rule_id));
   const mergedSummary = aggregated.summary;
-  const primaryObs = singleObservations[0];
+  const primaryObs = singleObservations[0].evidence;
   const reviewerRuns = singleObservations.map((obs, index) => {
     const evidence = obs.evidence;
     const routeEntry = reviewRoutes[index];
@@ -83800,17 +86144,18 @@ async function runCounterReview(dependencies, input) {
       envelope_input_digest: evidence.envelope_input_digest,
       observed_output_digest: evidence.observed_output_digest,
       finding_ids: Object.freeze([...ownedFindingIds[index]]),
+      ...assignment.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: Object.freeze([...assignment.expected_upstream_digests]) },
+      ...assignment.legacy_confirmations === void 0 ? {} : { legacy_confirmations: Object.freeze([...assignment.legacy_confirmations]) },
       ...evidence.provider === void 0 ? {} : { provider: evidence.provider },
       route_source: evidence.route_source,
       ...evidence.route_override === void 0 ? {} : { route_override: evidence.route_override }
     });
   });
   const mergedReviewEvidence = Object.freeze({
-    ...primaryObs.evidence,
-    schema_version: "2",
+    ...primaryObs,
+    schema_version: "3",
     findings: Object.freeze(allFindings),
     ...mergedSummary,
-    matched_rule_versions: Object.freeze(mergedMatchedRules),
     reviewer_runs: Object.freeze(reviewerRuns),
     ...effortAssessment === void 0 ? {} : { effort_review: effortAssessment }
   });
@@ -83940,7 +86285,7 @@ async function resolvePreDispatchReplay(dependencies, authority, call) {
 }
 
 // src/mcp/handlers/session.ts
-var fail25 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail26 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function openHandlerSession(call, context2) {
   const suppliedPhase = call.name === "archflow_state" || call.name === "archflow_gate" ? call.input.phase_instance : void 0;
   const services = await createProductionServices({
@@ -83952,7 +86297,7 @@ async function openHandlerSession(call, context2) {
   if (!services.ok) return services;
   const state = services.value.state?.value;
   if (state === void 0 && call.name !== "archflow_state") {
-    return fail25(createProjectError("STATE_MISSING", {
+    return fail26(createProjectError("STATE_MISSING", {
       phase_instance: suppliedPhase ?? "prd"
     }));
   }
@@ -83962,13 +86307,13 @@ async function openHandlerSession(call, context2) {
     if (staged !== void 0) configRead = Object.freeze({ kind: "valid", snapshot: staged });
   }
   if (configRead.kind !== "valid") {
-    return fail25(createProjectError("CONFIG_INVALID", {
+    return fail26(createProjectError("CONFIG_INVALID", {
       issue_code: `config-${configRead.kind}`,
       ...configRead.kind !== "invalid" || configRead.issues === void 0 ? {} : { issues: configRead.issues }
     }));
   }
   const host = context2.connection.initialization_candidates.host;
-  if (host === "unknown") return fail25(createProjectError("UNSUPPORTED_HOST", { host }));
+  if (host === "unknown") return fail26(createProjectError("UNSUPPORTED_HOST", { host }));
   const phaseInstance5 = state?.phase_instance ?? suppliedPhase;
   if (phaseInstance5 === void 0) throw new TypeError("phase instance is unavailable");
   const phase_kind = decodePhaseInstance(phaseInstance5).kind;
@@ -83976,7 +86321,7 @@ async function openHandlerSession(call, context2) {
   try {
     config2 = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes));
   } catch {
-    return fail25(createProjectError("CONFIG_INVALID", { issue_code: "config-unparseable" }));
+    return fail26(createProjectError("CONFIG_INVALID", { issue_code: "config-unparseable" }));
   }
   const repositorySet = await resolveRepositorySet(
     { runner: services.value.runner, environment: services.value.environment },
@@ -84008,7 +86353,7 @@ async function openHandlerSession(call, context2) {
 }
 
 // src/mcp/handlers/counter-review.ts
-var fail26 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail27 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 var ok26 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function effortInputContractError(issueCode, error51) {
   const issues = describeValidationIssues(error51);
@@ -84053,13 +86398,8 @@ async function resolveRepositoryViewCommit(runner, artifact) {
   return artifact.artifact_kind === "implementation-output" ? artifact.base_commit : readHeadCommit(runner);
 }
 async function deriveApprovedUpstreams(services, toolName, durable, subject) {
-  const resolvedConstitution = await resolvePinnedConstitution(
-    services.runner,
-    durable.policy_base_commit,
-    services.authority.context
-  );
-  if (!resolvedConstitution.ok) return resolvedConstitution;
-  const settlementPolicy = authenticateRuleAcceptancePolicy(durable, resolvedConstitution.value);
+  let settlementPolicy;
+  let settlementPolicyLoaded = false;
   const derived = [];
   const authorities = [];
   const seenOwners = /* @__PURE__ */ new Set();
@@ -84084,7 +86424,7 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
         upstreamProjections.value
       );
     } catch {
-      return fail26(createProjectError("CONTRACT_INVALID", {
+      return fail27(createProjectError("CONTRACT_INVALID", {
         tool: toolName,
         issue_code: "adjudication-upstream-not-utf8"
       }));
@@ -84123,6 +86463,16 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
         break;
       }
     }
+    if (!approved && !settlementPolicyLoaded && "reference" in upstream.value) {
+      settlementPolicyLoaded = true;
+      const resolvedConstitution = await resolvePinnedConstitution(
+        services.runner,
+        durable.policy_base_commit,
+        services.authority.context
+      );
+      if (!resolvedConstitution.ok) return resolvedConstitution;
+      settlementPolicy = authenticateRuleAcceptancePolicy(durable, resolvedConstitution.value);
+    }
     if (!approved && settlementPolicy !== void 0 && "reference" in upstream.value) {
       approved = acceptedNoWaitSettlement(
         settlementPolicy,
@@ -84132,9 +86482,9 @@ async function deriveApprovedUpstreams(services, toolName, durable, subject) {
       ) !== void 0;
     }
     if (!approved) {
-      return fail26(createProjectError("STATE_INVALID", {
+      return fail27(createProjectError("STATE_INVALID", {
         phase_instance: durable.phase_instance,
-        issue_code: "upstream-approval-missing"
+        issue_code: "approved-upstream-authority-unavailable"
       }));
     }
     seenOwners.add(upstreamDigest);
@@ -84164,13 +86514,13 @@ async function prepareDispatchEvidence(services, retainedBytes, resultId, value,
 }
 async function reobserveProjectionDigest(services, phaseInstance5, expectedArtifactDigest, artifactPath) {
   const current = await services.dependencies.read_state(services.authority.state);
-  if (current.kind !== "canonical") return fail26(createProjectError("STATE_INVALID", {
+  if (current.kind !== "canonical") return fail27(createProjectError("STATE_INVALID", {
     phase_instance: phaseInstance5,
     issue_code: "counter-review-state-not-current"
   }));
   const retained = await loadCurrentProduceSubject(services.dependencies, current.document.value);
   if (!retained.ok) return retained;
-  if (retained.value.artifact_digest !== expectedArtifactDigest) return fail26(createProjectError("STATE_INVALID", {
+  if (retained.value.artifact_digest !== expectedArtifactDigest) return fail27(createProjectError("STATE_INVALID", {
     phase_instance: phaseInstance5,
     issue_code: "counter-review-subject-not-current"
   }));
@@ -84185,7 +86535,7 @@ async function reobserveProjectionDigest(services, phaseInstance5, expectedArtif
 function asRepositoryViewFailure(result) {
   if (result.ok) return result;
   const unavailable = unavailableRepositoryView(result.error);
-  return unavailable === void 0 ? result : fail26(createProjectError("REPOSITORY_VIEW_UNAVAILABLE", { repository_name: unavailable.repository_name }));
+  return unavailable === void 0 ? result : fail27(createProjectError("REPOSITORY_VIEW_UNAVAILABLE", { repository_name: unavailable.repository_name }));
 }
 function secondarySectionsAreCurrent(artifact, repositorySet) {
   if (artifact.artifact_kind !== "implementation-output") return true;
@@ -84199,27 +86549,27 @@ async function reobserveDispatchSubject(call, context2, phaseInstance5, expected
   const fresh = asRepositoryViewFailure(await openHandlerSession(call, context2));
   if (!fresh.ok) return fresh;
   if (fresh.value.repository_set.digest !== expectedRepositorySetDigest) {
-    return fail26(createProjectError("STATE_INVALID", {
+    return fail27(createProjectError("STATE_INVALID", {
       phase_instance: phaseInstance5,
       issue_code: "counter-review-subject-not-current"
     }));
   }
   const currentMembers = new Map(fresh.value.repository_set.members.map((member) => [member.name, member]));
   if (headPins.some((pin) => currentMembers.get(pin.name)?.head !== pin.commit)) {
-    return fail26(createProjectError("STATE_INVALID", {
+    return fail27(createProjectError("STATE_INVALID", {
       phase_instance: phaseInstance5,
       issue_code: "counter-review-subject-not-current"
     }));
   }
   const current = await fresh.value.services.dependencies.read_state(fresh.value.services.authority.state);
-  if (current.kind !== "canonical") return fail26(createProjectError("STATE_INVALID", {
+  if (current.kind !== "canonical") return fail27(createProjectError("STATE_INVALID", {
     phase_instance: phaseInstance5,
     issue_code: "counter-review-state-not-current"
   }));
   const produce = await loadCurrentProduceSubject(fresh.value.services.dependencies, current.document.value);
   if (!produce.ok) return produce;
   if (!secondarySectionsAreCurrent(produce.value.artifact, fresh.value.repository_set)) {
-    return fail26(createProjectError("STATE_INVALID", {
+    return fail27(createProjectError("STATE_INVALID", {
       phase_instance: phaseInstance5,
       issue_code: "counter-review-subject-not-current"
     }));
@@ -84238,7 +86588,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
     const { services } = session.value;
     const state = services.state;
     if (state === void 0) {
-      return fail26(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
+      return fail27(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
     }
     const replay = await resolvePreDispatchReplay(
       services.dependencies,
@@ -84269,7 +86619,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
     try {
       artifact = renderProduceReviewMaterial(produce.value, projection.value, projections.value);
     } catch {
-      return fail26(createProjectError("CONTRACT_INVALID", {
+      return fail27(createProjectError("CONTRACT_INVALID", {
         tool: call.name,
         issue_code: "artifact-not-utf8"
       }));
@@ -84281,7 +86631,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       try {
         phaseDesignArtifact = new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes);
       } catch (error51) {
-        return fail26(effortInputContractError("phase-design-artifact-invalid", error51));
+        return fail27(effortInputContractError("phase-design-artifact-invalid", error51));
       }
       try {
         const repositoryNames = session.value.repository_set.members.map((member) => member.name);
@@ -84300,6 +86650,9 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         });
       }
     }
+    const upstreams = session.value.phase_kind === "prd" ? ok26(Object.freeze({ inputs: Object.freeze([]), authorities: Object.freeze([]) })) : await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
+    if (!upstreams.ok) return upstreams;
+    const approvedUpstreamDigests = requireApprovedUpstreamDigests(upstreams.value.authorities);
     const constitution = await resolvePinnedConstitution(
       services.runner,
       state.value.policy_base_commit,
@@ -84325,7 +86678,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
     for (const member of session.value.repository_set.members.slice(1)) {
       const retained = secondaryPlans.get(member.name);
       if (retained !== void 0 && (retained.repository_identity_digest !== member.identity.digest || retained.base_commit !== member.head)) {
-        return fail26(createProjectError("STATE_INVALID", {
+        return fail27(createProjectError("STATE_INVALID", {
           phase_instance: state.value.phase_instance,
           issue_code: "counter-review-subject-not-current"
         }));
@@ -84386,11 +86739,6 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
     const canonicalRubric2 = loadedRubric.value;
     let constitutionPlan;
     if (activeRules) {
-      const upstreams = await deriveApprovedUpstreams(services, call.name, state.value, produce.value);
-      if (!upstreams.ok) return upstreams;
-      const approvedUpstreamDigests = requireApprovedUpstreamDigests(
-        upstreams.value.authorities
-      );
       const constitutionResultId = stableId("adjudication-result", call.input.intent_id);
       const constitutionCoordinator = createDispatchCoordinator({
         authority: services.authority,
@@ -84406,8 +86754,7 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         registry: constitution.value.rules,
         pinned_constitution_digest: constitution.value.digest,
         rules: rulesForEnvelope(constitution.value.rules),
-        approved_upstreams: upstreams.value.inputs,
-        approved_upstream_digests: approvedUpstreamDigests,
+        rule_slots: ruleSlotsForEnvelope(constitution.value.rules),
         invocation_id: stableId("adjudication-invocation", call.input.intent_id),
         result_id: constitutionResultId,
         workspace: workspaceBinding,
@@ -84510,12 +86857,13 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
         }
       },
       projection_digest: produceProjectionSetDigest(projections.value),
+      ...session.value.phase_kind === "prd" ? {} : { approved_upstream_digests: approvedUpstreamDigests },
       ...priorTriage.value === void 0 ? {} : { prior_triage: priorTriage.value },
       ...constitutionPlan === void 0 ? {} : { constitution: constitutionPlan },
       ...effortPlan === void 0 ? {} : { effort: effortPlan }
     }).catch((error51) => {
       const overflow = envelopeOverflowError(error51, produce.value);
-      if (overflow !== void 0) return fail26(overflow);
+      if (overflow !== void 0) return fail27(overflow);
       throw error51;
     }).finally(() => sharedWorkspace.dispose());
     if (!result.ok) return result;
@@ -84936,7 +87284,7 @@ async function prepareImplementationResult(input) {
 }
 
 // src/mcp/handlers/state.ts
-var fail27 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var fail28 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function stateResultId(intentId) {
   return parseSafeId(`state-result-${sha256Bytes(new TextEncoder().encode(intentId)).slice(0, 32)}`);
 }
@@ -85065,7 +87413,7 @@ async function handleState(call, context2) {
     const artifact = restartInput === void 0 && refreshInput === void 0 && recoveryInput === void 0 && triggerRecoveryInput === void 0 && staleBaselineInput === void 0 && commitAuthorityInput === void 0 && validationOverrideInput === void 0 ? call.input.artifact : void 0;
     if (services.state === void 0) {
       if (restartInput !== void 0 || refreshInput !== void 0 || recoveryInput !== void 0 || triggerRecoveryInput !== void 0 || staleBaselineInput !== void 0 || commitAuthorityInput !== void 0 || validationOverrideInput !== void 0) {
-        return fail27(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
+        return fail28(createProjectError("STATE_MISSING", { phase_instance: call.input.phase_instance }));
       }
       const initialized = await runStateInitialization(services.dependencies, {
         authority: services.authority,
@@ -85091,7 +87439,7 @@ async function handleState(call, context2) {
             target2
           );
           if (live === void 0) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: current.value.phase_instance,
               issue_code: "stale-baseline-live-subject-unrepresentable"
             }));
@@ -85140,7 +87488,7 @@ async function handleState(call, context2) {
           reason: restartInput.reason,
           input_fingerprint: restartInput.input_fingerprint
         })) {
-          return fail27(createProjectError("STATE_INVALID", {
+          return fail28(createProjectError("STATE_INVALID", {
             phase_instance: services.state.value.phase_instance,
             issue_code: "planning-restart-replay-mismatch"
           }));
@@ -85160,7 +87508,7 @@ async function handleState(call, context2) {
             restart_id: restartId,
             request: restartInput.reason
           })) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: services.state.value.phase_instance,
               issue_code: "planning-restart-ask-replay-mismatch"
             }));
@@ -85193,7 +87541,7 @@ async function handleState(call, context2) {
           const computed = await computeTaskStatus(services.dependencies, services.authority);
           const recovery = computed.ok ? computed.value.milestone_recovery : void 0;
           if (!computed.ok || computed.value.next_action.code !== "recover-milestone-authority" || computed.value.revision !== current.value.revision || recovery === void 0 || recoveryInput.phase_instance !== current.value.phase_instance || recoveryInput.step !== current.value.step || recoveryInput.status !== current.value.status) {
-            return fail27(createProjectError("TRANSITION_INVALID", {
+            return fail28(createProjectError("TRANSITION_INVALID", {
               phase_instance: current.value.phase_instance,
               from: `${current.value.step}-${current.value.status}`,
               to: "milestone-recovery"
@@ -85242,7 +87590,7 @@ async function handleState(call, context2) {
         if (triggerRecoveryInput !== void 0) {
           const computed = await computeTaskStatus(services.dependencies, services.authority);
           if (!computed.ok || computed.value.next_action.code !== "recover-approval-trigger-authority" || computed.value.revision !== current.value.revision || triggerRecoveryInput.phase_instance !== current.value.phase_instance || triggerRecoveryInput.step !== current.value.step || triggerRecoveryInput.status !== current.value.status) {
-            return fail27(createProjectError("TRANSITION_INVALID", {
+            return fail28(createProjectError("TRANSITION_INVALID", {
               phase_instance: current.value.phase_instance,
               from: `${current.value.step}-${current.value.status}`,
               to: "approval-trigger-authority-recovery"
@@ -85285,7 +87633,7 @@ async function handleState(call, context2) {
         if (commitAuthorityInput !== void 0) {
           const state = current.value;
           if (state.terminal !== void 0 || state.open_gate !== void 0) {
-            return fail27(createProjectError("TRANSITION_INVALID", {
+            return fail28(createProjectError("TRANSITION_INVALID", {
               phase_instance: commitAuthorityInput.phase_instance,
               from: `${state.step}-${state.status}`,
               to: "set-commit-authority"
@@ -85295,7 +87643,7 @@ async function handleState(call, context2) {
           try {
             resolvedCommit = await resolveCommit(services.runner, commitAuthorityInput.target_commit);
           } catch {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "target-commit-unresolvable"
             }));
@@ -85374,7 +87722,7 @@ async function handleState(call, context2) {
           const state = current.value;
           const decoded = decodePhaseInstance(state.phase_instance);
           if (decoded.kind !== "design" && decoded.kind !== "phase-design" || refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" || state.status !== "succeeded" || state.open_gate !== void 0 || state.pending_human_revision !== void 0 || state.terminal !== void 0) {
-            return fail27(createProjectError("TRANSITION_INVALID", {
+            return fail28(createProjectError("TRANSITION_INVALID", {
               phase_instance: refreshInput.phase_instance,
               from: `${state.step}-${state.status}`,
               to: "refresh-milestone-baseline"
@@ -85415,7 +87763,7 @@ async function handleState(call, context2) {
             state.phase_instance
           );
           if (prior?.milestone_baseline_commit === void 0 || prior.config_digest !== liveConfig.digest) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "milestone-baseline-refresh-authority-missing"
             }));
@@ -85427,7 +87775,7 @@ async function handleState(call, context2) {
             produce.value.retained.manifest.value.outputs,
             services.authority.context
           )) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "milestone-baseline-refresh-reviewed-bytes-changed"
             }));
@@ -85436,14 +87784,14 @@ async function handleState(call, context2) {
           if (!discovered.ok) return discovered;
           const reconciliation = reconcileCurrentAuthority(discovered.value);
           if (reconciliation.findings.length !== 0 || (discovered.value.blocking_reasons ?? []).length !== 0) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "milestone-baseline-refresh-reconciliation-required"
             }));
           }
           const currentTarget = await currentTargetRef(services.dependencies);
           if (prior.milestone_target_ref !== void 0 && currentTarget.value !== prior.milestone_target_ref) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "milestone-baseline-refresh-target-changed"
             }));
@@ -85453,7 +87801,7 @@ async function handleState(call, context2) {
             prior.milestone_target_ref ?? currentTarget.value
           );
           if (head === prior.milestone_baseline_commit) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "milestone-baseline-refresh-not-needed"
             }));
@@ -85523,7 +87871,7 @@ async function handleState(call, context2) {
             });
             const liveConfig2 = await services.dependencies.read_config(services.authority.config);
             if (liveConfig2.kind !== "valid") {
-              return fail27(createProjectError("CONFIG_INVALID", { issue_code: `config-${liveConfig2.kind}` }));
+              return fail28(createProjectError("CONFIG_INVALID", { issue_code: `config-${liveConfig2.kind}` }));
             }
             const landingSubject = await services.dependencies.resolve_input_fingerprint({
               runner: services.runner,
@@ -85581,7 +87929,7 @@ async function handleState(call, context2) {
           const state = current.value;
           const phase3 = decodePhaseInstance(state.phase_instance);
           if (phase3.kind !== "phase-impl" || state.phase_instance !== validationOverrideInput.phase_instance || state.step !== "produce" || state.status !== "running" || state.terminal !== void 0 || state.open_gate !== void 0 || state.pending_validation_override !== void 0 || state.input_fingerprint !== validationOverrideInput.input_fingerprint) {
-            return fail27(createProjectError("TRANSITION_INVALID", {
+            return fail28(createProjectError("TRANSITION_INVALID", {
               phase_instance: validationOverrideInput.phase_instance,
               from: `${state.step}-${state.status}`,
               to: "produce-failed-validation-override"
@@ -85609,14 +87957,14 @@ async function handleState(call, context2) {
               void 0
             );
           } catch {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "validation-override-governing-authority-invalid"
             }));
           }
           const binding = expectedProduceUpstreamBindings(state).find((candidate) => candidate.artifact_kind === "phase-design");
           if (binding === void 0) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "validation-override-governing-phase-design-missing"
             }));
@@ -85629,7 +87977,7 @@ async function handleState(call, context2) {
           );
           if (!governing.ok) return governing;
           if (!approvedUpstreams.includes(governing.value.artifact_digest)) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "validation-override-governing-phase-design-unapproved"
             }));
@@ -85669,7 +88017,7 @@ async function handleState(call, context2) {
             if (!retained.ok) return retained;
             const triage = retained.value.get("triage")?.manifest.source_artifact;
             if (triage?.artifact_kind === "triage" && triage.evidence.accepted_count > 0) {
-              return fail27(createProjectError("CONTRACT_INVALID", {
+              return fail28(createProjectError("CONTRACT_INVALID", {
                 tool: "archflow_state",
                 issue_code: "simple-human-revision-cannot-resolve-accepted-finding"
               }));
@@ -85692,13 +88040,13 @@ async function handleState(call, context2) {
               current.value.planned_final_phase
             );
           } catch {
-            return fail27(createProjectError("CONTRACT_INVALID", {
+            return fail28(createProjectError("CONTRACT_INVALID", {
               tool: "archflow_state",
               issue_code: "produce-design-phase-plan-invalid"
             }));
           }
           if (derivedPlannedFinalPhase !== void 0 && derivedPlannedFinalPhase !== null && derivedFinalPhaseBelowCurrentPhase(derivedPlannedFinalPhase, call.input.phase_instance)) {
-            return fail27(createProjectError("CONTRACT_INVALID", {
+            return fail28(createProjectError("CONTRACT_INVALID", {
               tool: "archflow_state",
               issue_code: "produce-derived-final-phase-below-current"
             }));
@@ -85717,7 +88065,7 @@ async function handleState(call, context2) {
             const manifest = prepared.value.prepared.manifest.value;
             const source = manifest.source_artifact;
             if (source.artifact_kind !== "document" && source.artifact_kind !== "implementation-output") {
-              return fail27(createProjectError("STATE_INVALID", {
+              return fail28(createProjectError("STATE_INVALID", {
                 phase_instance: current.value.phase_instance,
                 issue_code: "produce-reentry-subject-invalid"
               }));
@@ -85741,7 +88089,7 @@ async function handleState(call, context2) {
           const produce = await loadCurrentProduceSubject(services.dependencies, current.value);
           if (!produce.ok) return produce;
           if (artifact.evidence.subject_digest !== produce.value.artifact_digest) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: current.value.phase_instance,
               issue_code: "review-subject-not-current-produce-artifact"
             }));
@@ -86044,7 +88392,7 @@ async function handleState(call, context2) {
           if (!discovered.ok) return discovered;
           const reconciled = reconcileCurrentAuthority(discovered.value);
           if (reconciled.findings.length !== 0 || (discovered.value.blocking_reasons ?? []).length !== 0) {
-            return fail27(createProjectError("STATE_INVALID", {
+            return fail28(createProjectError("STATE_INVALID", {
               phase_instance: current.value.phase_instance,
               issue_code: "milestone-consumption-reconciliation-required"
             }));
@@ -86101,7 +88449,7 @@ async function handleState(call, context2) {
         if (settlementEvidence !== void 0 && settlementProduce !== void 0) {
           const configRead = await services.dependencies.read_config(services.authority.config);
           if (configRead.kind !== "valid") {
-            return fail27(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
+            return fail28(createProjectError("CONFIG_INVALID", { issue_code: `config-${configRead.kind}` }));
           }
           const prospective = {
             ...next.value,

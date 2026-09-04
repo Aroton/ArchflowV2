@@ -166,6 +166,23 @@ export interface CounterReviewInput extends CommonToolInput {
 export type CounterReviewConstitutionOutcome =
   | Readonly<{ status: "evaluated"; path: RepositoryPathClaim; constitution: ConstitutionResult; drift: DriftResult; triggers: readonly RuleVersionRef[] }>
   | Readonly<{ status: "not-run"; reason: "no-active-constitution-rules" }>;
+export type CounterReviewConstitutionOutcomeV2 =
+  | Readonly<{ status: "evaluated"; path: RepositoryPathClaim; constitution: ConstitutionResult; triggers: readonly RuleVersionRef[] }>
+  | Readonly<{ status: "not-run"; reason: "no-active-constitution-rules" }>;
+export type CounterReviewAlignmentOutcomeV1 =
+  | Readonly<{ status: "evaluated"; drift: DriftResult; upstream_count: number }>
+  | Readonly<{ status: "not-run"; reason: "prd-has-no-approved-upstream-plan" }>;
+export type CounterReviewV3Success = {
+  readonly path: RepositoryPathClaim;
+  readonly verdict: "pass" | "advisory" | "review-raised";
+  readonly total_findings: number;
+  readonly partition_counts: FindingPartitionCounts;
+  readonly alignment: CounterReviewAlignmentOutcomeV1;
+  readonly constitution: CounterReviewConstitutionOutcomeV2;
+  readonly revision: number;
+  readonly request_digest?: Sha256Digest;
+};
+/** Archived Review V2 success shape; fresh calls return CounterReviewV3Success. */
 export type CounterReviewV2Success = {
   readonly path: RepositoryPathClaim;
   readonly verdict: "pass" | "advisory" | "review-raised";
@@ -183,7 +200,7 @@ export type LegacyCounterReviewV1Success = {
   readonly revision: number;
   readonly request_digest?: Sha256Digest;
 };
-export type CounterReviewSuccess = CounterReviewV2Success | LegacyCounterReviewV1Success;
+export type CounterReviewSuccess = CounterReviewV3Success | CounterReviewV2Success | LegacyCounterReviewV1Success;
 export type HumanGateChoice = { readonly choice: string; readonly reason: string };
 /**
  * The bounded-decision pair is optional and all-or-nothing: supply `preview_digest` + `decision`
@@ -438,6 +455,21 @@ export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<Pars
 export const toolSuccessSchemas = {
   archflow_state: z.object({ path: taskPathClaimV1Schema, revision: safeInteger, status: z.enum(["running", "succeeded", "failed"]), request_digest: digest.optional() }).strict(),
   archflow_counter_review: z.union([z.object({
+    path: repositoryPathClaimV1Schema,
+    verdict: z.enum(["pass", "advisory", "review-raised"]),
+    total_findings: safeInteger,
+    partition_counts: findingPartitionCountsSchema,
+    alignment: z.union([
+      z.object({ status: z.literal("evaluated"), drift: z.enum(DRIFT_RESULTS), upstream_count: safeInteger }).strict(),
+      z.object({ status: z.literal("not-run"), reason: z.literal("prd-has-no-approved-upstream-plan") }).strict(),
+    ]),
+    constitution: z.union([
+      z.object({ status: z.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: z.enum(CONSTITUTION_RESULTS), triggers: z.array(rule) }).strict(),
+      z.object({ status: z.literal("not-run"), reason: z.literal("no-active-constitution-rules") }).strict(),
+    ]),
+    revision: safeInteger,
+    request_digest: digest.optional(),
+  }).strict(), z.object({
     path: repositoryPathClaimV1Schema,
     verdict: z.enum(["pass", "advisory", "review-raised"]),
     total_findings: safeInteger,

@@ -1,7 +1,7 @@
 {
-  "host_selection_result_digest": "aefd617f6fccaa881278f086e284018e26b801c6d3edda91682295c07da3b468",
+  "host_selection_result_digest": "c1bc8390dee502f7ab3cac3fdc6d4aefe0c79f681efd7b73f2f3c5d5f348072f",
   "observation_payload": {
-    "bundle_manifest_sha256": "dbea600ca78fcf3e648140b369e61a4583df4057303af8446de5cb6d1ef1ac9b",
+    "bundle_manifest_sha256": "f2828755069b4ab3761360c0cc9eddd843ac8ee14a2c618e6d5cc955e1e3a33a",
     "hosts": {
       "claude": {
         "advertisement": {
@@ -40,7 +40,7 @@
             "archflow_status"
           ]
         },
-        "cli_version": "codex-cli 0.153.0",
+        "cli_version": "codex-cli 0.153.3",
         "first_call_selection": {
           "first_archflow_tool": "archflow_status",
           "prompt": "What is the current status of the ArchFlow task hostsel-codex? Answer in one sentence.",

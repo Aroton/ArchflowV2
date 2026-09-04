@@ -466,11 +466,11 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     if (!result.ok) return;
     view = result.value;
     expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-    expect(view.findings?.map((finding) => finding.finding_id)).toEqual(["requirement-observable"]);
+    expect(view.findings?.map((finding) => finding.finding_id)).toEqual(["general-requirement-observable"]);
     expect(readFileSync(prdPath, "utf8")).toBe("# Result\n\nImprove the workflow.\n");
 
     result = await h.apply(invocation, view, { kind: "triage", dispositions: [{
-      finding_id: "requirement-observable", disposition: "accepted",
+      finding_id: "general-requirement-observable", disposition: "accepted",
       rationale: "The reviewer identified a material verification gap.",
       revision_intent: "Add an observable semantic status outcome.",
     }] });

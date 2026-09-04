@@ -37,7 +37,7 @@ import {
   renderReviewEvidence,
   renderTriage,
 } from "../contracts/renderers.js";
-import type { ReviewEvidence } from "../contracts/review.js";
+import { reviewFindingDisplayDetail, type ReviewEvidence } from "../contracts/review.js";
 import type { EffortEvidence } from "../contracts/effort-review.js";
 import {
   parseSecretScanResult,
@@ -278,7 +278,49 @@ export async function computeDispositionLedger(
   }
   for (const disposition of dispositions) {
     const finding = findingDetails.get(`${disposition.review_evidence_digest}:${disposition.finding_id}`);
+    const display = finding === undefined ? undefined : reviewFindingDisplayDetail(finding);
     const occurrenceKey = `${disposition.review_evidence_digest}:${disposition.finding_id}`;
+    if (finding !== undefined && "reviewer_focus" in finding) {
+      const recorded = disposition as Readonly<{ rationale?: string; revision_intent?: string; evidence?: string }>;
+      const dispositionEvidence = disposition.disposition === "rejected" || disposition.disposition === "deferred"
+        ? recorded.evidence
+        : undefined;
+      const common = {
+        review_evidence_digest: disposition.review_evidence_digest,
+        finding_id: disposition.finding_id,
+        disposition: disposition.disposition,
+        attempt: sources.attempt,
+        rationale: disposition.rationale,
+        ...(recorded.revision_intent === undefined ? {} : { revision_intent: recorded.revision_intent }),
+        claim_type: finding.claim_type,
+        confidence: finding.confidence,
+        falsifier: finding.falsifier,
+        reviewer_id: finding.reviewer_id,
+        reviewer_focus: finding.reviewer_focus,
+        routing_role: finding.routing_role,
+        criterion_id: finding.criterion_id,
+        ...(dispositionEvidence === undefined ? {} : { disposition_evidence: dispositionEvidence }),
+      } as const;
+      merged.set(occurrenceKey, Object.freeze(finding.reviewer_focus === "general"
+        ? {
+          ...common,
+          reviewer_focus: "general" as const,
+          routing_role: "counter-reviewer" as const,
+          summary: finding.summary,
+          evidence: finding.evidence,
+          suggested_resolution: finding.suggested_resolution,
+        }
+        : {
+          ...common,
+          reviewer_focus: "tests" as const,
+          routing_role: "test-reviewer" as const,
+          required_behavior_or_risk_boundary: finding.required_behavior_or_risk_boundary,
+          coverage_or_oracle_problem: finding.coverage_or_oracle_problem,
+          consequence: finding.consequence,
+          proposed_verification_change: finding.proposed_verification_change,
+        }));
+      continue;
+    }
     merged.set(occurrenceKey, Object.freeze({
       review_evidence_digest: disposition.review_evidence_digest,
       finding_id: disposition.finding_id,
@@ -290,15 +332,15 @@ export async function computeDispositionLedger(
         : disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial"
           ? {
             revision_intent: disposition.revision_intent,
-            ...(finding === undefined ? {} : { evidence: finding.evidence }),
+            ...(display === undefined ? {} : { evidence: display.evidence }),
           }
           : disposition.disposition === "escalated-human"
-            ? (finding === undefined ? {} : { evidence: finding.evidence })
+            ? (display === undefined ? {} : { evidence: display.evidence })
             : {
               ...(disposition.evidence !== undefined
                 ? { evidence: disposition.evidence }
-                : finding !== undefined
-                  ? { evidence: finding.evidence }
+                : display !== undefined
+                  ? { evidence: display.evidence }
                   : {}),
             }),
       ...(finding === undefined ? {} : {
@@ -312,8 +354,8 @@ export async function computeDispositionLedger(
             severity: finding.severity,
             blocking: finding.blocking,
           }),
-        summary: finding.summary,
-        suggested_resolution: finding.suggested_resolution,
+        summary: display!.summary,
+        suggested_resolution: display!.suggested_resolution,
       }),
     }));
   }

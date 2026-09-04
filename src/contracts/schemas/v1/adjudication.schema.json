@@ -11,56 +11,17 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "1"
+      "const": "2"
     },
-    "task_id": {
-      "$ref": "#/$defs/taskSlug"
-    },
-    "phase_instance": {
-      "type": "string",
-      "pattern": "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$"
-    },
-    "step": {
-      "type": "string",
-      "const": "adjudicate"
-    },
-    "subject_digest": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "input_fingerprint": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "pinned_constitution_digest": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "approved_upstream_digests": {
-      "type": "array",
-      "items": {
+    "judgments": {
+      "type": "object",
+      "propertyNames": {
         "type": "string",
-        "pattern": "^[0-9a-f]{64}$"
-      }
-    },
-    "source_review_envelope_digest": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "rule_findings": {
-      "type": "array",
-      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      },
+      "additionalProperties": {
         "type": "object",
         "properties": {
-          "rule_id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          "rule_version": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
-          },
           "compliance": {
             "type": "string",
             "enum": [
@@ -89,8 +50,6 @@
           }
         },
         "required": [
-          "rule_id",
-          "rule_version",
           "compliance",
           "rationale",
           "trigger",
@@ -98,59 +57,11 @@
         ],
         "additionalProperties": false
       }
-    },
-    "drift_findings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "upstream_digest": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          },
-          "drift": {
-            "type": "string",
-            "enum": [
-              "aligned",
-              "incidental",
-              "material"
-            ]
-          },
-          "affected_claim_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-            }
-          },
-          "rationale": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "\\S"
-          }
-        },
-        "required": [
-          "upstream_digest",
-          "drift",
-          "affected_claim_ids",
-          "rationale"
-        ],
-        "additionalProperties": false
-      }
     }
   },
   "required": [
     "schema_version",
-    "task_id",
-    "phase_instance",
-    "step",
-    "subject_digest",
-    "input_fingerprint",
-    "pinned_constitution_digest",
-    "approved_upstream_digests",
-    "source_review_envelope_digest",
-    "rule_findings",
-    "drift_findings"
+    "judgments"
   ],
   "additionalProperties": false
 }

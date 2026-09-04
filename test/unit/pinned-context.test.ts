@@ -281,6 +281,7 @@ describe("priorTriageEvidence", () => {
     expect(record.current_attempt).toBe(2);
     expect(record.dispositions).toEqual([
       {
+        review_evidence_digest: REVIEW_DIGEST,
         finding_id: "digest-drift", attempt: 2, severity: "blocker", blocking: true,
         summary: "Digest recomputation skips the slot check.",
         evidence: "The slot is read after hashing.",
@@ -321,6 +322,7 @@ describe("priorTriageEvidence", () => {
     if (entry.status !== "pinned") throw new Error("expected pinned prior triage");
     const record = JSON.parse(entry.content) as { dispositions: readonly Record<string, unknown>[] };
     expect(record.dispositions).toEqual([{
+      review_evidence_digest: REVIEW_DIGEST,
       finding_id: "digest-risk", attempt: 2, claim_type: "risk", confidence: "likely",
       falsifier: "Run the slot-race test and observe a stable digest.",
       summary: "The digest can race the slot read.", evidence: "The slot is read after hashing.",
@@ -362,6 +364,7 @@ describe("priorTriageEvidence", () => {
     expect(record.coverage).toContain("latest accepted findings");
     expect(record.dispositions).toEqual([
       {
+        review_evidence_digest: REVIEW_DIGEST,
         finding_id: "digest-drift", attempt: 2,
         disposition: "accepted", rationale: "Round two disposition.",
         revision_intent: "Recompute after the slot check.",

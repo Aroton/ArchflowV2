@@ -9,6 +9,7 @@ import type { Sha256Digest } from "../contracts/evidence.js";
 import { parseTaskPathClaim, userAskClaim } from "../contracts/path-claims.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
+import { reviewFindingDisplayDetail, type ReviewEvidence } from "../contracts/review.js";
 import {
   readCommitTreeBlob,
   readCommitTreePathListing,
@@ -653,7 +654,16 @@ export type PriorTriageRecord = Readonly<{
   phase_instance: PhaseInstanceId;
   current_attempt: SafeInteger;
   dispositions: readonly PriorTriageDisposition[];
-  current: readonly Readonly<{ finding_id: string; disposition: string }>[];
+  current: readonly Readonly<{
+    review_evidence_digest?: Sha256Digest;
+    finding_id: string;
+    disposition: string;
+  }>[];
+  /** Exact review occurrence whose current accepted dispositions must be confirmed. */
+  source_review?: Readonly<{
+    evidence_digest: Sha256Digest;
+    evidence: ReviewEvidence;
+  }>;
 }>;
 
 export async function loadPriorTriageRecord(
@@ -681,21 +691,27 @@ export async function loadPriorTriageRecord(
   )>>();
   const reviewRef = state.authoritative_results.find((candidate) =>
     candidate.phase_instance === state.phase_instance && candidate.step === "counter_review");
+  let sourceReview: PriorTriageRecord["source_review"];
   if (reviewRef !== undefined) {
     const review = await dependencies.load_retained_result(reviewRef);
     if (!review.ok) return review;
     const manifest = review.value.prepared.manifest.value;
     if (manifest.source_artifact.artifact_kind === "review-evidence") {
+      sourceReview = Object.freeze({
+        evidence_digest: manifest.artifact_digest,
+        evidence: manifest.source_artifact.evidence,
+      });
       for (const finding of manifest.source_artifact.evidence.findings) {
+        const display = reviewFindingDisplayDetail(finding);
         findingsByRef.set(`${manifest.artifact_digest}:${finding.finding_id}`, {
-          ...(manifest.source_artifact.evidence.schema_version === "2" && "claim_type" in finding
+          ...(manifest.source_artifact.evidence.schema_version !== "1" && "claim_type" in finding
             ? { claim_type: finding.claim_type, confidence: finding.confidence, falsifier: finding.falsifier }
             : "severity" in finding
               ? { severity: finding.severity, blocking: finding.blocking }
               : (() => { throw new TypeError("review finding does not match its native schema version"); })()),
-          summary: finding.summary,
-          evidence: finding.evidence,
-          suggested_resolution: finding.suggested_resolution,
+          summary: display.summary,
+          evidence: display.evidence,
+          suggested_resolution: display.suggested_resolution,
         });
       }
     }
@@ -706,6 +722,7 @@ export async function loadPriorTriageRecord(
     // accepted-editorial); render whichever recorded response the shape carries.
     const recorded = disposition as Readonly<{ revision_intent?: unknown; rationale?: unknown }>;
     return {
+      review_evidence_digest: disposition.review_evidence_digest,
       finding_id: disposition.finding_id,
       attempt: state.attempt,
       ...(finding ?? {}),
@@ -722,9 +739,13 @@ export async function loadPriorTriageRecord(
     current_attempt: state.attempt,
     dispositions: Object.freeze(accepted),
     current: Object.freeze(accepted.map((disposition) => Object.freeze({
+      ...(typeof disposition.review_evidence_digest === "string"
+        ? { review_evidence_digest: disposition.review_evidence_digest as Sha256Digest }
+        : {}),
       finding_id: disposition.finding_id,
       disposition: disposition.disposition,
     }))),
+    ...(sourceReview === undefined ? {} : { source_review: sourceReview }),
   }));
 }
 

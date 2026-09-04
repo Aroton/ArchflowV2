@@ -1,12 +1,19 @@
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-
 import { canonicalJsonBytes } from "../contracts/canonical.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import type { HostIdentity } from "../contracts/hosts.js";
 import { safeIdV1Schema } from "../contracts/evidence.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import type { AdapterId, ModelFamily, ReviewedRepositoryV1, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
+import {
+  createGeneralReviewOutputV3Schema,
+  createTestReviewOutputV3Schema,
+  type AdapterId,
+  type ModelFamily,
+  type ReviewedRepositoryV1,
+  type RouteOverrideRecord,
+  type RouteSourceRecord,
+} from "../contracts/review.js";
 import {
   createAdjudicationObservationCapability,
   createReviewObservationCapability,
@@ -14,13 +21,17 @@ import {
 import {
   observationSource,
   type ObservationBindingByKind,
+  type ReviewObservationAssignmentV3,
 } from "../contracts/trust.js";
+import type { AdjudicationRuleSlotV1 } from "../contracts/adjudication.js";
 import type {
   AdjudicationSubject,
   DispatchEnvelope,
   DispatchSubject,
+  ReviewAssignmentV1,
 } from "../review/envelopes.js";
 import {
+  MAX_ARGV_ELEMENT_BYTES,
   runDispatchChild,
   type DispatchChildResult,
   type DispatchChildSpec,
@@ -236,9 +247,34 @@ export function projectCliOutputSchema(
   resultKind: DispatchEnvelope["result_kind"],
   adapter: AdapterId,
   subject?: Readonly<Record<string, PlainJsonValue>>,
+  assignment?: ReviewAssignmentV1,
 ): PlainJsonValue {
-  assertPlainJson(outputSchema, "CLI output schema");
-  const snapshot = structuredClone(outputSchema);
+  const roleSpecificSchema = resultKind === "review" && assignment !== undefined
+    ? assignment.focus === "general"
+      ? createGeneralReviewOutputV3Schema({
+          criterion_ids: assignment.criterion_ids,
+          ...(assignment.expected_upstream_digests === undefined
+            ? {}
+            : { expected_upstream_digests: assignment.expected_upstream_digests }),
+          ...(assignment.legacy_confirmations === undefined
+            ? {}
+            : { legacy_confirmations: assignment.legacy_confirmations }),
+        })
+      : createTestReviewOutputV3Schema({
+          criterion_ids: assignment.criterion_ids,
+          ...(assignment.legacy_confirmations === undefined
+            ? {}
+            : { legacy_confirmations: assignment.legacy_confirmations }),
+        })
+    : undefined;
+  // Zod attaches a non-enumerable `~standard` implementation marker to schemas emitted from a
+  // refined runtime factory. Round-trip the internally generated document through its JSON form
+  // before applying the plain-JSON boundary; only the enumerable JSON Schema is transport data.
+  const roleSpecific = roleSpecificSchema === undefined
+    ? outputSchema
+    : JSON.parse(JSON.stringify(roleSpecificSchema.toJSONSchema({ target: "draft-2020-12" }))) as unknown;
+  assertPlainJson(roleSpecific, "CLI output schema");
+  const snapshot = structuredClone(roleSpecific);
   const projected = projectSchemaNode(snapshot, adapter);
   if (projected === null || typeof projected !== "object" || Array.isArray(projected)) {
     throw new TypeError("CLI output schema must be an object");
@@ -289,22 +325,42 @@ export function projectCliOutputSchema(
           typeof hazardRegistry === "object" && !Array.isArray(hazardRegistry)
         ? (hazardRegistry as Readonly<Record<string, PlainJsonValue>>).registry_digest
         : subject[key];
-      if (value !== undefined) bound[key] = boundSubjectNode(bound[key]!, value, adapter);
+      // Fresh role-specific roots deliberately omit server-owned identity fields (notably the
+      // constitution-only V2 judgments root). Bind only fields the selected output contract
+      // actually declares; never widen a strict schema by manufacturing a subject property.
+      if (value !== undefined && bound[key] !== undefined) {
+        bound[key] = boundSubjectNode(bound[key], value, adapter);
+      }
     }
     root = { ...root, properties: bound };
   }
   return adapter === "codex-cli" ? codexStrictNode(root) : root;
 }
 
-function envelopeSubject(envelope: DispatchEnvelope): Readonly<Record<string, PlainJsonValue>> {
+function envelopeDocument(envelope: DispatchEnvelope): Readonly<Record<string, PlainJsonValue>> {
   const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
   assertPlainJson(decoded, "dispatch envelope");
   if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
-  if (envelope.result_kind === "effort-review") return decoded as Readonly<Record<string, PlainJsonValue>>;
-  const subject = (decoded as Readonly<Record<string, PlainJsonValue>>).subject;
-  if (subject === undefined) return {};
+  return decoded as Readonly<Record<string, PlainJsonValue>>;
+}
+
+function envelopeProjection(envelope: DispatchEnvelope): Readonly<{
+  subject: Readonly<Record<string, PlainJsonValue>>;
+  assignment?: ReviewAssignmentV1;
+}> {
+  const decoded = envelopeDocument(envelope);
+  if (envelope.result_kind === "effort-review") return Object.freeze({ subject: decoded });
+  const subject = decoded.subject;
+  if (subject === undefined) return Object.freeze({ subject: Object.freeze({}) });
   if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");
-  return subject as Readonly<Record<string, PlainJsonValue>>;
+  const assignment = decoded.assignment;
+  if (assignment !== undefined && (assignment === null || typeof assignment !== "object" || Array.isArray(assignment))) {
+    throw new TypeError("dispatch envelope assignment must be an object");
+  }
+  return Object.freeze({
+    subject: subject as Readonly<Record<string, PlainJsonValue>>,
+    ...(assignment === undefined ? {} : { assignment: assignment as ReviewAssignmentV1 }),
+  });
 }
 
 let dispatchQueue: Promise<void> = Promise.resolve();
@@ -376,6 +432,7 @@ export type ReviewObservationMint = Readonly<{
   extracted_output_bytes: Uint8Array;
   route_source?: RouteSourceRecord;
   route_override?: RouteOverrideRecord;
+  assignment?: ReviewObservationAssignmentV3;
 }>;
 
 export type AdjudicationObservationMint = Readonly<{
@@ -388,6 +445,7 @@ export type AdjudicationObservationMint = Readonly<{
   extracted_output_bytes: Uint8Array;
   route_source?: RouteSourceRecord;
   route_override?: RouteOverrideRecord;
+  rule_slots?: readonly AdjudicationRuleSlotV1[];
 }>;
 
 export class CliAdapterError extends Error {
@@ -644,7 +702,10 @@ const claudeAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("claude-cli", route);
-    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "claude-cli", envelopeSubject(envelope));
+    const projection = envelopeProjection(envelope);
+    const schema = projectCliOutputSchema(
+      outputSchema, envelope.result_kind, "claude-cli", projection.subject, projection.assignment,
+    );
     if (route.effort === "ultra") {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
@@ -654,6 +715,12 @@ const claudeAdapter: CliAdapter = Object.freeze({
     // exactly the read-only tools (no write, bash, or network tools). `--setting-sources ""`,
     // `--disable-slash-commands`, and the empty strict MCP config stay pinned so the view's own
     // CLAUDE.md and settings never become instructions. Without a view, every tool stays disabled.
+    const serializedSchema = JSON.stringify(schema);
+    if (Buffer.byteLength(serializedSchema, "utf8") >= MAX_ARGV_ELEMENT_BYTES) {
+      return fail(createProjectError("PROCESS_FAILED", {
+        adapter: "claude-cli", exit_class: "argument-list-too-long",
+      }));
+    }
     const argv = Object.freeze([
       "-p",
       "--safe-mode",
@@ -664,7 +731,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
       "--no-session-persistence",
       "--setting-sources", "",
       "--output-format", "json",
-      "--json-schema", JSON.stringify(schema),
+      "--json-schema", serializedSchema,
       "--model", route.model,
       "--effort", route.effort,
     ]);
@@ -747,7 +814,10 @@ const codexAdapter: CliAdapter = Object.freeze({
       // cc-switch wraps only the claude CLI; routing already rejects this pairing.
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
-    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "codex-cli", envelopeSubject(envelope));
+    const projection = envelopeProjection(envelope);
+    const schema = projectCliOutputSchema(
+      outputSchema, envelope.result_kind, "codex-cli", projection.subject, projection.assignment,
+    );
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
     // Named per result kind so the two children of one review can share a workspace root
     // without colliding on the codex final-output file.
@@ -879,7 +949,10 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     if (route.provider !== undefined) {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
-    const schema = projectCliOutputSchema(outputSchema, envelope.result_kind, "antigravity-cli", envelopeSubject(envelope));
+    const projection = envelopeProjection(envelope);
+    const schema = projectCliOutputSchema(
+      outputSchema, envelope.result_kind, "antigravity-cli", projection.subject, projection.assignment,
+    );
     // The envelope and the schema never ride on argv: `agy -p` accepts the prompt only as one
     // argv element, and Linux caps a single element at MAX_ARG_STRLEN (128 KiB) regardless of
     // ARG_MAX, so a large pinned design made execve fail with E2BIG. The prompt instead travels
@@ -998,6 +1071,7 @@ export function mintReviewObservation(input: ReviewObservationMint): ReturnType<
     repositories: input.repositories,
     rubric_digest: input.subject.rubric_digest,
     producer_family: input.subject.producer_family,
+    ...(input.assignment === undefined ? {} : { assignment: input.assignment }),
     ...(input.route_override === undefined ? {} : { route_override: input.route_override }),
   };
   const capability = createReviewObservationCapability(binding);
@@ -1009,6 +1083,9 @@ export function mintAdjudicationObservation(
   input: AdjudicationObservationMint,
 ): ReturnType<typeof observationSource.observeAdjudication> {
   assertRoute(input.adapter, input.route);
+  if (input.rule_slots === undefined) {
+    throw new TypeError("fresh adjudication observation requires exact rule slots");
+  }
   const binding: ObservationBindingByKind["adjudication"] = {
     kind: "adjudication",
     task_id: input.subject.task_id,
@@ -1028,7 +1105,7 @@ export function mintAdjudicationObservation(
     route_source: input.route_source ?? Object.freeze({ provenance: "configured" as const }),
     repositories: input.repositories,
     pinned_constitution_digest: input.subject.pinned_constitution_digest,
-    approved_upstream_digests: input.subject.approved_upstream_digests,
+    rule_slots: input.rule_slots,
     source_review_envelope_digest: input.subject.source_review_envelope_digest,
     ...(input.route_override === undefined ? {} : { route_override: input.route_override }),
   };

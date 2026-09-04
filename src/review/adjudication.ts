@@ -1,7 +1,9 @@
 import type {
   AdjudicationEvidence,
   DerivedAdjudication,
+  DerivedAdjudicationV2,
 } from "../contracts/adjudication.js";
+import type { AdjudicationRuleSlotV1, DriftResult } from "../contracts/adjudication.js";
 import type {
   ConstitutionRegistry,
   ConstitutionRuleV1,
@@ -11,7 +13,7 @@ import {
   type ProjectError,
 } from "../contracts/errors.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
-import type { AdapterId } from "../contracts/review.js";
+import type { AdapterId, ReviewEvidence, UpstreamAlignmentV1 } from "../contracts/review.js";
 import type { AdjudicationEnvelopeInput } from "./envelopes.js";
 import type { DesignPolicyFinding, EligibleWaiver, GateContext, GateKind, RuleVersionRef, WaivableOperation } from "../contracts/gates.js";
 
@@ -42,7 +44,7 @@ const invalidOutput = (issueCode: string, adapter: AdapterId | undefined): never
  * channel through which mechanism evidence could arrive, so judging a finding against them could
  * only ever manufacture uncertainty.
  */
-export function crossCheckRuleFindings<T extends DerivedAdjudication>(
+export function crossCheckRuleFindings<T extends DerivedAdjudication | DerivedAdjudicationV2>(
   registry: ConstitutionRegistry,
   adjudication: T,
   adapter?: AdapterId,
@@ -81,15 +83,120 @@ export function rulesForEnvelope(registry: ConstitutionRegistry):
     .filter((rule) => rule.status === "active")
     .sort((left, right) =>
       left.id.localeCompare(right.id) || left.version - right.version)
-    .map((rule) => Object.freeze({
-      id: rule.id,
-      version: rule.version,
+    .map((rule, index) => Object.freeze({
+      slot: `slot-${String(index + 1)}`,
       text: rule.text,
       ...(rule.review_trigger === undefined
         ? {}
         : { review_trigger: rule.review_trigger }),
       enforced_by: Object.freeze([...(rule.enforced_by ?? [])]),
     })));
+}
+
+/** Server-only rule identity map paired positionally with {@link rulesForEnvelope}. */
+export function ruleSlotsForEnvelope(registry: ConstitutionRegistry): readonly AdjudicationRuleSlotV1[] {
+  return Object.freeze([...registry.values()]
+    .filter((rule) => rule.status === "active")
+    .sort((left, right) => left.id.localeCompare(right.id) || left.version - right.version)
+    .map((rule, index) => Object.freeze({
+      slot: `slot-${String(index + 1)}`,
+      rule_id: rule.id,
+      rule_version: rule.version,
+    })));
+}
+
+export type PolicyReviewFacts = Readonly<{
+  subject_digest: AdjudicationEvidence["subject_digest"];
+  input_fingerprint: AdjudicationEvidence["input_fingerprint"];
+  source_review_envelope_digest: Sha256Digest | undefined;
+  constitution: Readonly<{
+    status: "not-run" | "evaluated";
+    result: "pass" | "fail" | "uncertain";
+    rule_findings: AdjudicationEvidence["rule_findings"];
+    matched_rule_versions: AdjudicationEvidence["matched_rule_versions"];
+    uncertain_rule_versions: AdjudicationEvidence["uncertain_rule_versions"];
+  }>;
+  alignment: Readonly<{
+    source: "review-v3" | "adjudication-v1" | "not-reviewed";
+    result: DriftResult;
+    findings: readonly UpstreamAlignmentV1[];
+  }>;
+}>;
+
+const alignmentResult = (findings: readonly UpstreamAlignmentV1[]): DriftResult =>
+  findings.some((finding) => finding.drift === "material")
+    ? "material"
+    : findings.some((finding) => finding.drift === "incidental") ? "incidental" : "aligned";
+
+/**
+ * The sole compatibility adapter for policy consumers. Fresh drift comes only from Review V3;
+ * archived drift comes only from Adjudication V1. Mixed fresh/archive cohorts are rejected.
+ */
+export function policyReviewFacts(
+  review: ReviewEvidence,
+  adjudication: AdjudicationEvidence | undefined,
+  activeRules: boolean,
+): PolicyReviewFacts {
+  // Subject/predecessor currency is established by the fixed-point caller before this adapter.
+  // The immutable round link is the review envelope digest and remains exact across the one-hop
+  // predecessor compatibility path.
+  if (adjudication !== undefined && review.assurance === "server-attested" &&
+      adjudication.source_review_envelope_digest !== review.envelope_input_digest) {
+    throw new TypeError("policy review evidence round bindings disagree");
+  }
+  if (review.schema_version === "3") {
+    if (review.assurance !== "server-attested") {
+      throw new TypeError("Review V3 policy facts require server-attested evidence");
+    }
+    if ((adjudication !== undefined) !== activeRules ||
+        (adjudication !== undefined && adjudication.schema_version !== "2")) {
+      throw new TypeError("fresh policy evidence cohort is incomplete or mixed");
+    }
+    const alignment = review.upstream_alignment ?? [];
+    return Object.freeze({
+      subject_digest: review.subject_digest,
+      input_fingerprint: review.input_fingerprint,
+      source_review_envelope_digest: review.envelope_input_digest,
+      constitution: adjudication === undefined
+        ? Object.freeze({ status: "not-run", result: "pass", rule_findings: Object.freeze([]), matched_rule_versions: Object.freeze([]), uncertain_rule_versions: Object.freeze([]) })
+        : Object.freeze({
+          status: "evaluated", result: adjudication.constitution,
+          rule_findings: adjudication.rule_findings,
+          matched_rule_versions: adjudication.matched_rule_versions,
+          uncertain_rule_versions: adjudication.uncertain_rule_versions,
+        }),
+      alignment: Object.freeze({
+        source: review.upstream_alignment === undefined ? "not-reviewed" : "review-v3",
+        result: alignmentResult(alignment),
+        findings: alignment,
+      }),
+    });
+  }
+  if ((adjudication !== undefined) !== activeRules ||
+      (adjudication !== undefined && adjudication.schema_version !== "1")) {
+    throw new TypeError("archived policy evidence cohort is incomplete or mixed");
+  }
+  const alignment = adjudication?.drift_findings ?? [];
+  return Object.freeze({
+    subject_digest: review.subject_digest,
+    input_fingerprint: review.input_fingerprint,
+    source_review_envelope_digest: review.assurance === "server-attested"
+      ? review.envelope_input_digest
+      : undefined,
+    constitution: adjudication === undefined
+      ? Object.freeze({ status: "not-run", result: "pass", rule_findings: Object.freeze([]), matched_rule_versions: Object.freeze([]), uncertain_rule_versions: Object.freeze([]) })
+      : Object.freeze({
+        status: "evaluated", result: adjudication.constitution,
+        rule_findings: adjudication.rule_findings,
+        matched_rule_versions: adjudication.matched_rule_versions,
+        uncertain_rule_versions: adjudication.uncertain_rule_versions,
+      }),
+    alignment: Object.freeze({
+      source: adjudication === undefined ? "not-reviewed" : "adjudication-v1",
+      result: adjudication?.drift ?? "aligned",
+      findings: alignment,
+    }),
+  });
 }
 
 function refs(rules: readonly ConstitutionRuleV1[]): readonly Readonly<{
@@ -178,13 +285,48 @@ export function selectAdjudicationGates(
   registry: ConstitutionRegistry,
   evidence: AdjudicationEvidence,
 ): readonly AdjudicationGateRequest[] {
+  const facts: PolicyReviewFacts = evidence.schema_version === "1"
+    ? Object.freeze({
+      subject_digest: evidence.subject_digest,
+      input_fingerprint: evidence.input_fingerprint,
+      source_review_envelope_digest: evidence.source_review_envelope_digest,
+      constitution: Object.freeze({
+        status: "evaluated", result: evidence.constitution,
+        rule_findings: evidence.rule_findings,
+        matched_rule_versions: evidence.matched_rule_versions,
+        uncertain_rule_versions: evidence.uncertain_rule_versions,
+      }),
+      alignment: Object.freeze({
+        source: "adjudication-v1", result: evidence.drift, findings: evidence.drift_findings,
+      }),
+    })
+    : Object.freeze({
+      subject_digest: evidence.subject_digest,
+      input_fingerprint: evidence.input_fingerprint,
+      source_review_envelope_digest: evidence.source_review_envelope_digest,
+      constitution: Object.freeze({
+        status: "evaluated", result: evidence.constitution,
+        rule_findings: evidence.rule_findings,
+        matched_rule_versions: evidence.matched_rule_versions,
+        uncertain_rule_versions: evidence.uncertain_rule_versions,
+      }),
+      alignment: Object.freeze({ source: "not-reviewed", result: "aligned", findings: Object.freeze([]) }),
+    });
+  return selectPolicyReviewGates(registry, facts);
+}
+
+/** Selects constitution first, then material alignment, from the compatibility projection only. */
+export function selectPolicyReviewGates(
+  registry: ConstitutionRegistry,
+  evidence: PolicyReviewFacts,
+): readonly AdjudicationGateRequest[] {
   const gates: AdjudicationGateRequest[] = [];
-  const failed = evidence.rule_findings.filter((item) => item.compliance === "fail");
-  const uncertain = evidence.rule_findings.filter((item) => item.compliance === "uncertain");
+  const failed = evidence.constitution.rule_findings.filter((item) => item.compliance === "fail");
+  const uncertain = evidence.constitution.rule_findings.filter((item) => item.compliance === "uncertain");
   const failedRules = refs(failed.map((item) => registry.get(item.rule_id)!));
   const uncertainRules = refs(uncertain.map((item) => registry.get(item.rule_id)!));
-  const matchedTriggers = evidence.matched_rule_versions;
-  const uncertainTriggers = evidence.uncertain_rule_versions;
+  const matchedTriggers = evidence.constitution.matched_rule_versions;
+  const uncertainTriggers = evidence.constitution.uncertain_rule_versions;
   // Compliance and trigger are separate judgments about the same rules and routinely share one
   // root cause, so they are disclosed together and decided once rather than asked twice.
   if (
@@ -195,7 +337,7 @@ export function selectAdjudicationGates(
       kind: "constitution-review",
       subject_digest: evidence.subject_digest,
       context: Object.freeze({
-        constitution: evidence.constitution,
+        constitution: evidence.constitution.result,
         failed_rules: failedRules,
         uncertain_rules: uncertainRules,
         matched_trigger_rules: matchedTriggers,
@@ -211,7 +353,7 @@ export function selectAdjudicationGates(
   }
   // Material drift is deliberately serialized. Resolving this gate re-enters production
   // and requires fresh review evidence before another upstream can become authoritative.
-  const material = evidence.drift_findings.find((item) => item.drift === "material");
+  const material = evidence.alignment.findings.find((item) => item.drift === "material");
   if (material !== undefined) {
     gates.push(Object.freeze({
       kind: "material-drift",

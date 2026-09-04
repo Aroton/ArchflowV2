@@ -81,6 +81,33 @@ describe("computeDispositionLedger", () => {
     expect(ledger[0]).not.toHaveProperty("blocking");
   });
 
+  it("preserves V3 test attribution and native detail independently of disposition evidence", async () => {
+    const evidence = digest("3");
+    const testFinding = {
+      finding_id: "test-oracle-gap", criterion_id: "test-quality",
+      claim_type: "gap", confidence: "certain", falsifier: "run the recovery test",
+      reviewer_id: "test", reviewer_focus: "tests", routing_role: "test-reviewer",
+      required_behavior_or_risk_boundary: "recovery remains covered",
+      coverage_or_oracle_problem: "the oracle accepts a bad value",
+      consequence: "a regression escapes",
+      proposed_verification_change: "assert the recovered value",
+    };
+    const ledger = await computeDispositionLedger(
+      [{ review_evidence_digest: evidence, finding_id: "test-oracle-gap", disposition: "rejected", rationale: "Refuted.", evidence: "The branch is already asserted." }],
+      { attempt, review_ref: ref("counter_review") },
+      loaderWith({ counter_review: installation({ artifact_kind: "review-evidence", evidence: { findings: [testFinding] } }, evidence) }),
+    );
+    expect(ledger[0]).toMatchObject({
+      reviewer_id: "test", reviewer_focus: "tests", routing_role: "test-reviewer", criterion_id: "test-quality",
+      required_behavior_or_risk_boundary: "recovery remains covered",
+      coverage_or_oracle_problem: "the oracle accepts a bad value",
+      consequence: "a regression escapes",
+      proposed_verification_change: "assert the recovered value",
+      disposition_evidence: "The branch is already asserted.",
+    });
+    expect(ledger[0]).not.toHaveProperty("evidence");
+  });
+
   it("carries the predecessor ledger and replaces only an exact occurrence replay", async () => {
     const previous = installation({
       artifact_kind: "triage",

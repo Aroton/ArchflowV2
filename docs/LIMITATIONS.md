@@ -112,7 +112,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Same-family and low-effort reviewer routes are legal, and only visible
 
-**Not enforced:** Nothing stops a repository from routing a general or test reviewer to the producer's own model family, or to a low effort. The shipped template routes general reviewers across families and selects Luna/max for test review, but an older or edited task can choose otherwise; "opposite-family by default" describes the template rather than a check. Merged evidence retains legacy primary provenance for compatibility and also records every fresh contributor, assignment, route, effort, and owned finding. `review_strength` exposes both the primary scalar and the complete contributor list; archived evidence without that list is explicitly synthesized as one legacy general reviewer.
+**Not enforced:** Nothing stops a repository from routing a general or test reviewer to the producer's own model family, or to a low effort. The shipped template routes general reviewers across families and selects Luna/xhigh for test review, but an edited task can choose otherwise; "opposite-family by default" describes the template rather than a check. Merged evidence retains legacy primary provenance for compatibility and also records every fresh contributor, assignment, route, effort, responsibility, and owned finding. `review_strength` exposes both the primary scalar and the complete contributor list; archived evidence without that list is explicitly synthesized as one legacy general reviewer.
 
 **Existing mitigation:** Every fresh review records the actual producer and every reviewer family, model, effort, focus, assignment, and finding count. The semantic view projects per-contributor `same_family` flags, the attempt number, remediation status, and per-round finding and acceptance counts. Skills present those facts at every human gate with the same prominence as an exceptional reason. A same-family or low-effort contribution is therefore visible when a human relies on it.
 
@@ -156,7 +156,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Existing mitigation:** A record is reused only for the exact envelope digest the server just recomputed from durable authority, the same role, route, and route provenance, and only when its bytes still hash to the recorded digest and pass the same output validation and binding checks a fresh dispatch must pass. Reuse then goes through the ordinary currency re-check and atomic commit. Records are deleted when the round commits and swept with the phase otherwise.
 
-**Contributor record:** Fresh merged evidence records every rubric contributor's stable reviewer ID, focus, routing role, ordered criterion IDs, rubric and envelope digests, model/effort/adapter/CLI provenance, route source or override, and exact owned finding IDs. The top-level findings must be partitioned by those runs. Archived evidence predating this shape remains readable and is presented as one legacy general reviewer; its missing sibling detail cannot be reconstructed retroactively.
+**Contributor record:** Fresh Review V3 evidence records every rubric contributor's stable reviewer ID, focus, routing role, ordered criterion IDs, alignment/legacy-confirmation responsibility, rubric and envelope digests, model/effort/adapter/CLI provenance, route source or override, and exact owned finding IDs. Every finding also carries server-stamped reviewer/focus/routing/criterion attribution, and the top-level findings must partition exactly across the runs. Archived evidence remains readable, but missing contributor facts cannot be reconstructed retroactively.
 
 **Why accepted:** The cache lives under the same same-user filesystem assumption as every other runtime file (see "Task filesystem races are not adversarially hardened" above): a process that can rewrite it can equally replace the reviewer CLI on `PATH`. Making retained outputs authoritative would add durable-state machinery to save one re-dispatch, and the records never change state, consume an attempt, or authorize anything on their own.
 
@@ -217,6 +217,14 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** The fixed point treats an unreadable or non-current constitution slot like any other stale slot: the next action is a fresh review round, whose new adjudication carries the new binding. Retained review evidence is unaffected — its `envelope_input_digest` predates and outlives this change.
 
 **Why accepted:** Consistent with the repository's fail-closed version posture; `.archflow/` task state is removed before PR, so the affected population is in-flight local tasks across one upgrade, and the recovery is the ordinary restart-the-round path.
+
+## Dynamic adjudication slots still need authenticated Gemini evidence
+
+**Not yet proven:** Local schema compilation exercises the Antigravity projection for Adjudication V2's dynamic judgment-slot object, but that is not authenticated evidence that the live Gemini host accepts and returns the representative multi-rule shape.
+
+**Existing mitigation:** The projected root remains a plain object, dynamic slot properties stay below it, and normative local validation checks the exact slot set before minting evidence. The opt-in real-host scope probe reports each family as passed or unavailable separately; missing Antigravity credentials are never converted into a pass.
+
+**Why accepted:** Provider schema behavior cannot be inferred from the local validator, while requiring credentials for the ordinary deterministic suite would make normal development unreliable. This limitation remains until an authenticated Antigravity/Gemini run records the boundary.
 
 ## Effort recommendations are policy judgments, not measurements
 

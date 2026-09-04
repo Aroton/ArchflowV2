@@ -171,23 +171,26 @@ else {
   for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const subject = envelope.subject;
+  const assignment = envelope.assignment;
+  const legacyConfirmations = assignment?.legacy_confirmations?.map((confirmation) => ({
+    finding_id: confirmation.finding_id, status: "resolved", evidence: "The revision intent is satisfied."
+  }));
+  const upstreamAlignment = assignment !== undefined && Object.prototype.hasOwnProperty.call(assignment, "expected_upstream_digests")
+    ? assignment.expected_upstream_digests.map((digest) => ({ upstream_digest: digest, drift: "aligned",
+        affected_claim_ids: [], rationale: "The artifact remains aligned with this approved upstream." }))
+    : undefined;
   const output = subject.role === "counter-review" ? {
-    task_id: subject.task_id, phase_instance: subject.phase_instance,
+    schema_version: "3", task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-    producer_family: subject.producer_family, findings: [], matched_rule_versions: []
+    producer_family: subject.producer_family, findings: [],
+    ...(legacyConfirmations === undefined ? {} : { legacy_confirmations: legacyConfirmations }),
+    ...(upstreamAlignment === undefined ? {} : { upstream_alignment: upstreamAlignment })
   } : {
-    schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-    step: "adjudicate", subject_digest: subject.subject_digest,
-    input_fingerprint: subject.input_fingerprint,
-    pinned_constitution_digest: subject.pinned_constitution_digest,
-    approved_upstream_digests: subject.approved_upstream_digests,
-    source_review_envelope_digest: subject.source_review_envelope_digest,
-    rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
+    schema_version: "2", judgments: Object.fromEntries(envelope.rules.map((rule) => [rule.slot, {
       compliance: "pass", rationale: "Checked the sealed envelope.",
-      trigger: "not-matched", trigger_evidence: "No review trigger matched." })),
-    drift_findings: subject.approved_upstream_digests.map((upstream_digest) => ({
-      upstream_digest, drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift found." }))
+      trigger: "not-matched", trigger_evidence: "No review trigger matched."
+    }]))
   };
   await appendFile(${JSON.stringify(countPath)}, "call\\n");
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
@@ -253,10 +256,13 @@ describe("counter-review handler replay integration", () => {
             "gap:certain": 0, "gap:likely": 0, "gap:suspicion": 0,
             "preference:certain": 0, "preference:likely": 0, "preference:suspicion": 0
           },
+          alignment: {
+            status: "not-run",
+            reason: "prd-has-no-approved-upstream-plan",
+          },
           constitution: {
             status: "evaluated",
             constitution: "pass",
-            drift: "aligned",
             triggers: [],
           },
           revision: 8,

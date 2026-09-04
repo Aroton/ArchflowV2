@@ -219,18 +219,33 @@ function installReviewerStub(
   const generatorScript = `
 function generateOutput(envelope, findings) {
   const subject = envelope.subject;
-  const v2Findings = findings.map((finding) => "claim_type" in finding ? finding : ({
-    finding_id: finding.finding_id, claim_type: finding.blocking === true ? "defect" : "preference",
-    confidence: "certain", falsifier: "Inspect the cited fixture evidence to settle this finding.",
+  const assignment = envelope.assignment;
+  const isGeneral = assignment === undefined || assignment.focus === "general";
+  const criterionIds = assignment?.criterion_ids ?? envelope.rubric.criteria.map((criterion) => criterion.id);
+  const v3Findings = isGeneral && criterionIds.length > 0 ? findings.map((finding) => ({
+    finding_id: finding.finding_id,
+    criterion_id: typeof finding.criterion_id === "string" && criterionIds.includes(finding.criterion_id)
+      ? finding.criterion_id : criterionIds[0],
+    claim_type: "claim_type" in finding ? finding.claim_type : finding.blocking === true ? "defect" : "preference",
+    confidence: "confidence" in finding ? finding.confidence : "certain",
+    falsifier: "falsifier" in finding ? finding.falsifier : "Inspect the cited fixture evidence to settle this finding.",
     summary: finding.summary, evidence: finding.evidence, suggested_resolution: finding.suggested_resolution,
+  })) : [];
+  const legacyConfirmations = assignment?.legacy_confirmations?.map((confirmation) => ({
+    finding_id: confirmation.finding_id, status: "resolved", evidence: "The revision intent is satisfied."
   }));
+  const upstreamAlignment = assignment !== undefined && Object.prototype.hasOwnProperty.call(assignment, "expected_upstream_digests")
+    ? assignment.expected_upstream_digests.map((digest) => ({ upstream_digest: digest, drift: "aligned",
+        affected_claim_ids: [], rationale: "The artifact remains aligned with this approved upstream." }))
+    : undefined;
   return {
-    task_id: subject.task_id, phase_instance: subject.phase_instance,
+    schema_version: "3", task_id: subject.task_id, phase_instance: subject.phase_instance,
     step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
     input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
     producer_family: subject.producer_family,
-    findings: v2Findings,
-    matched_rule_versions: []
+    findings: v3Findings,
+    ...(legacyConfirmations === undefined ? {} : { legacy_confirmations: legacyConfirmations }),
+    ...(upstreamAlignment === undefined ? {} : { upstream_alignment: upstreamAlignment })
   };
 }
 `;
@@ -349,7 +364,7 @@ describe("post-triage re-entry edits are expected", () => {
       const triageComposed = await h.compose({
         intent_id: "triage-1", kind: "triage",
         dispositions: [{
-          finding_id: "requirement-untestable", disposition: "accepted",
+          finding_id: "general-requirement-untestable", disposition: "accepted",
           rationale: "The requirement is indeed untestable as written.",
           revision_intent: "Restate the requirement as observable behavior in prd.md.",
         }],
@@ -472,8 +487,8 @@ describe("post-triage re-entry edits are expected", () => {
       await expect(h.compose({
         intent_id: "triage-refused", kind: "triage",
         dispositions: [
-          { finding_id: "scope-mismatch", disposition: "accepted-editorial", rationale: "Wording only.", revision_intent: "Reword the scope." },
-          { finding_id: "wording-typo", disposition: "rejected", rationale: "Not a defect.", evidence: "Reads fine." },
+          { finding_id: "general-scope-mismatch", disposition: "accepted-editorial", rationale: "Wording only.", revision_intent: "Reword the scope." },
+          { finding_id: "general-wording-typo", disposition: "rejected", rationale: "Not a defect.", evidence: "Reads fine." },
         ],
       })).rejects.toThrow(/substantive/u);
 
@@ -483,12 +498,12 @@ describe("post-triage re-entry edits are expected", () => {
         intent_id: "triage-1", kind: "triage",
         dispositions: [
           {
-            finding_id: "scope-mismatch", disposition: "rejected",
+            finding_id: "general-scope-mismatch", disposition: "rejected",
             rationale: "The scope matches the recorded ask verbatim.",
             evidence: "ask.md and prd.md scope wording agree.",
           },
           {
-            finding_id: "wording-typo", disposition: "accepted-editorial",
+            finding_id: "general-wording-typo", disposition: "accepted-editorial",
             rationale: "The typo changes wording, not meaning.",
             revision_intent: "Replace 'teh' with 'the' in the requirements sentence.",
           },
@@ -592,7 +607,7 @@ describe("post-triage re-entry edits are expected", () => {
       expect(revised.editorial_revision).toMatchObject({
         predecessor_subject_digest: predecessorDigest,
         dispositions: [{
-          finding_id: "wording-typo",
+          finding_id: "general-wording-typo",
           revision_intent: "Replace 'teh' with 'the' in the requirements sentence.",
         }],
       });
@@ -761,7 +776,7 @@ describe("post-triage re-entry edits are expected", () => {
       const triageComposed = await h.compose({
         intent_id: "triage-1", kind: "triage",
         dispositions: [{
-          finding_id: "requirement-untestable", disposition: "rejected",
+          finding_id: "general-requirement-untestable", disposition: "rejected",
           rationale: "The restated requirement names observable behavior.",
           evidence: "prd.md restated requirement.",
         }],

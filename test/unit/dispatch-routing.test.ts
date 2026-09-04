@@ -61,6 +61,19 @@ describe("dispatch routing", () => {
       .toBe("gpt-5.6-luna");
   });
 
+  it("uses the built-in test reviewer only after configured precedence for applicable phases", () => {
+    const value = config({});
+    expect(resolveDispatchRoute(value, "phase-design", "test-reviewer"))
+      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.6-luna", effort: "xhigh" });
+    expect(resolveDispatchRoute(value, "phase-impl", "test-reviewer"))
+      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.6-luna", effort: "xhigh" });
+    expectRoutingError(
+      () => resolveDispatchRoute(value, "design", "test-reviewer"),
+      "CONFIG_INVALID",
+      { issue_code: "route-missing" },
+    );
+  });
+
   it("classifies an absent dispatched role without returning a route", () => {
     expectRoutingError(
       () => resolveDispatchRoute(config({}), "phase-impl", "counter-reviewer"),

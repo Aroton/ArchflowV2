@@ -66,12 +66,42 @@ export type TriageDispositionLedgerEntryV2 = TriageDispositionLedgerEntryBase & 
   readonly confidence: ConfidenceLevel;
   readonly falsifier: string;
 };
+export type GeneralTriageDispositionLedgerEntryV3 = TriageDispositionLedgerEntryBase & {
+  readonly claim_type: ClaimType;
+  readonly confidence: ConfidenceLevel;
+  readonly falsifier: string;
+  readonly reviewer_id: string;
+  readonly reviewer_focus: "general";
+  readonly routing_role: "counter-reviewer";
+  readonly criterion_id: string;
+  readonly summary: string;
+  /** Reviewer-authored finding evidence; disposition evidence remains separate. */
+  readonly evidence: string;
+  readonly disposition_evidence?: string;
+  readonly suggested_resolution: string;
+};
+export type TestTriageDispositionLedgerEntryV3 = TriageDispositionLedgerEntryBase & {
+  readonly claim_type: ClaimType;
+  readonly confidence: ConfidenceLevel;
+  readonly falsifier: string;
+  readonly reviewer_id: string;
+  readonly reviewer_focus: "tests";
+  readonly routing_role: "test-reviewer";
+  readonly criterion_id: string;
+  readonly required_behavior_or_risk_boundary: string;
+  readonly coverage_or_oracle_problem: string;
+  readonly consequence: string;
+  readonly proposed_verification_change: string;
+  readonly disposition_evidence?: string;
+};
+export type TriageDispositionLedgerEntryV3 = GeneralTriageDispositionLedgerEntryV3 | TestTriageDispositionLedgerEntryV3;
 export type DetailedLegacyTriageDispositionLedgerEntry = TriageDispositionLedgerEntryBase & {
   readonly severity: ReviewFindingSeverity;
   readonly blocking: boolean;
 };
 export type DetailLessLegacyTriageDispositionLedgerEntry = TriageDispositionLedgerEntryBase;
 export type TriageDispositionLedgerEntry =
+  | TriageDispositionLedgerEntryV3
   | TriageDispositionLedgerEntryV2
   | DetailedLegacyTriageDispositionLedgerEntry
   | DetailLessLegacyTriageDispositionLedgerEntry;
@@ -146,6 +176,38 @@ const triageDispositionLedgerEntryV2Schema = z.object({
   confidence: z.enum(CONFIDENCE_LEVELS),
   falsifier: nonBlank,
 }).strict();
+const ledgerEntryV3AttributionShape = {
+  claim_type: z.enum(CLAIM_TYPES),
+  confidence: z.enum(CONFIDENCE_LEVELS),
+  falsifier: nonBlank,
+  reviewer_id: id,
+  criterion_id: id,
+} as const;
+const generalTriageDispositionLedgerEntryV3Schema = z.object({
+  ...ledgerEntryBaseShape,
+  ...ledgerEntryV3AttributionShape,
+  reviewer_focus: z.literal("general"),
+  routing_role: z.literal("counter-reviewer"),
+  summary: nonBlank,
+  evidence: nonBlank,
+  disposition_evidence: nonBlank.optional(),
+  suggested_resolution: nonBlank,
+}).strict();
+const testTriageDispositionLedgerEntryV3Schema = z.object({
+  ...ledgerEntryBaseShape,
+  ...ledgerEntryV3AttributionShape,
+  reviewer_focus: z.literal("tests"),
+  routing_role: z.literal("test-reviewer"),
+  required_behavior_or_risk_boundary: nonBlank,
+  coverage_or_oracle_problem: nonBlank,
+  consequence: nonBlank,
+  proposed_verification_change: nonBlank,
+  disposition_evidence: nonBlank.optional(),
+}).strict();
+export const triageDispositionLedgerEntryV3Schema = z.discriminatedUnion("reviewer_focus", [
+  generalTriageDispositionLedgerEntryV3Schema,
+  testTriageDispositionLedgerEntryV3Schema,
+]);
 const detailedLegacyTriageDispositionLedgerEntrySchema = z.object({
   ...ledgerEntryBaseShape,
   severity: z.enum(REVIEW_FINDING_SEVERITIES),
@@ -153,6 +215,7 @@ const detailedLegacyTriageDispositionLedgerEntrySchema = z.object({
 }).strict();
 const detailLessLegacyTriageDispositionLedgerEntrySchema = z.object(ledgerEntryBaseShape).strict();
 export const triageDispositionLedgerEntrySchema = z.union([
+  triageDispositionLedgerEntryV3Schema,
   triageDispositionLedgerEntryV2Schema,
   detailedLegacyTriageDispositionLedgerEntrySchema,
   detailLessLegacyTriageDispositionLedgerEntrySchema,
@@ -208,7 +271,7 @@ export const triageCandidateSchema = z.object({
 /** Structural parse only; exact current-review coverage is established by {@link validateTriage}. */
 export function parseTriageCandidate(value: unknown): TriageCandidate {
   assertPlainJson(value, "review triage candidate");
-  const parsed = triageCandidateSchema.parse(value);
+  const parsed = triageCandidateSchema.parse(structuredClone(value));
   const dispositions: TriageDisposition[] = parsed.dispositions.map((d) => {
     if (d.disposition === "deferred") {
       const res: DeferredDisposition = {
@@ -257,9 +320,16 @@ export function validateTriage(
   if (parsed.review_round_history !== undefined) {
     throw new TypeError("review_round_history is server-computed; triage candidates must not carry one");
   }
-  const parsedReviewRoundHistory = reviewRoundHistory === undefined
-    ? undefined
-    : reviewRoundHistoryV1Schema.parse(structuredClone(reviewRoundHistory));
+  let parsedDispositionLedger: readonly TriageDispositionLedgerEntry[] | undefined;
+  if (dispositionLedger !== undefined) {
+    assertPlainJson(dispositionLedger, "triage disposition ledger");
+    parsedDispositionLedger = z.array(triageDispositionLedgerEntrySchema).parse(structuredClone(dispositionLedger));
+  }
+  let parsedReviewRoundHistory: readonly ReviewRoundHistoryEntryV1[] | undefined;
+  if (reviewRoundHistory !== undefined) {
+    assertPlainJson(reviewRoundHistory, "review round history");
+    parsedReviewRoundHistory = reviewRoundHistoryV1Schema.parse(structuredClone(reviewRoundHistory));
+  }
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
@@ -341,9 +411,9 @@ export function validateTriage(
     accepted_editorial_count: parsed.accepted_editorial_count,
     escalated_human_count: parsed.escalated_human_count,
     deferred_count: parsed.deferred_count,
-    ...(dispositionLedger === undefined
+    ...(parsedDispositionLedger === undefined
       ? {}
-      : { disposition_ledger: Object.freeze(dispositionLedger.map((entry) => Object.freeze({ ...entry }))) }),
+      : { disposition_ledger: Object.freeze(parsedDispositionLedger.map((entry) => Object.freeze({ ...entry }))) }),
     ...(parsedReviewRoundHistory === undefined
       ? {}
       : { review_round_history: Object.freeze(parsedReviewRoundHistory.map((entry) => Object.freeze({ ...entry }))) }),

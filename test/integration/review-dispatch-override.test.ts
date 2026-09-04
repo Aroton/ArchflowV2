@@ -166,21 +166,23 @@ else {
   }
   let output;
   if (role === "counter-review") {
-    output = { task_id: subject.task_id, phase_instance: subject.phase_instance,
+    const assignment = envelope.assignment;
+    output = { schema_version: "3", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings: [], matched_rule_versions: [] };
+      producer_family: subject.producer_family, findings: [],
+      ...(assignment?.legacy_confirmations === undefined ? {} : { legacy_confirmations: assignment.legacy_confirmations.map((confirmation) => ({
+        finding_id: confirmation.finding_id, status: "resolved", evidence: "The revision intent is satisfied."
+      })) }),
+      ...(assignment !== undefined && Object.prototype.hasOwnProperty.call(assignment, "expected_upstream_digests")
+        ? { upstream_alignment: assignment.expected_upstream_digests.map((digest) => ({ upstream_digest: digest,
+            drift: "aligned", affected_claim_ids: [], rationale: "The artifact remains aligned with this approved upstream." })) }
+        : {}) };
   } else {
-    output = { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-      step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
-      pinned_constitution_digest: subject.pinned_constitution_digest,
-      approved_upstream_digests: subject.approved_upstream_digests,
-      source_review_envelope_digest: subject.source_review_envelope_digest,
-      rule_findings: envelope.rules.map((rule) => ({ rule_id: rule.id, rule_version: rule.version,
-        compliance: "pass", rationale: "The document respects this rule.", trigger: "not-matched",
-        trigger_evidence: "No review trigger matched." })),
-      drift_findings: subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest,
-        drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." })) };
+    output = { schema_version: "2", judgments: Object.fromEntries(envelope.rules.map((rule) => [rule.slot, {
+      compliance: "pass", rationale: "The document respects this rule.", trigger: "not-matched",
+      trigger_evidence: "No review trigger matched."
+    }])) };
   }
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
@@ -324,8 +326,8 @@ describe("reviewer route substitution through the public apply path", { timeout:
     const reviewed = await h.apply(invocation, atReview, SUBMISSION);
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
-    expect(reviewed.value.findings).toEqual([]);
-    expect(reviewed.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(reviewed.value.findings ?? []).toEqual([]);
+    expect(reviewed.value.next_action, JSON.stringify(reviewed.value)).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
 
     // The retained evidence records the substitute that actually reviewed and the pin it
     // displaced, with the human's reason for the substitution.
@@ -394,7 +396,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     const recovered = await h.apply(invocation, reoffered);
     expect(recovered.ok, JSON.stringify(recovered)).toBe(true);
     if (!recovered.ok) return;
-    expect(recovered.value.findings).toEqual([]);
+    expect(recovered.value.findings ?? []).toEqual([]);
 
     expect(launchedModels(workspace)).toEqual([
       SUBSTITUTION["counter-reviewer"].model,
@@ -438,8 +440,8 @@ describe("reviewer route substitution through the public apply path", { timeout:
     const resent = await h.apply(invocation, reoffered, SUBMISSION);
     expect(resent.ok, JSON.stringify(resent)).toBe(true);
     if (!resent.ok) return;
-    expect(resent.value.findings).toEqual([]);
-    expect(resent.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(resent.value.findings ?? []).toEqual([]);
+    expect(resent.value.next_action, JSON.stringify(resent.value)).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
 
     expect(launchedModels(workspace)).toEqual([
       SUBSTITUTION["counter-reviewer"].model,

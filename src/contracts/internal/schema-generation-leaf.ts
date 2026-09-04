@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { adjudicationDocumentDefs, adjudicationEvidenceSchema, rawAdjudicationSchema } from "../adjudication.js";
+import { adjudicationDocumentDefs, adjudicationEvidenceSchema, rawAdjudicationV2Schema } from "../adjudication.js";
 import { gitOidV1Schema } from "../canonical.js";
 import { configOverridesSchema, configRolesSchema, configRouteSchema, configV1Schema, repositoriesV1Schema, repositoryDeclarationV1Schema, repositoryModeV1Schema, repositoryNameV1Schema } from "../config.js";
 import { constitutionRuleV1Schema } from "../constitution.js";
@@ -20,7 +20,7 @@ import { resultExpectationDataSchema } from "../mcp-tools.js";
 import { hazardRegistryInputV1Schema, hazardRegistryV1Schema } from "../hazard-registry.js";
 import { pathClaimLexicalV1Schema, repositoryPathClaimV1Schema, taskPathClaimV1Schema } from "../path-claims.js";
 import { phaseInstanceIdV1Schema, phaseInstanceV1Schema, positiveSafePhaseNumberV1Schema } from "../phase-instance.js";
-import { childReviewOutputV2Schema, reviewDocumentDefs, reviewEvidenceSchema } from "../review.js";
+import { rawReviewOutputV3Schema, reviewDocumentDefs, reviewEvidenceSchema } from "../review.js";
 import { rubricV1Schema } from "../rubric.js";
 import { secretFindingV1Schema, secretScanResultV1Schema } from "../secret-scan.js";
 import { triageCandidateSchema } from "../triage.js";
@@ -153,7 +153,7 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
     {
       file: "review",
       id: SCHEMA_IDS.review,
-      root: childReviewOutputV2Schema,
+      root: rawReviewOutputV3Schema,
       defs: reviewDocumentDefs,
       migrated: true,
     },
@@ -203,7 +203,7 @@ export const leafSchemaGroup: SchemaGenerationGroup = {
     {
       file: "adjudication",
       id: SCHEMA_IDS.adjudication,
-      root: rawAdjudicationSchema,
+      root: rawAdjudicationV2Schema,
       defs: adjudicationDocumentDefs,
       migrated: true,
     },

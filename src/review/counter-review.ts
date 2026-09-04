@@ -1,9 +1,13 @@
-import adjudicationOutputSchema from "../contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import effortReviewOutputSchema from "../contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
 import reviewOutputSchema from "../contracts/schemas/v1/review.schema.json" with { type: "json" };
 
 import { canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
-import type { AdjudicationEvidence } from "../contracts/adjudication.js";
+import {
+  createRawAdjudicationV2Schema,
+  type AdjudicationEvidence,
+  type AdjudicationRuleSlotV1,
+  type ServerAttestedAdjudicationV2,
+} from "../contracts/adjudication.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ConfigV1 } from "../contracts/config.js";
 import type { DispatchFailureRoleV1 } from "../contracts/dispatch-failure.js";
@@ -20,7 +24,9 @@ import { parseSafeInteger, type SafeId, type SafeInteger, type Sha256Digest } fr
 import {
   createInternalResultExpectation,
   validateProjectResultStructure,
+  type CounterReviewAlignmentOutcomeV1,
   type CounterReviewConstitutionOutcome,
+  type CounterReviewConstitutionOutcomeV2,
   type ParsedToolCall,
   type RequestIdentifiedToolCall,
 } from "../contracts/mcp-tools.js";
@@ -31,11 +37,13 @@ import type {
   ModelFamily,
   ReviewedRepositoryV1,
   ReviewEvidence,
+  ReviewFindingV3,
   ReviewFindingV2,
   LegacyReviewFinding,
-  ReviewerRunV1,
+  ReviewerRunV2,
   RouteOverrideRecord,
-  RuleVersionRef,
+  LegacyConfirmationAssignmentV1,
+  ServerAttestedReviewV3,
 } from "../contracts/review.js";
 import { expectedReviewSummaryV2 } from "../contracts/review.js";
 import {
@@ -75,20 +83,25 @@ import {
   AdjudicationServiceError,
   canonicalRuleRefs,
   crossCheckRuleFindings,
+  policyReviewFacts,
   type AdjudicationDispatchResult,
 } from "./adjudication.js";
 import {
   buildAdjudicationEnvelope,
   buildEffortEnvelope,
   type AdjudicationEnvelopeInput,
-  type AdjudicationUpstreamInput,
   type DispatchEnvelope,
   type DispatchSubject,
+  type ReviewAssignmentV1,
   type ReviewWorkspaceBinding,
   type ReviewEnvelopeSeed,
 } from "./envelopes.js";
 import { buildReviewEnvelopeWithCap, priorTriageContextEntry, type PriorTriageRecord } from "./pinned-context.js";
-import { reviewerOwnsFinding, taggedFindingId } from "./reviewer-tags.js";
+import {
+  resolveReviewFindingOwner,
+  taggedFindingId,
+  type ReviewerRosterEntry,
+} from "./reviewer-tags.js";
 import { reviewAssignment, type CounterReviewPhaseKind } from "./rubrics.js";
 
 export type CounterReviewDispatchResult = Readonly<{
@@ -96,10 +109,13 @@ export type CounterReviewDispatchResult = Readonly<{
   extracted_output_bytes: Uint8Array;
 }>;
 
+const fail = <T>(error: ProjectError): ProjectResult<T> =>
+  Object.freeze({ schema_version: "1", ok: false, error });
+
 export type ActiveReviewerFindingSet = Readonly<{
   tag: string;
-  schema_version: "1" | "2";
-  findings: readonly (ReviewFindingV2 | LegacyReviewFinding)[];
+  schema_version: "1" | "2" | "3";
+  findings: readonly (ReviewFindingV2 | ReviewFindingV3 | LegacyReviewFinding)[];
 }>;
 
 /**
@@ -111,19 +127,24 @@ export function aggregateActiveReviewerFindings(
   reviewers: readonly ActiveReviewerFindingSet[],
   totalReviewers = reviewers.length,
 ): Readonly<{
-  findings: readonly ReviewFindingV2[];
+  findings: readonly (ReviewFindingV2 | ReviewFindingV3)[];
   finding_ids_by_reviewer: readonly (readonly string[])[];
   summary: ReturnType<typeof expectedReviewSummaryV2>;
 }> {
-  const findings: ReviewFindingV2[] = [];
+  const findings: Array<ReviewFindingV2 | ReviewFindingV3> = [];
   const findingIdsByReviewer: string[][] = reviewers.map(() => []);
   const seenIds = new Set<string>();
   reviewers.forEach((reviewer, reviewerIndex) => {
-    if (reviewer.schema_version !== "2" || reviewer.findings.some((finding) => !("claim_type" in finding))) {
-      throw new TypeError("fresh counter-review observations must all use active review schema version 2");
+    if ((reviewer.schema_version !== "2" && reviewer.schema_version !== "3") ||
+        reviewer.findings.some((finding) => !("claim_type" in finding))) {
+      throw new TypeError("fresh counter-review observations must use an active review schema");
     }
-    for (const finding of reviewer.findings as readonly ReviewFindingV2[]) {
-      const rawId = taggedFindingId(reviewer.tag, totalReviewers, finding.finding_id);
+    for (const finding of reviewer.findings as readonly (ReviewFindingV2 | ReviewFindingV3)[]) {
+      // V3 IDs and attribution were already stamped at the observation boundary. The V2 arm is
+      // retained only for direct compatibility tests of this aggregation helper.
+      const rawId = reviewer.schema_version === "3"
+        ? finding.finding_id
+        : taggedFindingId(reviewer.tag, totalReviewers, finding.finding_id);
       let uniqueId = rawId;
       let disambiguator = 2;
       while (seenIds.has(uniqueId)) {
@@ -153,6 +174,7 @@ export function adjudicationOutputIssueCode(error: unknown): string {
         : [])
     : [];
   const message = [...issueMessages, error instanceof Error ? error.message : ""].join(" | ");
+  if (/judgments|slot/u.test(message)) return "adjudication-rule-slot-coverage";
   if (/exactly cover approved_upstream_digests/u.test(message)) return "adjudication-upstream-coverage";
   if (/must be sorted and unique/u.test(message)) return "adjudication-finding-duplicate";
   if (/Unrecognized key/u.test(message)) return "adjudication-unexpected-fields";
@@ -215,8 +237,7 @@ export type ConstitutionReviewPlan = Readonly<{
   registry: ConstitutionRegistry;
   pinned_constitution_digest: Sha256Digest;
   rules: AdjudicationEnvelopeInput["rules"];
-  approved_upstreams: readonly AdjudicationUpstreamInput[];
-  approved_upstream_digests: readonly Sha256Digest[];
+  rule_slots: readonly AdjudicationRuleSlotV1[];
   invocation_id: SafeId;
   result_id: SafeId;
   workspace: ReviewWorkspaceBinding;
@@ -255,6 +276,8 @@ export type RunCounterReviewInput = Readonly<{
    * reviewer's pinned record to the findings it raised.
    */
   prior_triage?: PriorTriageRecord;
+  /** Present for every non-PRD review, including an authenticated empty upstream plan. */
+  approved_upstream_digests?: readonly Sha256Digest[];
   /** Present exactly for fresh phase-design review rounds. */
   effort?: EffortReviewPlan;
   /**
@@ -296,37 +319,68 @@ async function planCounterReviewCommit(
   call: Extract<RequestIdentifiedToolCall, { readonly name: "archflow_counter_review" }>,
 ): Promise<ProjectResult<PreparedResultTransaction<"archflow_counter_review">>> {
   const constitutionEvidence = inputs.constitution_evidence;
+  const policyFacts = policyReviewFacts(
+    inputs.review_evidence,
+    constitutionEvidence,
+    constitutionEvidence !== undefined,
+  );
   const revision = parseSafeInteger(current.value.revision + 1);
-  const constitutionOutcome: CounterReviewConstitutionOutcome = constitutionEvidence === undefined
+  const constitutionPath = parseRepositoryPathClaim(
+    `.archflow/runtime/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`,
+  );
+  const constitutionOutcome: CounterReviewConstitutionOutcomeV2 = policyFacts.constitution.status === "not-run"
     ? Object.freeze({
       status: "not-run" as const,
       reason: "no-active-constitution-rules" as const,
     })
     : Object.freeze({
       status: "evaluated" as const,
-      path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${adjudicationReviewClaim(current.value.phase_instance)}`),
-      constitution: constitutionEvidence.constitution,
-      drift: constitutionEvidence.drift,
+      path: constitutionPath,
+      constitution: policyFacts.constitution.result,
       triggers: canonicalRuleRefs([
-        ...constitutionEvidence.matched_rule_versions,
-        ...constitutionEvidence.uncertain_rule_versions,
+        ...policyFacts.constitution.matched_rule_versions,
+        ...policyFacts.constitution.uncertain_rule_versions,
       ]),
     });
   const commonSuccess = {
     path: parseRepositoryPathClaim(`.archflow/runtime/tasks/${current.value.task_id}/${counterReviewClaim(current.value.phase_instance)}`),
-    constitution: constitutionOutcome,
     revision,
     request_digest: inputs.request_digest,
   } as const;
-  const success = inputs.review_evidence.schema_version === "2"
+  const success = inputs.review_evidence.schema_version === "3"
     ? Object.freeze({
       ...commonSuccess,
+      constitution: constitutionOutcome,
+      alignment: (inputs.review_evidence.upstream_alignment === undefined
+        ? Object.freeze({ status: "not-run", reason: "prd-has-no-approved-upstream-plan" })
+        : Object.freeze({
+          status: "evaluated",
+          drift: policyFacts.alignment.result,
+          upstream_count: policyFacts.alignment.findings.length,
+        })) as CounterReviewAlignmentOutcomeV1,
       verdict: inputs.review_evidence.verdict,
       total_findings: inputs.review_evidence.total_findings,
       partition_counts: inputs.review_evidence.partition_counts,
     })
-    : Object.freeze({
+    : inputs.review_evidence.schema_version === "2"
+      ? Object.freeze({
+        ...commonSuccess,
+        constitution: (constitutionEvidence === undefined
+          ? constitutionOutcome
+          : constitutionEvidence.schema_version === "1"
+            ? Object.freeze({ ...constitutionOutcome, drift: constitutionEvidence.drift })
+            : (() => { throw new TypeError("archived review success cannot bind fresh adjudication"); })()) as CounterReviewConstitutionOutcome,
+        verdict: inputs.review_evidence.verdict,
+        total_findings: inputs.review_evidence.total_findings,
+        partition_counts: inputs.review_evidence.partition_counts,
+      })
+      : Object.freeze({
       ...commonSuccess,
+      constitution: (constitutionEvidence === undefined
+        ? constitutionOutcome
+        : constitutionEvidence.schema_version === "1"
+          ? Object.freeze({ ...constitutionOutcome, drift: constitutionEvidence.drift })
+          : (() => { throw new TypeError("legacy review success cannot bind fresh adjudication"); })()) as CounterReviewConstitutionOutcome,
       verdict: inputs.review_evidence.verdict,
       blocking_count: inputs.review_evidence.blocking_count,
     });
@@ -550,31 +604,136 @@ export async function runCounterReview(
   const totalReviewers = taggedRoutes.length;
   const sharedPriorTriage = input.envelope.context.find((entry) => entry.kind === "prior-triage");
   const priorTriage = sharedPriorTriage === undefined ? undefined : input.prior_triage;
-  // A remediation round dispatches only owners of the latest accepted findings. Rejected and
-  // editorial findings are closed. If attribution fails, the first configured reviewer confirms
-  // every accepted intent; dispatching every reviewer would turn remediation into another sweep.
-  const dispositioned = priorTriage?.current ?? [];
-  const owners = (findingId: string) =>
-    taggedRoutes.filter((routeEntry) => reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
-  const unattributed = priorTriage !== undefined &&
-    dispositioned.some((disposition) => owners(disposition.finding_id).length === 0);
+  const roster: readonly ReviewerRosterEntry[] = Object.freeze(taggedRoutes.map((routeEntry) => Object.freeze({
+    reviewer_id: routeEntry.assignment.reviewer_id,
+    focus: routeEntry.assignment.focus,
+    routing_role: routeEntry.role,
+    model: routeEntry.selection.route.model,
+    ...(routeEntry.selection.route.provider === undefined
+      ? {}
+      : { provider: routeEntry.selection.route.provider }),
+  })));
+  type RemediationScope = {
+    criterion_ids: Set<string>;
+    finding_ids: Set<string>;
+    legacy_confirmations: LegacyConfirmationAssignmentV1[];
+  };
+  const remediationByReviewer = new Map<string, RemediationScope>();
+  const scopeFor = (reviewerId: string): RemediationScope => {
+    const existing = remediationByReviewer.get(reviewerId);
+    if (existing !== undefined) return existing;
+    const created = { criterion_ids: new Set<string>(), finding_ids: new Set<string>(), legacy_confirmations: [] };
+    remediationByReviewer.set(reviewerId, created);
+    return created;
+  };
+  if (priorTriage !== undefined) {
+    const source = priorTriage.source_review;
+    if (source === undefined) {
+      return fail(createProjectError("STATE_INVALID", {
+        phase_instance: input.authority.context.phase_instance,
+        issue_code: "reviewer-ownership-source-unavailable",
+      }));
+    }
+    for (const occurrence of priorTriage.current) {
+      if (occurrence.review_evidence_digest !== source.evidence_digest) {
+        return fail(createProjectError("STATE_INVALID", {
+          phase_instance: input.authority.context.phase_instance,
+          issue_code: "reviewer-ownership-occurrence-unavailable",
+        }));
+      }
+      const finding = source.evidence.findings.find((candidate) =>
+        candidate.finding_id === occurrence.finding_id);
+      if (finding === undefined) {
+        return fail(createProjectError("STATE_INVALID", {
+          phase_instance: input.authority.context.phase_instance,
+          issue_code: "reviewer-ownership-finding-absent",
+        }));
+      }
+      const resolved = resolveReviewFindingOwner({
+        schema_version: source.evidence.schema_version,
+        finding,
+        ...(source.evidence.assurance === "server-attested" && source.evidence.reviewer_runs !== undefined
+          ? { reviewer_runs: source.evidence.reviewer_runs }
+          : {}),
+        roster,
+      });
+      if (!resolved.ok) {
+        const issue = resolved.failure.reason === "legacy-ordinal-unavailable"
+          ? `reviewer-ownership-r${String(resolved.failure.historical_position)}-unavailable`
+          : `reviewer-ownership-${resolved.failure.reason}`;
+        return fail(createProjectError("STATE_INVALID", {
+          phase_instance: input.authority.context.phase_instance,
+          issue_code: issue,
+        }));
+      }
+      const scope = scopeFor(resolved.owner.reviewer_id);
+      scope.finding_ids.add(finding.finding_id);
+      if (source.evidence.schema_version === "3" && "criterion_id" in finding) {
+        scope.criterion_ids.add(finding.criterion_id);
+      } else {
+        const routeEntry = taggedRoutes.find((candidate) =>
+          candidate.assignment.reviewer_id === resolved.owner.reviewer_id)!;
+        if (resolved.owner.focus === "general" &&
+            !routeEntry.assignment.criterion_ids.includes("substantive-correctness")) {
+          return fail(createProjectError("STATE_INVALID", {
+            phase_instance: input.authority.context.phase_instance,
+            issue_code: "legacy-confirmation-criterion-unavailable",
+          }));
+        }
+        const permitted = resolved.owner.focus === "tests"
+          ? routeEntry.assignment.criterion_ids
+          : ["substantive-correctness"];
+        scope.legacy_confirmations.push(Object.freeze({
+          finding_id: finding.finding_id,
+          criterion_ids: Object.freeze([...permitted]),
+        }));
+      }
+    }
+  }
+  const primary = generalRoutes[0];
+  if (primary === undefined) {
+    throw new TypeError("counter-review requires a primary general reviewer");
+  }
+  // Initial rounds dispatch the complete roster. Non-PRD remediation dispatches the primary
+  // regardless of ordinary ownership because it owns the exact alignment census, plus each
+  // accepted finding owner. PRD has no alignment responsibility, so its remediation dispatches
+  // only authenticated accepted-finding owners and never reopens an ownerless primary's rubric.
   const reviewRoutes = priorTriage === undefined
     ? taggedRoutes
-    : unattributed
-      ? taggedRoutes.slice(0, 1)
-    : taggedRoutes.filter((routeEntry) => dispositioned.some((disposition) =>
-      reviewerOwnsFinding(routeEntry.tag, totalReviewers, disposition.finding_id)));
-  const assignmentFor = (routeEntry: (typeof taggedRoutes)[number]) =>
-    unattributed && routeEntry.role === "counter-reviewer"
-      ? reviewAssignment(routeEntry.tag, "general", phaseKind, input.envelope.rubric, false)
-      : routeEntry.assignment;
+    : taggedRoutes.filter((routeEntry) =>
+      remediationByReviewer.has(routeEntry.assignment.reviewer_id) ||
+      (routeEntry === primary && input.approved_upstream_digests !== undefined));
+  const assignmentFor = (routeEntry: (typeof taggedRoutes)[number]): ReviewAssignmentV1 => {
+    const base = routeEntry.assignment;
+    const remediation = priorTriage === undefined
+      ? undefined
+      : remediationByReviewer.get(base.reviewer_id);
+    let criterionIds = remediation === undefined
+      ? priorTriage === undefined ? base.criterion_ids : Object.freeze([])
+      : Object.freeze(base.criterion_ids.filter((criterion) => remediation.criterion_ids.has(criterion)));
+    const expectedUpstreams = routeEntry === primary ? input.approved_upstream_digests : undefined;
+    const legacyConfirmations = remediation?.legacy_confirmations;
+    return Object.freeze({
+      reviewer_id: base.reviewer_id,
+      focus: base.focus,
+      criterion_ids: criterionIds,
+      ...(expectedUpstreams === undefined ? {} : { expected_upstream_digests: expectedUpstreams }),
+      ...(legacyConfirmations === undefined || legacyConfirmations.length === 0
+        ? {}
+        : { legacy_confirmations: Object.freeze(legacyConfirmations) }),
+    });
+  };
   const envelopeFor = (routeEntry: (typeof taggedRoutes)[number]): DispatchEnvelope => {
     const assignment = assignmentFor(routeEntry);
-    if (priorTriage === undefined || unattributed) {
+    if (priorTriage === undefined) {
       return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject });
     }
-    const scoped = priorTriageContextEntry(priorTriage, (findingId) =>
-      reviewerOwnsFinding(routeEntry.tag, totalReviewers, findingId));
+    const acceptedIds = new Set([
+      ...(remediationByReviewer.get(routeEntry.assignment.reviewer_id)?.legacy_confirmations ?? [])
+        .map((confirmation) => confirmation.finding_id),
+      ...(remediationByReviewer.get(routeEntry.assignment.reviewer_id)?.finding_ids ?? []),
+    ]);
+    const scoped = priorTriageContextEntry(priorTriage, (findingId) => acceptedIds.has(findingId));
     return buildReviewEnvelopeWithCap({
       ...input.envelope,
       assignment,
@@ -599,7 +758,6 @@ export async function runCounterReview(
       subject_digest: input.envelope.subject.subject_digest,
       input_fingerprint: input.envelope.subject.input_fingerprint,
       pinned_constitution_digest: plan.pinned_constitution_digest,
-      approved_upstream_digests: plan.approved_upstream_digests,
       source_review_envelope_digest: envelope.digest,
       invocation_id: plan.invocation_id,
       result_id: plan.result_id,
@@ -610,7 +768,6 @@ export async function runCounterReview(
       artifact: input.envelope.artifact,
       rules: plan.rules,
       source_review_envelope_digest: envelope.digest,
-      approved_upstreams: plan.approved_upstreams,
       workspace: plan.workspace,
       subject: constitutionSubject,
     });
@@ -640,6 +797,7 @@ export async function runCounterReview(
   const reviewOp = (
     routeEntry: (typeof reviewRoutes)[number],
     reviewEnvelope: DispatchEnvelope,
+    assignment: ReviewAssignmentV1,
   ) => async (): Promise<ChildOutcome> => {
     const route = routeEntry.selection.route;
     const routeOverride = routeEntry.role === "test-reviewer" ? testReviewOverride : reviewOverride;
@@ -652,6 +810,7 @@ export async function runCounterReview(
       envelope_input_digest: reviewEnvelope.digest,
       extracted_output_bytes: dispatched.extracted_output_bytes,
       repositories: input.repositories,
+      assignment: Object.freeze({ ...assignment, routing_role: routeEntry.role }),
       ...(routeOverride === undefined ? {} : { route_override: routeOverride }),
     });
     const binding = { envelope_digest: reviewEnvelope.digest, role: routeEntry.role, selection: routeEntry.selection };
@@ -689,7 +848,8 @@ export async function runCounterReview(
     return { ok: true, value: { kind: "review", observation } };
   };
 
-  const ops: (() => Promise<ChildOutcome>)[] = reviewRoutes.map((routeEntry, index) => reviewOp(routeEntry, reviewEnvelopes[index]!));
+  const ops: (() => Promise<ChildOutcome>)[] = reviewRoutes.map((routeEntry, index) =>
+    reviewOp(routeEntry, reviewEnvelopes[index]!, activeAssignments[index]!));
   if (effortPlan !== undefined && parsedEffortEnvelope !== undefined && effortEnvelope !== undefined && effortRoute !== undefined) {
     const route = effortRoute.selection.route;
     const mint = (dispatched: CounterReviewDispatchResult): EffortSelectionV2 => createEffortSelectionV2(
@@ -753,8 +913,9 @@ export async function runCounterReview(
         envelope_input_digest: constitutionEnvelope.digest,
         extracted_output_bytes: dispatched.extracted_output_bytes,
         repositories: input.repositories,
+        rule_slots: plan.rule_slots,
         ...(constitutionOverride === undefined ? {} : { route_override: constitutionOverride }),
-      }).evidence,
+      }).evidence as ServerAttestedAdjudicationV2,
       route.adapter,
     );
     const binding = { envelope_digest: constitutionEnvelope.digest, role: "adjudicator" as const, selection: constitutionRoute.selection };
@@ -770,7 +931,12 @@ export async function runCounterReview(
       let dispatched: CounterReviewDispatchResult;
       try {
         dispatched = await dispatchObserved("adjudicator", constitutionRoute, (selectedRoute) =>
-          plan.dispatch(selectedRoute, constitutionEnvelope, adjudicationOutputSchema as PlainJsonValue));
+          plan.dispatch(
+            selectedRoute,
+            constitutionEnvelope,
+            JSON.parse(JSON.stringify(createRawAdjudicationV2Schema(plan.rule_slots)
+              .toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue,
+          ));
       } catch (error) {
         return { ok: false, error };
       }
@@ -820,8 +986,8 @@ export async function runCounterReview(
   if (singleObservations.length !== reviewRoutes.length) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
   }
-  if (singleObservations.some((observation) => observation.evidence.schema_version !== "2")) {
-    throw new TypeError("fresh counter-review observations must all use active review schema version 2");
+  if (singleObservations.some((observation) => observation.evidence.schema_version !== "3")) {
+    throw new TypeError("fresh counter-review observations must all use review schema version 3");
   }
   if (effortPlan !== undefined && effortAssessment === undefined) {
     throw new TypeError("phase-design counter-review settled without an effort assessment");
@@ -832,22 +998,14 @@ export async function runCounterReview(
     schema_version: observation.evidence.schema_version,
     findings: observation.evidence.findings,
   })), totalReviewers);
-  const allFindings = aggregated.findings;
+  const allFindings = aggregated.findings as readonly ReviewFindingV3[];
   const ownedFindingIds = aggregated.finding_ids_by_reviewer;
-
-  const matchedMap = new Map<string, RuleVersionRef>();
-  for (const obs of singleObservations) {
-    for (const ruleRef of obs.evidence.matched_rule_versions) {
-      matchedMap.set(`${ruleRef.rule_id}:${ruleRef.rule_version}`, ruleRef);
-    }
-  }
-  const mergedMatchedRules = [...matchedMap.values()].sort((a, b) => a.rule_id.localeCompare(b.rule_id));
 
   const mergedSummary = aggregated.summary;
 
-  const primaryObs = singleObservations[0]!;
-  const reviewerRuns: ReviewerRunV1[] = singleObservations.map((obs, index) => {
-    const evidence = obs.evidence;
+  const primaryObs = singleObservations[0]!.evidence as ServerAttestedReviewV3;
+  const reviewerRuns: ReviewerRunV2[] = singleObservations.map((obs, index) => {
+    const evidence = obs.evidence as ServerAttestedReviewV3;
     const routeEntry = reviewRoutes[index]!;
     const assignment = activeAssignments[index]!;
     if (evidence.route_source === undefined) {
@@ -868,17 +1026,22 @@ export async function runCounterReview(
       envelope_input_digest: evidence.envelope_input_digest,
       observed_output_digest: evidence.observed_output_digest,
       finding_ids: Object.freeze([...ownedFindingIds[index]!]),
+      ...(assignment.expected_upstream_digests === undefined
+        ? {}
+        : { expected_upstream_digests: Object.freeze([...assignment.expected_upstream_digests]) }),
+      ...(assignment.legacy_confirmations === undefined
+        ? {}
+        : { legacy_confirmations: Object.freeze([...assignment.legacy_confirmations]) }),
       ...(evidence.provider === undefined ? {} : { provider: evidence.provider }),
       route_source: evidence.route_source,
       ...(evidence.route_override === undefined ? {} : { route_override: evidence.route_override }),
     });
   });
   const mergedReviewEvidence: ReviewEvidence = Object.freeze({
-    ...primaryObs.evidence,
-    schema_version: "2",
+    ...primaryObs,
+    schema_version: "3",
     findings: Object.freeze(allFindings),
     ...mergedSummary,
-    matched_rule_versions: Object.freeze(mergedMatchedRules),
     reviewer_runs: Object.freeze(reviewerRuns),
     ...(effortAssessment === undefined ? {} : { effort_review: effortAssessment }),
   });

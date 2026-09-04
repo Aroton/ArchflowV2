@@ -140,7 +140,32 @@ describe("canonical counter-review rubrics", () => {
       expect(general.criterion_ids.some((id) => tests.criterion_ids.includes(id))).toBe(false);
     }
     expect(reviewAssignment("general", "general", "phase-impl", implementation.rubric, false).criterion_ids)
-      .toEqual(implementation.rubric.criteria.map((criterion) => criterion.id));
+      .toEqual(implementationGeneral.criterion_ids);
+  });
+
+  it("constructs explicit alignment-only and legacy-confirmation-only assignments", async () => {
+    const implementation = await loadTestRubric("phase-impl");
+    expect(reviewAssignment("general", "general", "phase-impl", implementation.rubric, {
+      criterion_ids: [],
+      expected_upstream_digests: [],
+    })).toEqual({
+      reviewer_id: "general",
+      focus: "general",
+      criterion_ids: [],
+      expected_upstream_digests: [],
+    });
+    expect(reviewAssignment("test", "tests", "phase-impl", implementation.rubric, {
+      criterion_ids: [],
+      legacy_confirmations: [{ finding_id: "archived-finding", criterion_ids: ["test-quality"] }],
+    })).toEqual({
+      reviewer_id: "test",
+      focus: "tests",
+      criterion_ids: [],
+      legacy_confirmations: [{ finding_id: "archived-finding", criterion_ids: ["test-quality"] }],
+    });
+    expect(() => reviewAssignment("general", "general", "phase-impl", implementation.rubric, {
+      criterion_ids: [],
+    })).toThrow(/present responsibility/iu);
   });
 
   it("asks the test reviewer for economical distinct coverage, not raw test volume", async () => {

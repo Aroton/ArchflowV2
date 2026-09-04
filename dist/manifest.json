@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "3c054d05bd5c8f284ce8a6be36656ee08ab273f4224fab2a1105cc38d04fd193",
+      "digest": "b7db0619be17878fee2bdfc0c65c65476b7f6a307368d66122e5c3f9d78b4d38",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 2250286
+      "size": 2371217
     },
     {
-      "digest": "9cc289b1199cfbaabbdc75a3236dc76cd92f7d19f6fea531c27f40a4d9469220",
+      "digest": "e5982c2b6b04ccdcf5cc75b88aebb883138da7de27c8420413d74bc1115546de",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3507374
+      "size": 3612843
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,10 +210,10 @@
       "role": "manifest"
     },
     {
-      "digest": "0feb1501698a3a5d2f56ee2a35d5ab9b2c3f7a833f5df4f7dfa383d6acaa4c47",
+      "digest": "30fe9457d85cf5cca91ea0343176c9bbf7a8fb96d5cf2dca8908eeac57767fda",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 370712
+      "size": 371236
     }
   ],
   "build_entries": [
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "9cc289b1199cfbaabbdc75a3236dc76cd92f7d19f6fea531c27f40a4d9469220",
+  "bundle_digest": "e5982c2b6b04ccdcf5cc75b88aebb883138da7de27c8420413d74bc1115546de",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -1519,7 +1519,7 @@
       "size": 9253
     },
     {
-      "bytes_in_output": 0,
+      "bytes_in_output": 107,
       "digest": "c733a1897d6b4b30dad6998597f6896b265b094a65534359ada34b08ecf8932c",
       "key": "node_modules/zod/index.js",
       "origin": {
@@ -1531,7 +1531,7 @@
       "size": 121
     },
     {
-      "bytes_in_output": 1716,
+      "bytes_in_output": 1815,
       "digest": "78a162d29e06001b4d919e1ed08f6e7d0d665bba0ef983201373745410d7b354",
       "key": "node_modules/zod/v4/classic/checks.js",
       "origin": {
@@ -1543,7 +1543,7 @@
       "size": 663
     },
     {
-      "bytes_in_output": 1080,
+      "bytes_in_output": 1199,
       "digest": "fb2efe3b6eacc475c77cbb571b5fb8650d92a10f316dc869e49b722973d83c3c",
       "key": "node_modules/zod/v4/classic/coerce.js",
       "origin": {
@@ -1555,7 +1555,7 @@
       "size": 550
     },
     {
-      "bytes_in_output": 1282,
+      "bytes_in_output": 1450,
       "digest": "0e948b101771cc0e7b753e54b3f5b486929d3db9bd4c09d98fe4ce86271bcf7b",
       "key": "node_modules/zod/v4/classic/compat.js",
       "origin": {
@@ -1567,7 +1567,7 @@
       "size": 1090
     },
     {
-      "bytes_in_output": 2046,
+      "bytes_in_output": 2362,
       "digest": "b155316267f79068ddc2dddc7046e13785804b768ca36e6deff1691d154f7c20",
       "key": "node_modules/zod/v4/classic/errors.js",
       "origin": {
@@ -1579,7 +1579,7 @@
       "size": 1609
     },
     {
-      "bytes_in_output": 13816,
+      "bytes_in_output": 14207,
       "digest": "179a03ace3d1d77895cc5b3c54a3fcbf2b7f8bad44d6f030092491c10e5d9097",
       "key": "node_modules/zod/v4/classic/external.js",
       "origin": {
@@ -1591,7 +1591,7 @@
       "size": 907
     },
     {
-      "bytes_in_output": 32956,
+      "bytes_in_output": 33456,
       "digest": "d8866bf5232e55d12cda032bde6a56a05a0a8b276945c2e4eed66432ef5cc9b2",
       "key": "node_modules/zod/v4/classic/from-json-schema.js",
       "origin": {
@@ -1615,7 +1615,7 @@
       "size": 99
     },
     {
-      "bytes_in_output": 2410,
+      "bytes_in_output": 2631,
       "digest": "3cc5e6b4da086b8ffc7ee3188c69e4d3c945b368092e78d2299b5321182752c5",
       "key": "node_modules/zod/v4/classic/iso.js",
       "origin": {
@@ -1627,7 +1627,7 @@
       "size": 1151
     },
     {
-      "bytes_in_output": 1472,
+      "bytes_in_output": 1751,
       "digest": "14cbcc416ab9169abc2cde97af77da54ca769684eac1e03a3753c16ea4a7cd95",
       "key": "node_modules/zod/v4/classic/parse.js",
       "origin": {
@@ -1639,7 +1639,7 @@
       "size": 997
     },
     {
-      "bytes_in_output": 91381,
+      "bytes_in_output": 95279,
       "digest": "eb4af7946a092aff8678b9251728ea58dab40154920cd65ec4a2ca1d4df68393",
       "key": "node_modules/zod/v4/classic/schemas.js",
       "origin": {
@@ -1651,7 +1651,7 @@
       "size": 51378
     },
     {
-      "bytes_in_output": 45774,
+      "bytes_in_output": 45967,
       "digest": "00cb5edcfde8098e5a169e66c1dce50c101484d21436e3d78e137e1fa87c4836",
       "key": "node_modules/zod/v4/core/api.js",
       "origin": {
@@ -1663,7 +1663,7 @@
       "size": 28054
     },
     {
-      "bytes_in_output": 33098,
+      "bytes_in_output": 35758,
       "digest": "5a33a20dcad372b4d18ead8d1e58b1950454f136a2216e62f247e0e5601ac838",
       "key": "node_modules/zod/v4/core/checks.js",
       "origin": {
@@ -1675,7 +1675,7 @@
       "size": 20005
     },
     {
-      "bytes_in_output": 4183,
+      "bytes_in_output": 4366,
       "digest": "a5e713beaac4647151e03716a83f51ab714e5337cf66850f3b28eaf072a0bbfe",
       "key": "node_modules/zod/v4/core/core.js",
       "origin": {
@@ -1687,7 +1687,7 @@
       "size": 2578
     },
     {
-      "bytes_in_output": 1852,
+      "bytes_in_output": 2064,
       "digest": "e084bbcc536746a8942fd33b08afe4db345554b3a0383114f1dca95261c958d9",
       "key": "node_modules/zod/v4/core/doc.js",
       "origin": {
@@ -1699,7 +1699,7 @@
       "size": 1088
     },
     {
-      "bytes_in_output": 9368,
+      "bytes_in_output": 9582,
       "digest": "bdd0ed8fd4a6e9d04fe6423b0f9df3a0b403939bc7dcedd8930a4b8df1fb118c",
       "key": "node_modules/zod/v4/core/errors.js",
       "origin": {
@@ -1711,7 +1711,7 @@
       "size": 6413
     },
     {
-      "bytes_in_output": 17732,
+      "bytes_in_output": 18153,
       "digest": "f9698820ee8371215e8d015cfa060230c62e65428397dce83f78e6538976301c",
       "key": "node_modules/zod/v4/core/index.js",
       "origin": {
@@ -1723,7 +1723,7 @@
       "size": 594
     },
     {
-      "bytes_in_output": 4238,
+      "bytes_in_output": 4720,
       "digest": "9cc884cdb535a9c87b85b66e61a593ff6b686222f038834f81c5e92552cd6e23",
       "key": "node_modules/zod/v4/core/json-schema-generator.js",
       "origin": {
@@ -1735,7 +1735,7 @@
       "size": 3218
     },
     {
-      "bytes_in_output": 33922,
+      "bytes_in_output": 36647,
       "digest": "ff15f567c9401dd7d3151ce11736283ff747c9a9e205cc08ee96f90eadc1c0c6",
       "key": "node_modules/zod/v4/core/json-schema-processors.js",
       "origin": {
@@ -1747,7 +1747,7 @@
       "size": 20716
     },
     {
-      "bytes_in_output": 60,
+      "bytes_in_output": 147,
       "digest": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
       "key": "node_modules/zod/v4/core/json-schema.js",
       "origin": {
@@ -1759,7 +1759,7 @@
       "size": 11
     },
     {
-      "bytes_in_output": 7588,
+      "bytes_in_output": 8272,
       "digest": "2578b8d1341c3882a6c089f9ec57ce1c1a16b8b2b477721d4d89ba3d3ee50c9c",
       "key": "node_modules/zod/v4/core/parse.js",
       "origin": {
@@ -1771,7 +1771,7 @@
       "size": 4444
     },
     {
-      "bytes_in_output": 15051,
+      "bytes_in_output": 15776,
       "digest": "3cb122080c1154321331322ebc0cbe04878fe104c8c7b335891d9f85fc4b3f63",
       "key": "node_modules/zod/v4/core/regexes.js",
       "origin": {
@@ -1783,7 +1783,7 @@
       "size": 9078
     },
     {
-      "bytes_in_output": 2660,
+      "bytes_in_output": 2952,
       "digest": "620ea1a715ccc4e6e605a271343bf47942dccae90885dc71f137b1f08a972e50",
       "key": "node_modules/zod/v4/core/registries.js",
       "origin": {
@@ -1795,7 +1795,7 @@
       "size": 1512
     },
     {
-      "bytes_in_output": 132321,
+      "bytes_in_output": 139703,
       "digest": "09da9b0cb9b9d2d795c349bc47c7521d5aaffe241885f0c9728f2aa7de3834c9",
       "key": "node_modules/zod/v4/core/schemas.js",
       "origin": {
@@ -1807,7 +1807,7 @@
       "size": 83322
     },
     {
-      "bytes_in_output": 22910,
+      "bytes_in_output": 23132,
       "digest": "fb3c9ab59947582f7671a53c8e20a3ced5eaa92d1c220ce8b27717a59033ad0d",
       "key": "node_modules/zod/v4/core/to-json-schema.js",
       "origin": {
@@ -1819,7 +1819,7 @@
       "size": 17006
     },
     {
-      "bytes_in_output": 39764,
+      "bytes_in_output": 40309,
       "digest": "968e3433e810cf7ba5efb609a1cb6d9a6cfb51215fd1f699938228f7ac25deb3",
       "key": "node_modules/zod/v4/core/util.js",
       "origin": {
@@ -1831,7 +1831,7 @@
       "size": 22018
     },
     {
-      "bytes_in_output": 108,
+      "bytes_in_output": 218,
       "digest": "bf082fde98fa7725412d713c7f56da3a5603bdef199d68d5769263f30ce9c756",
       "key": "node_modules/zod/v4/core/versions.js",
       "origin": {
@@ -1855,7 +1855,7 @@
       "size": 92
     },
     {
-      "bytes_in_output": 14246,
+      "bytes_in_output": 14742,
       "digest": "220ca3ca8cf67e4ccc05d789eeed2692d970269fe0cd82f05db8fd899b661b9e",
       "key": "node_modules/zod/v4/locales/ar.js",
       "origin": {
@@ -1867,7 +1867,7 @@
       "size": 5188
     },
     {
-      "bytes_in_output": 8684,
+      "bytes_in_output": 9177,
       "digest": "4725ffef0b2f2df947194f9698c792b69f52a8c3a5a1e1bdfabbf62259a1dd46",
       "key": "node_modules/zod/v4/locales/az.js",
       "origin": {
@@ -1879,7 +1879,7 @@
       "size": 4511
     },
     {
-      "bytes_in_output": 17408,
+      "bytes_in_output": 18045,
       "digest": "da4bda7fbc940dd9f50efdd914caa9397243be779a505b82bd4be5395d3b795e",
       "key": "node_modules/zod/v4/locales/be.js",
       "origin": {
@@ -1891,7 +1891,7 @@
       "size": 6619
     },
     {
-      "bytes_in_output": 15654,
+      "bytes_in_output": 16207,
       "digest": "48511ad2f86043f0eea6e7673d5e2b848a3295a26c9c4650e96b3884d640196d",
       "key": "node_modules/zod/v4/locales/bg.js",
       "origin": {
@@ -1903,7 +1903,7 @@
       "size": 5785
     },
     {
-      "bytes_in_output": 8312,
+      "bytes_in_output": 8817,
       "digest": "796f9ba7dcd53648171aa0132c50271ef358936765cec0a44a642c41d05b3e8c",
       "key": "node_modules/zod/v4/locales/ca.js",
       "origin": {
@@ -1915,7 +1915,7 @@
       "size": 4710
     },
     {
-      "bytes_in_output": 8936,
+      "bytes_in_output": 9453,
       "digest": "670a75fe1db1104db090c95aabb01e4eb6decd451fe77fd830c2e4dafc79b49a",
       "key": "node_modules/zod/v4/locales/cs.js",
       "origin": {
@@ -1927,7 +1927,7 @@
       "size": 4772
     },
     {
-      "bytes_in_output": 8358,
+      "bytes_in_output": 8891,
       "digest": "cdaad7a1fa370abda1943fe9c2caba961e7896b9808d51275daf33f964af49cc",
       "key": "node_modules/zod/v4/locales/da.js",
       "origin": {
@@ -1939,7 +1939,7 @@
       "size": 4804
     },
     {
-      "bytes_in_output": 8010,
+      "bytes_in_output": 8515,
       "digest": "521a4ed29fcaf3f781163875dc282cfb5262047773aa2b70a852996b1d8a51b9",
       "key": "node_modules/zod/v4/locales/de.js",
       "origin": {
@@ -1951,7 +1951,7 @@
       "size": 4588
     },
     {
-      "bytes_in_output": 15970,
+      "bytes_in_output": 16479,
       "digest": "9857a9e4909282b2efd86317fc3e67ed86e24287f32329cfa5ab833c05fc0d81",
       "key": "node_modules/zod/v4/locales/el.js",
       "origin": {
@@ -1963,7 +1963,7 @@
       "size": 5544
     },
     {
-      "bytes_in_output": 8158,
+      "bytes_in_output": 8680,
       "digest": "232a0828d64df8e410b23ac9825a667bd9d485fd70acdc4b4d0870539faef0a4",
       "key": "node_modules/zod/v4/locales/en.js",
       "origin": {
@@ -1975,7 +1975,7 @@
       "size": 4805
     },
     {
-      "bytes_in_output": 8090,
+      "bytes_in_output": 8600,
       "digest": "ebe08048aa3ee9871ce9fe1271e254cb672b1968ec40ac253066d08d176e8a65",
       "key": "node_modules/zod/v4/locales/eo.js",
       "origin": {
@@ -1987,7 +1987,7 @@
       "size": 4603
     },
     {
-      "bytes_in_output": 9582,
+      "bytes_in_output": 10184,
       "digest": "4edd9302e9724c408b024220e99092fbd2f90100ac3c6407a94543b79843610c",
       "key": "node_modules/zod/v4/locales/es.js",
       "origin": {
@@ -1999,7 +1999,7 @@
       "size": 5439
     },
     {
-      "bytes_in_output": 13456,
+      "bytes_in_output": 13986,
       "digest": "2dc1bee1e984e8a15191fb3c69aaecaa26c922e12a0d4486ac005a0372b78565",
       "key": "node_modules/zod/v4/locales/fa.js",
       "origin": {
@@ -2011,7 +2011,7 @@
       "size": 5131
     },
     {
-      "bytes_in_output": 8498,
+      "bytes_in_output": 9020,
       "digest": "3911184979f01d2ae580ce611710ee40597eff97a410d0fa823ab6ea27cee88c",
       "key": "node_modules/zod/v4/locales/fi.js",
       "origin": {
@@ -2023,7 +2023,7 @@
       "size": 4818
     },
     {
-      "bytes_in_output": 8002,
+      "bytes_in_output": 8510,
       "digest": "f8716c2baaccdfd1d958743bbc5250c9bdef5152d0801470e9b9a380d618f4ab",
       "key": "node_modules/zod/v4/locales/fr-CA.js",
       "origin": {
@@ -2035,7 +2035,7 @@
       "size": 4554
     },
     {
-      "bytes_in_output": 9054,
+      "bytes_in_output": 9628,
       "digest": "3ea466ca5737984bb5acc9008822060272f596317004618cfe1e05109f707577",
       "key": "node_modules/zod/v4/locales/fr.js",
       "origin": {
@@ -2047,7 +2047,7 @@
       "size": 5137
     },
     {
-      "bytes_in_output": 26070,
+      "bytes_in_output": 26920,
       "digest": "290512e43d2907700211da09dc3959fd98d120bfb89f8836e6e3f83a472e26fe",
       "key": "node_modules/zod/v4/locales/he.js",
       "origin": {
@@ -2059,7 +2059,7 @@
       "size": 12005
     },
     {
-      "bytes_in_output": 8874,
+      "bytes_in_output": 9436,
       "digest": "1ea65433c32b89bead43113ac69b3acc520bb73ae231dd2e05fedf8e8c5656d6",
       "key": "node_modules/zod/v4/locales/hr.js",
       "origin": {
@@ -2071,7 +2071,7 @@
       "size": 5052
     },
     {
-      "bytes_in_output": 8562,
+      "bytes_in_output": 9068,
       "digest": "913ee94a253db79b31463ae23a337060b6fe28be73dfc7657d8a83a4942bd8a8",
       "key": "node_modules/zod/v4/locales/hu.js",
       "origin": {
@@ -2083,7 +2083,7 @@
       "size": 4696
     },
     {
-      "bytes_in_output": 16532,
+      "bytes_in_output": 17154,
       "digest": "0d3bbb96c0f8bc74468a2dfc7d066e838bb56fab64fd5ec03ce9c4d89eccbe99",
       "key": "node_modules/zod/v4/locales/hy.js",
       "origin": {
@@ -2095,7 +2095,7 @@
       "size": 6390
     },
     {
-      "bytes_in_output": 7932,
+      "bytes_in_output": 8430,
       "digest": "cd2c19b5c30dade3ed91ffcff3deb0b068713be24f02248e7e46b87b2b9553ee",
       "key": "node_modules/zod/v4/locales/id.js",
       "origin": {
@@ -2107,7 +2107,7 @@
       "size": 4577
     },
     {
-      "bytes_in_output": 2644,
+      "bytes_in_output": 3514,
       "digest": "d73f41a76614855d43eea493030a1aa05dca30c9a17015a0da5b8b70da61b6b1",
       "key": "node_modules/zod/v4/locales/index.js",
       "origin": {
@@ -2119,7 +2119,7 @@
       "size": 2149
     },
     {
-      "bytes_in_output": 8292,
+      "bytes_in_output": 8802,
       "digest": "ead5b14eac892229f915fe38ec94ab3b1e676f8aa2df2a8450848ba9ca9a1612",
       "key": "node_modules/zod/v4/locales/is.js",
       "origin": {
@@ -2131,7 +2131,7 @@
       "size": 4635
     },
     {
-      "bytes_in_output": 7928,
+      "bytes_in_output": 8434,
       "digest": "439969d199427d77ebf1e477bf2295b226712804b25437d442f9dfc78aca95e0",
       "key": "node_modules/zod/v4/locales/it.js",
       "origin": {
@@ -2143,7 +2143,7 @@
       "size": 4582
     },
     {
-      "bytes_in_output": 10700,
+      "bytes_in_output": 11202,
       "digest": "43ee10378cac22b0b8aee912a66c3f36a834d5b4c76e9748f88a784044f248fd",
       "key": "node_modules/zod/v4/locales/ja.js",
       "origin": {
@@ -2155,7 +2155,7 @@
       "size": 4851
     },
     {
-      "bytes_in_output": 15638,
+      "bytes_in_output": 16160,
       "digest": "0ab5322368f9ac6e6b58f93dac484a4f4f06cdf4c0677f4df88164e9d8b4bf81",
       "key": "node_modules/zod/v4/locales/ka.js",
       "origin": {
@@ -2167,7 +2167,7 @@
       "size": 6202
     },
     {
-      "bytes_in_output": 98,
+      "bytes_in_output": 185,
       "digest": "78c3d1991041bb8c8fc0f7c5d745aae422d4c2e4e8f30bae44f3fef4765900a8",
       "key": "node_modules/zod/v4/locales/kh.js",
       "origin": {
@@ -2179,7 +2179,7 @@
       "size": 111
     },
     {
-      "bytes_in_output": 16068,
+      "bytes_in_output": 16582,
       "digest": "dbdabda94dd93d4a1827e6c809505c79fa6aa7abefec91dc50fa0871382c99cc",
       "key": "node_modules/zod/v4/locales/km.js",
       "origin": {
@@ -2191,7 +2191,7 @@
       "size": 6242
     },
     {
-      "bytes_in_output": 10294,
+      "bytes_in_output": 10812,
       "digest": "d2efe22ac069d9b32b0109fa07713ac0695ac1c1357afc4e4277056466f2e196",
       "key": "node_modules/zod/v4/locales/ko.js",
       "origin": {
@@ -2203,7 +2203,7 @@
       "size": 4929
     },
     {
-      "bytes_in_output": 14422,
+      "bytes_in_output": 15290,
       "digest": "dad886e52c56a1329d22e072f8b08dc8730f69c3dc5e5acf8267cac18df1ab28",
       "key": "node_modules/zod/v4/locales/lt.js",
       "origin": {
@@ -2215,7 +2215,7 @@
       "size": 8082
     },
     {
-      "bytes_in_output": 14004,
+      "bytes_in_output": 14514,
       "digest": "9eb4af0392fc5b9c438cdc6ceea446acc541b59e221dba918f7b80800d9da3d1",
       "key": "node_modules/zod/v4/locales/mk.js",
       "origin": {
@@ -2227,7 +2227,7 @@
       "size": 5157
     },
     {
-      "bytes_in_output": 7750,
+      "bytes_in_output": 8252,
       "digest": "c550a9185d997e8fcd17311951aa1e29793a50b8e825e18310efd5a46c641795",
       "key": "node_modules/zod/v4/locales/ms.js",
       "origin": {
@@ -2239,7 +2239,7 @@
       "size": 4491
     },
     {
-      "bytes_in_output": 8262,
+      "bytes_in_output": 8776,
       "digest": "acba414579c5bbd7f83dc6661fa1a12d65f1822f9b0f5035549ac60f46d93763",
       "key": "node_modules/zod/v4/locales/nl.js",
       "origin": {
@@ -2251,7 +2251,7 @@
       "size": 4762
     },
     {
-      "bytes_in_output": 7854,
+      "bytes_in_output": 8360,
       "digest": "1854483c7cf158b8f97f0faf6fd799eb1f762009018b5fde893ca33f2fb0b313",
       "key": "node_modules/zod/v4/locales/no.js",
       "origin": {
@@ -2263,7 +2263,7 @@
       "size": 4506
     },
     {
-      "bytes_in_output": 8290,
+      "bytes_in_output": 8802,
       "digest": "34ae496104bc17fea7d30c3d45c94cfe3d1d569b5d39a6ca51de6c177690c556",
       "key": "node_modules/zod/v4/locales/ota.js",
       "origin": {
@@ -2275,7 +2275,7 @@
       "size": 4525
     },
     {
-      "bytes_in_output": 9314,
+      "bytes_in_output": 9824,
       "digest": "18eab58f395e30b906e8e3fddc5f212eb19f2c4362410889a5c5e0141ebe2144",
       "key": "node_modules/zod/v4/locales/pl.js",
       "origin": {
@@ -2287,7 +2287,7 @@
       "size": 4966
     },
     {
-      "bytes_in_output": 12156,
+      "bytes_in_output": 12686,
       "digest": "f977b5141fa8fb6a8459372e0b2895d74b381c9f2ff4899141f7ee3e639a4513",
       "key": "node_modules/zod/v4/locales/ps.js",
       "origin": {
@@ -2299,7 +2299,7 @@
       "size": 4909
     },
     {
-      "bytes_in_output": 8012,
+      "bytes_in_output": 8518,
       "digest": "df172afc585544dee7c063c484f5a07b5ed103e2c1072a782c763ad8ceb08e17",
       "key": "node_modules/zod/v4/locales/pt.js",
       "origin": {
@@ -2311,7 +2311,7 @@
       "size": 4568
     },
     {
-      "bytes_in_output": 8736,
+      "bytes_in_output": 9286,
       "digest": "ecae409f4299ab91e2aff1095db14e23f3cf2c05b3654e242047655352c7f46b",
       "key": "node_modules/zod/v4/locales/ro.js",
       "origin": {
@@ -2323,7 +2323,7 @@
       "size": 4774
     },
     {
-      "bytes_in_output": 17980,
+      "bytes_in_output": 18618,
       "digest": "c397a473e94d7d189a9c09c7890fe379c4f6f46d9556d52a040a90ffa56f7b93",
       "key": "node_modules/zod/v4/locales/ru.js",
       "origin": {
@@ -2335,7 +2335,7 @@
       "size": 6714
     },
     {
-      "bytes_in_output": 8048,
+      "bytes_in_output": 8558,
       "digest": "ee2ff3a19b62cd2f89b54b165088773b937de15df7253df220bef07d9adf2d80",
       "key": "node_modules/zod/v4/locales/sl.js",
       "origin": {
@@ -2347,7 +2347,7 @@
       "size": 4567
     },
     {
-      "bytes_in_output": 8244,
+      "bytes_in_output": 8758,
       "digest": "97d6718fb643e05d6fe30fa4f9f09b8d9a3eda4a3a350b57dfb2944943d19502",
       "key": "node_modules/zod/v4/locales/sv.js",
       "origin": {
@@ -2359,7 +2359,7 @@
       "size": 4663
     },
     {
-      "bytes_in_output": 16348,
+      "bytes_in_output": 16862,
       "digest": "04bbde9766251f9047e786fdd77632f2ecd53aec2eb060eb2fc85bf576ad729d",
       "key": "node_modules/zod/v4/locales/ta.js",
       "origin": {
@@ -2371,7 +2371,7 @@
       "size": 6369
     },
     {
-      "bytes_in_output": 16218,
+      "bytes_in_output": 16732,
       "digest": "aea70c9ac2b399fe4749e19ba3aa99c3efb4dfb50eadfb62b0b2a6e005748f3d",
       "key": "node_modules/zod/v4/locales/th.js",
       "origin": {
@@ -2383,7 +2383,7 @@
       "size": 6290
     },
     {
-      "bytes_in_output": 8166,
+      "bytes_in_output": 8660,
       "digest": "4449f41d22c6f15ede5066f79d840a52ec45a6b694c859e16f9121062b6fad2f",
       "key": "node_modules/zod/v4/locales/tr.js",
       "origin": {
@@ -2395,7 +2395,7 @@
       "size": 4454
     },
     {
-      "bytes_in_output": 98,
+      "bytes_in_output": 185,
       "digest": "9391169ffbc72f777a83230b6ffcc3f4cf46ab5945ec540de9ef4609dca1f4cc",
       "key": "node_modules/zod/v4/locales/ua.js",
       "origin": {
@@ -2407,7 +2407,7 @@
       "size": 111
     },
     {
-      "bytes_in_output": 15758,
+      "bytes_in_output": 16264,
       "digest": "77136a2a60eef62f7cc803a0f9971aebbc641403af77c1b41fd5ce59abfa5de3",
       "key": "node_modules/zod/v4/locales/uk.js",
       "origin": {
@@ -2419,7 +2419,7 @@
       "size": 5430
     },
     {
-      "bytes_in_output": 14792,
+      "bytes_in_output": 15306,
       "digest": "858f4f38d651073e7a3fbec7ed356692578b3ad1fae1b453cb3d85312a4f39d2",
       "key": "node_modules/zod/v4/locales/ur.js",
       "origin": {
@@ -2431,7 +2431,7 @@
       "size": 5271
     },
     {
-      "bytes_in_output": 8440,
+      "bytes_in_output": 8954,
       "digest": "d540bed482d15c47cb45439cff34e053379c53019c7c7c5fbe43f222d0c81f04",
       "key": "node_modules/zod/v4/locales/uz.js",
       "origin": {
@@ -2443,7 +2443,7 @@
       "size": 4739
     },
     {
-      "bytes_in_output": 9334,
+      "bytes_in_output": 9840,
       "digest": "2c61bd3f4a733f3cbb1ad85e75a053cb15a8ebeb83ab56dc21f2948b1138e12f",
       "key": "node_modules/zod/v4/locales/vi.js",
       "origin": {
@@ -2455,7 +2455,7 @@
       "size": 4772
     },
     {
-      "bytes_in_output": 9572,
+      "bytes_in_output": 10074,
       "digest": "98b9cbf31bf00c8b2c00de62725a9dd7cb718ac72d6e8fd4e0a1a7c49723e0f4",
       "key": "node_modules/zod/v4/locales/yo.js",
       "origin": {
@@ -2467,7 +2467,7 @@
       "size": 4665
     },
     {
-      "bytes_in_output": 9012,
+      "bytes_in_output": 9528,
       "digest": "99a4b16af598834a0b11607fcdebd1c6de026386ff1d6a5a306b364c154c5899",
       "key": "node_modules/zod/v4/locales/zh-CN.js",
       "origin": {
@@ -2479,7 +2479,7 @@
       "size": 4452
     },
     {
-      "bytes_in_output": 9222,
+      "bytes_in_output": 9730,
       "digest": "37dcae620e1553e9174a4b9434bbcc4e465150a627e80c9c17fd01de8baaf59a",
       "key": "node_modules/zod/v4/locales/zh-TW.js",
       "origin": {
@@ -2491,17 +2491,17 @@
       "size": 4498
     },
     {
-      "bytes_in_output": 15956,
-      "digest": "61781f3f995d14286d8ad57f5d0f04daa4e0fb897545bc047ddee442c5113da0",
+      "bytes_in_output": 27599,
+      "digest": "91bdcaff13290f71e5f483119a1a17de899b5d3636b120215931049523d4f329",
       "key": "src/contracts/adjudication.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/adjudication.ts"
       },
-      "size": 12273
+      "size": 20868
     },
     {
-      "bytes_in_output": 13497,
+      "bytes_in_output": 13563,
       "digest": "d0c84178ceec34aa0580835c3d8b9aa563b8c4e2e0549b3202f429d3238e344a",
       "key": "src/contracts/automation-status.ts",
       "origin": {
@@ -2511,7 +2511,7 @@
       "size": 21863
     },
     {
-      "bytes_in_output": 7474,
+      "bytes_in_output": 7675,
       "digest": "db3f0dcd4369908f16825593117647ff6e1e122e692a13317dd40506d55de0aa",
       "key": "src/contracts/canonical.ts",
       "origin": {
@@ -2521,7 +2521,7 @@
       "size": 6992
     },
     {
-      "bytes_in_output": 1872,
+      "bytes_in_output": 2266,
       "digest": "8a39bab2c68e5dea044d6e80d26cc89267cc21d5d7185c5e9f0b93654ab57648",
       "key": "src/contracts/component-manifest.ts",
       "origin": {
@@ -2531,7 +2531,7 @@
       "size": 5869
     },
     {
-      "bytes_in_output": 7570,
+      "bytes_in_output": 8246,
       "digest": "4413acf5e2d7d0339e54404d9675340ee4c095c82b7b0ad041d0067769277473",
       "key": "src/contracts/config.ts",
       "origin": {
@@ -2541,7 +2541,7 @@
       "size": 6325
     },
     {
-      "bytes_in_output": 4516,
+      "bytes_in_output": 4560,
       "digest": "e50af9c876995e5f901332ecd7fbec9118ba1dd6ac4c68eb610f7cda08761ea7",
       "key": "src/contracts/constitution.ts",
       "origin": {
@@ -2551,7 +2551,7 @@
       "size": 3842
     },
     {
-      "bytes_in_output": 6380,
+      "bytes_in_output": 6411,
       "digest": "641fa0344337784dd9a9091294a232ffb462592d7c4b62857c68538b4e81d053",
       "key": "src/contracts/contexts.ts",
       "origin": {
@@ -2561,7 +2561,7 @@
       "size": 5089
     },
     {
-      "bytes_in_output": 5888,
+      "bytes_in_output": 5955,
       "digest": "b816f7aef2d03d48f8337fe6be351d6a59dad542a1717fe19b40c6736e26bd4e",
       "key": "src/contracts/dispatch-failure.ts",
       "origin": {
@@ -2571,7 +2571,7 @@
       "size": 5375
     },
     {
-      "bytes_in_output": 3964,
+      "bytes_in_output": 4055,
       "digest": "0f67099fa71f9d0f3f10afd4508ff20da0f86976618100c62355bb112f450056",
       "key": "src/contracts/durable-document.ts",
       "origin": {
@@ -2581,7 +2581,7 @@
       "size": 8376
     },
     {
-      "bytes_in_output": 39185,
+      "bytes_in_output": 39248,
       "digest": "ebf177ad37d3b98a9e6749e28bda5228a362959c4a1bdc4b909e1178205fce64",
       "key": "src/contracts/durable-gate.ts",
       "origin": {
@@ -2591,7 +2591,7 @@
       "size": 34601
     },
     {
-      "bytes_in_output": 7495,
+      "bytes_in_output": 7604,
       "digest": "2ab6cf6a75a4ae04403484eb3194d82be66a62778761e1892dcf97cf3c754b4d",
       "key": "src/contracts/durable-implementation-output.ts",
       "origin": {
@@ -2601,7 +2601,7 @@
       "size": 13063
     },
     {
-      "bytes_in_output": 2090,
+      "bytes_in_output": 2156,
       "digest": "9c88831481738992161936e6336e77257b7c724641612abf55bbe3bb34346cd8",
       "key": "src/contracts/durable-intent.ts",
       "origin": {
@@ -2611,7 +2611,7 @@
       "size": 4190
     },
     {
-      "bytes_in_output": 3922,
+      "bytes_in_output": 4031,
       "digest": "b04ccc2cb659de9c051594fa30ad1adc9b58d856420db391a1a32e2053e7ca49",
       "key": "src/contracts/durable-legacy-import.ts",
       "origin": {
@@ -2621,7 +2621,7 @@
       "size": 7418
     },
     {
-      "bytes_in_output": 14826,
+      "bytes_in_output": 14927,
       "digest": "910f656c78607bbb0c767dd768a36b30fc56f5b5a6f638c05525ef3dc0fcb0e5",
       "key": "src/contracts/durable-primitives.ts",
       "origin": {
@@ -2631,7 +2631,7 @@
       "size": 20822
     },
     {
-      "bytes_in_output": 7522,
+      "bytes_in_output": 7608,
       "digest": "4a75370c98a344f234a2e8c6384ba30e629c49cbd7e5608f82440a444576a006",
       "key": "src/contracts/durable-result-manifest.ts",
       "origin": {
@@ -2641,7 +2641,7 @@
       "size": 10462
     },
     {
-      "bytes_in_output": 59928,
+      "bytes_in_output": 60033,
       "digest": "c997ee892eabc6ba9d47665f91001f5539e1433e9007910da4d63384358de9ef",
       "key": "src/contracts/durable-state.ts",
       "origin": {
@@ -2651,7 +2651,7 @@
       "size": 54335
     },
     {
-      "bytes_in_output": 1062,
+      "bytes_in_output": 1128,
       "digest": "80059626adf4eb1cd21233097f45dcbe2bfcdfade9ef0ef086fe4b6b3ff18b79",
       "key": "src/contracts/durable-task-initialization.ts",
       "origin": {
@@ -2661,7 +2661,7 @@
       "size": 3452
     },
     {
-      "bytes_in_output": 82880,
+      "bytes_in_output": 82940,
       "digest": "6b8c63578ca8f79084aa72ce55c6d1fedfce3d9be70b075c37c743789c259b91",
       "key": "src/contracts/durable.ts",
       "origin": {
@@ -2671,7 +2671,7 @@
       "size": 55776
     },
     {
-      "bytes_in_output": 32284,
+      "bytes_in_output": 34191,
       "digest": "0f72cf0dc8625e7fda4f2ea7d34629272fda3853caffa6664a394f4db456bffb",
       "key": "src/contracts/effort-review.ts",
       "origin": {
@@ -2681,7 +2681,7 @@
       "size": 28492
     },
     {
-      "bytes_in_output": 34696,
+      "bytes_in_output": 34817,
       "digest": "7a6ac0603657d1e75ac4b837ba5d41f073cedb28bf76bfebd4fbbd3747e078d7",
       "key": "src/contracts/errors.ts",
       "origin": {
@@ -2691,7 +2691,7 @@
       "size": 24160
     },
     {
-      "bytes_in_output": 6650,
+      "bytes_in_output": 7101,
       "digest": "13fb90a04e5266e5545e01ed460cf32d73084d1e0333cb9df8debc5c1e4646e9",
       "key": "src/contracts/evidence.ts",
       "origin": {
@@ -2701,7 +2701,7 @@
       "size": 7043
     },
     {
-      "bytes_in_output": 22472,
+      "bytes_in_output": 22509,
       "digest": "d36ba75bc801497c19f42a90eb77778cd3dbce85c99c0423600e9543a6385f3a",
       "key": "src/contracts/fingerprints.ts",
       "origin": {
@@ -2711,7 +2711,7 @@
       "size": 23342
     },
     {
-      "bytes_in_output": 71496,
+      "bytes_in_output": 71637,
       "digest": "beb96aea7e3396e22c462b57986c311c843ba156bf3608dbbbc9d45f680a7ba0",
       "key": "src/contracts/gates.ts",
       "origin": {
@@ -2721,7 +2721,7 @@
       "size": 55228
     },
     {
-      "bytes_in_output": 4794,
+      "bytes_in_output": 5225,
       "digest": "96aa1d23aaee3cc53d5b96df89f2c6935f277ae0b13b59d9f09263d8bf749ad4",
       "key": "src/contracts/hazard-registry.ts",
       "origin": {
@@ -2751,27 +2751,27 @@
       "size": 3555
     },
     {
-      "bytes_in_output": 2106,
-      "digest": "ab8507eae56a8ed7a13e85db6a24b072663978894e5e02c8a65b4f66ac50af14",
+      "bytes_in_output": 2364,
+      "digest": "4ef85c24297e20ffe03e064597a87a2e3abdebcd9420bd611245b8f8fb19d9f9",
       "key": "src/contracts/internal/trust-mints.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/internal/trust-mints.ts"
       },
-      "size": 3415
+      "size": 3673
     },
     {
-      "bytes_in_output": 55359,
-      "digest": "9cdf004c90da3978f9ceb3ff09f0573d52cec7219aedc404e787baae961b7414",
+      "bytes_in_output": 57704,
+      "digest": "84ced3988d90dc4ca33750b844e3f190f25fb53d4fb45e4c8d434cb3007b46cc",
       "key": "src/contracts/mcp-tools.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/mcp-tools.ts"
       },
-      "size": 43755
+      "size": 45605
     },
     {
-      "bytes_in_output": 6281,
+      "bytes_in_output": 6812,
       "digest": "dd7d7a7247a71bf33fd578d8025276ab685a7ea4a8bc6fe9ee3db627a164d7c9",
       "key": "src/contracts/path-claims.ts",
       "origin": {
@@ -2781,7 +2781,7 @@
       "size": 7671
     },
     {
-      "bytes_in_output": 6904,
+      "bytes_in_output": 7174,
       "digest": "0edae52da8dc42961da9a14dc76f703c6e23d23543e3e815762a33af655da7b1",
       "key": "src/contracts/phase-instance.ts",
       "origin": {
@@ -2791,7 +2791,7 @@
       "size": 6375
     },
     {
-      "bytes_in_output": 8258,
+      "bytes_in_output": 8396,
       "digest": "8d8bb1c19e691ab122030e46dd4edcc4b33d61fda42d2f4b4374eb62707f6b31",
       "key": "src/contracts/plain-json.ts",
       "origin": {
@@ -2801,27 +2801,27 @@
       "size": 4895
     },
     {
-      "bytes_in_output": 20892,
-      "digest": "51419bd8433010253e3f44f9c7e3af9b06aa4e7e1395fe44dc7f7ec4db15ea24",
+      "bytes_in_output": 23697,
+      "digest": "e81bc93221f0d02ddefa332c7d3ceb0944bd60a315711bab55ab712f3a507cdc",
       "key": "src/contracts/renderers.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/renderers.ts"
       },
-      "size": 11781
+      "size": 13364
     },
     {
-      "bytes_in_output": 29526,
-      "digest": "f402b72b3cbab030b7387e234ebe47de88dfb0d6d4443a7ef7438afd0192b364",
+      "bytes_in_output": 77483,
+      "digest": "ff1cd15fa00d2b802a20a5cee4fd0d9db7eeefe6f4160bcd0eeed43069a3fc70",
       "key": "src/contracts/review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/review.ts"
       },
-      "size": 25279
+      "size": 53440
     },
     {
-      "bytes_in_output": 1954,
+      "bytes_in_output": 1985,
       "digest": "ddc18ef29186a40eaad66c8c33057c86fd271c898b7c773adc57cf99dd46091d",
       "key": "src/contracts/rubric.ts",
       "origin": {
@@ -2829,16 +2829,6 @@
         "path": "src/contracts/rubric.ts"
       },
       "size": 1260
-    },
-    {
-      "bytes_in_output": 3601,
-      "digest": "fd2125f192c00391954184c683920ba0ef4b89ddf4687d6529fb82f5514cdeda",
-      "key": "src/contracts/schemas/v1/adjudication.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/adjudication.schema.json"
-      },
-      "size": 3742
     },
     {
       "bytes_in_output": 3208,
@@ -2921,14 +2911,14 @@
       "size": 3857
     },
     {
-      "bytes_in_output": 43960,
-      "digest": "12a77ee1b09df0855ca7278868f6e880ee5a6a33897ee690479625e49995c3ae",
+      "bytes_in_output": 51019,
+      "digest": "1ec2d3069d399f96cbfc6756c1653e57731ad64192083f54df443b40be045103",
       "key": "src/contracts/schemas/v1/mcp-tools.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/mcp-tools.schema.json"
       },
-      "size": 45526
+      "size": 52801
     },
     {
       "bytes_in_output": 493,
@@ -2961,14 +2951,14 @@
       "size": 86016
     },
     {
-      "bytes_in_output": 3166,
-      "digest": "cdfea33b890cb4dbfd57a43835173d71c37ead0f8de1e4c34f899830d8a9ee4c",
+      "bytes_in_output": 11885,
+      "digest": "b23923623f0195eda6fb0ad582aca8b57c81ff1c03beb5e8316a9a5ece1a9a57",
       "key": "src/contracts/schemas/v1/review.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/review.schema.json"
       },
-      "size": 3303
+      "size": 12314
     },
     {
       "bytes_in_output": 1092,
@@ -2991,14 +2981,14 @@
       "size": 3115
     },
     {
-      "bytes_in_output": 78082,
-      "digest": "988e63b76317f521f406fe822a68de983be5f17df2fa54f69276db7a02aa89e3",
+      "bytes_in_output": 90363,
+      "digest": "b4377f42ad62fac0b2a5585c67a6c3d6385ad27211e62e4f590521ed877af999",
       "key": "src/contracts/schemas/v1/semantic-workflow.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/semantic-workflow.schema.json"
       },
-      "size": 81540
+      "size": 94325
     },
     {
       "bytes_in_output": 1432,
@@ -3021,17 +3011,17 @@
       "size": 44076
     },
     {
-      "bytes_in_output": 13205,
-      "digest": "b2eae693638677c0b3b319cf0d1308ebb267c0f7e12f68b999bad400e899fc87",
+      "bytes_in_output": 21366,
+      "digest": "3b6f128c40950c7eb5055b560047353f784359b126ea3cb7cfb6af9b4a5e4df2",
       "key": "src/contracts/schemas/v1/triage.schema.json",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/schemas/v1/triage.schema.json"
       },
-      "size": 13776
+      "size": 22223
     },
     {
-      "bytes_in_output": 2510,
+      "bytes_in_output": 2578,
       "digest": "64aca85e5e00e75884918905bbf5d373f49c42081c3f736233e395db82b15293",
       "key": "src/contracts/secret-scan.ts",
       "origin": {
@@ -3041,14 +3031,14 @@
       "size": 4065
     },
     {
-      "bytes_in_output": 51217,
-      "digest": "02c2904d10a5e20cd7290df292a8568f31590205891be4ff76b98c1b2b9f042c",
+      "bytes_in_output": 55122,
+      "digest": "dd762d57dadbae831d934b38be320450b610a9f77d0eac3ad8df0bdc7036457a",
       "key": "src/contracts/semantic-workflow.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/semantic-workflow.ts"
       },
-      "size": 44172
+      "size": 47258
     },
     {
       "bytes_in_output": 872,
@@ -3061,24 +3051,24 @@
       "size": 1257
     },
     {
-      "bytes_in_output": 25983,
-      "digest": "d281946f9afc1702dc71bf7adf2add655e6a8cc411ca8db4e97b55b03498d357",
+      "bytes_in_output": 29448,
+      "digest": "72480d5bc66213a03321e768a3d4defce546a5e8f79440df11788638cb97dafd",
       "key": "src/contracts/triage.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/triage.ts"
       },
-      "size": 18739
+      "size": 21686
     },
     {
-      "bytes_in_output": 26853,
-      "digest": "a68305e6e01e2c95e3334d7f4cfe9f52b94a94d3a878befae48c9e06b116bcc8",
+      "bytes_in_output": 40407,
+      "digest": "ef69ca05ed4359531f17adef80cda5d1b5f199c9b6be9b3d4ae6f6dc3c4d8746",
       "key": "src/contracts/trust.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/trust.ts"
       },
-      "size": 25003
+      "size": 33470
     },
     {
       "bytes_in_output": 475,
@@ -3111,7 +3101,7 @@
       "size": 827
     },
     {
-      "bytes_in_output": 3792,
+      "bytes_in_output": 3836,
       "digest": "01113511e86a18d9e6f68428edd0f369dfa6479eaeb639bde8d85ef4ec76d10e",
       "key": "src/contracts/workflow.ts",
       "origin": {
@@ -3121,7 +3111,7 @@
       "size": 2598
     },
     {
-      "bytes_in_output": 3171,
+      "bytes_in_output": 3273,
       "digest": "b47ab8fef29cec0a0e716e88df051af0e10422c2a68a98bdfc6d09c8e029f716",
       "key": "src/contracts/yaml.ts",
       "origin": {
@@ -3131,14 +3121,14 @@
       "size": 1721
     },
     {
-      "bytes_in_output": 58936,
-      "digest": "dc3c0682a6601f73b742ce0944457058da2d96421791d4d000de2a08391647d6",
+      "bytes_in_output": 63087,
+      "digest": "56b2cbabc0d615b964107f0d1dcb0dab354a60c908035ab7abfdb8a07f71c160",
       "key": "src/dispatch/cli.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/cli.ts"
       },
-      "size": 43213
+      "size": 46527
     },
     {
       "bytes_in_output": 6939,
@@ -3151,7 +3141,7 @@
       "size": 10948
     },
     {
-      "bytes_in_output": 7468,
+      "bytes_in_output": 7486,
       "digest": "60b4df3b9721bf14becf0a8383d8376a0414ffc35f05cdd898c5ef4cd284eab8",
       "key": "src/dispatch/failure-observation.ts",
       "origin": {
@@ -3181,17 +3171,17 @@
       "size": 9960
     },
     {
-      "bytes_in_output": 13940,
-      "digest": "60db28b67ad56b2e6d12392306e968f0e1e11676bf5e6eaedf8b759376e94f06",
+      "bytes_in_output": 14324,
+      "digest": "3e7927189b09e6e9b76cb5eb7cc6ef67f118212241913ddb9f5d3e0835b4c004",
       "key": "src/dispatch/routing.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/routing.ts"
       },
-      "size": 10798
+      "size": 11228
     },
     {
-      "bytes_in_output": 13515,
+      "bytes_in_output": 13530,
       "digest": "f0ab832b5eef29104f73b38a63ace26a1ac6978e89b63042f9e17bde0e529e3e",
       "key": "src/dispatch/workspace.ts",
       "origin": {
@@ -3211,7 +3201,7 @@
       "size": 6865
     },
     {
-      "bytes_in_output": 8361,
+      "bytes_in_output": 8378,
       "digest": "1a0a58142c85954f26b0f68e9b267433dce1c25ca1a37060b234fefe1a349500",
       "key": "src/init/diagnostics.ts",
       "origin": {
@@ -3221,7 +3211,7 @@
       "size": 11423
     },
     {
-      "bytes_in_output": 2008,
+      "bytes_in_output": 2048,
       "digest": "947ae87f0aa7bca7e8f0364a4d0ecdd26cf4ce198a65da87434dab3539df41fc",
       "key": "src/init/index.ts",
       "origin": {
@@ -3231,7 +3221,7 @@
       "size": 3482
     },
     {
-      "bytes_in_output": 1966,
+      "bytes_in_output": 2057,
       "digest": "92570226e5c2cff318c7284eeea175e5f1b29301c2670bc5090bf9e004f03a84",
       "key": "src/init/legacy-upgrade-stage.ts",
       "origin": {
@@ -3241,7 +3231,7 @@
       "size": 3689
     },
     {
-      "bytes_in_output": 23037,
+      "bytes_in_output": 23147,
       "digest": "171c7be8da281eab92198ce8b1aff85da44c7377cd305e6236e6a62c4f432fd3",
       "key": "src/init/legacy-upgrade.ts",
       "origin": {
@@ -3261,7 +3251,7 @@
       "size": 18603
     },
     {
-      "bytes_in_output": 8474,
+      "bytes_in_output": 8586,
       "digest": "861925dd6933ae9286896efe52eeb25a78c08def5db58d38bd159d45fe7ea2d4",
       "key": "src/init/task-initialization.ts",
       "origin": {
@@ -3271,7 +3261,7 @@
       "size": 9262
     },
     {
-      "bytes_in_output": 3792,
+      "bytes_in_output": 3810,
       "digest": "a2918412144851308feaac508abd873bde9a9fa97baeef330bb4a7d1a18b0658",
       "key": "src/local/automation-status-edges.ts",
       "origin": {
@@ -3281,7 +3271,7 @@
       "size": 5184
     },
     {
-      "bytes_in_output": 12044,
+      "bytes_in_output": 12079,
       "digest": "681273ceb8ef4efc49c745820837e447e5eb39f6f280b28e85ead9b377ae517f",
       "key": "src/local/automation-status.ts",
       "origin": {
@@ -3291,7 +3281,7 @@
       "size": 14415
     },
     {
-      "bytes_in_output": 8547,
+      "bytes_in_output": 8604,
       "digest": "4d0d17fb18e24bf13d181fbcdfc43267bfee56a182d5820acea8eb0e7f9bffda",
       "key": "src/local/call-envelope.ts",
       "origin": {
@@ -3301,7 +3291,7 @@
       "size": 7396
     },
     {
-      "bytes_in_output": 17189,
+      "bytes_in_output": 17310,
       "digest": "5bb699f107ee9ec7bdd84a9cd5450f93a59d5e54f03a24ad1145bf8652a37f2d",
       "key": "src/local/commands.ts",
       "origin": {
@@ -3311,7 +3301,7 @@
       "size": 22854
     },
     {
-      "bytes_in_output": 5073,
+      "bytes_in_output": 5110,
       "digest": "b82b8a6b10c25237f0cae26810c08c2916ce35b2962d2137c73b6b14f557e9a2",
       "key": "src/local/main.ts",
       "origin": {
@@ -3321,7 +3311,7 @@
       "size": 5947
     },
     {
-      "bytes_in_output": 3948,
+      "bytes_in_output": 3988,
       "digest": "708ba8cb362dbb1c3e74c6b56804bf9ee904568bb9b1bdddc8d9724864f433a8",
       "key": "src/local/status-classification.ts",
       "origin": {
@@ -3361,14 +3351,14 @@
       "size": 3378
     },
     {
-      "bytes_in_output": 23832,
-      "digest": "b7dce70c6111d68dc8239371275abdbf98d93f21ffa381df7057371426a0952a",
+      "bytes_in_output": 24217,
+      "digest": "2b2deab0765b855ea27c61f1ab265b14ff1a3e27c0288a78677b048c0b16fa0b",
       "key": "src/mcp/handlers/counter-review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/mcp/handlers/counter-review.ts"
       },
-      "size": 34536
+      "size": 35459
     },
     {
       "bytes_in_output": 1816,
@@ -3411,7 +3401,7 @@
       "size": 11692
     },
     {
-      "bytes_in_output": 6193,
+      "bytes_in_output": 6248,
       "digest": "207a35adc5903c32d946043345a3096d1ef0781b8fdef6dbf4cb3ad500f832be",
       "key": "src/mcp/handlers/session.ts",
       "origin": {
@@ -3421,7 +3411,7 @@
       "size": 4902
     },
     {
-      "bytes_in_output": 36194,
+      "bytes_in_output": 36249,
       "digest": "979a280508185d462977800ac3141f9dd3f401c882ff5986dbd70e0d9aed2809",
       "key": "src/mcp/handlers/state-results.ts",
       "origin": {
@@ -3431,7 +3421,7 @@
       "size": 22931
     },
     {
-      "bytes_in_output": 122202,
+      "bytes_in_output": 122280,
       "digest": "7dd2d2fdb89e307a7338be7b32029377e91fdb8f3f15f126f794e96c64a0ddf8",
       "key": "src/mcp/handlers/state.ts",
       "origin": {
@@ -3501,7 +3491,7 @@
       "size": 11635
     },
     {
-      "bytes_in_output": 42006,
+      "bytes_in_output": 42024,
       "digest": "838dbc72d47eac654e42377902b5c3c17a7922a28ff096552d87e0434848c86a",
       "key": "src/repository/git.ts",
       "origin": {
@@ -3511,7 +3501,7 @@
       "size": 31968
     },
     {
-      "bytes_in_output": 12914,
+      "bytes_in_output": 12932,
       "digest": "682bbe1d411ad514b71b968d7d299f044ff09bcbe4ff3fc58e01ef79d8e2f4fb",
       "key": "src/repository/identity.ts",
       "origin": {
@@ -3521,7 +3511,7 @@
       "size": 14292
     },
     {
-      "bytes_in_output": 5577,
+      "bytes_in_output": 5595,
       "digest": "ddb128522226ca331e425f319022642856df37ed1e4045a8325f7a47970b375f",
       "key": "src/repository/index-entries.ts",
       "origin": {
@@ -3531,7 +3521,7 @@
       "size": 6606
     },
     {
-      "bytes_in_output": 37931,
+      "bytes_in_output": 37983,
       "digest": "1c00fbd8143f4c8ec101f446526beb83e9b90f0d83d039c6d3899a11f6e0b6c1",
       "key": "src/repository/paths.ts",
       "origin": {
@@ -3541,7 +3531,7 @@
       "size": 41445
     },
     {
-      "bytes_in_output": 11163,
+      "bytes_in_output": 11196,
       "digest": "fa6264e0bd926fdda1fa7cc09de69f6c8c6f1b8a4f763592c6ff3f4213d3c05e",
       "key": "src/repository/repository-set.ts",
       "origin": {
@@ -3551,27 +3541,27 @@
       "size": 10421
     },
     {
-      "bytes_in_output": 9090,
-      "digest": "082032a905aa1b772a44a0b948aef5594c914d426867c8f2f3f532a1669ab57c",
+      "bytes_in_output": 15626,
+      "digest": "26c501ba6c7fa1a8bb14dc55569aec8d9363c5acd70ba8c0c0fe9f7c299c52a7",
       "key": "src/review/adjudication.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/adjudication.ts"
       },
-      "size": 10317
+      "size": 17104
     },
     {
-      "bytes_in_output": 26478,
-      "digest": "e8cdba7a9a74c89f0f187cf378828294152da677e42f74a2cd0356595ed5c325",
+      "bytes_in_output": 32465,
+      "digest": "68ae9c78ffbbdeb8c0d32ed8d4ebdc0ebfc22497be648f56100d64a1e8e989ea",
       "key": "src/review/counter-review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/counter-review.ts"
       },
-      "size": 44329
+      "size": 51817
     },
     {
-      "bytes_in_output": 2124,
+      "bytes_in_output": 2430,
       "digest": "d88cdc782c3c8324e6096dadde5883c2c0c7f1e2eb1c54435258d4301218ac00",
       "key": "src/review/effort-policy.ts",
       "origin": {
@@ -3581,57 +3571,57 @@
       "size": 6660
     },
     {
-      "bytes_in_output": 26721,
-      "digest": "12ccde16319453fbebce6bfee985261395f4b6fdb7ad3f8018ac208c5caa8bf7",
+      "bytes_in_output": 30598,
+      "digest": "605bbd8a15917a4d387092d0164dd392c08907580273314909e04afe87560868",
       "key": "src/review/envelopes.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/envelopes.ts"
       },
-      "size": 37870
+      "size": 43139
     },
     {
-      "bytes_in_output": 47500,
-      "digest": "892f0bbe78d4a40fea3a2305bab937e6d068f4122fdf187c548e531ed760fb96",
+      "bytes_in_output": 50957,
+      "digest": "3b9602a54cf443b6165b5eb1b2d571b024dd7462d803c44eea871f1f990b9c8a",
       "key": "src/review/fixed-point.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/fixed-point.ts"
       },
-      "size": 42175
+      "size": 43967
     },
     {
-      "bytes_in_output": 23017,
-      "digest": "bc7b97cd047eb9aaacc4aa8d3f09b9c5935ad8ce305f385a2e6b1af4ef30814e",
+      "bytes_in_output": 23520,
+      "digest": "dc0638e97f30f85771fd726890aa570183d2c36f73b7b483d028ada1d80935f8",
       "key": "src/review/pinned-context.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/pinned-context.ts"
       },
-      "size": 35432
+      "size": 36343
     },
     {
-      "bytes_in_output": 314,
-      "digest": "2f7a29a8cde81e364696a30870f065831920287a58eebbaa3388515f93aa072b",
+      "bytes_in_output": 4347,
+      "digest": "1a9334a37b1edc836553d41aa47ab53f47862ff5aee2b22062cd16b35a02dbad",
       "key": "src/review/reviewer-tags.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/reviewer-tags.ts"
       },
-      "size": 1623
+      "size": 8260
     },
     {
-      "bytes_in_output": 7283,
-      "digest": "429e2b829b8c951a53e7085650221e4c81424890735d1781b10ee23eb4645393",
+      "bytes_in_output": 8206,
+      "digest": "ffa37ee504c89c2480080dd525536ed03536debdd6e64c156ff1755d566ce25a",
       "key": "src/review/rubrics.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/rubrics.ts"
       },
-      "size": 6154
+      "size": 7904
     },
     {
-      "bytes_in_output": 13954,
+      "bytes_in_output": 13994,
       "digest": "d3da23cde7aa39898f59738c77769fc3218e6f8dc12a4c102f743a8212f69dc0",
       "key": "src/state/approval-rules.ts",
       "origin": {
@@ -3651,7 +3641,7 @@
       "size": 8435
     },
     {
-      "bytes_in_output": 6320,
+      "bytes_in_output": 6359,
       "digest": "fcab1efe3f3f081f882118fa32eeb2f30ab396de5ac9a61774ab2d59d3777ee6",
       "key": "src/state/authority.ts",
       "origin": {
@@ -3671,7 +3661,7 @@
       "size": 7150
     },
     {
-      "bytes_in_output": 19287,
+      "bytes_in_output": 19325,
       "digest": "78bd8a3f2999abc1229de335a0cbcd3f94dc6a7b798fc72f91a8bad123e71dca",
       "key": "src/state/constitution.ts",
       "origin": {
@@ -3691,17 +3681,17 @@
       "size": 8454
     },
     {
-      "bytes_in_output": 47678,
-      "digest": "825fc9004ac3faf2028c50480282b65db5164dc9d235498e45c7bfc5622e9ba2",
+      "bytes_in_output": 51381,
+      "digest": "b175ea0f4950e89370256c85deb30344b4ef85d9de01b70e89dfa71df0055feb",
       "key": "src/state/evidence-results.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/evidence-results.ts"
       },
-      "size": 39298
+      "size": 41353
     },
     {
-      "bytes_in_output": 12048,
+      "bytes_in_output": 12089,
       "digest": "78db9b361de13590287d0a5ab06d638e87636666f3d31fe8e27b1b75cdbf4950",
       "key": "src/state/fingerprint-readers.ts",
       "origin": {
@@ -3711,7 +3701,7 @@
       "size": 9941
     },
     {
-      "bytes_in_output": 9525,
+      "bytes_in_output": 9566,
       "digest": "aaa1a838971ea383a2f42591948a006ebdb131def2e646fc67e5a4c82b3561d3",
       "key": "src/state/fingerprint.ts",
       "origin": {
@@ -3721,7 +3711,7 @@
       "size": 8843
     },
     {
-      "bytes_in_output": 10311,
+      "bytes_in_output": 10330,
       "digest": "e67c4a94832be558f3d65189d384633fbf42cdd67a6c6b76d0c28c325ea7f12a",
       "key": "src/state/gate-approvals.ts",
       "origin": {
@@ -3731,7 +3721,7 @@
       "size": 9516
     },
     {
-      "bytes_in_output": 12248,
+      "bytes_in_output": 12302,
       "digest": "a09b5073e452c7a1a159fff896120ccc8d133a9b14e336801a2d1f34f7a27039",
       "key": "src/state/gate-core.ts",
       "origin": {
@@ -3741,7 +3731,7 @@
       "size": 14576
     },
     {
-      "bytes_in_output": 53014,
+      "bytes_in_output": 53033,
       "digest": "977674d872122262f2b37ffe34811d2a9c87fee4d3da2e366c0c6937d7f6e357",
       "key": "src/state/gate-decision-interface.ts",
       "origin": {
@@ -3751,17 +3741,17 @@
       "size": 35328
     },
     {
-      "bytes_in_output": 143287,
-      "digest": "0d5122a480f73e5c0ca3f91738320d44a4981c1e9ebf15838bfd4a4901feac6a",
+      "bytes_in_output": 144441,
+      "digest": "2175b762c58c200eb6c239c2a8aecd5e6a8fa7b6c0acd862b43e1964cc6b4416",
       "key": "src/state/gates.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/gates.ts"
       },
-      "size": 161648
+      "size": 162799
     },
     {
-      "bytes_in_output": 114907,
+      "bytes_in_output": 115004,
       "digest": "b2ae692680406cedada6375a59606b3984a4ac8612c82b5e9f4e237ea5b1efec",
       "key": "src/state/implementation-manifest.ts",
       "origin": {
@@ -3771,7 +3761,7 @@
       "size": 85297
     },
     {
-      "bytes_in_output": 44105,
+      "bytes_in_output": 44202,
       "digest": "8c1945640a677163792725d5f3f0eb63ea821cc13c10a1fed6cafbd8e9a450b4",
       "key": "src/state/initialization.ts",
       "origin": {
@@ -3781,7 +3771,7 @@
       "size": 27885
     },
     {
-      "bytes_in_output": 12013,
+      "bytes_in_output": 12053,
       "digest": "5a94076fca4ee437cc39a14317fc55deb3ea8bc18822509370c0d6e6e71b0ebe",
       "key": "src/state/layout.ts",
       "origin": {
@@ -3791,7 +3781,7 @@
       "size": 9124
     },
     {
-      "bytes_in_output": 3625,
+      "bytes_in_output": 3648,
       "digest": "08df329423061785c591246b5d8f0123d8ebdc2ab0c3453c49a048a629e626fe",
       "key": "src/state/legacy-import-resume.ts",
       "origin": {
@@ -3801,7 +3791,7 @@
       "size": 3133
     },
     {
-      "bytes_in_output": 2284,
+      "bytes_in_output": 2317,
       "digest": "bb27c76e1031468da4714258d0a15b6797b3b314a4b3fcb421ef0d140b6a42fe",
       "key": "src/state/legacy-stage.ts",
       "origin": {
@@ -3821,7 +3811,7 @@
       "size": 8194
     },
     {
-      "bytes_in_output": 1122,
+      "bytes_in_output": 1139,
       "digest": "352b23d33fb8902b90d11e9cb2d513535ed0e0cfce97985bf795f4dfbee163b9",
       "key": "src/state/milestone-recovery.ts",
       "origin": {
@@ -3831,7 +3821,7 @@
       "size": 758
     },
     {
-      "bytes_in_output": 43474,
+      "bytes_in_output": 43497,
       "digest": "8849b43bab4ea0232c62e19451e7788a3f06c7e347627e63a0e7a95d0340eacd",
       "key": "src/state/next-action.ts",
       "origin": {
@@ -3851,7 +3841,7 @@
       "size": 3918
     },
     {
-      "bytes_in_output": 13827,
+      "bytes_in_output": 13868,
       "digest": "1167bb02f34dc0df2ec1d0ed57482221b1868c149d3285e163c69dac67385ea7",
       "key": "src/state/phase-documents.ts",
       "origin": {
@@ -3861,7 +3851,7 @@
       "size": 11119
     },
     {
-      "bytes_in_output": 8663,
+      "bytes_in_output": 8704,
       "digest": "aec5394994bf44702d384afb9f706bcb9af81929cf5752d45b0c01c5d3bd7fb1",
       "key": "src/state/planned-final-phase.ts",
       "origin": {
@@ -3871,7 +3861,7 @@
       "size": 8747
     },
     {
-      "bytes_in_output": 2729,
+      "bytes_in_output": 2769,
       "digest": "3f499cc7541682e76cc7f71e9d9e7da7e5cb12c15ae74e1d96e1e2769ba0ea10",
       "key": "src/state/planning-restart.ts",
       "origin": {
@@ -3881,17 +3871,17 @@
       "size": 2376
     },
     {
-      "bytes_in_output": 26686,
-      "digest": "a2010555d57cf58a46ed5922896297fb0d1e8810f8642793e2acaf011e7a4486",
+      "bytes_in_output": 26787,
+      "digest": "0df2047d3cb8c6e03d6c7df43edec859c5f1e9be20e6028502294725bc805bcb",
       "key": "src/state/produce-subject.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/produce-subject.ts"
       },
-      "size": 22565
+      "size": 22570
     },
     {
-      "bytes_in_output": 46084,
+      "bytes_in_output": 46139,
       "digest": "924c64ea8cb8232a6173114be9f6460a931afcb62d796fbe0db0ea24590291e4",
       "key": "src/state/production.ts",
       "origin": {
@@ -3901,7 +3891,7 @@
       "size": 31074
     },
     {
-      "bytes_in_output": 5330,
+      "bytes_in_output": 5363,
       "digest": "df06129d2a68a1ce149041fc503b34f858893a9a028f8938f6d3a9a8394478f3",
       "key": "src/state/read.ts",
       "origin": {
@@ -3911,7 +3901,7 @@
       "size": 5648
     },
     {
-      "bytes_in_output": 31868,
+      "bytes_in_output": 31903,
       "digest": "f4be9d4a213a97495eb280dafbfd9f9b7141a9ef96484b713e66f13153118e1e",
       "key": "src/state/reconciliation-discovery.ts",
       "origin": {
@@ -3921,7 +3911,7 @@
       "size": 23620
     },
     {
-      "bytes_in_output": 20096,
+      "bytes_in_output": 20150,
       "digest": "9ab1c8edd2e2dc4747d60406299e739e2776645b3f3d2de7dbcdd30580a5d6f5",
       "key": "src/state/reconciliation.ts",
       "origin": {
@@ -3941,7 +3931,7 @@
       "size": 67578
     },
     {
-      "bytes_in_output": 11660,
+      "bytes_in_output": 11678,
       "digest": "83ce4f8db8c249c8f55ce6c3833a88caaabbf8388c02f847286e630e15ca7f0e",
       "key": "src/state/request.ts",
       "origin": {
@@ -3951,7 +3941,7 @@
       "size": 7594
     },
     {
-      "bytes_in_output": 19002,
+      "bytes_in_output": 19025,
       "digest": "62c0de5559be35053fd0dcf85c6e01a8326fd057053c3328ce7cfa557904714e",
       "key": "src/state/restart-authority.ts",
       "origin": {
@@ -3971,7 +3961,7 @@
       "size": 1399
     },
     {
-      "bytes_in_output": 9297,
+      "bytes_in_output": 9316,
       "digest": "a2eb538c2a6ce090d47fbc795c1d9f8bc062adb0f9835c2e9dcca478b754f0c3",
       "key": "src/state/review-push-throughs.ts",
       "origin": {
@@ -3981,7 +3971,7 @@
       "size": 6348
     },
     {
-      "bytes_in_output": 9818,
+      "bytes_in_output": 9853,
       "digest": "03c04c2c7a4783f87b688d036904ea778f18f5186f1b6d8dc92fdd70653c06aa",
       "key": "src/state/secret-scan.ts",
       "origin": {
@@ -4001,27 +3991,27 @@
       "size": 46229
     },
     {
-      "bytes_in_output": 54338,
-      "digest": "78694858164a27d7c6cecccc31a77d09ca0952c4dcc898584b7035dc360a8689",
+      "bytes_in_output": 62624,
+      "digest": "1eb49a7a30dfcc5c24136d2860fa68ac0f3f5526e46f21efc6ef765fa68241e0",
       "key": "src/state/semantic-status.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/semantic-status.ts"
       },
-      "size": 36137
+      "size": 40766
     },
     {
-      "bytes_in_output": 48173,
-      "digest": "ad3f301106af16ede081e9f949fd3f1b71771c5ca2ff46bfcd122d6a8963e073",
+      "bytes_in_output": 49176,
+      "digest": "c57cd8321492dbeaa62f45ce481148015646286c1c2d18715c9794eb89c6c457",
       "key": "src/state/semantic-view.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/semantic-view.ts"
       },
-      "size": 27878
+      "size": 28418
     },
     {
-      "bytes_in_output": 63749,
+      "bytes_in_output": 63815,
       "digest": "676bbb025309e57c1abd7b25f684ddf7079baca8316b70621429f871290aaaef",
       "key": "src/state/snapshots.ts",
       "origin": {
@@ -4031,17 +4021,17 @@
       "size": 46547
     },
     {
-      "bytes_in_output": 170346,
-      "digest": "323c2221a942fe9972f7911e5f663e33c5fd0ab6936872b518ce8cd3e1df59bc",
+      "bytes_in_output": 172594,
+      "digest": "5d465371d95be27fbe9bf180f585aa33684dba1d66a2afbbd647cc4bb1b8c9f8",
       "key": "src/state/status.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/status.ts"
       },
-      "size": 127763
+      "size": 129291
     },
     {
-      "bytes_in_output": 101456,
+      "bytes_in_output": 101510,
       "digest": "90ab8b33d4b26f89e64495ccd7702a6f14ba0c7594a0d1c72d81bf1fa4773cf1",
       "key": "src/state/transaction.ts",
       "origin": {
@@ -4051,7 +4041,7 @@
       "size": 68098
     },
     {
-      "bytes_in_output": 52720,
+      "bytes_in_output": 52779,
       "digest": "c9bab80958469c1553c07e13db004486f79868a773b7b21b715cf642c14917c9",
       "key": "src/state/transitions.ts",
       "origin": {
@@ -4061,7 +4051,7 @@
       "size": 38340
     },
     {
-      "bytes_in_output": 11933,
+      "bytes_in_output": 11952,
       "digest": "95dec0ff325d48cb6ba36b7ee37f8870fff6ec8f5799fdb56030335d2c0a86a5",
       "key": "src/state/validation-overrides.ts",
       "origin": {
@@ -4081,7 +4071,7 @@
       "size": 3071
     },
     {
-      "bytes_in_output": 34488,
+      "bytes_in_output": 34523,
       "digest": "e63305f862d3eeb28e7506aa425e46ecece49b4502bf61797d854f4ec2950f57",
       "key": "src/state/workspace-cleanup.ts",
       "origin": {
@@ -4196,6 +4186,7 @@
     "node_modules/yaml/dist/stringify/stringifyPair.js",
     "node_modules/yaml/dist/stringify/stringifyString.js",
     "node_modules/yaml/dist/visit.js",
+    "node_modules/zod/index.js",
     "node_modules/zod/v4/classic/checks.js",
     "node_modules/zod/v4/classic/coerce.js",
     "node_modules/zod/v4/classic/compat.js",
@@ -4308,7 +4299,6 @@
     "src/contracts/renderers.ts",
     "src/contracts/review.ts",
     "src/contracts/rubric.ts",
-    "src/contracts/schemas/v1/adjudication.schema.json",
     "src/contracts/schemas/v1/document-artifact.schema.json",
     "src/contracts/schemas/v1/durable-primitives.schema.json",
     "src/contracts/schemas/v1/effort-review.schema.json",
@@ -4492,7 +4482,7 @@
     ],
     "workflow": "assets/workflow.yaml"
   },
-  "dependency_inventory_digest": "e4154019f69b69d90631115a9a3a9a52ab3dc0fb799474b7f5bde65c8feba876",
+  "dependency_inventory_digest": "9112dd0b881de3a219adddc317019e9356f5b38675f755c409f4078ff029b4f5",
   "dependency_provenance_inputs": [
     {
       "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
@@ -4949,7 +4939,6 @@
         "src/contracts/renderers.ts",
         "src/contracts/review.ts",
         "src/contracts/rubric.ts",
-        "src/contracts/schemas/v1/adjudication.schema.json",
         "src/contracts/schemas/v1/document-artifact.schema.json",
         "src/contracts/schemas/v1/durable-primitives.schema.json",
         "src/contracts/schemas/v1/effort-review.schema.json",
@@ -5068,7 +5057,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "9cc289b1199cfbaabbdc75a3236dc76cd92f7d19f6fea531c27f40a4d9469220",
+      "output_digest": "e5982c2b6b04ccdcf5cc75b88aebb883138da7de27c8420413d74bc1115546de",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5190,6 +5179,7 @@
         "node_modules/yaml/dist/stringify/stringifyPair.js",
         "node_modules/yaml/dist/stringify/stringifyString.js",
         "node_modules/yaml/dist/visit.js",
+        "node_modules/zod/index.js",
         "node_modules/zod/v4/classic/checks.js",
         "node_modules/zod/v4/classic/coerce.js",
         "node_modules/zod/v4/classic/compat.js",
@@ -5389,7 +5379,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "3c054d05bd5c8f284ce8a6be36656ee08ab273f4224fab2a1105cc38d04fd193",
+      "output_digest": "b7db0619be17878fee2bdfc0c65c65476b7f6a307368d66122e5c3f9d78b4d38",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -5492,9 +5482,9 @@
       "size": 10
     },
     {
-      "digest": "1c516b8482435b19b0c43fafda113b58ab4efe43e6ef7055e7b0d195d68507f5",
+      "digest": "2320e6451f71b2047278f671b9577b1507bd9d579d4759c2ccb738295fe23312",
       "path": "assets/config.template.yaml",
-      "size": 5329
+      "size": 5389
     },
     {
       "digest": "3b6cdd5f3370c8455fd7ba443476215d78110eebc6ca6ccba085dbe84f0af8a1",
@@ -5542,9 +5532,9 @@
       "size": 32
     },
     {
-      "digest": "8d8665acf2b9874be00516e59840a73bf7cc9a2053605c0bec616ba8948405e4",
+      "digest": "484cded3debb61493e02e1188a33cef1ba8b8685c09312daebd7acacbbf5e982",
       "path": "assets/rubrics/README.md",
-      "size": 1917
+      "size": 1985
     },
     {
       "digest": "399fa63abaed29d64b31e0e2777ee757034401868b05203ef6476ea4307f69f2",
@@ -5702,9 +5692,14 @@
       "size": 32624
     },
     {
-      "digest": "a82d95a1232c4fa04fdf288bb3adc8495785457fa84f10956be93a2ae4904acc",
+      "digest": "0dd271ba135bc7826144d4a8981f2c64303e25d40116358465d21188a9393264",
       "path": "src/contracts/schemas/v1/adjudication-evidence.schema.json",
-      "size": 24454
+      "size": 37440
+    },
+    {
+      "digest": "c6e012dfa408625571f62f2a77d12581ca02c1e117c5f1ac4e7900f300f66ed7",
+      "path": "src/contracts/schemas/v1/adjudication.schema.json",
+      "size": 1602
     },
     {
       "digest": "0cdfba5485d85dd98090980d98061da8613f4c59aae1e3aba3747d6080454d62",
@@ -5797,9 +5792,9 @@
       "size": 5188
     },
     {
-      "digest": "cf7e1f00222e45664e54eb8b6fa00b6256e44fbab9a0c9ac11bc5356a76051bd",
+      "digest": "bb1c67c5257b18db3741f3e2a1c2586e4b50029969b7c042123f421689c566a7",
       "path": "src/contracts/schemas/v1/review-evidence.schema.json",
-      "size": 46798
+      "size": 69173
     },
     {
       "digest": "1547a660d2f43ce743ad5f39f4da7f6fb82f9e3d2e6630b7106782d96d793b36",
@@ -5859,9 +5854,9 @@
       "size": 10
     },
     {
-      "digest": "1c516b8482435b19b0c43fafda113b58ab4efe43e6ef7055e7b0d195d68507f5",
+      "digest": "2320e6451f71b2047278f671b9577b1507bd9d579d4759c2ccb738295fe23312",
       "path": "assets/config.template.yaml",
-      "size": 5329
+      "size": 5389
     },
     {
       "digest": "3b6cdd5f3370c8455fd7ba443476215d78110eebc6ca6ccba085dbe84f0af8a1",
@@ -5909,9 +5904,9 @@
       "size": 32
     },
     {
-      "digest": "8d8665acf2b9874be00516e59840a73bf7cc9a2053605c0bec616ba8948405e4",
+      "digest": "484cded3debb61493e02e1188a33cef1ba8b8685c09312daebd7acacbbf5e982",
       "path": "assets/rubrics/README.md",
-      "size": 1917
+      "size": 1985
     },
     {
       "digest": "399fa63abaed29d64b31e0e2777ee757034401868b05203ef6476ea4307f69f2",

@@ -142,12 +142,25 @@ describe("anti-spoofing renderers", () => {
       { review_evidence_digest: digest("8"), finding_id: "older", disposition: "rejected" as const, attempt: 1, rationale: "older", severity: "major" as const, blocking: false, summary: "older summary", evidence: "rejection evidence" },
       { review_evidence_digest: digest("8"), finding_id: "deferred-finding", disposition: "deferred" as const, attempt: 1, rationale: "deferred reason", claim_type: "gap" as const, confidence: "likely" as const, falsifier: "falsifier", summary: "gap summary", suggested_resolution: "gap resolution" },
       { review_evidence_digest: digest("8"), finding_id: "escalated-finding", disposition: "escalated-human" as const, attempt: 1, rationale: "human call", claim_type: "risk" as const, confidence: "likely" as const, falsifier: "falsifier", summary: "risk summary", suggested_resolution: "risk resolution" },
+      {
+        review_evidence_digest: digest("8"), finding_id: "test-oracle-gap", disposition: "accepted" as const,
+        attempt: 1, rationale: "missing oracle", revision_intent: "add the assertion",
+        claim_type: "gap" as const, confidence: "certain" as const, falsifier: "run the recovery test",
+        reviewer_id: "test", reviewer_focus: "tests" as const, routing_role: "test-reviewer" as const,
+        criterion_id: "test-quality", required_behavior_or_risk_boundary: "recovery must remain covered",
+        coverage_or_oracle_problem: "the old oracle accepted a bad value", consequence: "regressions escape",
+        proposed_verification_change: "assert the recovered value",
+      },
     ];
     const ledgerRendered = new TextDecoder().decode(renderTriage(validateTriage(set, candidate, ledger as never)));
     expect(ledgerRendered).toMatch(/^## Disposition Ledger/mu);
     expect(ledgerRendered).toContain("(attempt 1)");
     expect(ledgerRendered).toContain("deferred");
     expect(ledgerRendered).toContain("escalated-human");
+    expect(ledgerRendered).toContain('reviewer_id: "test"');
+    expect(ledgerRendered).toContain('criterion_id: "test-quality"');
+    expect(ledgerRendered).toContain('required_behavior_or_risk_boundary: "recovery must remain covered"');
+    expect(ledgerRendered).toContain('proposed_verification_change: "assert the recovered value"');
     expect(() => validateTriage(set, { ...candidate, disposition_ledger: [] })).toThrow(/server-computed/u);
     expect(() => renderTriage({ ...validated } as never)).toThrow(/validated triage/);
     expect(() => renderTriage(candidate as never)).toThrow(/validated triage/);

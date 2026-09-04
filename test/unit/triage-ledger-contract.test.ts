@@ -36,4 +36,21 @@ describe("triage disposition ledger contract", () => {
       { ...common, review_evidence_digest: digest("3"), finding_id: "partial-v1", blocking: true },
     ]) expect(() => parseTriageCandidate({ ...base, disposition_ledger: [entry] })).toThrow();
   });
+
+  it("retains V3 attribution and native test detail without flattening it", () => {
+    const entry = {
+      ...common, review_evidence_digest: digest("4"), finding_id: "test-missing-oracle",
+      claim_type: "gap", confidence: "likely", falsifier: "Show an assertion that detects the bad result.",
+      reviewer_id: "test", reviewer_focus: "tests", routing_role: "test-reviewer", criterion_id: "test-quality",
+      required_behavior_or_risk_boundary: "Reject traversal.",
+      coverage_or_oracle_problem: "The test has no rejection assertion.",
+      consequence: "Traversal can regress silently.",
+      proposed_verification_change: "Assert rejection and an unchanged filesystem.",
+      disposition_evidence: "The existing assertion checks only process exit.",
+    } as const;
+    const parsed = parseTriageCandidate({ ...base, disposition_ledger: [entry] });
+    expect(parsed.disposition_ledger?.[0]).toEqual(entry);
+    expect(parsed.disposition_ledger?.[0]).not.toHaveProperty("summary");
+    expect(parsed.disposition_ledger?.[0]).not.toHaveProperty("suggested_resolution");
+  });
 });

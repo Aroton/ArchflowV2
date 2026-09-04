@@ -55,6 +55,7 @@ export type SemanticStatusEnrichmentsV1 = Readonly<{
   live_config_digest?: Sha256Digest;
   legacy_import_initialization?: true;
   full_findings: readonly PublicFindingV1[];
+  finding_history?: readonly PublicFindingV1[];
   review_rounds?: readonly PublicReviewRoundV1[];
   taxonomy_denial_rates: TaxonomyDenialRates;
   implementation_recommendation: ImplementationRecommendationV1;
@@ -300,21 +301,22 @@ function reviewRounds(details: DetailedTaskStatusV1): readonly PublicReviewRound
         dispositions.set(`${disposition.review_evidence_digest}:${disposition.finding_id}`, disposition.disposition);
       }
     }
-    const versions = new Set(current.reviews.map((review) => review.evidence.schema_version));
-    if (versions.size !== 1) throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 evidence`);
+    const versions = new Set(current.reviews.map((review) =>
+      review.evidence.schema_version === "1" ? "1" as const : "2" as const));
+    if (versions.size !== 1) throw new TypeError(`active review attempt ${currentAttempt} mixes legacy and taxonomy evidence`);
     const round = roundAt(currentAttempt);
-    setVersion(round, current.reviews[0]!.evidence.schema_version, `active review attempt ${currentAttempt}`);
+    setVersion(round, current.reviews[0]!.evidence.schema_version === "1" ? "1" : "2", `active review attempt ${currentAttempt}`);
     for (const review of current.reviews) {
       for (const finding of review.evidence.findings) {
         const disposition = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
         round.findings += 1;
         if (disposition !== undefined && isAccepted(disposition)) round.accepted += 1;
         if ("claim_type" in finding) {
-          if (round.version !== "2") throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 findings`);
+          if (round.version !== "2") throw new TypeError(`active review attempt ${currentAttempt} mixes legacy and taxonomy findings`);
           const key = `${finding.claim_type}:${finding.confidence}`;
           round.partitions[key] = (round.partitions[key] ?? 0) + 1;
         } else {
-          if (round.version !== "1") throw new TypeError(`active review attempt ${currentAttempt} mixes V1 and V2 findings`);
+          if (round.version !== "1") throw new TypeError(`active review attempt ${currentAttempt} mixes legacy and taxonomy findings`);
           if (finding.blocking) round.blocking += 1;
         }
       }
@@ -352,6 +354,89 @@ function fullFindings(details: DetailedTaskStatusV1): readonly PublicFindingV1[]
         current_disposition: dispositions.get(`${review.evidence_digest}:${finding.finding_id}`),
       }),
     })) as PublicFindingV1)));
+}
+
+function ledgerDisposition(
+  entry: TriageDispositionLedgerEntry,
+): NonNullable<PublicFindingV1["current_disposition"]> | undefined {
+  if (entry.rationale === undefined) return undefined;
+  if (entry.disposition === "accepted" || entry.disposition === "accepted-editorial") {
+    return entry.revision_intent === undefined ? undefined : Object.freeze({
+      disposition: entry.disposition, rationale: entry.rationale, revision_intent: entry.revision_intent,
+    });
+  }
+  if (entry.disposition === "rejected") {
+    const evidence = "disposition_evidence" in entry ? entry.disposition_evidence : entry.evidence;
+    return evidence === undefined ? undefined : Object.freeze({
+      disposition: "rejected", rationale: entry.rationale, evidence,
+    });
+  }
+  if (entry.disposition === "deferred") {
+    const evidence = "disposition_evidence" in entry ? entry.disposition_evidence : entry.evidence;
+    return Object.freeze({ disposition: "deferred", rationale: entry.rationale, ...(evidence === undefined ? {} : { evidence }) });
+  }
+  return Object.freeze({ disposition: "escalated-human", rationale: entry.rationale });
+}
+
+/** Superseded review occurrences reconstructed only from cumulative durable triage memory. */
+export function publicFindingHistoryFromLedger(
+  ledger: readonly TriageDispositionLedgerEntry[],
+  currentReviewDigest?: Sha256Digest,
+): readonly PublicFindingV1[] {
+  const findings: PublicFindingV1[] = [];
+  for (const entry of ledger) {
+    if (entry.review_evidence_digest === currentReviewDigest) continue;
+    const currentDisposition = ledgerDisposition(entry);
+    let candidate: unknown;
+    if ("reviewer_focus" in entry) {
+      const common = {
+        finding_id: entry.finding_id,
+        claim_type: entry.claim_type,
+        confidence: entry.confidence,
+        falsifier: entry.falsifier,
+        reviewer_id: entry.reviewer_id,
+        reviewer_focus: entry.reviewer_focus,
+        routing_role: entry.routing_role,
+        criterion_id: entry.criterion_id,
+        ...(currentDisposition === undefined ? {} : { current_disposition: currentDisposition }),
+      };
+      candidate = entry.reviewer_focus === "general"
+        ? { ...common, summary: entry.summary, evidence: entry.evidence, suggested_resolution: entry.suggested_resolution }
+        : {
+          ...common,
+          required_behavior_or_risk_boundary: entry.required_behavior_or_risk_boundary,
+          coverage_or_oracle_problem: entry.coverage_or_oracle_problem,
+          consequence: entry.consequence,
+          proposed_verification_change: entry.proposed_verification_change,
+        };
+    } else if ("claim_type" in entry && entry.summary !== undefined &&
+        entry.evidence !== undefined && entry.suggested_resolution !== undefined) {
+      candidate = {
+        finding_id: entry.finding_id, claim_type: entry.claim_type, confidence: entry.confidence,
+        falsifier: entry.falsifier, summary: entry.summary, evidence: entry.evidence,
+        suggested_resolution: entry.suggested_resolution,
+        ...(currentDisposition === undefined ? {} : { current_disposition: currentDisposition }),
+      };
+    } else if ("severity" in entry && entry.summary !== undefined &&
+        entry.evidence !== undefined && entry.suggested_resolution !== undefined) {
+      candidate = {
+        finding_id: entry.finding_id, severity: entry.severity, blocking: entry.blocking,
+        summary: entry.summary, evidence: entry.evidence, suggested_resolution: entry.suggested_resolution,
+        ...(currentDisposition === undefined ? {} : { current_disposition: currentDisposition }),
+      };
+    } else continue;
+    findings.push(Object.freeze(publicFindingV1Schema.parse(candidate)) as PublicFindingV1);
+  }
+  return Object.freeze(findings);
+}
+
+function findingHistory(details: DetailedTaskStatusV1): readonly PublicFindingV1[] {
+  const triage = details.retained.get("triage")?.manifest.source_artifact;
+  if (triage?.artifact_kind !== "triage") return Object.freeze([]);
+  return publicFindingHistoryFromLedger(
+    triage.evidence.disposition_ledger ?? [],
+    details.retained.get("counter_review")?.manifest.artifact_digest,
+  );
 }
 
 /** Cross-authenticates a readable request/decision pair; false means corrupt or forged bytes. */
@@ -580,6 +665,7 @@ export async function computeAuthoritativeSemanticStatus(
       legacy_import_initialization: true,
     }),
     full_findings: fullFindings(detailed.value),
+    finding_history: findingHistory(detailed.value),
     review_rounds: reviewRounds(detailed.value),
     taxonomy_denial_rates: computeTaxonomyDenialRates(ledger),
     implementation_recommendation: implementationRecommendation,
@@ -631,6 +717,8 @@ export function computeSemanticStatusSnapshot(
 
   const findings: readonly PublicFindingV1[] = enrichments.full_findings.map((finding) =>
     Object.freeze(publicFindingV1Schema.parse(materializeJson(finding, "semantic review finding"))) as PublicFindingV1);
+  const history: readonly PublicFindingV1[] = (enrichments.finding_history ?? []).map((finding) =>
+    Object.freeze(publicFindingV1Schema.parse(materializeJson(finding, "semantic review finding history"))) as PublicFindingV1);
   const snapshot: SemanticStatusSnapshotV1 = {
     schema_version: "1",
     repository_identity_digest: repositoryIdentity,
@@ -646,6 +734,7 @@ export function computeSemanticStatusSnapshot(
     }),
     status: statusJson,
     full_findings: Object.freeze(findings),
+    finding_history: Object.freeze(history),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) =>
       Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))) as PublicReviewRoundV1)),
     taxonomy_denial_rates: Object.freeze({ ...enrichments.taxonomy_denial_rates }),

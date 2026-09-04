@@ -25,7 +25,14 @@ import type {
   SecondaryCommitAuthorizationV1,
 } from "../contracts/gates.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import type { ReviewerRunV1, ReviewEvidence, RouteOverrideRecord, RouteSourceRecord } from "../contracts/review.js";
+import {
+  reviewFindingDisplayDetail,
+  type ReviewerRunV1,
+  type ReviewerRunV2,
+  type ReviewEvidence,
+  type RouteOverrideRecord,
+  type RouteSourceRecord,
+} from "../contracts/review.js";
 import type {
   PublicReviewPushThroughAuditV1,
   PublicValidationOverrideAuditV1,
@@ -33,7 +40,11 @@ import type {
 } from "../contracts/semantic-workflow.js";
 import type { CurrentEvidenceSetRef } from "../contracts/trust.js";
 import { configuredRoute, resolveDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
-import { designApprovalPolicyContext, selectAdjudicationGates } from "../review/adjudication.js";
+import {
+  designApprovalPolicyContext,
+  policyReviewFacts,
+  selectPolicyReviewGates,
+} from "../review/adjudication.js";
 import {
   assessCurrentEvidence,
   DEFAULT_MAX_ATTEMPTS,
@@ -155,7 +166,7 @@ type StatusEvidence = Readonly<{
     provider?: string;
     route_source?: RouteSourceRecord;
     route_override?: RouteOverrideRecord;
-    reviewer_runs?: readonly ReviewerRunV1[];
+    reviewer_runs?: readonly (ReviewerRunV1 | ReviewerRunV2)[];
   }>;
   assessment: EvidenceAssessment;
 }>;
@@ -906,13 +917,27 @@ export function pendingAdjudicationGates(
   constitution: ResolvedConstitution,
   retained: RetainedEvidenceSet,
   authenticated: readonly AuthenticatedGateApproval[],
-): readonly ReturnType<typeof selectAdjudicationGates>[number][] {
-  const source = retained.get("adjudicate")?.manifest.source_artifact;
-  if (source?.artifact_kind !== "adjudication-evidence") return [];
-  const pending: ReturnType<typeof selectAdjudicationGates>[number][] = [];
+): readonly ReturnType<typeof selectPolicyReviewGates>[number][] {
+  const reviewSource = retained.get("counter_review")?.manifest.source_artifact;
+  if (reviewSource?.artifact_kind !== "review-evidence") return [];
+  const adjudicationSource = retained.get("adjudicate")?.manifest.source_artifact;
+  const adjudication = adjudicationSource?.artifact_kind === "adjudication-evidence"
+    ? adjudicationSource.evidence
+    : undefined;
+  let facts;
+  try {
+    facts = policyReviewFacts(
+      reviewSource.evidence,
+      adjudication,
+      [...constitution.rules.values()].some((rule) => rule.status === "active"),
+    );
+  } catch {
+    return [];
+  }
+  const pending: ReturnType<typeof selectPolicyReviewGates>[number][] = [];
   let currentSet: CurrentEvidenceSetRef | undefined;
   try { currentSet = deriveCurrentEvidenceSet(retained).current_evidence_set; } catch { /* degraded below */ }
-  for (const gate of selectAdjudicationGates(constitution.rules, source.evidence)) {
+  for (const gate of selectPolicyReviewGates(constitution.rules, facts)) {
     const contextDigest = computeGateContextDigest(gate.kind, gate.context);
     const exactGateApproved = currentSet !== undefined && authenticated.some((item) =>
       item.approval.gate_kind === gate.kind &&
@@ -922,7 +947,7 @@ export function pendingAdjudicationGates(
       item.request.kind !== "baseline-adoption" && // narrowed: a drift observation is not an evidence set
       item.request.kind !== "validation-override" && // a validation request is not review evidence
       item.request.current_evidence.set_digest === currentSet.set_digest &&
-      source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained));
+      facts.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained));
     const designPhase = state.phase_instance === "design" || state.phase_instance.startsWith("phase-design-");
     const ordinaryKind = state.phase_instance === "prd"
       ? "artifact-approval"
@@ -943,7 +968,7 @@ export function pendingAdjudicationGates(
           item.request.phase_instance === state.phase_instance &&
           item.request.subject_digest === gate.subject_digest &&
           item.request.current_evidence.set_digest === currentSet!.set_digest &&
-          source.evidence.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained) &&
+          facts.source_review_envelope_digest === retainedReviewEnvelopeDigest(retained) &&
           (decision === "approve" || decision === "authorize-commit");
       });
     const approved = exactGateApproved || ordinaryApproval;
@@ -964,7 +989,7 @@ export function pendingAdjudicationGate(
   constitution: ResolvedConstitution,
   retained: RetainedEvidenceSet,
   authenticated: readonly AuthenticatedGateApproval[],
-): ReturnType<typeof selectAdjudicationGates>[number] | undefined {
+): ReturnType<typeof selectPolicyReviewGates>[number] | undefined {
   return pendingAdjudicationGates(state, constitution, retained, authenticated)[0];
 }
 
@@ -1901,8 +1926,9 @@ async function computeTaskStatusDetailedInternal(
   // by the document drifted from, so the revise offer says what to fix rather than just "revise".
   let policyFindings: PolicyReentryFindings | undefined;
   if (assessment?.policy_reentry_required === true) {
-    const source = retained.get("adjudicate")?.manifest.source_artifact;
-    if (source?.artifact_kind === "adjudication-evidence") {
+    const reviewSource = retained.get("counter_review")?.manifest.source_artifact;
+    const adjudicationSource = retained.get("adjudicate")?.manifest.source_artifact;
+    if (reviewSource?.artifact_kind === "review-evidence" && constitution !== undefined) {
       const upstreamPaths = new Map<Sha256Digest, string>();
       if (produceSubject !== undefined) {
         try {
@@ -1914,23 +1940,37 @@ async function computeTaskStatusDetailedInternal(
           }
         } catch { /* unmapped drift below still names the finding */ }
       }
-      policyFindings = Object.freeze({
-        rules: Object.freeze(source.evidence.rule_findings
-          .filter((finding) => finding.compliance !== "pass")
-          .map((finding) => Object.freeze({
-            rule_id: finding.rule_id,
-            rule_version: finding.rule_version,
-            compliance: finding.compliance as "fail" | "uncertain",
-            rationale: finding.rationale,
-          }))),
-        drift: Object.freeze(source.evidence.drift_findings
-          .filter((finding) => finding.drift === "material")
-          .map((finding) => Object.freeze({
-            path: upstreamPaths.get(finding.upstream_digest) ?? "an approved upstream document",
-            affected_claim_ids: Object.freeze([...finding.affected_claim_ids]),
-            rationale: finding.rationale,
-          }))),
-      });
+      const adjudication = adjudicationSource?.artifact_kind === "adjudication-evidence"
+        ? adjudicationSource.evidence
+        : undefined;
+      try {
+        const facts = policyReviewFacts(
+          reviewSource.evidence,
+          adjudication,
+          [...constitution.rules.values()].some((rule) => rule.status === "active"),
+        );
+        policyFindings = Object.freeze({
+          rules: Object.freeze(facts.constitution.rule_findings
+            .filter((finding) => finding.compliance !== "pass")
+            .map((finding) => Object.freeze({
+              rule_id: finding.rule_id,
+              rule_version: finding.rule_version,
+              compliance: finding.compliance as "fail" | "uncertain",
+              rationale: finding.rationale,
+            }))),
+          drift: Object.freeze(facts.alignment.findings
+            .filter((finding) => finding.drift === "material")
+            .map((finding) => Object.freeze({
+              path: upstreamPaths.get(finding.upstream_digest) ?? "an approved upstream document",
+              affected_claim_ids: Object.freeze([...finding.affected_claim_ids]),
+              rationale: finding.rationale,
+            }))),
+        });
+      } catch {
+        // Fixed-point already chose safe producer re-entry for an incomplete or stale cohort.
+        // Status detail is best-effort and must not strand that recovery action by rethrowing the
+        // same policy-fact validation error while naming its optional findings.
+      }
     }
   }
 
@@ -2164,7 +2204,10 @@ async function computeTaskStatusDetailedInternal(
             );
             const escalated = evidence.findings.filter((f) => f.disposition === "escalated-human");
             if (escalated.length > 0) {
-              escalatedFindingDetails = escalated.map((f) => `Escalated finding ${f.finding_id}: ${f.summary} (rationale: ${f.rationale ?? ""})`);
+              escalatedFindingDetails = escalated.map((f) => {
+                const display = reviewFindingDisplayDetail(f);
+                return `Escalated finding ${f.finding_id}: ${display.summary} (rationale: ${f.rationale ?? ""})`;
+              });
             }
             if (activeGate.kind === "attempts-exhausted" &&
                 activeGate.context.review_push_through !== undefined) {
@@ -2187,7 +2230,8 @@ async function computeTaskStatusDetailedInternal(
                 const falsifier = "falsifier" in finding
                   ? finding.falsifier
                   : "Legacy finding: no structured falsifier was recorded.";
-                return `Accepted finding ${finding.finding_id} (${taxonomy}): ${finding.summary} Falsifier: ${falsifier}`;
+                const display = reviewFindingDisplayDetail(finding);
+                return `Accepted finding ${finding.finding_id} (${taxonomy}): ${display.summary} Falsifier: ${falsifier}`;
                 }),
               ];
             }

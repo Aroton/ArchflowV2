@@ -76,6 +76,10 @@
   },
   "type": "object",
   "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "3"
+    },
     "task_id": {
       "$ref": "#/$defs/taskSlug"
     },
@@ -109,35 +113,342 @@
         "gemini"
       ]
     },
-    "matched_rule_versions": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "finding_id": {
+                "$ref": "#/$defs/id"
+              },
+              "claim_type": {
+                "type": "string",
+                "enum": [
+                  "defect",
+                  "risk",
+                  "gap",
+                  "preference"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "certain",
+                  "likely",
+                  "suspicion"
+                ]
+              },
+              "falsifier": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              },
+              "summary": {
+                "$ref": "#/$defs/nonBlank"
+              },
+              "evidence": {
+                "$ref": "#/$defs/nonBlank"
+              },
+              "suggested_resolution": {
+                "$ref": "#/$defs/nonBlank"
+              },
+              "criterion_id": {
+                "$ref": "#/$defs/id"
+              }
+            },
+            "required": [
+              "finding_id",
+              "claim_type",
+              "confidence",
+              "falsifier",
+              "summary",
+              "evidence",
+              "suggested_resolution",
+              "criterion_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "finding_id": {
+                "$ref": "#/$defs/id"
+              },
+              "criterion_id": {
+                "$ref": "#/$defs/id"
+              },
+              "claim_type": {
+                "type": "string",
+                "enum": [
+                  "defect",
+                  "risk",
+                  "gap",
+                  "preference"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "certain",
+                  "likely",
+                  "suspicion"
+                ]
+              },
+              "falsifier": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              },
+              "required_behavior_or_risk_boundary": {
+                "$ref": "#/$defs/nonBlank"
+              },
+              "coverage_or_oracle_problem": {
+                "$ref": "#/$defs/nonBlank"
+              },
+              "consequence": {
+                "$ref": "#/$defs/nonBlank"
+              },
+              "proposed_verification_change": {
+                "$ref": "#/$defs/nonBlank"
+              }
+            },
+            "required": [
+              "finding_id",
+              "criterion_id",
+              "claim_type",
+              "confidence",
+              "falsifier",
+              "required_behavior_or_risk_boundary",
+              "coverage_or_oracle_problem",
+              "consequence",
+              "proposed_verification_change"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "upstream_alignment": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "rule_id": {
-            "$ref": "#/$defs/id"
+          "upstream_digest": {
+            "$ref": "#/$defs/digest"
           },
-          "rule_version": {
-            "type": "integer",
-            "exclusiveMinimum": 0,
-            "maximum": 9007199254740991
+          "drift": {
+            "type": "string",
+            "enum": [
+              "aligned",
+              "incidental",
+              "material"
+            ]
+          },
+          "affected_claim_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "rationale": {
+            "$ref": "#/$defs/nonBlank"
           }
         },
         "required": [
-          "rule_id",
-          "rule_version"
+          "upstream_digest",
+          "drift",
+          "affected_claim_ids",
+          "rationale"
         ],
         "additionalProperties": false
       }
     },
-    "findings": {
+    "legacy_confirmations": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/finding"
+        "anyOf": [
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "finding_id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "resolved"
+                  },
+                  "evidence": {
+                    "$ref": "#/$defs/nonBlank"
+                  }
+                },
+                "required": [
+                  "finding_id",
+                  "status",
+                  "evidence"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "finding_id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "claim_type": {
+                    "type": "string",
+                    "enum": [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  "falsifier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "\\S"
+                  },
+                  "summary": {
+                    "$ref": "#/$defs/nonBlank"
+                  },
+                  "evidence": {
+                    "$ref": "#/$defs/nonBlank"
+                  },
+                  "suggested_resolution": {
+                    "$ref": "#/$defs/nonBlank"
+                  },
+                  "criterion_id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "unresolved"
+                  }
+                },
+                "required": [
+                  "finding_id",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "summary",
+                  "evidence",
+                  "suggested_resolution",
+                  "criterion_id",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "finding_id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "resolved"
+                  },
+                  "evidence": {
+                    "$ref": "#/$defs/nonBlank"
+                  }
+                },
+                "required": [
+                  "finding_id",
+                  "status",
+                  "evidence"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "finding_id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "criterion_id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "claim_type": {
+                    "type": "string",
+                    "enum": [
+                      "defect",
+                      "risk",
+                      "gap",
+                      "preference"
+                    ]
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "certain",
+                      "likely",
+                      "suspicion"
+                    ]
+                  },
+                  "falsifier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096,
+                    "pattern": "\\S"
+                  },
+                  "required_behavior_or_risk_boundary": {
+                    "$ref": "#/$defs/nonBlank"
+                  },
+                  "coverage_or_oracle_problem": {
+                    "$ref": "#/$defs/nonBlank"
+                  },
+                  "consequence": {
+                    "$ref": "#/$defs/nonBlank"
+                  },
+                  "proposed_verification_change": {
+                    "$ref": "#/$defs/nonBlank"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "unresolved"
+                  }
+                },
+                "required": [
+                  "finding_id",
+                  "criterion_id",
+                  "claim_type",
+                  "confidence",
+                  "falsifier",
+                  "required_behavior_or_risk_boundary",
+                  "coverage_or_oracle_problem",
+                  "consequence",
+                  "proposed_verification_change",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        ]
       }
     }
   },
   "required": [
+    "schema_version",
     "task_id",
     "phase_instance",
     "step",
@@ -146,7 +457,6 @@
     "input_fingerprint",
     "rubric_digest",
     "producer_family",
-    "matched_rule_versions",
     "findings"
   ],
   "additionalProperties": false

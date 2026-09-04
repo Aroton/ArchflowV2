@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { parseAndDeriveReview, parseReferencedReviewEvidence, parseReviewEvidence } from "../../src/contracts/review.js";
+import {
+  createGeneralReviewOutputV3Schema,
+  createTestReviewOutputV3Schema,
+  parseAndDeriveReview,
+  parseReferencedReviewEvidence,
+  parseReviewEvidence,
+} from "../../src/contracts/review.js";
 
 const fixture = async (name: string) => JSON.parse(await readFile(new URL(`../fixtures/contracts/review/${name}`, import.meta.url), "utf8")) as unknown;
 describe("review semantics", () => {
@@ -28,5 +34,45 @@ describe("review semantics", () => {
       .toThrow(/partition review findings exactly/);
     expect(() => parseReviewEvidence({ ...attested, reviewer_runs: [run, { ...run }] }))
       .toThrow(/reviewer run ids must be unique/);
+  });
+
+  it("keeps fresh general and test child findings in separate exact criterion shapes", () => {
+    const common = {
+      schema_version: "3", task_id: "mcp-integration", phase_instance: "phase-impl-1",
+      step: "counter_review", role: "counter-review", subject_digest: "a".repeat(64),
+      input_fingerprint: "b".repeat(64), rubric_digest: "c".repeat(64), producer_family: "claude",
+    } as const;
+    const generalFinding = {
+      finding_id: "unsafe-path", criterion_id: "correctness", claim_type: "defect", confidence: "certain",
+      falsifier: "Prove the path remains confined.", summary: "Path escapes.", evidence: "Traversal is accepted.",
+      suggested_resolution: "Reject traversal.",
+    } as const;
+    const general = createGeneralReviewOutputV3Schema({ criterion_ids: ["correctness"], expected_upstream_digests: [] });
+    expect(general.parse({ ...common, findings: [generalFinding], upstream_alignment: [] })).toMatchObject({ findings: [generalFinding] });
+    expect(() => general.parse({ ...common, findings: [{ ...generalFinding, criterion_id: "test-quality" }], upstream_alignment: [] })).toThrow();
+    expect(() => general.parse({ ...common, findings: [{ ...generalFinding, consequence: "Hidden test detail." }], upstream_alignment: [] })).toThrow();
+    expect(() => general.parse({ ...common, findings: [{ ...generalFinding, reviewer_id: "general" }], upstream_alignment: [] })).toThrow();
+
+    const testFinding = {
+      finding_id: "missing-oracle", criterion_id: "test-quality", claim_type: "gap", confidence: "likely",
+      falsifier: "Show an assertion that detects the bad result.", required_behavior_or_risk_boundary: "Reject traversal.",
+      coverage_or_oracle_problem: "The test has no rejection assertion.", consequence: "Traversal can regress silently.",
+      proposed_verification_change: "Assert the rejection and unchanged filesystem.",
+    } as const;
+    const tests = createTestReviewOutputV3Schema({ criterion_ids: ["test-quality"] });
+    expect(tests.parse({ ...common, findings: [testFinding] })).toMatchObject({ findings: [testFinding] });
+    expect(() => tests.parse({ ...common, findings: [{ ...testFinding, suggested_resolution: "Change production code." }] })).toThrow();
+  });
+
+  it("treats a present empty upstream plan as an exact alignment responsibility", () => {
+    const schema = createGeneralReviewOutputV3Schema({ criterion_ids: [], expected_upstream_digests: [] });
+    const common = {
+      schema_version: "3", task_id: "mcp-integration", phase_instance: "design", step: "counter_review",
+      role: "counter-review", subject_digest: "a".repeat(64), input_fingerprint: "b".repeat(64),
+      rubric_digest: "c".repeat(64), producer_family: "claude", findings: [],
+    } as const;
+    expect(schema.parse({ ...common, upstream_alignment: [] })).toEqual({ ...common, upstream_alignment: [] });
+    expect(() => schema.parse(common)).toThrow();
+    expect(() => createGeneralReviewOutputV3Schema({ criterion_ids: [] })).toThrow(/requires criteria/u);
   });
 });

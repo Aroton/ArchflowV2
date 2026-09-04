@@ -153,6 +153,13 @@ export function configuredRoutes(
     return [baseRoles.adjudicator];
   }
 
+  // Phase design and implementation always have a distinct test assignment. Configuration and
+  // invocation routing retain their existing precedence; this built-in is only the final fallback
+  // when the optional configured role was omitted.
+  if (role === "test-reviewer" && (phaseKind === "phase-design" || phaseKind === "phase-impl")) {
+    return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" as const })];
+  }
+
   return [];
 }
 

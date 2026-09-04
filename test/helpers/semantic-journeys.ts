@@ -140,35 +140,53 @@ function generateOutput(envelope, countPath, findingsByReview, adjudicationCompl
   const subject = envelope.subject;
   if (subject.role === "counter-review") {
     let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
+    const assignment = envelope.assignment;
     const all = findingsByReview; const findings = all[Math.min(count, all.length - 1)] ?? [];
-    const v2Findings = findings.map((finding) => "claim_type" in finding ? finding : ({
-      finding_id: finding.finding_id, claim_type: finding.blocking === true ? "defect" : "preference",
-      confidence: "certain", falsifier: "Inspect the cited fixture evidence to settle this finding.",
+    const isGeneral = assignment === undefined || assignment.focus === "general";
+    const criterionIds = assignment?.criterion_ids ?? envelope.rubric.criteria.map((criterion) => criterion.id);
+    const selected = isGeneral && criterionIds.length > 0 ? findings : [];
+    const v3Findings = selected.map((finding) => ({
+      finding_id: finding.finding_id,
+      criterion_id: typeof finding.criterion_id === "string" && criterionIds.includes(finding.criterion_id)
+        ? finding.criterion_id : criterionIds[0],
+      claim_type: "claim_type" in finding ? finding.claim_type : finding.blocking === true ? "defect" : "preference",
+      confidence: "confidence" in finding ? finding.confidence : "certain",
+      falsifier: "falsifier" in finding ? finding.falsifier : "Inspect the cited fixture evidence to settle this finding.",
       summary: finding.summary, evidence: finding.evidence, suggested_resolution: finding.suggested_resolution,
     }));
-    writeFileSync(countPath, String(count + 1));
-    return { task_id: subject.task_id, phase_instance: subject.phase_instance,
+    if (isGeneral) writeFileSync(countPath, String(count + 1));
+    const legacyConfirmations = assignment?.legacy_confirmations?.map((confirmation) => ({
+      finding_id: confirmation.finding_id, status: "resolved",
+      evidence: "The accepted revision intent is present in the current artifact.",
+    }));
+    const upstreamAlignment = assignment !== undefined && Object.prototype.hasOwnProperty.call(assignment, "expected_upstream_digests")
+      ? assignment.expected_upstream_digests.map((digest) => ({ upstream_digest: digest, drift: "aligned", affected_claim_ids: [], rationale: "The current artifact remains aligned with this approved upstream." }))
+      : undefined;
+    if (!isGeneral) {
+      return { schema_version: "3", task_id: subject.task_id, phase_instance: subject.phase_instance,
+        step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
+        input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
+        producer_family: subject.producer_family, findings: [],
+        ...(legacyConfirmations === undefined ? {} : { legacy_confirmations: legacyConfirmations }) };
+    }
+    return { schema_version: "3", task_id: subject.task_id, phase_instance: subject.phase_instance,
       step: "counter_review", role: "counter-review", subject_digest: subject.subject_digest,
       input_fingerprint: subject.input_fingerprint, rubric_digest: subject.rubric_digest,
-      producer_family: subject.producer_family, findings: v2Findings, matched_rule_versions: [] };
+      producer_family: subject.producer_family, findings: v3Findings,
+      ...(legacyConfirmations === undefined ? {} : { legacy_confirmations: legacyConfirmations }),
+      ...(upstreamAlignment === undefined ? {} : { upstream_alignment: upstreamAlignment }) };
   } else {
-    return { schema_version: "1", task_id: subject.task_id, phase_instance: subject.phase_instance,
-      step: "adjudicate", subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint,
-      pinned_constitution_digest: subject.pinned_constitution_digest,
-      approved_upstream_digests: subject.approved_upstream_digests,
-      source_review_envelope_digest: subject.source_review_envelope_digest,
-      rule_findings: envelope.rules.map((rule, index) => implementationFailingRule && index === 0 &&
+    return { schema_version: "2", judgments: Object.fromEntries(envelope.rules.map((rule, index) => [rule.slot,
+      implementationFailingRule && index === 0 &&
         subject.phase_instance.indexOf("phase-impl-") === 0
-        ? { rule_id: rule.id, rule_version: rule.version, compliance: "pass",
+        ? { compliance: "pass",
             rationale: "The implementation respects this rule.", trigger: "matched",
             trigger_evidence: "The approved phase design requires an update before this work advances." }
-        : { rule_id: rule.id, rule_version: rule.version,
-        compliance: adjudicationCompliance,
-        rationale: adjudicationCompliance === "pass" ? "The document respects this rule." : "The document violates this rule.",
-        trigger: adjudicationCompliance === "pass" ? "not-matched" : "matched",
-        trigger_evidence: adjudicationCompliance === "pass" ? "No review trigger matched." : "The review trigger matched this document." }),
-      drift_findings: subject.approved_upstream_digests.map((digest) => ({ upstream_digest: digest,
-        drift: "aligned", affected_claim_ids: [], rationale: "No upstream drift." })) };
+        : { compliance: adjudicationCompliance,
+          rationale: adjudicationCompliance === "pass" ? "The document respects this rule." : "The document violates this rule.",
+          trigger: adjudicationCompliance === "pass" ? "not-matched" : "matched",
+          trigger_evidence: adjudicationCompliance === "pass" ? "No review trigger matched." : "The review trigger matched this document." }
+    ])) };
   }
 }
 `;

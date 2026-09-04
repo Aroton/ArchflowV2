@@ -80,6 +80,29 @@ export type PublicFindingV2 = {
   readonly suggested_resolution: string;
   readonly current_disposition?: PublicFindingDispositionV1;
 };
+type PublicFindingAttributionV3 = {
+  readonly reviewer_id: string;
+  readonly reviewer_focus: "general" | "tests";
+  readonly routing_role: "counter-reviewer" | "test-reviewer";
+  readonly criterion_id: string;
+};
+export type PublicGeneralFindingV3 = PublicFindingV2 & PublicFindingAttributionV3 & {
+  readonly reviewer_focus: "general";
+  readonly routing_role: "counter-reviewer";
+};
+export type PublicTestFindingV3 = PublicFindingAttributionV3 & {
+  readonly finding_id: string;
+  readonly reviewer_focus: "tests";
+  readonly routing_role: "test-reviewer";
+  readonly claim_type: ClaimType;
+  readonly confidence: ConfidenceLevel;
+  readonly falsifier: string;
+  readonly required_behavior_or_risk_boundary: string;
+  readonly coverage_or_oracle_problem: string;
+  readonly consequence: string;
+  readonly proposed_verification_change: string;
+  readonly current_disposition?: PublicFindingDispositionV1;
+};
 export type LegacyPublicFindingV1 = {
   readonly finding_id: string;
   readonly severity: "blocker" | "major" | "minor";
@@ -89,7 +112,7 @@ export type LegacyPublicFindingV1 = {
   readonly suggested_resolution: string;
   readonly current_disposition?: PublicFindingDispositionV1;
 };
-export type PublicFindingV1 = PublicFindingV2 | LegacyPublicFindingV1;
+export type PublicFindingV1 = PublicGeneralFindingV3 | PublicTestFindingV3 | PublicFindingV2 | LegacyPublicFindingV1;
 export type PublicTriageDispositionV1 = PublicFindingDispositionV1 & { readonly finding_id: string };
 
 export type PublicConstitutionRuleV1 = {
@@ -116,6 +139,8 @@ export type PublicReviewAssignmentV1 = {
   readonly reviewer_id: string;
   readonly focus: "general" | "tests";
   readonly criterion_ids: readonly string[];
+  readonly expected_upstream_digests?: readonly Sha256Digest[];
+  readonly legacy_confirmation_finding_ids?: readonly string[];
 };
 
 /** One counter-review round of the current phase instance: what it raised and what triage accepted. */
@@ -327,6 +352,8 @@ export type WorkflowViewV1 = {
   readonly resources: readonly WorkflowResourceV1[];
   readonly next_action: SemanticNextActionV1;
   readonly findings?: readonly PublicFindingV1[];
+  /** Superseded dispositioned occurrences reconstructed from the durable cumulative ledger. */
+  readonly finding_history?: readonly PublicFindingV1[];
   /** Rejection rate for each V2 claim-type/confidence cell; zero means no dispositioned occurrences or no rejections. */
   readonly taxonomy_denial_rates?: FindingPartitionCounts;
   readonly review_context?: PublicReviewContextV1;
@@ -453,6 +480,7 @@ export type SemanticStatusSnapshotV1 = {
   readonly legacy_import_initialization?: true;
   readonly status: PlainJsonValue;
   readonly full_findings: readonly PublicFindingV1[];
+  readonly finding_history?: readonly PublicFindingV1[];
   /** Per-attempt finding and acceptance counts for the current phase instance, from retained review and triage. */
   readonly review_rounds?: readonly PublicReviewRoundV1[];
   readonly taxonomy_denial_rates: FindingPartitionCounts;
@@ -539,6 +567,37 @@ export const publicFindingV2Schema = z.object({
   suggested_resolution: nonBlank,
   current_disposition: findingDispositionV1Schema.optional(),
 }).strict() as unknown as z.ZodType<PublicFindingV2>;
+const publicFindingAttributionV3Shape = {
+  reviewer_id: nonBlank,
+  criterion_id: nonBlank,
+} as const;
+export const publicGeneralFindingV3Schema = z.object({
+  finding_id: nonBlank,
+  claim_type: z.enum(CLAIM_TYPES),
+  confidence: z.enum(CONFIDENCE_LEVELS),
+  falsifier: boundedText,
+  summary: nonBlank,
+  evidence: nonBlank,
+  suggested_resolution: nonBlank,
+  ...publicFindingAttributionV3Shape,
+  reviewer_focus: z.literal("general"),
+  routing_role: z.literal("counter-reviewer"),
+  current_disposition: findingDispositionV1Schema.optional(),
+}).strict() as unknown as z.ZodType<PublicGeneralFindingV3>;
+export const publicTestFindingV3Schema = z.object({
+  finding_id: nonBlank,
+  claim_type: z.enum(CLAIM_TYPES),
+  confidence: z.enum(CONFIDENCE_LEVELS),
+  falsifier: boundedText,
+  required_behavior_or_risk_boundary: nonBlank,
+  coverage_or_oracle_problem: nonBlank,
+  consequence: nonBlank,
+  proposed_verification_change: nonBlank,
+  ...publicFindingAttributionV3Shape,
+  reviewer_focus: z.literal("tests"),
+  routing_role: z.literal("test-reviewer"),
+  current_disposition: findingDispositionV1Schema.optional(),
+}).strict() as unknown as z.ZodType<PublicTestFindingV3>;
 export const legacyPublicFindingV1Schema = z.object({
   finding_id: nonBlank,
   severity: z.enum(REVIEW_FINDING_SEVERITIES),
@@ -551,13 +610,26 @@ export const legacyPublicFindingV1Schema = z.object({
   if (finding.blocking !== (finding.severity === "blocker")) context.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
 }) as unknown as z.ZodType<LegacyPublicFindingV1>;
 export const publicFindingV1Schema = z.union([
+  publicGeneralFindingV3Schema,
+  publicTestFindingV3Schema,
   publicFindingV2Schema,
   legacyPublicFindingV1Schema,
 ]) as unknown as z.ZodType<PublicFindingV1>;
 const publicConstitutionRuleV1Schema = z.object({ id: nonBlank, version: positiveSafePhaseNumberV1Schema, text: nonBlank, review_trigger: nonBlank.optional(), enforced_by: z.array(nonBlank).min(1).optional() }).strict();
 const rubricCriterionV1Schema = z.object({ id: nonBlank, text: nonBlank, blocking: z.boolean() }).strict();
 const publicRubricV1Schema = z.object({ schema_version: z.literal("1"), kind: z.enum(["artifact", "implementation"]), mode: z.literal("adversarial"), criteria: z.array(rubricCriterionV1Schema).min(1) }).strict();
-const publicReviewAssignmentV1Schema = z.object({ reviewer_id: nonBlank, focus: z.enum(["general", "tests"]), criterion_ids: z.array(nonBlank).min(1) }).strict();
+const publicReviewAssignmentV1Schema = z.object({
+  reviewer_id: nonBlank,
+  focus: z.enum(["general", "tests"]),
+  criterion_ids: z.array(nonBlank),
+  expected_upstream_digests: z.array(digest).optional(),
+  legacy_confirmation_finding_ids: z.array(nonBlank).min(1).optional(),
+}).strict().superRefine((assignment, context) => {
+  if (assignment.criterion_ids.length === 0 && assignment.expected_upstream_digests === undefined &&
+      assignment.legacy_confirmation_finding_ids === undefined) {
+    context.addIssue({ code: "custom", path: ["criterion_ids"], message: "empty assignment criteria require an explicit responsibility" });
+  }
+});
 const publicReviewContextV1Schema = z.object({ rubric: publicRubricV1Schema, assignments: z.array(publicReviewAssignmentV1Schema).min(1).optional(), active_rules: z.array(publicConstitutionRuleV1Schema) }).strict();
 const roundCount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 export const publicReviewRoundV2Schema = z.object({
@@ -724,6 +796,7 @@ export const workflowViewV1Schema = z.object({
   resources: z.array(workflowResourceV1Schema),
   next_action: semanticNextActionV1Schema,
   findings: z.array(publicFindingV1Schema).optional(),
+  finding_history: z.array(publicFindingV1Schema).optional(),
   taxonomy_denial_rates: taxonomyDenialRatesV1Schema.optional(),
   review_context: publicReviewContextV1Schema.optional(),
   review_strength: publicReviewStrengthV1Schema.optional(),
