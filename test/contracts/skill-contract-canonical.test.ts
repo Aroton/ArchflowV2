@@ -513,11 +513,8 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("valid completion state");
     expect(source).toContain("approved predecessors or stable inputs");
     expect(source).toContain("one understandable verification story");
-    expect(source).toContain("**split check**");
-    expect(source).toContain("**merge check**");
     expect(source).toMatch(/unusually broad phase only with a concrete/u);
     expect(source).toMatch(/unusually small phase only when/u);
-    expect(source).toContain("Phase count, layer count, file count, diff size, and numeric thresholds are not sizing evidence");
   });
 
   it("requires open-ended rationale and one bounded numbered-phase fit check", () => {

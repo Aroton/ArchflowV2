@@ -23,11 +23,66 @@ If either semantic workflow tool is unavailable, run read-only `archflow-local m
 
 If entry status returns `start-next-skill` with `next_action.offer`, apply that no-submission offer with the same exact invocation before writing. If it names a successor without an offer, report the returned successor command and stop; this completed invocation does not own the hand-off. If it selects another phase or an inspection action, report that safe result and stop. When production is open, read the returned PRD and relevant repository context. Use parallel sub-agents with complete briefs for substantial exploration or ecosystem research; keep conversation, triage, and synthesis here. Write the `current-artifact` with system boundaries, data and control flow, key interfaces and decisions, requirement mapping, dependency and library evaluation, risks, verification strategy, and the implementation phase plan. Update a returned writable PRD in the same production result if design makes it inaccurate. If the requirements instead need a fundamentally new pass, an explicit user reopen request (above) durably restarts at the PRD without discarding the worktree; superseded authority stays archived for audit.
 
-For a finite plan, make the sizing attempt observable in the artifact. The default phase is one coherent repository-ready increment: it has one primary behavioral or enabling outcome, leaves the repository in a valid completion state, consumes named approved predecessors or stable inputs, and has one understandable verification story. Repository-ready does not require separate deployment or user visibility, and a phase may cross technical layers when they jointly deliver that outcome.
+### Phase sizing
 
-Apply both directions of boundary judgment before finalizing the plan. The **split check** asks whether a candidate bundles outcomes, integration stories, or risk boundaries that can be implemented, verified, reviewed, and committed meaningfully on their own. The **merge check** asks whether adjacent candidates are merely scaffolding, isolated technical layers or files, separated tests, or transitional steps without a stable capability or concrete risk-reduction value of their own. Work chunks may divide or parallelize implementation inside one governed phase without becoming phase authority. Retain an unusually broad phase only with a concrete atomicity, repository-validity, or inseparable-verification rationale; retain an unusually small phase only when its stable interface, capability, or risk reduction justifies another full phase lifecycle. Phase count, layer count, file count, diff size, and numeric thresholds are not sizing evidence; prefer the fewest phases that preserve coherent outcomes and useful completion states.
+For a finite plan, make phase outcomes, boundaries, dependencies, and verification observable in the artifact. The default phase is one coherent repository-ready increment: it has one primary behavioral or enabling outcome, leaves the repository in a valid completion state, consumes named approved predecessors or stable inputs, and has one understandable verification story. Repository-ready does not require separate deployment or user visibility, and a phase may cross technical layers when they jointly deliver that outcome. Work chunks may divide or parallelize implementation inside one governed phase without becoming phase authority.
 
-Make quantitative and safety commitments auditable in the same way the sizing attempt is. Every constant a stated bound or budget depends on appears in the constants table with a value or a named measurement that precedes the phase relying on it, and a derived figure shows its arithmetic; every isolation, safety, ordering, or recovery property names the mechanism it rests on and the test that asserts that mechanism directly. A reviewer, and later a human, must be able to recompute the design rather than take it on trust.
+Use the following rubric internally while choosing boundaries. Scores are advisory planning guidance, not a required worksheet in the design artifact or an additional review or approval criterion. Target roughly one phase per ~300k-token implementation pass; score the design rather than estimate tokens. This is a calibration target, not a promised budget. Oversized phases risk context compaction mid-work and loss of the reasoning behind decisions; undersized phases pay a full design cycle for too little work. Undersizing is cheaper to fix, so bias toward splitting.
+
+#### Score (0–3 each)
+
+| Axis | What to count | 0 | 1 | 2 | 3 |
+|---|---|---|---|---|---|
+| **F — File surface** | New or substantially rewritten files; read-only dependencies do not count | 1–2 | 3–5 | 6–10 | 11+ |
+| **I — Interface novelty** | Types, traits, signatures to invent rather than conform to | All exist | 1–2 new | 3–5 new, or one trait with several implementers | 6+, or a new abstraction layer |
+| **V — Verification surface** | Distinct behaviors needing test coverage | 1–3 | 4–8 | 9–15 | 16+, or fixtures/harness built in-phase |
+| **U — Unknowns** | Decisions the design leaves to implementation | None | 1–2 local | 3+, or one that shapes the interface | An unresolved approach question |
+| **C — Coupling** | Files that must change together for compilation | Independent | One cluster of 2–3 | One cluster of 4+, or two clusters | Change ripples unpredictably |
+
+#### Verdict
+
+| Sum | Suggested action |
+|---|---|
+| 0–3 | **Merge** with an adjacent phase |
+| 4–9 | **Ship** |
+| 10–12 | **Split** |
+| 13–15 | **Split, then rescore** — likely three phases |
+
+Overrides guide the boundary judgment:
+
+- **U = 3** → split regardless of the sum. Unknowns expand during implementation and drive overruns.
+- **C = 3** → fix the design first; it cannot yet split cleanly.
+- **F ≤ 1 and I = 0 and V ≤ 1** → merge even if the sum reaches 4; the work is unlikely to justify a full design cycle.
+- **Any axis = 3 with sum ≤ 9** → split anyway; one extreme axis can dominate the pass.
+
+Apply both split and merge judgment, preserving useful completion states. Retain an unusually broad phase only with a concrete atomicity, repository-validity, or inseparable-verification rationale; retain an unusually small phase only when its stable interface, capability, or risk reduction justifies another full phase lifecycle. If no useful adjacent merge or valid split exists, use that concrete boundary rationale rather than force the score's suggestion.
+
+#### Where to cut
+
+Prefer these boundaries, in order:
+
+1. **Interface, then implementers.** Define types and traits with a trivial implementation first, then fill in implementers. This can drop I to 0 for later phases and expose parallel work where dependencies permit it.
+2. **Harness, then usage.** Give substantial fixtures or simulators their own phase so later failures can be distinguished from verifier defects.
+3. **Happy path, then edge cases.** Use this cut only when the error taxonomy is already specified.
+4. **File clusters**, along coupling boundaries.
+
+Avoid splitting mid-cluster: two phases that cannot compile independently are one phase. Each cut should leave an intermediate state that compiles and passes its tests.
+
+#### Automation
+
+Plan every phase before the last with fully machine-verifiable exit criteria: compiler, tests, lints, or simulation. If an intermediate criterion says only “verify visually” or “confirm behavior,” revise the design to name a machine-checkable criterion. If the validation is genuinely manual, batch it into the final phase. Add a separate final validation phase only when needed.
+
+A cut that depends on human inspection to establish that the intermediate state works is a poor cut. Where a verifier needs to be built, prefer harness-first sequencing so subsequent phases have automated checks. This guidance concerns validation of behavior; all server-returned human approval gates still require explicit judgment, including before the final phase.
+
+#### Calibration
+
+Score the design artifact, not the prose describing its ambition. If F, I, V, or C cannot be counted from the design, treat that as an unknowns problem and clarify the design. Split aggressively when phases are cheap to merge and expensive to overflow.
+
+As optional future calibration, compare actual token spend with the sums across roughly 20 phases and refit the bands. F and V are likely the strongest predictors of spend; U is likely the strongest predictor of overrun. This does not require token tracking machinery or implementation logs to record scores.
+
+### Finalize and submit
+
+Make quantitative and safety commitments auditable. Every constant a stated bound or budget depends on appears in the constants table with a value or a named measurement that precedes the phase relying on it, and a derived figure shows its arithmetic; every isolation, safety, ordering, or recovery property names the mechanism it rests on and the test that asserts that mechanism directly. A reviewer, and later a human, must be able to recompute the design rather than take it on trust.
 
 When a plan is genuinely open-ended, explain why responsible phase boundaries cannot yet be named and what information will make decomposition possible. Do not use the open-ended form merely to avoid the sizing attempt.
 

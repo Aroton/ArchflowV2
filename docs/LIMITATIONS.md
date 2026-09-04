@@ -30,13 +30,13 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Why accepted:** Rubrics are server review policy, deliberately live-editable without a rebuild — the same posture as task config, which reports edits informationally rather than blocking. Fail-closed fingerprint churn is the honest behavior when review policy changes under an open task; an operator who edits mid-task is changing the rules the task is judged by, and the workflow says so loudly instead of quietly mixing policies across rounds.
 
-## Phase sizing is judgment, not calculation
+## Phase sizing remains approximate
 
-**Not deterministic:** ArchFlow cannot calculate a uniquely correct phase boundary. Whether work forms one coherent repository-ready outcome depends on the product, architecture, predecessor stability, meaningful completion states, and the verification story. File counts, repository layers, work-chunk counts, token estimates, and phase-count targets cannot settle that question.
+**Not deterministic:** ArchFlow cannot calculate a uniquely correct phase boundary or guarantee a token budget. The overall design skill's five-axis rubric estimates relative implementation scope from file surface, interface novelty, verification surface, unknowns, and coupling. Its roughly 300k-token target and score bands are uncalibrated guidance; context compaction and overruns remain possible.
 
-**Existing mitigation:** Architecture design makes explicit split and merge checks against one default: a phase has one primary outcome, a valid completion state, stable predecessor inputs, and one understandable verification story. Broad, small, and genuinely open-ended plans must explain their concrete exception value. Numbered phase design repeats one bounded fit check, and counter-review raises only materially harmful boundary defects rather than enforcing stylistic or numeric preferences.
+**Existing mitigation:** Architecture design uses the rubric internally to guide splits and merges, with a bias toward splitting, while preserving coherent outcomes, valid completion states, stable predecessor inputs, and meaningful verification. Intermediate phases have machine-verifiable exit criteria; genuinely manual validation belongs at the end. Scores are not a required artifact or review criterion. Numbered phase design retains its bounded fit check, and counter-review raises materially harmful boundary defects rather than enforcing numeric preferences. Existing human approval gates are unaffected.
 
-**Why accepted:** Coherent outcome checkpoints make review, recovery, verification, and later work easier to reason about, but turning that guidance into a scoring engine would create false precision and invite gaming. Human and reviewer judgment, constrained by material consequences and durable approval, is the honest control for this prototype.
+**Why accepted:** A lightweight heuristic helps the design agent choose manageable phases without introducing a scoring engine or false guarantees. Actual spend could inform later calibration across roughly 20 phases, but tracking and refitting are optional future work. Concrete boundary rationale and material consequences still govern exceptions.
 
 ## Adversarial stdio peers at the JSON-RPC layer
 
