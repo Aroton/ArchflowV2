@@ -119,8 +119,8 @@ async function createExclusive(path: WritableResolvedPath, bytes: Uint8Array): P
 async function replace(path: WritableResolvedPath, bytes: Uint8Array): Promise<void> {
   // `staged-request` is deliberately replaceable: recomposing an intent before the call
   // overwrites its staged file, and the request digest — not file identity — guards use.
-  if (path.path_class !== "task-state" && path.path_class !== "workspace-gate-interface" && path.path_class !== "workspace-staged-request") {
-    throw new TypeError("replace requires a task-state, gate-interface, or staged-request resolved path");
+  if (path.path_class !== "authority-recovery" && path.path_class !== "task-state" && path.path_class !== "workspace-gate-interface" && path.path_class !== "workspace-staged-request") {
+    throw new TypeError("replace requires a task-state, recovery, gate-interface, or staged-request resolved path");
   }
 
   await replaceRegularBytes(path.absolute, bytes, 0o644);

@@ -1116,12 +1116,11 @@ The committed state carries the settlement and the successor hand-off is offered
   });
 
   register("requires human design approval when a phase design changes the architecture design", async () => {
-    // Fresh-project defaults: the phase-design subject is unlisted, but the shipped content rule
-    // watches the task's governing documents, so rewriting design.md from a phase is one
-    // configured human boundary — and only then.
+    // The independent reviewer identifies a material amendment under the shipped plan-change
+    // rule. Merely changing parent-document bytes no longer opens a blanket content gate.
     const workspace = await createTaskWorkspace({ taskId: "semantic-phase-architecture", label: "semantic-phase-architecture" });
     workspaces.push(workspace);
-    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    restorers.push(installSemanticReviewStub(workspace.root, [[]], { phaseDesignTrigger: "human-approved requirements" }));
     const h = semanticJourneyHarness(workspace);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe an architecture-change journey.\n");
@@ -1194,7 +1193,7 @@ The committed state carries the settlement and the successor hand-off is offered
     if (!phaseDesign.ok) return;
     expect(phaseDesign.value.presentation?.class).toBe("configured-approval");
     expect(phaseDesign.value.presentation?.reasons).toEqual([
-      expect.objectContaining({ class: "configured-approval", text: expect.stringContaining("this phase changed the architecture design") }),
+      expect.objectContaining({ class: "configured-approval", text: expect.stringContaining("human-approval-for-material-plan-changes") }),
     ]);
     phaseDesign = await h.apply(phaseDesignInvocation, phaseDesign.value, { kind: "decision", choice: "approve", reason: "The corrected architecture is right." });
     expect(phaseDesign.ok, JSON.stringify(phaseDesign)).toBe(true);

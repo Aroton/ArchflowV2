@@ -208,14 +208,14 @@ describe("D2 — the agent-supplied roots validate under the Zod authority", () 
  * unprotected, and no leaf chunk's test can see it.
  */
 describe("the claimable and server-owned class sets partition PATH_CLASSES", () => {
-  it("is a partition: 3 + 8 = 11, disjoint, union exact", () => {
+  it("is a partition: 3 + 9 = 12, disjoint, union exact", () => {
     const claimable = new Set<string>(CLAIMABLE_OUTPUT_PATH_CLASSES);
     const serverOwned = new Set<string>(SERVER_OWNED_PATH_CLASSES);
     const all = new Set<string>(PATH_CLASSES);
 
     expect(claimable.size).toBe(3);
-    expect(serverOwned.size).toBe(8);
-    expect(all.size).toBe(11);
+    expect(serverOwned.size).toBe(9);
+    expect(all.size).toBe(12);
 
     expect([...claimable].filter((entry) => serverOwned.has(entry))).toEqual([]);
     expect([...claimable, ...serverOwned].sort()).toEqual([...all].sort());
@@ -361,10 +361,10 @@ describe("the pinned $def inventory resolves", () => {
 });
 
 describe("schema registry invariants", () => {
-  it("SCHEMA_IDS holds 42 entries in exact bijection with the schema directory", () => {
-    expect(Object.keys(SCHEMA_IDS)).toHaveLength(42);
-    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(42);
-    expect(schemaFileNames()).toHaveLength(42);
+  it("SCHEMA_IDS holds 43 entries in exact bijection with the schema directory", () => {
+    expect(Object.keys(SCHEMA_IDS)).toHaveLength(43);
+    expect(new Set(Object.values(SCHEMA_IDS)).size).toBe(43);
+    expect(schemaFileNames()).toHaveLength(43);
 
     const idsInFiles = [...ALL_SCHEMAS.values()].map((document) => document.$id as string).sort();
     expect(idsInFiles).toEqual([...Object.values(SCHEMA_IDS)].sort());
@@ -500,6 +500,19 @@ describe("the phase's exclusions hold", () => {
       "automation-status-v2/oneOf/4/properties/state_revision/anyOf/1/type",
       "automation-status-v2/oneOf/4/properties/position/type",
       "automation-status-v2/oneOf/5/properties/state_revision/anyOf/1/type",
+      "automation-status-v3/oneOf/0/properties/state_revision/anyOf/1/type",
+      "automation-status-v3/oneOf/0/properties/progress/anyOf/1/type",
+      "automation-status-v3/oneOf/1/properties/state_revision/anyOf/1/type",
+      "automation-status-v3/oneOf/1/properties/progress/anyOf/1/type",
+      "automation-status-v3/oneOf/2/properties/state_revision/anyOf/1/type",
+      "automation-status-v3/oneOf/2/properties/progress/anyOf/1/type",
+      "automation-status-v3/oneOf/3/properties/state_revision/anyOf/1/type",
+      "automation-status-v3/oneOf/3/properties/progress/anyOf/1/type",
+      "automation-status-v3/oneOf/4/properties/state_revision/anyOf/1/type",
+      "automation-status-v3/oneOf/4/properties/position/type",
+      "automation-status-v3/oneOf/4/properties/progress/anyOf/1/type",
+      "automation-status-v3/oneOf/5/properties/state_revision/anyOf/1/type",
+      "automation-status-v3/oneOf/5/properties/progress/anyOf/1/type",
       "automation-status/oneOf/0/properties/state_revision/anyOf/1/type",
       "automation-status/oneOf/1/properties/state_revision/anyOf/1/type",
       "automation-status/oneOf/2/properties/state_revision/anyOf/1/type",

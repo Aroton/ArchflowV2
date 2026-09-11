@@ -1,6 +1,6 @@
 # mcp/SERVER
 
-**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** `src/main.ts`, `src/mcp/`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/state/status.ts`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
+**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** `src/main.ts`, `src/mcp/`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/state/status.ts`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
@@ -117,3 +117,8 @@ The read-only semantic snapshot selects authenticated effort evidence for the go
 The public catalogue remains the same two semantic tools. Effort selection is an internal best-effort child of the existing phase-design `review` action, not a new operation. The server passes the authenticated design projection and one captured `.archflow/hazards.yaml` snapshot, then commits either the returned profile or the Sol-medium default with the ordinary review after the existing post-dispatch subject and repository recheck.
 
 Fresh semantic failure projection never exposes an effort-selector failure: invalid configuration, dispatch, or output defaults locally without retry. The configured/invocation route still chooses which selector runs when available. Recommendation fields do not participate in offer derivation, action choice, gate composition, commit facts, or controller launching.
+
+
+## Automation responsibility
+
+Semantic workflow views include optional `progress`: pipeline step/status, completed review count/limit, boundary and explanation, and any current dispatch recovery. The offered action remains the only mutation authority. Automation status v3 represents successor launch as a human-owned transition; semantic offer ownership still belongs only to the exact successor invocation.

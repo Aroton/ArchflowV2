@@ -191,6 +191,7 @@ const TASK_SAMPLES: readonly TaskSample[] = [
       "authority/decisions/gate-1/decision.json",
     ],
   },
+  { path_class: "authority-recovery", claims: ["authority/dispatch-recovery.json"] },
 ];
 
 interface RepositorySample {
@@ -229,7 +230,7 @@ describe.skipIf(!hasGit)("the durable path-class table", () => {
     expect(REPOSITORY_SAMPLES.map((sample) => sample.path_class)).toEqual([
       ...REPOSITORY_PATH_CLASSES,
     ]);
-    expect(TASK_SAMPLES.length + REPOSITORY_SAMPLES.length).toBe(11);
+    expect(TASK_SAMPLES.length + REPOSITORY_SAMPLES.length).toBe(12);
   });
 
   it("resolves every task-scoped class through the resolver that owns it", async () => {
@@ -869,6 +870,6 @@ describe("path brands", () => {
 
   it("keeps the class partition total over PathClass", () => {
     const all: readonly PathClass[] = [...TASK_PATH_CLASSES, ...REPOSITORY_PATH_CLASSES];
-    expect(all).toHaveLength(11);
+    expect(all).toHaveLength(12);
   });
 });

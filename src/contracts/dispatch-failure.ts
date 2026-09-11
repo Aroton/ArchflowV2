@@ -18,9 +18,12 @@ export const DISPATCH_FAILURE_CODES = [
   "CLI_MISSING",
   "AUTH_UNAVAILABLE",
   "RATE_LIMITED",
+  "TIMEOUT",
+  "RECOVERY_STATE_INVALID",
   "UNSUPPORTED_MODEL",
   "CLI_VERSION_UNSUPPORTED",
   "PROCESS_FAILED",
+  "MODEL_OUTPUT_INVALID",
   "REPOSITORY_VIEW_UNAVAILABLE",
 ] as const;
 
@@ -60,7 +63,20 @@ export type PublicDispatchFailureV1 = Readonly<{
   message: string;
   repository_name?: string;
   route?: DispatchFailureRouteV1;
+  recovery?: DispatchRecoveryProgressV1;
 }>;
+
+export type DispatchRecoveryProgressV1 = {
+  readonly status: "retrying" | "exhausted" | "repair-required";
+  readonly dispatches: number;
+  readonly maximum_dispatches: 3;
+  readonly next_retry_at?: string;
+};
+export const dispatchRecoveryProgressV1Schema = z.object({
+  status: z.enum(["retrying", "exhausted", "repair-required"]),
+  dispatches: z.number().int().min(0).max(3), maximum_dispatches: z.literal(3),
+  next_retry_at: z.iso.datetime().optional(),
+}).strict();
 
 const boundedMessage = z.string().min(1).max(256);
 
@@ -109,6 +125,7 @@ export const dispatchFailureObservationV1Schema = z.object({
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE }) as unknown as z.ZodType<DispatchFailureObservationV1>;
 
 export const publicDispatchFailureV1Schema = z.object({
+  recovery: dispatchRecoveryProgressV1Schema.optional(),
   role: z.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   code: z.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,

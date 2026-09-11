@@ -4,10 +4,10 @@ import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync }
 import { basename, dirname, join } from "node:path";
 
 import { buildSync } from "esbuild";
-import { parseAutomationStatusV2, type AutomationStatusV2 } from "../../src/contracts/automation-status.js";
+import { parseAutomationStatusV3, type AutomationStatusV3 } from "../../src/contracts/automation-status.js";
 import type { WorkflowInvocationV1 } from "../../src/contracts/semantic-workflow.js";
 
-export type AutomationObservation = AutomationStatusV2;
+export type AutomationObservation = AutomationStatusV3;
 
 export type AutomationProcessResult = Readonly<{
   status: number | null;
@@ -58,7 +58,7 @@ export function runAutomationStatus(
     stdout: result.stdout,
     stderr: result.stderr,
     ...(result.status === 0 && result.stdout !== ""
-      ? { observation: parseAutomationStatusV2(JSON.parse(result.stdout)) }
+      ? { observation: parseAutomationStatusV3(JSON.parse(result.stdout)) }
       : {}),
   });
 }
@@ -66,7 +66,7 @@ export function runAutomationStatus(
 /** Converts only the published owner descriptor into the semantic invocation a producer uses. */
 export function invocationFromAutomation(observation: AutomationObservation): WorkflowInvocationV1 {
   const action = observation.next_action;
-  if (action.actor !== "skill" && action.actor !== "orchestrator") {
+  if (action.actor !== "skill" && !(action.actor === "human" && action.kind === "launch-skill")) {
     throw new TypeError(`automation actor ${action.actor} does not name a producer`);
   }
   if (action.skill === undefined || action.task_id !== observation.task_id || action.skill_args === undefined) {

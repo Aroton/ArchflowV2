@@ -2266,7 +2266,7 @@ describe("partial review round retry", () => {
       code: "MODEL_OUTPUT_INVALID",
       diagnostic: { parameters: { issue_code: "review-schema-invalid" } },
     });
-    expect(failures).toEqual([]);
+    expect(failures).toEqual(["test-reviewer"]);
     expect(first.envelopes.get(LUNA)).toMatchObject({
       assignment: {
         reviewer_id: "test", focus: "tests",

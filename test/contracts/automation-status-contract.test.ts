@@ -1,3 +1,5 @@
+import { createAutomationStatusV3, parseAutomationStatusV3 } from "../../src/contracts/automation-status.js";
+import automationStatusV3Schema from "../../src/contracts/schemas/v1/automation-status-v3.schema.json" with { type: "json" };
 import { describe, expect, it } from "vitest";
 
 import {
@@ -279,5 +281,21 @@ describe("automation status v2 contract", () => {
     const value = createAutomationStatusV2(document, authority);
     expect(parseAutomationStatusV2(value)).toEqual(value);
     expect(validateV2.assert(value)).toEqual(value);
+  });
+});
+
+
+describe("automation v3 contract", () => {
+  const validateV3 = createJsonSchemaValidator(automationStatusV3Schema, [primitivesSchema, semanticWorkflowSchema, automationStatusV2Schema]);
+  it("publishes a strict human-owned transition and preserves version separation", () => {
+    const legacy = readyV2();
+    const document = { ...legacy, schema_version: "3" as const, progress: null,
+      condition: "awaiting-transition" as const, next_action: { ...legacy.next_action, actor: "human" as const } };
+    const value = createAutomationStatusV3(document as never, authority);
+    expect(parseAutomationStatusV3(value)).toEqual(value);
+    expect(validateV3.assert(value)).toEqual(value);
+    expect(() => parseAutomationStatusV2(value)).toThrow();
+    expect(() => parseAutomationStatus(value)).toThrow();
+    expect(() => parseAutomationStatusV3({ ...value, next_action: { ...value.next_action, actor: "orchestrator" } })).toThrow();
   });
 });

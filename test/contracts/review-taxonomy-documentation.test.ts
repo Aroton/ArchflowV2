@@ -19,7 +19,7 @@ const maintainedPages = [
   "docs/state/DURABLE-STATE.md",
 ] as const;
 const expectedCommit = (path: typeof maintainedPages[number]): string =>
-  path === "docs/TESTING.md" ? "e427a19" : "1d71fee";
+  path === "docs/contracts/AUTOMATION.md" ? "5a75d0e" : path === "docs/TESTING.md" ? "e427a19" : "1d71fee";
 const acceptancePath = "docs/validation/review-taxonomy-acceptance.md";
 
 function page(path: string): string {
@@ -32,7 +32,7 @@ describe("review taxonomy documentation", () => {
       const source = page(path);
       const stamp = source.split("\n")[2];
       expect(stamp, `${path} has its exploration stamp`).toMatch(
-        /^\*\*Explored:\*\* 2026-09-03 · \*\*Commit:\*\* `[0-9a-f]{7}` · \*\*Covers:\*\* .+$/u,
+        /^\*\*Explored:\*\* 2026-09-11 · \*\*Commit:\*\* `[0-9a-f]{7}` · \*\*Covers:\*\* .+$/u,
       );
       expect(stamp).toContain(`\`${expectedCommit(path)}\``);
     }

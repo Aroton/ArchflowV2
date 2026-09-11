@@ -1,6 +1,6 @@
 # contracts/CONTRACTS
 
-**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
+**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
 
 `src/contracts/` is the bottom layer: TypeScript contract modules plus generated JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 
@@ -102,3 +102,8 @@ Automation publishes separate strict v1 and v2 roots. V1 remains available throu
 The public work result preserves its primary top-level fields and optionally carries `repositories`, with exactly one ordinal section for every configured writable secondary. Durable implementation outputs mirror these as `secondary_repositories`; result manifests bind repository-qualified `secondary_projections`. Projection references may carry `repository`; omission is the archive-compatible primary spelling. Equality and ordering use the repository/path tuple, never a joined display string.
 
 Commit-authorization requests retain truthful primary scalar facts and add ordered secondary commit facts. No-wait settlements add the matching secondary milestones. Semantic commit actions expose a fresh `{name, location}` execution projection for a secondary while persisting only its name, identity, target, baseline, subject, message, and paths. Baseline adoption similarly keeps primary fields compatible and adds repository-bearing secondary targets and absences.
+
+
+## Automation responsibility
+
+Automation status v3 adds explicit manual-transition responsibility and a progress projection. The strict v1/v2 parsers retain their historical shapes. `authority-recovery` is a server-owned task path class, excluded from declared implementation outputs, for the bounded dispatch journal; it grants no review, approval or commit authority.

@@ -1,6 +1,6 @@
 # state/DURABLE-STATE
 
-**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`
+**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`, `src/dispatch/recovery.ts`
 
 Durable state is ArchFlow's memory and authority, but not every file the workflow uses deserves that status. The repository now separates tracked, reviewable authority from an ignored workspace containing bytes that are transient, reconstructible, or useful only for diagnosis.
 
@@ -27,6 +27,7 @@ One internal policy-facts projection prevents status, fixed point, request compo
     phases/<n>/{design.md,impl-notes.md}
     authority/
       initialization.json
+      dispatch-recovery.json           # bounded operational retry journal
       results/<result-digest>.json
       decisions/<gate-id>/
         request.json
@@ -40,7 +41,9 @@ One internal policy-facts projection prevents status, fixed point, request compo
 
 The durable side contains human-authored documents, mutable task configuration, pinned constitution policy, `state.json`, the adopted initialization artifact, current result manifests, and gate authority still referenced by state. The `runtime/` side contains intent receipts, crash receipts, locks, duplicate payload bytes, rendered evidence and gate interfaces, raw verification transcripts, legacy import staging, and failed-dispatch diagnostics. `.archflow/.gitignore` ignores that entire tree; initialization checks both that the rule works and that no runtime path is already tracked, without touching the project root `.gitignore`.
 
-Each current review attempt may have one deterministic compact dispatch-failure observation beside the existing random-ID forensic attempt records. The compact file is latest-failure-only and intentionally disposable: it records safe route/code facts plus task, phase instance, step, attempt, and revision solely so status can reject stale or mismatched bytes. It never transitions state, consumes an attempt, mints evidence, opens a gate, or authorizes a retry. Losing it removes convenience only; the same pending durable review authority remains and a still-failing retry can reconstruct the observation.
+Current dispatch failures and retry budgets live in `authority/dispatch-recovery.json`, a bounded operational journal atomically replaced under the existing task lock. Its binding covers the exact phase, attempt, input fingerprint and produced-result reference. It never supplies review, approval, commit, or phase-advance authority and never rewrites the workflow cursor. Each role/route records dispatch count, pending retry time, failure and completion; two automatic transient retries survive producer restarts. A corrupt journal is an explicit repair boundary. Status reads it without mutation and a current journal outranks the older ignored failure observation, including when the repaired failure has cleared.
+
+Random failed-dispatch forensics and old compact observations remain disposable runtime diagnostics. Losing them cannot erase a current durable failure or reset its retry budget. A reason-bearing one-dispatch human override can authorize a fresh attempt on the repaired route or a substitute; it does not waive review.
 
 The same directory holds the retained child outputs of a review round that has not committed yet (`round-<envelope>-<role>-<key>.json`): the validated raw output of each general, test-specialist, or constitution child bound to the exact envelope digest, role, route, and route provenance it answered. A retry of the same round reuses them instead of re-dispatching those children and deletes them when the round commits. They are equally disposable — reuse re-validates the bytes under the current binding, and losing a record costs one re-dispatch, never workflow progress.
 
@@ -194,3 +197,8 @@ Status does not add a durable recommendation pointer or duplicate assessment byt
 Fresh phase-design review evidence nests one authenticated effort assessment beside ordinary reviewer provenance. It binds the exact task, phase instance, attempt, subject/input identities, component-manifest and hazard digests, policy, repository pins, child input/output digests, and any one-dispatch override. The recommendation is server-derived data inside evidence, not a state transition or approval field.
 
 Fixed-point readers require an exact-current, ready assessment for newly reviewed phase designs. An effort blocker remains active even when all ordinary findings are rejected; remaining attempts return to production with the recorded questions, and the maximum reaches the existing exhausted-attempt boundary. Read paths accept absent effort data only for explicitly classified, byte-identical pre-feature authority. Retained-graph accounting continues reading the narrow authenticated manifest slice it consumes, so an old record cannot strand a task merely because its nested review schema predates effort evidence.
+
+
+## Governing document comparisons
+
+With the material-plan-change rule active, review pins changed governing documents beside the most recent eligible human-approved baseline. The loader authenticates the task's approval archives and matching content-addressed production manifests, then reads the original Git blob by its recorded identity and checks its content digest. This avoids comparing only against the previous automatic amendment and silently accumulating a material change. An unavailable original baseline is reported as unavailable evidence, never treated as a non-material change. The comparison is carried in the sealed review artifact, so the independent constitution verdict and its trigger evidence remain bound to the exact reviewed subject.

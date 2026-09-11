@@ -1,3 +1,4 @@
+import { completedReviewRoundCount } from "../review/fixed-point.js";
 import { isDeepStrictEqual } from "node:util";
 
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
@@ -379,6 +380,15 @@ export async function openDurableGate(
       const attemptsContext = input.kind === "attempts-exhausted"
         ? input.context as Extract<GateRequestV1, { kind: "attempts-exhausted" }>["context"]
         : undefined;
+      if (attemptsContext?.completed_review_rounds !== undefined) {
+        if (dependencies.load_retained_manifest === undefined) return issue("STATE_INVALID", current.value, "review-round-history-unavailable");
+        const history = await loadRetainedEvidence({ load_retained_manifest: dependencies.load_retained_manifest }, current.value, current.value.phase_instance);
+        if (!history.ok) return history;
+        const count = completedReviewRoundCount(current.value, history.value);
+        if (count !== attemptsContext.completed_review_rounds || count < attemptsContext.maximum_attempts) {
+          return issue("STATE_INVALID", current.value, "review-round-context-stale");
+        }
+      }
       if (attemptsContext?.review_push_through !== undefined) {
         if (current.value.step !== "triage" || current.value.status !== "succeeded" ||
             dependencies.load_retained_manifest === undefined) {
@@ -436,7 +446,7 @@ export async function openDurableGate(
         const candidate = deriveReviewPushThroughCandidate(current.value, retained.value, subject);
         const expectedMaximum = live.value.config.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
         if (
-          candidate === undefined || current.value.attempt < expectedMaximum ||
+          candidate === undefined || completedReviewRoundCount(current.value, retained.value) < expectedMaximum ||
           input.phase_instance !== current.value.phase_instance ||
           input.subject_digest !== candidate.subject_digest ||
           attemptsContext.step !== current.value.step ||

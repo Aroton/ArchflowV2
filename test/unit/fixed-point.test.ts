@@ -7,7 +7,7 @@ import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 import type { RetainedEvidenceSet } from "../../src/state/evidence-results.js";
 import { deriveEvidenceSetFromCounter } from "../../src/state/evidence-results.js";
 import type { EvidenceSubject } from "../../src/review/fixed-point.js";
-import { assessCurrentEvidence } from "../../src/review/fixed-point.js";
+import { assessCurrentEvidence, completedReviewRoundCount, DEFAULT_MAX_ATTEMPTS } from "../../src/review/fixed-point.js";
 import type { TriageCandidate } from "../../src/contracts/triage.js";
 import type { ResultManifestV1 } from "../../src/contracts/durable-result-manifest.js";
 import { resolvedConstitutionFixture } from "../helpers/resolved-constitution.js";
@@ -313,5 +313,19 @@ describe("fixed-point taxonomy and escalation handling", () => {
     expect(assessment.escalated_human_findings).toBe(true);
     expect(assessment.next).toBe("adjudication-gate");
     expect(assessment.adjudication_gate_pending).toBe(true);
+  });
+});
+
+
+describe("review round accounting", () => {
+  it("defaults to five total rounds and excludes production-entry gaps", () => {
+    expect(DEFAULT_MAX_ATTEMPTS).toBe(5);
+    const state = { ...baseState(), attempt: parseSafeInteger(12) };
+    const history = [1, 4, 8, 12].map((attempt) => ({ attempt: parseSafeInteger(attempt), review_evidence_digest: digest(`round-${attempt}`) }));
+    const retained = new Map([["triage", { reference: { step: "triage", phase_instance: phase }, manifest: makeManifest("triage", {
+      review_round_history: history,
+    }) }]]) as unknown as RetainedEvidenceSet;
+    expect(completedReviewRoundCount(state, retained)).toBe(4);
+    expect(completedReviewRoundCount({ ...state, attempt: parseSafeInteger(13), step: "produce", status: "running" }, retained)).toBe(4);
   });
 });

@@ -20,6 +20,8 @@ const ASSETS = Object.freeze([
   ["constitution/15-dependencies.md", ".archflow/constitution/15-dependencies.md"],
   ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
   ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
+  ["constitution/35-plan-changes.md", ".archflow/constitution/35-plan-changes.md"],
+  ["constitution/45-public-contracts.md", ".archflow/constitution/45-public-contracts.md"],
   ["constitution/40-authentication.md", ".archflow/constitution/40-authentication.md"],
   ["constitution/50-cryptography.md", ".archflow/constitution/50-cryptography.md"],
   ["constitution/60-control-plane.md", ".archflow/constitution/60-control-plane.md"],

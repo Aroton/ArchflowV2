@@ -364,7 +364,7 @@ describe("gate decision presentation", () => {
     const combined = buildHumanGatePresentation(activeGate(CASES[0], "combined-reasons"));
     expect(combined.class).toBe("exception");
     expect(combined.reasons.map((reason) => reason.class)).toEqual([
-      "configured-approval", "exception", "exception",
+      "configured-approval", "exception", "configured-approval",
     ]);
 
     const simple = parseActiveGate({

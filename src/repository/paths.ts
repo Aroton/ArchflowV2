@@ -196,6 +196,7 @@ const anchored = (body: string): RegExp => new RegExp(`^${body}$`, "u");
  * | `authority-decision`| `authority/decisions/<gate-id>/{request,decision}.json`                                     | gate ID                         |
  */
 const TASK_CLASS_RULES: readonly ClassRule<TaskPathClass>[] = [
+  { path_class: "authority-recovery", pattern: anchored("authority/dispatch-recovery\\.json") },
   { path_class: "task-config", pattern: anchored("config\\.yaml") },
   { path_class: "task-state", pattern: anchored("state\\.json") },
   { path_class: "task-ask", pattern: anchored("ask\\.md") },

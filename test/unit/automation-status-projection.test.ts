@@ -1,3 +1,4 @@
+import { projectSemanticStatus } from "../../src/state/semantic-view.js";
 import { describe, expect, it } from "vitest";
 
 import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
@@ -10,7 +11,7 @@ import {
   type SemanticStatusSnapshotV1,
   type WorkflowViewV1,
 } from "../../src/contracts/semantic-workflow.js";
-import { projectAutomationStatus, projectAutomationStatusV2 } from "../../src/local/automation-status.js";
+import { projectAutomationStatus, projectAutomationStatusV2, projectAutomationStatusV3 } from "../../src/local/automation-status.js";
 import type { NextAction, NextActionCode } from "../../src/state/next-action.js";
 import type { TaskStatusV1 } from "../../src/state/status.js";
 import { computeTaxonomyDenialRates } from "../../src/state/semantic-status.js";
@@ -212,4 +213,41 @@ describe("automation status pure projection", () => {
     expect(v2).toMatchObject({ human_boundary: { failed_role: "effort-reviewer" } });
     expect(v2.next_action).toEqual(v1.next_action);
   });
+});
+
+
+describe("automation v3 manual responsibility", () => {
+  it("exposes a user-owned handoff while preserving the legacy controller contract", () => {
+    const current = snapshot(rawAction("advance-phase"));
+    const next = view("ready", "start-next-skill", { next_action: {
+      kind: "start-next-skill", instruction: "Next phase.", skill: "archflow-phase-design", skill_args: ["4"],
+    } });
+    expect(projectAutomationStatusV3(current, next)).toMatchObject({ schema_version: "3", condition: "awaiting-transition",
+      next_action: { actor: "human", kind: "launch-skill", skill: "archflow-phase-design", skill_args: ["4"] } });
+    expect(projectAutomationStatusV2(current, next)).toMatchObject({ schema_version: "2", condition: "ready", next_action: { actor: "orchestrator" } });
+  });
+  it("keeps transient recovery with the producer and escalates exhausted retries", () => {
+    const current = snapshot(rawAction("run-step", { step: "counter_review" }));
+    const pending = view("awaiting-client", "review", { dispatch_failure: {
+      role: "counter-reviewer", code: "RATE_LIMITED", message: "Rate limited.",
+      recovery: { status: "retrying", dispatches: 1, maximum_dispatches: 3 },
+    } });
+    expect(projectAutomationStatusV3(current, pending)).toMatchObject({ condition: "awaiting-client", next_action: { actor: "skill" } });
+    expect(projectAutomationStatusV3(current, { ...pending, dispatch_failure: { ...pending.dispatch_failure!, recovery: {
+      status: "exhausted", dispatches: 3, maximum_dispatches: 3,
+    } } })).toMatchObject({ condition: "awaiting-human", next_action: { actor: "human" }, human_boundary: { source: "dispatch-failure" } });
+  });
+});
+
+
+it("reports durable dispatch intervention consistently in semantic and controller status", () => {
+  const current = snapshot(rawAction("run-step", { step: "counter_review" }));
+  const raw = current.status as unknown as TaskStatusV1;
+  const withFailure = { ...current, status: { ...raw, step: "counter_review", status: "running", dispatch_failure: {
+    role: "counter-reviewer", code: "RATE_LIMITED", message: "Repeated rate limit.",
+    recovery: { status: "exhausted", dispatches: 3, maximum_dispatches: 3 },
+  } } as unknown as PlainJsonValue };
+  const projected = projectSemanticStatus(withFailure).view;
+  expect(projected).toMatchObject({ condition: "awaiting-human", progress: { boundary: "exception" }, next_action: { kind: "review" } });
+  expect(projectAutomationStatusV3(withFailure, projected)).toMatchObject({ condition: "awaiting-human", next_action: { actor: "human" } });
 });

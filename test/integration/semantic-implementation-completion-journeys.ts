@@ -820,7 +820,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     const workspace = await createTaskWorkspace({ taskId: "semantic-impl-exhausted", label: "semantic-impl-exhausted" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
-    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], blocker, blocker, blocker, []]));
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], blocker, blocker, blocker, blocker, blocker, []]));
     const h = semanticJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
 
@@ -856,8 +856,8 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(exhaustedBoundary).toBeDefined();
     // The empirically verified attempt budget: the first produce plus two accepted-finding
     // re-entries converge the loop, and the third remediation round reaches the ceiling.
-    expect(rounds).toBe(3);
-    expect(reviewCountAt(workspace)).toBe(6);
+    expect(rounds).toBe(5);
+    expect(reviewCountAt(workspace)).toBe(8);
     view = exhaustedBoundary!;
     expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
 
@@ -918,6 +918,38 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(reviewCountAt(workspace)).toBe(reviewsBeforeRevision + 1);
   });
 
+  scenario("commits a clean fifth review round without an exhausted-attempt gate", async () => {
+    const finding = [{ finding_id: "material-gap", severity: "blocker", blocking: true,
+      summary: "The implementation misses an observable requirement.", evidence: "The changed behavior is incomplete.",
+      suggested_resolution: "Complete the changed behavior." }];
+    const workspace = await createTaskWorkspace({ taskId: "clean-fifth-round" });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], finding, finding, finding, finding, []]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    let view = await applied(h, invocation, handoff);
+    writeApprovalRulesConfig(workspace, ["**/*.sql"]);
+    for (let round = 1; round <= 5; round++) {
+      const work = writeClientImplementation(workspace, view, `clean-fifth-${round}`);
+      view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+      view = await applied(h, invocation, view);
+      if (round === 5) break;
+      view = await applied(h, invocation, view, { kind: "triage", dispositions: [{ finding_id: "general-material-gap",
+        disposition: "accepted", rationale: "A material defect remains.", revision_intent: "Complete the changed behavior." }] });
+      expect(view.next_action.kind).toBe("revise");
+      view = await applied(h, invocation, view);
+    }
+    expect(view.next_action.kind).toBe("commit");
+    expect(view.presentation).toBeUndefined();
+    expect(view.progress).toMatchObject({ review_rounds_completed: 5, review_round_limit: 5 });
+    clientCommit(workspace, view.next_action.commit!);
+    view = await h.status(invocation);
+    expect(view.next_action.kind).toBe("finish-task");
+    view = await applied(h, invocation, view);
+    expect(view.condition).toBe("complete");
+  });
+
   scenario("pushes through the exact exhausted review and preserves configured commit authorization", async () => {
     const repeated = [{
       finding_id: "repeated-verification-gap", severity: "blocker", blocking: true,
@@ -930,13 +962,13 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
-    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], repeated, repeated, repeated, []]));
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], repeated, repeated, repeated, repeated, repeated, []]));
     const h = semanticJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
 
     let view = await applied(h, invocation, handoff);
     writeApprovalRulesConfig(workspace, ["**/*.ts"]);
-    for (let round = 1; round <= 3; round += 1) {
+    for (let round = 1; round <= 5; round += 1) {
       const work = writeClientImplementation(workspace, view, `push-through-round-${round}`);
       view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
       view = await applied(h, invocation, view);
@@ -947,7 +979,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
         rationale: "The reviewer identified a material gap.",
         revision_intent: "Rework the verification.",
       }] });
-      if (round < 3) {
+      if (round < 5) {
         expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
         view = await applied(h, invocation, view);
         expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
@@ -958,7 +990,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     const reviewsAtExhaustion = reviewCountAt(workspace);
     view = await applied(h, invocation, view, {
       kind: "gate-summary",
-      summary: "Three completed review rounds retained the same exact accepted finding.",
+      summary: "Five completed review rounds retained the same exact accepted finding.",
     });
     expect(view.presentation).toMatchObject({ class: "exception" });
     expect(view.presentation?.options.map((option) => option.token)).toContain("continue-despite-review");
@@ -978,7 +1010,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     expect(view.review_push_throughs).toEqual([expect.objectContaining({
       phase_instance: "phase-impl-1",
-      attempt: 3,
+      attempt: 5,
       status: "current",
       reason: "The exact repeated finding has had sufficient human review; retain all policy and commit checks.",
       accepted_occurrences: [expect.objectContaining({ finding_id: "general-repeated-verification-gap" })],
@@ -1142,7 +1174,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     rounds -= 1;
     expect(boundary).toBeDefined();
     // The default budget: the first produce plus two drift re-entries, then the human decides.
-    expect(rounds).toBe(3);
+    expect(rounds).toBe(5);
     view = boundary!;
     const reviewsAtGate = reviewCountAt(workspace);
 
@@ -1225,7 +1257,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     }
     rounds -= 1;
     expect(boundary).toBeDefined();
-    expect(rounds).toBe(3);
+    expect(rounds).toBe(5);
 
     // At exhaustion the failed rule folds into the ordinary commit-authorization boundary, where
     // a human can authorize, request changes, or waive the rule the reviewer may have misjudged.

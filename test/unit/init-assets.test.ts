@@ -27,7 +27,7 @@ describe("repository asset scaffolding", () => {
     const first = await scaffoldRepositoryAssets({ working_directory: root });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
-    expect(first.value.created).toHaveLength(13);
+    expect(first.value.created).toHaveLength(15);
     expect(first.value.runtime_gitignore).toBe("created");
     expect(first.value.gitattributes_updated).toBe(true);
     expect(readFileSync(join(root, ".archflow", "workflow.yaml"))).toEqual(
@@ -39,7 +39,7 @@ describe("repository asset scaffolding", () => {
     expect(readFileSync(join(root, ".archflow", "hazards.yaml"))).toEqual(
       readFileSync(new URL("../../assets/hazards.yaml", import.meta.url)),
     );
-    for (const path of ["00-process.md", "10-architecture.md"] as const) {
+    for (const path of ["00-process.md", "10-architecture.md", "35-plan-changes.md", "45-public-contracts.md"] as const) {
       expect(readFileSync(join(root, ".archflow", "constitution", path))).toEqual(
         readFileSync(new URL(`../../assets/constitution/${path}`, import.meta.url)),
       );
@@ -53,7 +53,7 @@ describe("repository asset scaffolding", () => {
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(second.value.created).toEqual([]);
-    expect(second.value.unchanged).toHaveLength(13);
+    expect(second.value.unchanged).toHaveLength(15);
     expect(second.value.runtime_gitignore).toBe("already-present");
     expect(second.value.gitattributes_updated).toBe(false);
     expect(readFileSync(join(root, ".gitattributes"), "utf8").match(/\.archflow\/\*\* -text merge=binary/gu)).toHaveLength(1);
@@ -74,7 +74,6 @@ describe("repository asset scaffolding", () => {
       subjects: ["prd", "design"],
       content: [
         { paths: ["**/*.sql"] },
-        { paths: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"] },
       ],
     });
   });

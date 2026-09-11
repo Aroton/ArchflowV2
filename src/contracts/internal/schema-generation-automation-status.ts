@@ -3,6 +3,7 @@ import {
   automationHumanBoundaryV2Schema,
   automationStatusV1Schema,
   automationStatusV2Schema,
+  automationStatusV3Schema,
 } from "../automation-status.js";
 import { SCHEMA_IDS } from "../versions.js";
 import type { SchemaGenerationGroup } from "./schema-generation.js";
@@ -100,6 +101,7 @@ const AUTOMATION_HUMAN_BOUNDARY_V2_FRAGMENT = {
 export const automationStatusSchemaGroup: SchemaGenerationGroup = {
   group: "automation-status",
   documents: [
+    { file: "automation-status-v3", id: SCHEMA_IDS.automationStatusV3, root: automationStatusV3Schema, migrated: true },
     {
       file: "automation-status",
       id: SCHEMA_IDS.automationStatus,

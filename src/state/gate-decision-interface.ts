@@ -325,8 +325,8 @@ function policyFindingReasons(findings: readonly DesignPolicyFinding[]): HumanPr
         text: `${identity} has a ${finding.compliance} policy-compliance finding.`,
       })]),
       ...(finding.trigger === "not-matched" ? [] : [Object.freeze({
-        class: "exception" as const,
-        text: `${identity} has a ${finding.trigger} human-review trigger.`,
+        class: finding.trigger === "matched" ? "configured-approval" as const : "exception" as const,
+        text: `${identity} has a ${finding.trigger} human-review trigger. ${finding.trigger_evidence}`,
       })]),
     ];
   });
@@ -436,7 +436,9 @@ function exceptionalReasons(active: ActiveGateV1): readonly HumanPresentationRea
       case "material-drift":
         return "The reviewed work materially diverges from approved upstream work and requires a recovery decision.";
       case "attempts-exhausted":
-        return active.context.review_push_through === undefined
+        return active.context.completed_review_rounds !== undefined
+          ? `Automated review completed ${active.context.completed_review_rounds} of ${active.context.maximum_attempts} allowed rounds and still has unresolved material findings. Human direction is required.`
+          : active.context.review_push_through === undefined
           ? `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.`
           : `Automated review reached its limit after ${active.context.review_push_through.minimum_attempt} or more completed review rounds; continuing despite the exact accepted findings is an explicit exception.`;
       case "validation-override":

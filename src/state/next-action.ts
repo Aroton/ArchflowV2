@@ -67,6 +67,7 @@ export type NextAction = Readonly<{
 
 /** Agent-resolvable constitution findings, already mapped to the paths a producer can act on. */
 export type PolicyReentryFindings = Readonly<{
+  triggers?: readonly Readonly<{ rule_id: string; rule_version: number; rationale: string }>[];
   rules: readonly Readonly<{
     rule_id: string;
     rule_version: number;
@@ -208,6 +209,9 @@ function policyReentryDetail(findings: PolicyReentryFindings | undefined): strin
   for (const rule of findings?.rules ?? []) {
     const verdict = rule.compliance === "fail" ? "is not met" : "could not be shown to be met";
     lines.push(`Constitution rule ${rule.rule_id} (v${rule.rule_version}) ${verdict}: ${rule.rationale}`);
+  }
+  for (const trigger of findings?.triggers ?? []) {
+    lines.push(`Whether approval rule ${trigger.rule_id} (v${trigger.rule_version}) applies is uncertain: ${trigger.rationale}`);
   }
   for (const drift of findings?.drift ?? []) {
     lines.push(`The work departs materially from ${drift.path} (${drift.affected_claim_ids.join(", ")}): ${drift.rationale}`);

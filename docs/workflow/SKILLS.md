@@ -1,6 +1,6 @@
 # workflow/SKILLS
 
-**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** `skills/`, `src/init/`, `src/contracts/config.ts`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/mcp/handlers/semantic.ts`, `src/state/semantic-*.ts`, `assets/`
+**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** `skills/`, `src/init/`, `src/contracts/config.ts`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/mcp/handlers/semantic.ts`, `src/state/semantic-*.ts`, `assets/`
 
 The nine skills are the human-facing entry points. They are thin judgment and trust-boundary playbooks: the MCP owns durable state, legal transitions, canonical task resource paths, and immutable review policy. Every workflow runs through the semantic status/apply pair; the one purpose-specific local adapter is the legacy upgrade's preview/stage/adopt, which exists only because the destination task does not exist yet at adoption time. In Codex the same skills are invoked with `$` instead of `/`.
 
@@ -116,3 +116,8 @@ From there the task is an ordinary semantic workflow: the imported design is sub
 - **Degraded mode fails safe.** If the MCP server is down, skills run read-only `manual-status`, report the position, make no milestone, and wait for the server — there is no offline recording; the server records all progress. If the helper is gone too, stop and reinstall with `./install.sh`.
 - **Phase designs do not author selector bookkeeping.** The effort selector silently infers implementation components from the ordinary phase design. No `archflow-components-v1` manifest or scoring worksheet is required from the producer.
 - **Effort routing is configurable and failure-safe.** `effort-reviewer` uses the configured route (`gpt-5.6-luna`/`xhigh` by default) and may be declared on phase-design invocation. Its output is only one implementation profile. Any selector failure becomes GPT-5.6 Sol at medium effort without retry or a human boundary; phase design, phase implementation entry, and generic status render only the selected model and effort while preserving the exact next action.
+
+
+## Automation responsibility
+
+Producer skills continue through the exact authenticated commit, then report the successor and stop. Automation status v3 exposes this manual handoff as `awaiting-transition`. Skills do not turn a pending server-managed transient retry into a human question. Five completed review rounds are permitted by default; intentional SQL/public-contract rules and real exceptions remain human decisions.

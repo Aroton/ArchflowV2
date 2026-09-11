@@ -1,3 +1,5 @@
+import { DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
+import type { WorkflowProgressV1 } from "../contracts/workflow-progress.js";
 import { canonicalJsonDigest } from "../contracts/canonical.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
 import { decodePhaseInstance, encodePhaseInstance, parsePositiveSafePhaseNumber, type PhaseInstanceId } from "../contracts/phase-instance.js";
@@ -270,6 +272,7 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
 }
 
 function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1): ProjectionShape {
+  if (status.dispatch_failure?.code === "RECOVERY_STATE_INVALID") return inspect(status.dispatch_failure.message);
   if (markerStatus(snapshot.pending_waiver_origin) === "invalid") {
     return inspect("The pending waiver origin is stale or unauthenticated.");
   }
@@ -330,8 +333,15 @@ function mapNextAction(status: TaskStatusV1, snapshot: SemanticStatusSnapshotV1)
         action_kind: "decide", instruction: presentation.question, expected_submission: "decision", presentation,
       });
     }
-    case "run-step":
-      return mapRunStep(status, action, snapshot);
+    case "run-step": {
+      const step = mapRunStep(status, action, snapshot);
+      const recovery = status.dispatch_failure?.recovery;
+      return step.action_kind === "review" && recovery !== undefined && recovery.status !== "retrying"
+        ? Object.freeze({ ...step, condition: "awaiting-human", headline: "Reviewer recovery needs human attention",
+            detail: status.dispatch_failure!.message,
+            instruction: "Repair the reviewer route or explicitly authorize a one-dispatch retry or substitute, then resume this review." })
+        : step;
+    }
     case "recover-approval-trigger-authority":
       return Object.freeze({
         condition: "ready",
@@ -529,7 +539,26 @@ export function projectSemanticStatus(
   const position = positionFromPhase(status.phase_instance);
   const context = reviewContext(status);
   const strength = reviewStrength(status, snapshot);
+  const recovery = status.dispatch_failure?.recovery;
+  const boundary: WorkflowProgressV1["boundary"] = status.state === "abandoned" ? "abandoned"
+    : status.state === "complete" ? "complete"
+    : shape.presentation !== undefined ? shape.presentation.class
+    : status.dispatch_failure !== undefined && recovery?.status !== "retrying" ? "exception"
+    : shape.action_kind === "start-next-skill" ? "step-transition"
+    : shape.action_kind === "inspect" ? "exception" : "none";
+  const progress: WorkflowProgressV1 | undefined = status.step === undefined || status.status === undefined ? undefined : {
+    step: status.step, step_status: status.status,
+    review_rounds_completed: status.evidence?.assessment?.completed_review_rounds ?? 0,
+    review_round_limit: status.evidence?.assessment?.maximum_review_rounds ?? status.review_round_limit ?? DEFAULT_MAX_ATTEMPTS,
+    boundary,
+    reason: shape.presentation !== undefined ? shape.instruction : recovery?.status === "retrying" ? "A transient reviewer failure is being retried automatically on the same route."
+      : status.dispatch_failure !== undefined ? status.dispatch_failure.message
+      : shape.action_kind === "start-next-skill" ? "This skill is complete. Waiting for the user to launch the named successor."
+      : shape.instruction,
+    ...(recovery === undefined ? {} : { dispatch_recovery: recovery }),
+  };
   const view: WorkflowViewV1 = Object.freeze({
+    ...(progress === undefined ? {} : { progress }),
     schema_version: "1",
     task_id: status.task_id,
     condition: shape.condition,

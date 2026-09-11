@@ -1,6 +1,6 @@
 # cli/COMMANDS
 
-**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
 `archflow-local` is the local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, a degraded human classifier, and the versioned read-only automation observation used by external controllers. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
 
@@ -86,3 +86,8 @@ Nothing in this mode advances the workflow, resolves gates, or records progress.
 `clean --task <id>` is safe to run after an automatic cleanup warning. It never reads stdin, never treats cache as authority, and never rolls a committed transition back.
 
 Repository-aware recovery keeps the existing primary spelling and adds `--repository <name>` for a configured writable secondary. Restore and reconciliation guidance always name the affected repository; the helper resolves that name through the current task configuration and checks its identity and mode rather than accepting a filesystem path. A restore validates every selected repository group before writing, applies primary then ordinal secondaries, and rolls back in reverse on an ordinary failure. Context-only members are never restore targets.
+
+
+## Automation responsibility
+
+`automation-status` now emits schema version 3. A completed skill yields `awaiting-transition` with a human-owned `launch-skill` descriptor. Controllers must wait for the user to launch it. Current-skill continuation and transient retries remain automatic. The v1/v2 contract readers remain available for archived observations; neither may parse v3 as automatic launch permission.

@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -24,7 +24,7 @@ The optional config section has two lists. `subjects` accepts `prd`, `design`, `
 
 An implementation content match is more than a path list at presentation time. The settlement freezes the complete matched-path set; the server joins those paths to the retained implementation output to reconstruct each operation and exact signed byte delta. Rename endpoints are evaluated independently: the old path, new path, or both can match, and a rename away followed by a new add at the old name keeps both operations. This evidence is sorted deterministically and survives later `approval_rules` edits unchanged. A waiting conclusion explains the reviewed diff at the human gate; a no-wait conclusion is consumed only through separately derived exact commit facts.
 
-That decision does not silently rewrite the phase. Approval commits first; the active producer then automatically composes the server-derived `advance` operation and re-runs status until the successor or terminal state is durable. This separation preserves replay and auditability without leaving a customer action gap. If a session stops between the two commits, status recommends the exact destination skill and arguments, and that invocation can complete only its authenticated immediate-predecessor hand-off.
+A human decision or automatic settlement authorizes only the reviewed result. The current producer executes any returned exact commit and observes its proof, then reports the server-derived successor and stops. The user launches that successor, whose invocation alone owns the handoff offer and the next production window.
 
 The workflow file's bytes are digest-pinned into each task at creation, so changing the graph mid-task is detectable, not silently applied. Tasks pinned to the retired four-step workflow digest (the one with a separate `adjudicate` step) are invalidated and either restart or go through `archflow-upgrade`; there is no graph migration. Task routing config is deliberately different: every dispatch or state transaction reads the live task-local file, records the parsed shape as `last_seen_config`, and later status calls report field-level changes without invalidating retained evidence or gates. The retired `producer` role remains accepted on read; other invalid or unknown fields block as `config-invalid` until the human fixes the file.
 
@@ -70,7 +70,7 @@ On the semantic document path, both an explicit triage submission and review's e
 
 The triage-settle transaction evaluates `approval_rules` and persists its complete conclusion when the fixed point is clean or has a foldable policy-adjudication obligation. Subject rules apply to all four workflow subjects; content globs are evaluated against the paths a result changed — every repository path an implementation touched, and the governing task documents (`design.md`, `prd.md`) a later phase rewrote, which is how the shipped defaults keep a human over the architecture while phase designs and implementations that change only their own phase run autonomously. For a content match, the settlement freezes every matching path; joining that set to the retained output supplies the complete per-path operation and exact signed size change, including both independently matched rename endpoints and overlapping rename/add effects. A fresh ordinary gate copies the exact settlement identity and frozen `{wait, match}` into its required `approval_trigger`, alongside rule-authority provenance and any policy findings. An absent or empty section records `wait:false`; exact authenticated policy consumes that conclusion autonomously only when no matching ordinary approval exists. A matching human approval wins in commit, target movement, recovery, and phase-exit proof. Later config edits may be reported without rewriting the gate reasons, and a planning restart makes old settlements ineligible.
 
-Editing the artifact changes the subject digest, which normally invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 3); exhaustion opens an `attempts-exhausted` gate rather than looping forever. A significant human revision begins a new cycle at attempt 1, so exhaustion counts only attempts since the latest such revision.
+Editing the artifact changes the subject digest, which normally invalidates all downstream evidence — the pipeline re-runs until everything agrees about the same bytes. Re-entry is bounded (`max_attempts`, default 5 completed review rounds); exhaustion opens an `attempts-exhausted` gate rather than looping forever. A significant human revision begins a new cycle at attempt 1, so exhaustion counts only attempts since the latest such revision.
 
 **Triage ends the loop, not the finding count.** Only a plain `accepted` disposition forces another round. Rejected and editorial findings are closed. For every non-PRD artifact, the primary general reviewer reruns for a fresh upstream census; every other remediation child receives only its exact latest accepted revision intents. PRD has no upstream census, so its remediation runs only those exact owners and does not reopen an ownerless primary. Ownership is recovered from authenticated run membership and route identity, with version-specific handling for run-less archives. Missing or ambiguous ownership fails closed before dispatch; no reviewer inherits another's finding. The cumulative ledger remains durable for audit and `review_strength`, but is not reviewer memory.
 
@@ -96,7 +96,7 @@ Choosing it advances through the ordinary gate effect and atomically records bot
 
 When a round's only accepted findings are `accepted-editorial`, the producer applies exactly the recorded revision intents and records produce again — and **nothing re-runs**. The revised artifact declares a server-validated, strictly one-hop `editorial_predecessor` link — `{subject_digest, input_fingerprint, triage_result_digest}` naming the exact reviewed bytes, their inputs, and the triage round that authorized the hop. The retained reviews *and* the constitution verdict stay bound to the declared predecessor for that one hop, and the eventual human gate presents the predecessor→final diff with an explicit disclosure that the evidence evaluated the predecessor bytes. A plain `accepted` disposition anywhere in the round still forces full re-entry — the editorial path exists only for rounds that are editorial through and through.
 
-An editorial round consumes an attempt slot like any other re-entry. That is deliberate: if editorial rounds push a task to its attempt cap, the `attempts-exhausted` gate's retry decision is the intended recovery, keeping the human in the loop rather than letting cosmetic churn extend the loop silently.
+Production re-entry retains its durable attempt identity, but only completed review rounds consume the review budget. Optional editorial polish is not a material defect and does not justify a new review round or escalation.
 
 ### Human revisions after a gate
 
@@ -118,7 +118,7 @@ That Git proof is descendant-aware but not permissive. The only candidate is the
 
 Two server-owned no-submission actions keep recovery executable. `refresh-stale-baseline` supersedes an obsolete open baseline interface after its complete path/digest/committedness or target-history subject changes; it records no decision. `recover-milestone-authority` preserves repository bytes but invalidates stale active authority and starts attempt 1 of a significant same-position production/review cycle when proof is missing or a current-owner governing plan changed. A content-preserving rewritten history with no committable delta is not sent into an empty-commit loop: status explains the safe history-restoration or explicit planning-reopen choices instead.
 
-An interrupted handoff has two authenticated owners: the current producer can complete the automatic advance, and a resume invocation for the exact server-derived successor may recover it. Semantic ownership implements that literally: `start-next-skill` is offerable only to the exact successor invocation, while ordinary actions belong only to the current document owner. A different phase number or skill receives the common view but no mutation offer.
+A completed invocation names the successor and stops. Only a resume invocation for that exact successor receives the `start-next-skill` offer and can enter its production window. Automation status v3 calls this `awaiting-transition`: the human launches the next skill, with no additional content-approval dialog.
 
 ### Reopening earlier planning work
 
@@ -193,3 +193,16 @@ At phase-design completion, generic status, and phase-implementation entry, clie
 Only phase design adds the effort selector. Review captures the current plan and hazard registry and dispatches the configured selector alongside the ordinary review group. The selector silently applies the existing component/A–E policy and returns one profile ID. Ready advice exposes only model and effort and does not change the successor or authority path.
 
 Effort selection has no fixed-point authority. It cannot create findings, blockers, re-entry, attempt exhaustion, or a human gate. If it cannot return a valid bound profile, the server records the Sol-medium default and the ordinary review continues without retry. Archived blocker-shaped effort evidence remains readable but is likewise ignored by action selection.
+
+
+## Reading automation responsibility
+
+The cursor is `(phase_instance, step, status, attempt)`. A succeeded pipeline step is not proof that the skill has committed. Current review evidence, authenticated approvals or rule settlement, and observed Git proof determine completion. `adjudicate` remains an evidence slot inside review, never a separate work step.
+
+Semantic `progress` and automation v3 expose the step/status, completed review rounds and limit, operational retry state, and boundary reason. Configured approvals, exceptional intervention, and manual skill transitions have different meanings. A matched constitution trigger is a configured approval; failed or uncertain compliance and uncertain triggers remain exceptions. Several reasons for the same subject are disclosed together.
+
+Five total completed review rounds are allowed by default. Production entries, transport retries, and session restarts do not spend additional rounds. A clean fifth round continues to settlement and commit. Remaining material findings require human direction before another round. Legacy pre-history evidence conservatively retains attempt-based accounting until current evidence establishes completed-round history.
+
+Shipped rules retain SQL, access-control, cryptography/secrets, and workflow-control approvals and add truly public contracts. A language-level public method or an internal export is not an external contract. Meaning-preserving PRD/architecture maintenance is independently assessed against the last human-approved bytes; material decisions still need approval. Explicit project content rules continue to match even a small edit.
+
+Uncertain approval triggers are first returned to the producer with the rule and missing evidence named. They use the completed-review-round budget; only a positively matched trigger opens its configured approval immediately. Unresolved uncertainty at the budget limit remains an explicit exception.

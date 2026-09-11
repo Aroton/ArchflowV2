@@ -286,7 +286,7 @@ describe("durable gate decisions", () => {
     expect(assessCurrentEvidence(assessmentState, changedContext, {
       subject_digest: D("c"), input_fingerprint: inputFingerprint, constitution,
       authenticated_gate_approvals: [loaded.value],
-    }).next).toBe("adjudication-gate");
+    })).toMatchObject({ next: "produce", policy_reentry_required: true });
     const simultaneousObligations = new Map(retained);
     simultaneousObligations.set("adjudicate", entry(D("b"), {
       schema_version: "1", artifact_kind: "adjudication-evidence",

@@ -1,165 +1,83 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** `src/contracts/automation-status.ts`, `src/local/automation-status.ts`, `src/local/commands.ts`, `src/local/main.ts`, `src/state/semantic-status.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-09-11 · **Commit:** `5a75d0e` · **Covers:** `src/contracts/automation-status.ts`, `src/contracts/workflow-progress.ts`, `src/local/automation-status*.ts`, `src/local/commands.ts`, `src/state/semantic-*.ts`, `src/dispatch/recovery.ts`, `test/integration/automation-status-*.test.ts`
 
-`archflow-local automation-status` is the stable read-only handoff between ArchFlow and an external controller. It answers three questions from one reconciled observation: what condition is the task in, who is responsible now, and which canonical skill—if any—owns the next producer session.
+`archflow-local automation-status --task <task>` is the read-only controller contract. It identifies the current condition, responsible actor, and exact next skill or repair action. It never reads stdin, acquires the task lock, dispatches reviewers, edits files, answers gates, stages files, or commits.
 
-The command observes authority; it never creates it. It does not acquire the task lock, open or answer a gate, consume an offer, dispatch a reviewer, write a cache, stage files, or commit. An interactive skill remains the only client that follows `archflow_status`/`archflow_apply`, presents human decisions conversationally, and executes authenticated commit facts.
+The command emits one canonical JSON document using schema version **3** (`urn:archflow:schema:v3:automation-status`, `automation-status-v3.schema.json`). Classified observations exit zero, including blocked and complete states. Invalid arguments or failures that prevent a trustworthy observation return a structured nonzero error. Strict v1/v2 parsers remain available for their historical contracts; consumers must reject unsupported versions, not reinterpret v3 as the old automatic-launch contract.
 
-## Command and process contract
+## Conditions and ownership
 
-```bash
-archflow-local automation-status --task <task>
-```
-
-`automation-status` is task-required, accepts no payload, and never reads stdin—even when its parent leaves stdin open. Each invocation prints exactly one canonical JSON document to stdout. (The `--repository <name>` flag that `restore` accepts for a configured writable secondary is rejected by every other command, including this one; see `../cli/COMMANDS.md`.)
-
-- A classified observation exits `0`, including `blocked` and `complete`.
-- Invalid arguments or a repository/preflight/identity failure that prevents a trustworthy classification exit nonzero, print one structured `ok:false` project-error envelope to stdout, and print a concise reason to stderr.
-- The successful document is the status object itself, not an `{ok,value}` wrapper.
-- The command emits automation status v2. Its JSON Schema is `src/contracts/schemas/v1/automation-status-v2.schema.json`, identified by `urn:archflow:schema:v2:automation-status`. The separate v1 schema, parser, and constructors remain strict compatibility surfaces; v1 and v2 reject each other's bytes. Consumers should reject unknown fields and unsupported `schema_version` values.
-
-## Document contract
-
-Every successful arm has these fields:
-
-```text
-schema_version  "2"
-task_id         exact requested task ID
-observation_id  SHA-256 identifier for this complete derived observation
-state_revision  non-negative durable revision, or null when no readable canonical state exists
-condition       awaiting-client | awaiting-human | ready | blocked | complete
-position        prd | design | phase-design N | phase-impl N, or null only where authority is unreadable/staged
-next_action     exactly one condition-specific discriminated action
-implementation_recommendation  authenticated ready | unavailable agent advice
-validation_overrides           optional authenticated/safe validation-exception audit (v2 only)
-review_push_throughs            optional authenticated/safe review-exception audit (v2 only)
-```
-
-The closed union permits `human_boundary` only on `awaiting-human`, and `blocked` only on `blocked`.
-
-| Condition | Responsible actor | Action kind | Meaning |
+| Condition | Responsible actor | Next action | Meaning |
 |---|---|---|---|
-| `awaiting-client` | `skill` | `continue-skill` | Start or resume the returned owning skill if no producer is already alive. |
-| `awaiting-human` | `human` | `respond-in-session` | Put the returned owning skill in front of a human; do not answer on the controller's behalf. |
-| `ready` | `orchestrator` | `launch-skill` | Launch exactly the returned successor skill and string arguments. |
-| `blocked` | `operator` | `repair` | Stop producer automation and surface the safe instruction and category. |
-| `complete` | `none` | `none` | Stop the task loop. |
+| `awaiting-client` | skill | `continue-skill` | Start or resume this skill when no producer is alive. Includes automatic review, remediation, recovery, retries, and authenticated commits. |
+| `awaiting-human` | human | `respond-in-session` | Present the owning interactive skill's configured approval or real exception. |
+| `awaiting-transition` | human | `launch-skill` | The current skill has finished. Wait for the user to launch exactly the returned successor. |
+| `blocked` | operator | `repair` | Trustworthy continuation is unavailable. Explain the reason and repair instruction. |
+| `complete` | none | `none` | Stop the task loop. `progress.boundary` distinguishes completion from abandonment. |
 
-Skill, human, and orchestrator actions include `skill`, `task_id`, `skill_args`, and a human-readable `instruction`. Owner descriptors are canonical: PRD is `archflow-prd []`, design is `archflow-design []`, phase design N is `archflow-phase-design ["N"]`, and phase implementation N is `archflow-phase-impl ["N"]`. A readable adopted legacy task still at migration audit is owned by `archflow-upgrade`; staged imports are blocked operator states, not invented producer work.
+The complete skill, not an internal pipeline step, is the manual handoff boundary. No extra content approval is needed at that handoff. Only the exact successor invocation receives the semantic `start-next-skill` offer. A controller never calculates the next phase number or starts successor work because a pipeline step merely says `succeeded`.
 
-Only semantic `ready` plus the server-returned `start-next-skill` action becomes `ready/orchestrator/launch-skill`. Every other live workflow action—including initialization, production, review, triage, gate-summary preparation, archived-decision settlement, revision, waiver opening, commit execution, recovery, handoff completion, and task finishing—remains current-skill continuation. Controllers must never calculate a phase number or infer a successor from the current position.
+Every document carries `schema_version`, `task_id`, `observation_id`, `state_revision`, `position`, `condition`, `next_action`, `implementation_recommendation`, and `progress`. Positionless damaged/staged states have `position:null`; a new task has a PRD position and `state_revision:null`. `progress:null` means no readable pipeline position is available.
 
-### Human boundaries
+`progress` exposes:
 
-Every `awaiting-human` arm carries one shape:
+- `step` and `step_status`: durable pipeline activity, separate from skill completion.
+- `review_rounds_completed` and `review_round_limit`: completed review rounds, with a default limit of five.
+- `boundary`: `none`, `configured-approval`, `exception`, `step-transition`, `complete`, or `abandoned`.
+- `reason`: the human-readable explanation of the next responsibility.
+- Optional `dispatch_recovery`: retry status, dispatches consumed, maximum dispatches (three including the initial call), and a scheduled retry time when present.
 
-```json
-{
-  "class": "configured-approval",
-  "source": "presentation",
-  "headline": "SQL changes require approval",
-  "summary": "The reviewed implementation changes a configured protected path.",
-  "question": "Do you authorize this reviewed result?",
-  "reasons": [
-    {
-      "class": "configured-approval",
-      "text": "A configured SQL path rule matched the implementation."
-    }
-  ]
-}
-```
-
-`source` is `presentation` for a durable gate and `dispatch-failure` for the current disposable reviewer diagnostic. `class` is `configured-approval` only when every structured reason is an ordinary configured approval; any safety, recovery, unavailable-reviewer, inconclusive-policy, missing-evidence, exhausted-attempt, validation-override, or review-push-through reason makes it `exception`. The boundary never contains a decision token. Return the human's natural-language response to the owning interactive session; that skill presents the authenticated choices and submits the selected opaque decision.
-
-An exact-current reviewer dispatch failure temporarily takes precedence over the ordinary pending-review projection. It appears as an exceptional human boundary naming the failed role and safe repair-or-substitute conversation. This disposable observation says the last current dispatch failed; it is not durable proof that the outage persists, does not consume a review attempt, and does not authorize fallback. A repaired producer must retry using the same declared invocation route, or obtain the human's reason-bearing one-dispatch substitute through the owning skill.
-
-### Blocked observations
-
-Every `blocked` arm has `blocked.category`, `blocked.reasons`, and an operator `repair` instruction. Stable categories are:
-
-- Semantic inspection: `inspect-state`, `resume-exact-intent`, `inspect-retained-receipt`, `create-fresh-intent`, `resolve-current-authority`.
-- Projection-owned recovery: `state-unreadable`, `legacy-upgrade-staged`, `legacy-upgrade-restart-required`, `archived-decision-invalid`, `revision-checkpoint-invalid`, `waiver-origin-invalid`, `presentation-unavailable`, `commit-facts-unavailable`.
-
-Reasons are safe explanatory text. Paths, offers, digests, decision tokens, and mechanical archive identifiers are intentionally absent. A blocked document is a successful observation and exits zero; stop automation and follow only its operator instruction.
+Progress describes authority; it never supplies an approval token or substitutes for the next semantic action. Human presentations derive from durable gate requests, completed-round counts derive from authenticated retained evidence, handoffs derive from settlement/approval plus Git proof, and dispatch recovery derives from the durable operational journal.
 
 ## Controller loop
 
-Maintain at most one live producer per task:
+Keep at most one live producer per task:
 
 ```text
 poll
- ├─ awaiting-client + producer alive  → keep observing
- ├─ awaiting-client + no producer     → resume returned owning skill
- ├─ awaiting-human                    → present/resume owning interactive session
- ├─ ready                             → refetch, then launch returned successor
- ├─ blocked                           → stop and surface repair instruction
- └─ complete                          → stop
+ ├─ awaiting-client + producer alive → keep observing
+ ├─ awaiting-client + no producer    → resume the returned owning skill
+ ├─ awaiting-human                  → present the owning interactive session
+ ├─ awaiting-transition             → wait for the user's successor launch
+ ├─ blocked                         → surface the exact repair instruction
+ └─ complete                        → stop
 ```
 
-Never launch a second producer merely because polling says `awaiting-client` while one is alive. Refetch after producer exit, after a human response, after a config edit, and immediately before a launch. If the resumed skill finds its semantic offer stale, it calls status again and follows the fresh server action; the controller must not replay or reconstruct an internal offer.
+Refetch after producer exit, human response, configuration change, or repository change, and before a user-requested launch. A stale semantic offer causes a fresh status read, not a guessed replay. A transient retry does not permit a second producer while the existing review call is alive.
 
-The same loop covers a clean task from PRD through completion. With no matching approval rules, clean reviews advance to `ready` descriptors for design, numbered phase design, and numbered phase implementation until terminal `complete`; no human response or inferred phase order is needed. A constitution rule the work fails, or material drift from its plan, is `awaiting-client` work (a revise offer naming what to resolve), not `awaiting-human`; under shipped defaults the human boundaries are the PRD, the architecture design and any later rewrite of it or the PRD, SQL changes, the three shipped constitution triggers (access-control changes, cryptography and secrets handling, and ArchFlow control-plane file edits), and an exhausted attempt budget. With a matching `**/*.sql` implementation rule, the reviewed implementation instead reports one `awaiting-human` configured boundary. Approval in the owning session authorizes those exact bytes; after the client executes the returned commit facts and status proves the commit, automation exposes the next returned successor.
+For example, a completed phase design names `archflow-phase-impl` with `skill_args:["2"]`. The user starts `$archflow-phase-impl <task> 2` in Codex or `/archflow-phase-impl <task> 2` in Claude. The completed design invocation stops; the implementation invocation consumes its own handoff and begins work only after the server authenticates the design authority.
 
-## Launching producers
+## Configured approvals and exceptions
 
-Translate the returned canonical skill name into the host's native invocation syntax, preserving `task_id` and every `skill_args` entry exactly:
+An `awaiting-human` document carries `human_boundary` with a class, source, headline, summary, question, and structured reasons. It never contains a decision token. Return the user's natural-language answer to the owning skill, which presents and submits the authenticated choice.
 
-```text
-Claude: /archflow-prd example
-Codex:  $archflow-prd example
+A passed compliance review with a matched policy trigger is `configured-approval`, as are configured subject and content matches. Failed or uncertain compliance, uncertain triggers, unavailable authority, and exceptional recovery remain `exception`; any exceptional reason makes the overall boundary exceptional. Multiple same-subject reasons appear together.
 
-Claude: /archflow-phase-design example 2
-Codex:  $archflow-phase-design example 2
+The defaults retain PRD and architecture approval, deterministic approval for every changed SQL path, and access-control, cryptography/secrets, and workflow-control triggers. They add truly public contract changes and material amendments to approved PRD/architecture decisions. A public method on an internal class is not an external contract. Meaning-preserving governing-document maintenance may proceed after independent comparison with the last human-approved bytes. Explicit project content rules still apply, even to a small change.
 
-Claude: /archflow-phase-impl example 2
-Codex:  $archflow-phase-impl example 2
-```
+An SQL approval identifies the matching paths and the owning session explains their frozen operations and byte deltas. Public-contract approval names the externally consumed surface and the change, through authenticated trigger evidence. Approval authorizes the reviewed subject; it never means a later implementation can borrow an earlier design's approval for different bytes.
 
-The controller may append invocation-declared reviewer routes after those returned positionals:
+## Two separate retry budgets
 
-```text
-Claude: /archflow-phase-impl example 2 --counter-reviewer claude-fable-5:high --adjudicator gpt-5.6-sol:xhigh
-Codex:  $archflow-phase-impl example 2 --counter-reviewer claude-fable-5:high --adjudicator gpt-5.6-sol:xhigh
-```
+The server automatically retries positively classified transient reviewer failures twice on the same route. Rate limits, timeouts, recognized temporary transport failures, and unavailable repository views qualify. Missing credentials, invalid/unsupported routes, invalid model output, cancellation, and generic process failures do not. Valid sibling results keep their existing exact-envelope reuse.
 
-A route is `model:effort[@provider]`. Each role is optional independently. A supplied role is normal invocation input and wins over the task's live phase/base configuration for that run; an omitted role falls back to configuration. The selected candidate is validated without falling through on failure. Evidence records whether the actual route came from configuration, the invocation, or a human one-dispatch override. Invocation routing is controller-declared, not authenticated as a human decision, and the producer must repeat it byte-for-byte through retries and significant revisions.
+The bounded `authority/dispatch-recovery.json` journal records dispatch progress under the task lock with atomic replacement. It is operational state and cannot grant review, approval, commit, or advancement authority. Producer restart or deleted ignored diagnostics cannot reset the budget. Corruption becomes an explicit repair boundary. While recovery says `retrying`, v3 remains `awaiting-client`; exhausted or repair-required failures become `awaiting-human`. An explicit reason-bearing one-dispatch override can authorize a repaired or substitute route; it does not skip review.
 
-## First observation and damaged authority
+Valid reviewer feedback is a separate loop: up to five total completed review rounds by default. Routine production entries and transport retries do not spend rounds. A clean fifth round advances normally; unresolved material findings require human direction before a sixth. Existing pre-history evidence retains conservative legacy accounting, and explicit task `max_attempts` values remain the configured limit. A significant human-directed revision starts its authenticated new cycle.
 
-- No canonical state and no staged import is a valid new task: `awaiting-client`, PRD position, `state_revision:null`, and `archflow-prd` ownership.
-- One authenticated current-format legacy stage is `blocked/legacy-upgrade-staged`; old, ambiguous, or incompatible stages are `blocked/legacy-upgrade-restart-required`.
-- Unreadable or noncanonical state is a zero-exit `blocked/state-unreadable` observation with only safe best-effort position context.
-- Repository discovery, preflight, or identity failure that prevents those classifications is a structured nonzero command failure.
+## Observation identity and recovery
 
-Malformed output or an unsupported schema version is a controller error: do not guess. Invalid invocation routes and unavailable reviewers stay with the owning producer as exceptional human boundaries. Git mismatch or reconciliation drift never becomes a launch; it projects the current skill's recovery work or a blocked/operator action. A controller should log the safe public status and leave forensic state to the interactive workflow.
+`observation_id` binds the entire public document, canonical state identity, live configuration, and semantic snapshot under the v3 domain. It changes when responsibility, gate reasons, review advice, retry progress, or Git proof changes. It is a deduplication key, never an offer, lease, approval, or mutation token. Repeated identical observations leave files unchanged.
 
-## Freshness, identity, and polling cost
+No canonical state and no staged import is a valid new PRD task. Unreadable state or incompatible staged imports produce blocked observations. Recovery categories include `inspect-state`, `resume-exact-intent`, `inspect-retained-receipt`, `create-fresh-intent`, `resolve-current-authority`, `state-unreadable`, legacy-upgrade categories, invalid archived decisions/revision checkpoints/waiver origins, and unavailable presentations or commit facts. Safe existing server recovery actions remain current-skill work; ambiguous receipts, conflicting bytes, destructive restores, and unavailable proof remain explicit repair or human boundaries.
 
-`observation_id` hashes a purpose-tagged canonical structure containing the entire ID-less public observation plus the canonical state identity (or classified absence) and live parsed-config identity. It is stable across identical observations and changes when controller-relevant durable state, live configuration, presentation, reconciliation/worktree proof, Git proof, or edge classification changes. It is useful for deduplication and change detection only. It is not an offer, precondition, approval, lease, or mutation token.
+Raw `.archflow` files, offers, gate archives, and decision tokens are not controller APIs. Poll the published command; the owning interactive skill performs authorized mutations. The read path may authenticate current evidence and hash projected files, so polling has a cost. Prefer event-driven reads and short polling intervals appropriate to repository size. The existing benchmark enforces bounded Git calls and cold-process time; it is a regression ceiling, not a performance promise.
 
-Polling is bounded but not free: the readable path opens the repository once, reads the small authority and retained manifests required by semantic status, and may hash projected worktree files because drift affects the answer. It never reads raw review payloads, `ask.md`, or rendered gate UI, and creates no cache. On the reference Linux x64 machine (Node v24.19.0, Intel Core i5-13500T), five cold bundled-process samples against a representative committed task spawned Git 28 times each and took 936.127–976.153 ms (967.246 ms median). The regression test permits at most 64 invariant Git spawns and 5 seconds per sample; those are generous test ceilings, not performance promises for other repositories or machines. Controllers may poll every one to two seconds for small active tasks, but event-driven reads after producer exit, human response, config change, or repository change avoid unnecessary cold Git work.
+## Advice, audit fields, and adoption
 
-Tests assert repeated observations leave `.archflow` byte-for-byte unchanged and launch no reviewer. Repeated identical reads return the same ID; durable state, config, gate, worktree reconciliation, and observed commit changes return a new ID.
+`implementation_recommendation`, `validation_overrides`, and `review_push_throughs` retain their v2 meanings. Both audit arrays are copied after action selection and cannot change the selected actor, successor, approval, or commit authority. Advice never changes authority or reviewer routing. Validation exceptions never report skipped checks as passed, and review push-through never bypasses configured approvals, policy, or commit proof. Current effort-selector failures retain their advisory fallback and never create a human boundary.
 
-## Trust boundary and optional MCP equivalent
+Update controllers to understand v3 before consuming the new CLI. Existing task-local configurations and pinned constitutions are not silently rewritten. To adopt the defaults, explicitly review the repository seed policy and the task's approval rules: keep intentional custom content rules, remove the old blanket parent-document path rule only when adopting the independently reviewed material-plan-change rule, and preserve the SQL rule. Existing pinned tasks retain their old governing policy until an explicit policy-adoption action. Adoption never retroactively clears an open gate or changes archived human decisions. Rebuilding the tracked distribution does not authorize a machine-global install.
 
-The public controller interfaces are this versioned document, its JSON Schema, and the skill descriptors it returns. Raw `.archflow` state, gate archives, retained manifests, semantic offers, digests, and decision tokens are internal authority—not controller APIs. Do not read, copy, submit, or calculate them.
-
-An MCP-based controller may expose an equivalent read-only observation, but it must preserve this exact classification, descriptor, freshness, and no-mutation behavior. MCP is optional: controllers need only the local command and published schema.
-
-## Implementation recommendation
-
-V2 requires the same `implementation_recommendation` union published by semantic status on every condition arm. `ready` carries only the selected implementation `model` and `effort`; private scores, component breakdown, selector provenance, and fallback diagnostics are not exposed. `unavailable` distinguishes `not-applicable`, `not-produced`, `subject-stale`, and `legacy-evidence`; positionless edge documents use `not-applicable` without inventing a phase.
-
-The recommendation is observational. Projection copies it after action selection and never branches on it to select an actor, action, owner, successor, repair, or launch. Registry-created/removed/changed/unreadable caveats likewise do not change currency or action. V2 observation identity binds the complete recommendation bytes under the `archflow-automation-observation-v2` domain, so advice changes are visible to polling without becoming authority.
-
-The V2 parser retains `effort-reviewer` in its historical `failed_role` vocabulary, but fresh effort-selector failures are absorbed into the Sol-medium default and never emit that boundary. V1 retains its original closed vocabulary and compatibility projection; `parseAutomationStatus` remains the documented v1 alias. Controllers may display the returned agent but must not infer authority from it.
-
-## Validation and review-exception audit
-
-Automation v2 may include `validation_overrides` and `review_push_throughs`. The projector copies both only after the ordinary semantic condition, actor, owner, and next action have been selected. Adding, removing, corrupting, or reclassifying an audit entry can change `observation_id`, but it cannot turn `awaiting-client` into `ready`, choose a successor, change a gate, or authorize a commit. V1 remains unchanged and strict: it has neither field and rejects v2 bytes.
-
-An authenticated validation entry identifies the phase and gate, says `granted`, distinguishes whether it is current, and exposes the archived human reason/time, governing input fingerprint and phase-design digest, and exact displaced validation descriptions. Those descriptions mean **not run**, never passed. An authenticated review push-through entry identifies the phase, gate, attempt, current-versus-historical status, human reason/time, and exact accepted `{review_evidence_digest, finding_id}` occurrences.
-
-Archive failures are fail-quiet, not fabricated. An `invalid` or `unavailable` validation entry exposes only phase, gate, and status. Its push-through counterpart exposes only phase, gate, attempt, and status. Reason, timestamp, input, governing design, validations, and finding occurrences appear only after the underlying request and decision archives authenticate. Controllers may display this audit but must not treat it as an instruction or re-evaluate its authority.
+Uncertain approval triggers are first returned to the producer with the rule and missing evidence named. They use the completed-review-round budget; only a positively matched trigger opens its configured approval immediately. Unresolved uncertainty at the budget limit remains an explicit exception.

@@ -73,7 +73,6 @@ describe("config template", () => {
       subjects: ["prd", "design"],
       content: [
         { paths: ["**/*.sql"] },
-        { paths: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"] },
       ],
     });
     expect(config.approval_rules?.subjects).not.toContain("phase-design");

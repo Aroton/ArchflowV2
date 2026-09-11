@@ -88,7 +88,7 @@ describe("dispatch-failure observation", () => {
     });
     expect(classifiedDispatchFailure(new DispatchRoutingError(
       createProjectError("MODEL_OUTPUT_INVALID", { adapter: "claude-cli", attempt: 1, issue_code: "secret-tail" }),
-    ))).toBeUndefined();
+    ))).toEqual({ code: "MODEL_OUTPUT_INVALID", message: "The reviewer returned invalid structured output. Repair the response contract before retrying." });
     expect(classifiedDispatchFailure(new Error("raw child stderr"))).toBeUndefined();
   });
 

@@ -122,7 +122,7 @@ export function tryRepositoryPathClaim(value: RawGitPath): RepositoryPathClaim |
 
 export const TASK_PATH_CLASSES = [
   "task-config", "task-state", "task-ask", "document",
-  "authority-initialization", "authority-result", "authority-decision",
+  "authority-initialization", "authority-result", "authority-decision", "authority-recovery",
 ] as const;
 export const REPOSITORY_PATH_CLASSES = [
   "shared-workflow", "shared-constitution", "task-branch-constitution", "repository-source",

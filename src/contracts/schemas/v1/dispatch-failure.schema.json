@@ -37,9 +37,12 @@
         "CLI_MISSING",
         "AUTH_UNAVAILABLE",
         "RATE_LIMITED",
+        "TIMEOUT",
+        "RECOVERY_STATE_INVALID",
         "UNSUPPORTED_MODEL",
         "CLI_VERSION_UNSUPPORTED",
         "PROCESS_FAILED",
+        "MODEL_OUTPUT_INVALID",
         "REPOSITORY_VIEW_UNAVAILABLE"
       ]
     },

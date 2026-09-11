@@ -1,0 +1,1224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v3:automation-status",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "3"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string",
+                  "enum": [
+                    "produce",
+                    "counter_review",
+                    "triage",
+                    "adjudicate"
+                  ]
+                },
+                "step_status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "succeeded",
+                    "failed"
+                  ]
+                },
+                "review_rounds_completed": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "review_round_limit": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "boundary": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "configured-approval",
+                    "exception",
+                    "step-transition",
+                    "complete",
+                    "abandoned"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "dispatch_recovery": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "retrying",
+                        "exhausted",
+                        "repair-required"
+                      ]
+                    },
+                    "dispatches": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "maximum_dispatches": {
+                      "type": "number",
+                      "const": 3
+                    },
+                    "next_retry_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "dispatches",
+                    "maximum_dispatches"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "step",
+                "step_status",
+                "review_rounds_completed",
+                "review_round_limit",
+                "boundary",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "const": "awaiting-client"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "skill"
+            },
+            "kind": {
+              "type": "string",
+              "const": "continue-skill"
+            },
+            "skill": {
+              "type": "string",
+              "enum": [
+                "archflow-upgrade",
+                "archflow-prd",
+                "archflow-design",
+                "archflow-phase-design",
+                "archflow-phase-impl"
+              ]
+            },
+            "task_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+            },
+            "skill_args": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "skill",
+            "task_id",
+            "skill_args",
+            "instruction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "progress",
+        "condition",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "3"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string",
+                  "enum": [
+                    "produce",
+                    "counter_review",
+                    "triage",
+                    "adjudicate"
+                  ]
+                },
+                "step_status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "succeeded",
+                    "failed"
+                  ]
+                },
+                "review_rounds_completed": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "review_round_limit": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "boundary": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "configured-approval",
+                    "exception",
+                    "step-transition",
+                    "complete",
+                    "abandoned"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "dispatch_recovery": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "retrying",
+                        "exhausted",
+                        "repair-required"
+                      ]
+                    },
+                    "dispatches": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "maximum_dispatches": {
+                      "type": "number",
+                      "const": 3
+                    },
+                    "next_retry_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "dispatches",
+                    "maximum_dispatches"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "step",
+                "step_status",
+                "review_rounds_completed",
+                "review_round_limit",
+                "boundary",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "const": "awaiting-human"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "human"
+            },
+            "kind": {
+              "type": "string",
+              "const": "respond-in-session"
+            },
+            "skill": {
+              "type": "string",
+              "enum": [
+                "archflow-upgrade",
+                "archflow-prd",
+                "archflow-design",
+                "archflow-phase-design",
+                "archflow-phase-impl"
+              ]
+            },
+            "task_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+            },
+            "skill_args": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "skill",
+            "task_id",
+            "skill_args",
+            "instruction"
+          ],
+          "additionalProperties": false
+        },
+        "human_boundary": {
+          "$ref": "urn:archflow:schema:v2:automation-status#/$defs/humanBoundary"
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "progress",
+        "condition",
+        "next_action",
+        "human_boundary"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "3"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string",
+                  "enum": [
+                    "produce",
+                    "counter_review",
+                    "triage",
+                    "adjudicate"
+                  ]
+                },
+                "step_status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "succeeded",
+                    "failed"
+                  ]
+                },
+                "review_rounds_completed": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "review_round_limit": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "boundary": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "configured-approval",
+                    "exception",
+                    "step-transition",
+                    "complete",
+                    "abandoned"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "dispatch_recovery": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "retrying",
+                        "exhausted",
+                        "repair-required"
+                      ]
+                    },
+                    "dispatches": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "maximum_dispatches": {
+                      "type": "number",
+                      "const": 3
+                    },
+                    "next_retry_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "dispatches",
+                    "maximum_dispatches"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "step",
+                "step_status",
+                "review_rounds_completed",
+                "review_round_limit",
+                "boundary",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "const": "awaiting-transition"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "human"
+            },
+            "kind": {
+              "type": "string",
+              "const": "launch-skill"
+            },
+            "skill": {
+              "type": "string",
+              "enum": [
+                "archflow-upgrade",
+                "archflow-prd",
+                "archflow-design",
+                "archflow-phase-design",
+                "archflow-phase-impl"
+              ]
+            },
+            "task_id": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+            },
+            "skill_args": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "skill",
+            "task_id",
+            "skill_args",
+            "instruction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "progress",
+        "condition",
+        "next_action"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "3"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string",
+                  "enum": [
+                    "produce",
+                    "counter_review",
+                    "triage",
+                    "adjudicate"
+                  ]
+                },
+                "step_status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "succeeded",
+                    "failed"
+                  ]
+                },
+                "review_rounds_completed": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "review_round_limit": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "boundary": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "configured-approval",
+                    "exception",
+                    "step-transition",
+                    "complete",
+                    "abandoned"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "dispatch_recovery": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "retrying",
+                        "exhausted",
+                        "repair-required"
+                      ]
+                    },
+                    "dispatches": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "maximum_dispatches": {
+                      "type": "number",
+                      "const": 3
+                    },
+                    "next_retry_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "dispatches",
+                    "maximum_dispatches"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "step",
+                "step_status",
+                "review_rounds_completed",
+                "review_round_limit",
+                "boundary",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "const": "blocked"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "operator"
+            },
+            "kind": {
+              "type": "string",
+              "const": "repair"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "instruction"
+          ],
+          "additionalProperties": false
+        },
+        "blocked": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "inspect-state",
+                "resume-exact-intent",
+                "inspect-retained-receipt",
+                "create-fresh-intent",
+                "resolve-current-authority",
+                "archived-decision-invalid",
+                "revision-checkpoint-invalid",
+                "waiver-origin-invalid",
+                "presentation-unavailable",
+                "commit-facts-unavailable"
+              ]
+            },
+            "reasons": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": [
+            "category",
+            "reasons"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "progress",
+        "condition",
+        "next_action",
+        "blocked"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "3"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "type": "null"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string",
+                  "enum": [
+                    "produce",
+                    "counter_review",
+                    "triage",
+                    "adjudicate"
+                  ]
+                },
+                "step_status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "succeeded",
+                    "failed"
+                  ]
+                },
+                "review_rounds_completed": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "review_round_limit": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "boundary": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "configured-approval",
+                    "exception",
+                    "step-transition",
+                    "complete",
+                    "abandoned"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "dispatch_recovery": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "retrying",
+                        "exhausted",
+                        "repair-required"
+                      ]
+                    },
+                    "dispatches": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "maximum_dispatches": {
+                      "type": "number",
+                      "const": 3
+                    },
+                    "next_retry_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "dispatches",
+                    "maximum_dispatches"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "step",
+                "step_status",
+                "review_rounds_completed",
+                "review_round_limit",
+                "boundary",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "const": "blocked"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "operator"
+            },
+            "kind": {
+              "type": "string",
+              "const": "repair"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "instruction"
+          ],
+          "additionalProperties": false
+        },
+        "blocked": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "state-unreadable",
+                "legacy-upgrade-staged",
+                "legacy-upgrade-restart-required"
+              ]
+            },
+            "reasons": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096,
+                "pattern": "\\S"
+              }
+            }
+          },
+          "required": [
+            "category",
+            "reasons"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "progress",
+        "condition",
+        "next_action",
+        "blocked"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "3"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "observation_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "state_revision": {
+          "anyOf": [
+            {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/workflowPosition"
+        },
+        "implementation_recommendation": {
+          "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/implementationRecommendation"
+        },
+        "validation_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicValidationOverrideAudit"
+          }
+        },
+        "review_push_throughs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:archflow:schema:v1:semantic-workflow#/$defs/publicReviewPushThroughAudit"
+          }
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string",
+                  "enum": [
+                    "produce",
+                    "counter_review",
+                    "triage",
+                    "adjudicate"
+                  ]
+                },
+                "step_status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "succeeded",
+                    "failed"
+                  ]
+                },
+                "review_rounds_completed": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "review_round_limit": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "boundary": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "configured-approval",
+                    "exception",
+                    "step-transition",
+                    "complete",
+                    "abandoned"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "dispatch_recovery": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "retrying",
+                        "exhausted",
+                        "repair-required"
+                      ]
+                    },
+                    "dispatches": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "maximum_dispatches": {
+                      "type": "number",
+                      "const": 3
+                    },
+                    "next_retry_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "dispatches",
+                    "maximum_dispatches"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "step",
+                "step_status",
+                "review_rounds_completed",
+                "review_round_limit",
+                "boundary",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "const": "complete"
+        },
+        "next_action": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "const": "none"
+            },
+            "kind": {
+              "type": "string",
+              "const": "none"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "actor",
+            "kind",
+            "instruction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "observation_id",
+        "state_revision",
+        "position",
+        "implementation_recommendation",
+        "progress",
+        "condition",
+        "next_action"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

@@ -31,6 +31,6 @@ describe("advertised MCP tool catalogue", () => {
     // The ceiling retains about 3% headroom so accidental recursive growth still fails while
     // accounting for the expanded user-visible review contract.
     // Input roots and their host-compatibility constraints remain unchanged.
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(67_700);
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(69_000);
   });
 });

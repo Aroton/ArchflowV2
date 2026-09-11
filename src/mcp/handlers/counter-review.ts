@@ -1,3 +1,5 @@
+import { governingDocumentComparisons } from "../../state/governing-document-comparison.js";
+import { createDispatchRecovery } from "../../dispatch/recovery.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -510,6 +512,14 @@ export async function handleCounterReview(
       services.runner, state.value.policy_base_commit, services.authority.context,
     );
     if (!constitution.ok) return constitution;
+    if (constitution.value.rules.get("human-approval-for-material-plan-changes")?.status === "active") {
+      const comparisons = await governingDocumentComparisons(services.dependencies, services.authority, state.value, produce.value);
+      if (comparisons.length > 0) artifact = JSON.stringify({
+        produced_artifact: artifact,
+        governing_document_comparisons: comparisons,
+        comparison_instruction: "Compare proposed governing documents against these exact human-approved baselines. Preserve approved requirements, architecture, external interfaces, trust boundaries and verification commitments. Wording, formatting and implementation-detail updates that preserve those decisions are non-material. Missing baseline evidence is uncertain, never evidence of a harmless amendment.",
+      });
+    }
     const activeRules = [...constitution.value.rules.values()]
       .some((rule) => rule.status === "active");
     const repositoryViewCommit = await resolveRepositoryViewCommit(
@@ -656,16 +666,18 @@ export async function handleCounterReview(
       phase_instance: state.value.phase_instance,
       attempt: state.value.attempt,
     });
+    const recovery = createDispatchRecovery({ authority: services.authority, dependencies: services.dependencies, state: state.value, signal: context.signal,
+      ...(call.input.route_override === undefined ? {} : { retry_authorization: canonicalJsonDigest({ intent_id: call.input.intent_id, override: call.input.route_override } as unknown as PlainJsonValue) }) });
+    const diagnosticObserver = createDispatchFailureObserver({ authority: services.authority, dependencies: services.dependencies,
+      phase_instance: state.value.phase_instance, attempt: state.value.attempt, observed_at_revision: state.value.revision });
     const result = await runCounterReview({
       transaction: services.dependencies,
       dispatch: coordinator,
-      observe_failure: createDispatchFailureObserver({
-        authority: services.authority,
-        dependencies: services.dependencies,
-        phase_instance: state.value.phase_instance,
-        attempt: state.value.attempt,
-        observed_at_revision: state.value.revision,
-      }),
+      retry_dispatch: (role, selected, envelopeDigest, operation) => recovery.run(role, selected, operation, envelopeDigest),
+      observe_failure: async (role, selected, error) => {
+        await recovery.observe(role, selected, error);
+        await diagnosticObserver(role, selected, error);
+      },
       ...(retainedOutputs === undefined ? {} : { retained_outputs: retainedOutputs }),
       ...(dispatchAlreadySerialized ? {
         serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),

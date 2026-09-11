@@ -59,10 +59,10 @@ producers:
 #     effort: high
 #     provider: zai
 
-# Optional. Caps produce re-entries per phase instance before the attempts-exhausted
-# gate opens; defaults to 3. This is a thrash backstop, not the primary brake — the
+# Optional. Caps completed review rounds per revision cycle before the attempts-exhausted
+# gate opens; defaults to 5. Transport retries and production entries do not consume rounds. This is a thrash backstop, not the primary brake — the
 # loop ends when triage accepts nothing, so review convergence is a triage judgment.
-# max_attempts: 3
+# max_attempts: 5
 
 # Optional task repository set. Task creation copies this declaration into the
 # task-local config; that task remains the only source of task resources, policy,
@@ -113,12 +113,11 @@ producers:
 # (`.archflow/tasks/<task>/design.md` is the architecture design, `prd.md` the PRD).
 # Counter-review still runs for every subject; when no rule matches and no safety
 # condition opens a gate, the authenticated workflow advances and commits without a
-# human decision. The shipped defaults gate the PRD, the architecture design, any
-# later rewrite of either, and SQL changes — a phase design or implementation that
+# human decision. The shipped defaults gate the PRD, the architecture design, material
+# later amendments through constitution review, and SQL changes — a phase design or implementation that
 # changes only its own phase runs to commit on its own.
 approval_rules:
   subjects: [prd, design]
   content:
     - paths: ["**/*.sql"]
-    - paths: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"]
 

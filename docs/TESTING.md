@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-09-03 · **Commit:** `e427a19` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
+**Explored:** 2026-09-11 · **Commit:** `e427a19` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
 
 ## The default is deliberately fast
 
@@ -129,3 +129,8 @@ Contract tests validate the minimal `ImplementationRecommendationV1` ready and u
 - Name tests for the behavior they cover, never the workflow phase that introduced them.
 
 There is no coverage percentage gate. Confidence comes from the fast representative layer plus explicitly chosen deeper evidence when the affected boundary warrants it.
+
+
+## Automation responsibility
+
+Automation regressions cover bounded transient retries, persistence across producer restarts and deleted diagnostics, corrupted recovery state, intentional policy-trigger classification, five-round remediation accounting, and v3 manual handoffs. Integration controller fixtures simulate an explicit human launch at each successor boundary rather than inferring permission to run the next skill.

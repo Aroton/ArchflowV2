@@ -558,6 +558,9 @@
             },
             "maximum_attempts": {
               "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
+            },
+            "completed_review_rounds": {
+              "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
             }
           },
           "required": [
@@ -655,6 +658,9 @@
               "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
             },
             "maximum_attempts": {
+              "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
+            },
+            "completed_review_rounds": {
               "$ref": "urn:archflow:schema:v1:gate-contract#/$defs/safeInteger"
             },
             "review_push_through": {

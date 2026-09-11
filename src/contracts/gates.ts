@@ -154,7 +154,7 @@ export type GateContractByKind = {
    */
   readonly "constitution-review": { readonly context: { readonly constitution: "pass" | "fail" | "uncertain"; readonly failed_rules: readonly RuleVersionRef[]; readonly uncertain_rules: readonly RuleVersionRef[]; readonly matched_trigger_rules: readonly RuleVersionRef[]; readonly uncertain_trigger_rules: readonly RuleVersionRef[]; readonly eligible_waivers: readonly EligibleWaiver[] }; readonly decision: { readonly decision: "approve" | "revise" | "reject"; readonly reason: string } | { readonly decision: "waiver-requested"; readonly reason: string; readonly rule: RuleVersionRef; readonly operation: WaivableOperation; readonly rationale: string } };
   readonly "material-drift": { readonly context: { readonly affected_upstream: EvidenceIdentityRef; readonly drift: "material"; readonly affected_claim_ids: readonly string[] }; readonly decision: { readonly decision: "amend-upstream" | "revise-current" | "reject"; readonly reason: string } };
-  readonly "attempts-exhausted": { readonly context: { readonly step: PipelineStep; readonly attempts: number; readonly maximum_attempts: number; readonly review_push_through?: ReviewPushThroughContextV1 }; readonly decision: { readonly decision: "retry-once" | "revise" | "abort" | "push-through-review"; readonly reason: string } };
+  readonly "attempts-exhausted": { readonly context: { readonly step: PipelineStep; readonly attempts: number; readonly maximum_attempts: number; readonly completed_review_rounds?: number; readonly review_push_through?: ReviewPushThroughContextV1 }; readonly decision: { readonly decision: "retry-once" | "revise" | "abort" | "push-through-review"; readonly reason: string } };
   readonly "validation-override": { readonly context: {
     readonly request_revision: SafeInteger;
     readonly input_fingerprint: Sha256Digest;
@@ -417,11 +417,13 @@ export const legacyAttemptsExhaustedContextSchema = z.object({
   step: z.enum(PIPELINE_STEPS),
   attempts: safeInteger,
   maximum_attempts: safeInteger,
+  completed_review_rounds: safeInteger.optional(),
 }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts");
 export const reviewPushThroughAttemptsExhaustedContextSchema = z.object({
   step: z.enum(PIPELINE_STEPS),
   attempts: safeInteger,
   maximum_attempts: safeInteger,
+  completed_review_rounds: safeInteger.optional(),
   review_push_through: reviewPushThroughContextV1Schema,
 }).strict().superRefine((value, context) => {
   if (value.attempts < value.maximum_attempts) context.addIssue({ code: "custom", path: ["attempts"], message: "attempts must be at least maximum_attempts" });
@@ -451,7 +453,7 @@ const contexts = {
     }
   }),
   "material-drift": z.object({ affected_upstream: z.object({ kind: z.enum(["prd", "architecture", "phase-design", "implementation-result", "review", "adjudication", "constitution", "workflow", "import"]), digest }).strict(), drift: z.literal("material"), affected_claim_ids: canonicalStrings.min(1) }).strict(),
-  "attempts-exhausted": z.object({ step: z.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger, review_push_through: reviewPushThroughContextV1Schema.optional() }).strict().superRefine((value, context) => {
+  "attempts-exhausted": z.object({ step: z.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger, completed_review_rounds: safeInteger.optional(), review_push_through: reviewPushThroughContextV1Schema.optional() }).strict().superRefine((value, context) => {
     if (value.attempts < value.maximum_attempts) context.addIssue({ code: "custom", path: ["attempts"], message: "attempts must be at least maximum_attempts" });
     if (value.review_push_through !== undefined && value.attempts < value.review_push_through.minimum_attempt) {
       context.addIssue({ code: "custom", path: ["review_push_through", "minimum_attempt"], message: "attempts must meet the review push-through minimum" });

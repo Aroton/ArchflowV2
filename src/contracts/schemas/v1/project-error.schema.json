@@ -28,6 +28,7 @@
         "authority-initialization",
         "authority-result",
         "authority-decision",
+        "authority-recovery",
         "shared-workflow",
         "shared-constitution",
         "task-branch-constitution",

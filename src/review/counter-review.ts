@@ -47,6 +47,7 @@ import type {
 } from "../contracts/review.js";
 import { expectedReviewSummaryV2 } from "../contracts/review.js";
 import {
+  CliAdapterError,
   mintAdjudicationObservation,
   mintReviewObservation,
   serializeDispatch,
@@ -192,6 +193,7 @@ export function reviewOutputIssueCode(error: unknown): string {
 
 export type RunCounterReviewDependencies = Readonly<{
   transaction: TransactionDependencies;
+  retry_dispatch?: <T>(role: DispatchFailureRoleV1, selected: SelectedRouteCandidate, envelopeDigest: Sha256Digest, operation: () => Promise<T>) => Promise<T>;
   dispatch: (
     route: DispatchRoute,
     envelope: DispatchEnvelope,
@@ -496,9 +498,10 @@ export async function runCounterReview(
     role: DispatchFailureRoleV1,
     selected: Readonly<{ candidate: SelectedRouteCandidate; selection: SelectedDispatchRoute }>,
     dispatch: (route: DispatchRoute) => Promise<T>,
+    envelopeDigest: Sha256Digest,
   ): Promise<T> => {
     try {
-      return await dispatch(selected.selection.route);
+      return await (dependencies.retry_dispatch?.(role, selected.candidate, envelopeDigest, () => dispatch(selected.selection.route)) ?? dispatch(selected.selection.route));
     } catch (error) {
       await observeFailure(role, selected.candidate, error);
       throw error;
@@ -824,10 +827,15 @@ export async function runCounterReview(
     }
     let dispatched: CounterReviewDispatchResult;
     try {
-      dispatched = await dispatchObserved(routeEntry.role, routeEntry, (selectedRoute) =>
-        dependencies.dispatch(selectedRoute, reviewEnvelope, reviewOutputSchema as PlainJsonValue));
+      dispatched = await dispatchObserved(routeEntry.role, routeEntry, async (selectedRoute) => {
+        const result = await dependencies.dispatch(selectedRoute, reviewEnvelope, reviewOutputSchema as PlainJsonValue);
+        try { mint(result); } catch (error) {
+          throw new CliAdapterError(createProjectError("MODEL_OUTPUT_INVALID", { adapter: selectedRoute.adapter, attempt: 1, issue_code: reviewOutputIssueCode(error) }));
+        }
+        return result;
+      }, reviewEnvelope.digest);
     } catch (error) {
-      return { ok: false, error };
+      return { ok: false, error, ...(error instanceof CliAdapterError && error.project_error.code === "MODEL_OUTPUT_INVALID" ? { project_error: error.project_error } : {}) };
     }
     let observation: ReviewObservation;
     try {
@@ -930,15 +938,20 @@ export async function runCounterReview(
       }
       let dispatched: CounterReviewDispatchResult;
       try {
-        dispatched = await dispatchObserved("adjudicator", constitutionRoute, (selectedRoute) =>
-          plan.dispatch(
+        dispatched = await dispatchObserved("adjudicator", constitutionRoute, async (selectedRoute) => {
+          const result = await plan.dispatch(
             selectedRoute,
             constitutionEnvelope,
             JSON.parse(JSON.stringify(createRawAdjudicationV2Schema(plan.rule_slots)
               .toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue,
-          ));
+          );
+          try { mint(result); } catch (error) {
+            throw new CliAdapterError(error instanceof AdjudicationServiceError ? error.project_error : createProjectError("MODEL_OUTPUT_INVALID", { adapter: selectedRoute.adapter, attempt: 1, issue_code: adjudicationOutputIssueCode(error) }));
+          }
+          return result;
+        }, constitutionEnvelope.digest);
       } catch (error) {
-        return { ok: false, error };
+        return { ok: false, error, ...(error instanceof CliAdapterError && error.project_error.code === "MODEL_OUTPUT_INVALID" ? { project_error: error.project_error } : {}) };
       }
       let evidence: AdjudicationEvidence;
       try {

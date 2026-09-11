@@ -373,11 +373,11 @@ export function selectPolicyReviewGates(
 
 /**
  * True when the repository's constitution asked for this gate itself: a rule's `review_trigger`
- * matched (or could not be ruled out). Compliance failures and drift are producer work first.
+ * matched. An uncertain trigger, compliance failure, or drift is producer work first.
  */
 export function gateDeclaredByReviewTrigger(gate: AdjudicationGateRequest): boolean {
   if (gate.kind !== "constitution-review" || !("matched_trigger_rules" in gate.context)) return false;
-  return gate.context.matched_trigger_rules.length > 0 || gate.context.uncertain_trigger_rules.length > 0;
+  return gate.context.matched_trigger_rules.length > 0;
 }
 
 /** Compatibility selector for callers that can publish only the next gate. */

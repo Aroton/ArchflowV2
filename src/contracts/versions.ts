@@ -42,5 +42,6 @@ export const SCHEMA_IDS = {
   semanticWorkflow: "urn:archflow:schema:v1:semantic-workflow",
   dispatchFailure: "urn:archflow:schema:v1:dispatch-failure",
   automationStatus: "urn:archflow:schema:v1:automation-status",
+  automationStatusV3: "urn:archflow:schema:v3:automation-status",
   automationStatusV2: "urn:archflow:schema:v2:automation-status",
 } as const;

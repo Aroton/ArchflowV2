@@ -626,6 +626,9 @@ function classifyMessage(adapter: AdapterId, message: string): ProjectError | un
     const model = modelFromMessage(message);
     if (model !== undefined) return createProjectError("UNSUPPORTED_MODEL", { model });
   }
+  if (/\b(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|service temporarily unavailable|bad gateway|gateway timeout)\b|\bHTTP\s+(?:502|503|504)\b/iu.test(message)) {
+    return createProjectError("PROCESS_FAILED", { adapter, exit_class: "transient-transport" });
+  }
   return undefined;
 }
 

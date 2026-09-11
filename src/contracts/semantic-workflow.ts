@@ -1,3 +1,4 @@
+import { workflowProgressV1Schema, type WorkflowProgressV1 } from "./workflow-progress.js";
 import { z } from "zod";
 
 import { gitOidV1Schema, type GitOid } from "./canonical.js";
@@ -343,6 +344,7 @@ export type RepositoryStatusV1 = {
 };
 
 export type WorkflowViewV1 = {
+  readonly progress?: WorkflowProgressV1;
   readonly schema_version: "1";
   readonly task_id: string;
   readonly condition: WorkflowConditionV1;
@@ -787,6 +789,7 @@ export const publicReviewPushThroughAuditV1Schema = z.discriminatedUnion("status
 ]) as unknown as z.ZodType<PublicReviewPushThroughAuditV1>;
 
 export const workflowViewV1Schema = z.object({
+  progress: workflowProgressV1Schema.optional(),
   schema_version: z.literal("1"),
   task_id: taskSlugV1Schema,
   condition: z.enum(WORKFLOW_CONDITIONS),

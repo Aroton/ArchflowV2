@@ -1,12 +1,12 @@
 {
-  "host_selection_result_digest": "c1bc8390dee502f7ab3cac3fdc6d4aefe0c79f681efd7b73f2f3c5d5f348072f",
+  "host_selection_result_digest": "9fe90886ac0679b979a722efb489d1b1fe0580c31b38a8360d46ee4285e17300",
   "observed_metrics": {
     "advertisement_hosts": 2,
-    "blocked_journey_hosts": 0,
-    "completed_journey_hosts": 2,
+    "blocked_journey_hosts": 1,
+    "completed_journey_hosts": 1,
     "first_call_selection_hosts": 2
   },
-  "recorded_at": "2026-09-04",
+  "recorded_at": "2026-09-11",
   "schema_version": "1",
   "thresholds": {
     "minimum_advertisement_hosts": 2,

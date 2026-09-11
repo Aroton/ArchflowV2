@@ -1,6 +1,6 @@
 # OVERVIEW
 
-**Explored:** 2026-09-03 · **Commit:** `1d71fee` · **Covers:** the whole repository
+**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** the whole repository
 
 ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, either family by explicit config). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
 
@@ -127,3 +127,8 @@ Phase-design review has one additional best-effort child: the configurable effor
 That evidence now has one authenticated public projection. Phase-design completion, generic status, phase-implementation entry, and automation status v2 receive the same `ready`, `blocked`, or `unavailable` recommendation while the server-derived action remains unchanged. Reviewer provenance—including a conspicuous one-dispatch substitute—stays separate from the recommended implementation profile, and the actual producer route is explicitly not recorded. Live hazard-registry drift may add an informational caveat but cannot rewrite sealed evidence or workflow authority.
 
 This split defines recovery honestly. A fresh clone reconstructs status, current result validation, and gate UI from tracked authority, verified projections, and recorded Git blobs. It recovers the last checked-in durable boundary, not uncommitted implementation or cache bytes. Durable `.archflow` files exist only on the working branch for resumability and are removed before the final product PR.
+
+
+## Automation responsibility
+
+A producer invocation normally runs through review, remediation and its authenticated commit. The user launches the next skill at the explicit handoff. Automation v3 distinguishes that handoff from configured SQL/public-contract approvals and genuine exceptions; transient dispatch retries and five completed review rounds have separate budgets.

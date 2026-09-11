@@ -1,3 +1,4 @@
+import { readDispatchRecovery } from "../dispatch/recovery.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -506,6 +507,7 @@ export type TaskStatusV1 = Readonly<{
   open_gate_id?: PathSafeId;
   blocking_reasons: readonly string[];
   attempt?: number;
+  review_round_limit?: number;
   input_fingerprint?: Sha256Digest;
   /** Canonical task and runtime paths the current phase reads or writes. */
   resources?: readonly StatusResource[];
@@ -1950,6 +1952,8 @@ async function computeTaskStatusDetailedInternal(
           [...constitution.rules.values()].some((rule) => rule.status === "active"),
         );
         policyFindings = Object.freeze({
+          triggers: Object.freeze(facts.constitution.rule_findings.filter((finding) => finding.trigger === "uncertain")
+            .map((finding) => Object.freeze({ rule_id: finding.rule_id, rule_version: finding.rule_version, rationale: finding.trigger_evidence }))),
           rules: Object.freeze(facts.constitution.rule_findings
             .filter((finding) => finding.compliance !== "pass")
             .map((finding) => Object.freeze({
@@ -2457,6 +2461,9 @@ async function computeTaskStatusDetailedInternal(
     // A disposable diagnostic projection never blocks or changes canonical workflow status.
   }
 
+  const durableDispatchFailure = await readDispatchRecovery({ dependencies, authority, state });
+  if (durableDispatchFailure !== undefined) dispatchFailure = durableDispatchFailure ?? undefined;
+
   const validationOverrides: PublicValidationOverrideAuditV1[] = (state.validation_overrides ?? []).map((record) => {
     const authenticated = authenticatedValidationOverrides.find((item) => item.record.gate_id === record.gate_id);
     if (authenticated === undefined) {
@@ -2525,6 +2532,7 @@ async function computeTaskStatusDetailedInternal(
   if (!reviewPolicy.ok) return reviewPolicy;
   const status: TaskStatusV1 = Object.freeze({
     task_id: authority.task_id,
+    review_round_limit: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
     state: state.terminal ?? "active",
     revision: state.revision,
     phase_instance: state.phase_instance,

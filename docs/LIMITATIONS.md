@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-08-31 · **Commit:** `fe0e4ce` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-09-11 · **Commit:** `fe0e4ce` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -241,3 +241,12 @@ These limitations assume a trusted developer account and a filesystem not being 
 **Existing mitigation:** Fresh effort-selector failures no longer reach automation at all: the server uses the fixed Sol-medium default and continues ordinary review. V2 retains the historical enum for archived projections; V1 remains a separate strict compatibility contract.
 
 **Why accepted:** Widening v1 would break strict readers. A deliberate v2 lets updated controllers consume the real role and advice while old consumers can continue parsing exactly the contract they adopted.
+
+
+## Automation responsibility
+
+Public-contract and governing-amendment materiality are independent reviewer judgments over pinned evidence, not syntactic proofs. Public class visibility alone is not an approval trigger. Original governing-document Git blobs must remain available for non-material amendment assessment; missing authenticated before-images cannot silently clear approval. Durable dispatch recovery records operational failures, but cannot make an unavailable filesystem or corrupt task authority writable.
+
+### Observed Antigravity workspace mismatch
+
+The 2026-09-11 real-host investigation observed `agy` advertising the supplied temporary repository snapshot as its cwd while its `run_command` tool actually started in the machine-global Antigravity scratch directory. The reviewer searched outside the snapshot, located the source fixture and read the test itself before reporting the seeded defect. A passing assertion from that run is contaminated evidence, not proof of an independent review. Passing a process cwd and disabling slash commands do not isolate Antigravity tool execution or inherited context. The adapter needs a verified workspace binding before this route can support a clean repository-scope validation claim. See [investigation evidence](validation/real-host-investigation-2026-09-11.md).

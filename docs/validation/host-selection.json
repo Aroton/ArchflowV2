@@ -1,7 +1,7 @@
 {
-  "host_selection_result_digest": "c1bc8390dee502f7ab3cac3fdc6d4aefe0c79f681efd7b73f2f3c5d5f348072f",
+  "host_selection_result_digest": "9fe90886ac0679b979a722efb489d1b1fe0580c31b38a8360d46ee4285e17300",
   "observation_payload": {
-    "bundle_manifest_sha256": "f2828755069b4ab3761360c0cc9eddd843ac8ee14a2c618e6d5cc955e1e3a33a",
+    "bundle_manifest_sha256": "3accc348400e2ccb3dfcfa017095c6214c391f34f5e6262ab41d52e0b3539ff8",
     "hosts": {
       "claude": {
         "advertisement": {
@@ -11,7 +11,7 @@
             "archflow_status"
           ]
         },
-        "cli_version": "2.1.259 (Claude Code)",
+        "cli_version": "2.1.269 (Claude Code)",
         "first_call_selection": {
           "first_archflow_tool": "archflow_status",
           "prompt": "What is the current status of the ArchFlow task hostsel-claude? Answer in one sentence.",
@@ -40,7 +40,7 @@
             "archflow_status"
           ]
         },
-        "cli_version": "codex-cli 0.153.3",
+        "cli_version": "codex-cli 0.154.0",
         "first_call_selection": {
           "first_archflow_tool": "archflow_status",
           "prompt": "What is the current status of the ArchFlow task hostsel-codex? Answer in one sentence.",
@@ -48,24 +48,19 @@
           "task_id": "hostsel-codex"
         },
         "journey": {
-          "final_next_action_kind": "submit-work",
-          "initialize_task_apply_seen": true,
-          "reason": "",
-          "status": "completed",
-          "task_state": {
-            "phase_instance": "prd",
-            "revision": 1,
-            "status": "running",
-            "step": "produce"
-          }
+          "final_next_action_kind": "",
+          "initialize_task_apply_seen": false,
+          "reason": "no successful invocation-scoped archflow_status call in 1 attempt(s)",
+          "status": "blocked",
+          "task_state": null
         },
         "requested_model": "gpt-5.6-sol"
       }
     },
     "observed_metrics": {
       "advertisement_hosts": 2,
-      "blocked_journey_hosts": 0,
-      "completed_journey_hosts": 2,
+      "blocked_journey_hosts": 1,
+      "completed_journey_hosts": 1,
       "first_call_selection_hosts": 2
     },
     "schema_version": "1",

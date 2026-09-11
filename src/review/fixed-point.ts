@@ -38,7 +38,27 @@ import {
 } from "./adjudication.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
 
-export const DEFAULT_MAX_ATTEMPTS = 3;
+export const DEFAULT_MAX_ATTEMPTS = 5;
+
+/** Count authenticated completed rounds, not production entries or transport retries.
+ * Pre-history records retain their conservative attempt-based accounting.
+ */
+export function completedReviewRoundCount(state: TaskStateV1, retained: RetainedEvidenceSet): number {
+  const triage = triageAt(retained);
+  const history = triage?.review_round_history;
+  if (history === undefined) {
+    const artifact = retained.get("counter_review")?.manifest.source_artifact;
+    if (artifact?.artifact_kind !== "review-evidence") return 0;
+    if (artifact.evidence.schema_version === "3") return 1;
+    return state.attempt;
+  }
+  const attempts = new Set(history.filter((round) => round.attempt <= state.attempt).map((round) => round.attempt));
+  const review = retained.get("counter_review");
+  if (review !== undefined && review.reference.phase_instance === state.phase_instance &&
+      !history.some((round) => round.review_evidence_digest === review.manifest.artifact_digest) &&
+      (state.step === "triage" || (state.step === "counter_review" && state.status === "succeeded"))) attempts.add(state.attempt);
+  return attempts.size;
+}
 export { REVIEW_PUSH_THROUGH_MIN_ATTEMPT };
 
 const EVIDENCE_STEPS = Object.freeze([
@@ -108,6 +128,8 @@ export type ReviewPushThroughCandidate = Readonly<{
 }>;
 
 export type EvidenceAssessment = Readonly<{
+  completed_review_rounds?: number;
+  maximum_review_rounds?: number;
   current: readonly PipelineStep[];
   stale: readonly PipelineStep[];
   every_finding_dispositioned: boolean;
@@ -832,7 +854,7 @@ function resolveAdjudicationGateStep(
   // The same action covers both halves of the commit/publication crash window:
   // recreate the deterministic gate when absent, or resume the exact open gate.
   const pending = adjudicationGatePending(state, gate);
-  if (!pending && !gateDeclaredByReviewTrigger(gate) && state.attempt < maximum) {
+  if (!pending && !gateDeclaredByReviewTrigger(gate) && completedReviewRoundCount(state, retained) < maximum) {
     return decision("produce", { reentry_required: true, policy_reentry_required: true });
   }
   return decision("adjudication-gate", { adjudication_gate_pending: pending });
@@ -936,8 +958,11 @@ export function assessCurrentEvidence(
   const action = decideNextAction(
     state, retained, subject, current, disposition, triageCurrent, maximum, acceptedSettled,
   );
-  const exhausted = action.reentry_required && state.attempt >= maximum;
+  const completedRounds = completedReviewRoundCount(state, retained);
+  const exhausted = action.reentry_required && completedRounds >= maximum;
   return Object.freeze({
+    completed_review_rounds: completedRounds,
+    maximum_review_rounds: maximum,
     current: Object.freeze([...current]),
     stale: Object.freeze([...stale]),
     every_finding_dispositioned: disposition.complete,

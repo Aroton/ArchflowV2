@@ -14,10 +14,10 @@ describe("constitution Markdown", () => {
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     const files = Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, directory), "utf8")] as const)));
     const registry = parseConstitutionRuleFiles(files);
-    expect([...registry.keys()]).toEqual(["explicit-human-authority", "approved-design-before-code", "prefer-established-libraries", "task-and-evidence-isolation", "honest-human-centered-outcomes", "human-approval-for-access-control", "human-approval-for-crypto-and-secrets", "human-approval-for-workflow-control-plane"]);
+    expect([...registry.keys()]).toEqual(["explicit-human-authority", "approved-design-before-code", "prefer-established-libraries", "task-and-evidence-isolation", "honest-human-centered-outcomes", "human-approval-for-material-plan-changes", "human-approval-for-access-control", "human-approval-for-public-contracts", "human-approval-for-crypto-and-secrets", "human-approval-for-workflow-control-plane"]);
   });
 
-  it("ships review triggers only on the three human-boundary seed rules", async () => {
+  it("ships review triggers on the intentional human-boundary seed rules", async () => {
     const directory = new URL("../../assets/constitution/", import.meta.url);
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     const files = Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, directory), "utf8")] as const)));
@@ -28,6 +28,8 @@ describe("constitution Markdown", () => {
     expect(triggered).toEqual([
       "human-approval-for-access-control",
       "human-approval-for-crypto-and-secrets",
+      "human-approval-for-material-plan-changes",
+      "human-approval-for-public-contracts",
       "human-approval-for-workflow-control-plane",
     ]);
   });

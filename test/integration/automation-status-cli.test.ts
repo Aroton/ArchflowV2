@@ -79,7 +79,7 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.observation).toMatchObject({
-      schema_version: "2",
+      schema_version: "3",
       task_id: taskId,
       state_revision: null,
       condition: "awaiting-client",
@@ -159,7 +159,7 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
     const current = runAutomationStatus(localBundle, root, taskId, gitEnvironment);
     expect(current.status, current.stderr).toBe(0);
     expect(current.observation).toMatchObject({
-      schema_version: "2",
+      schema_version: "3",
       condition: "blocked",
       state_revision: null,
       position: null,
@@ -246,7 +246,7 @@ describe("automation status CLI", { timeout: TIMEOUT }, () => {
     const result = runAutomationStatus(localBundle, workspace.root, workspace.taskId, gitEnvironment);
     expect(result.status, result.stderr).toBe(0);
     expect(result.observation).toMatchObject({
-      schema_version: "2",
+      schema_version: "3",
       condition: "blocked",
       state_revision: null,
       position: null,

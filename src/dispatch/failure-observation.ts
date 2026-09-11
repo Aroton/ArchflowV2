@@ -26,9 +26,12 @@ const SAFE_MESSAGES: Readonly<Record<DispatchFailureCodeV1, string>> = Object.fr
   CONFIG_MODEL_UNSUPPORTED: "The selected reviewer model is not supported by the dispatcher.",
   CLI_MISSING: "The required reviewer CLI is not installed or is not available on PATH.",
   AUTH_UNAVAILABLE: "The required reviewer authentication is unavailable.",
+  TIMEOUT: "The reviewer timed out before producing a usable result.",
+  RECOVERY_STATE_INVALID: "Durable reviewer recovery state is unreadable; repair it before retrying.",
   RATE_LIMITED: "The reviewer service rate limit prevented this dispatch.",
   UNSUPPORTED_MODEL: "The reviewer service does not support the selected model.",
   CLI_VERSION_UNSUPPORTED: "The installed reviewer CLI version is not supported.",
+  MODEL_OUTPUT_INVALID: "The reviewer returned invalid structured output. Repair the response contract before retrying.",
   PROCESS_FAILED: "The reviewer process failed before producing a usable result.",
   REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review.",
 });

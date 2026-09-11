@@ -28,11 +28,11 @@ import type { ProjectResult } from "../contracts/errors.js";
 import { runInit } from "../init/index.js";
 import { adoptLegacyUpgrade, discardLegacyUpgrade, stageLegacyUpgrade } from "../init/legacy-upgrade.js";
 import { classifyDurableStateReadability } from "../state/status.js";
-import { projectAutomationStatusV2 } from "./automation-status.js";
+import { projectAutomationStatusV3 } from "./automation-status.js";
 import {
-  newTaskAutomationStatusV2,
-  stagedTaskAutomationStatusV2,
-  unreadableTaskAutomationStatusV2,
+  newTaskAutomationStatusV3,
+  stagedTaskAutomationStatusV3,
+  unreadableTaskAutomationStatusV3,
 } from "./automation-status-edges.js";
 import { classifyWorkflowStatus, stagedUpgradeStatus } from "./status-classification.js";
 import { cleanTaskWorkspace, cleanTerminalTaskWorkspace } from "../state/workspace-cleanup.js";
@@ -224,11 +224,11 @@ async function automationStatus(input: CommandInput): Promise<PlainJsonValue | P
         live_config_digest: snapshot.value.live_config_digest ?? null,
       });
       return (staged === undefined
-        ? newTaskAutomationStatusV2(taskId, edgeAuthority)
-        : stagedTaskAutomationStatusV2(taskId, staged, edgeAuthority)) as unknown as PlainJsonValue;
+        ? newTaskAutomationStatusV3(taskId, edgeAuthority)
+        : stagedTaskAutomationStatusV3(taskId, staged, edgeAuthority)) as unknown as PlainJsonValue;
     }
     const semantic = projectSemanticStatus(snapshot.value);
-    return projectAutomationStatusV2(snapshot.value, semantic.view) as unknown as PlainJsonValue;
+    return projectAutomationStatusV3(snapshot.value, semantic.view) as unknown as PlainJsonValue;
   }
 
   // Production services are authoritative on the ordinary path. This second read exists only to
@@ -239,7 +239,7 @@ async function automationStatus(input: CommandInput): Promise<PlainJsonValue | P
     task_id: taskId,
   });
   if (readability.readability === "unreadable" && readability.details.reason !== "status-authority-invalid") {
-    return unreadableTaskAutomationStatusV2(taskId, readability) as unknown as PlainJsonValue;
+    return unreadableTaskAutomationStatusV3(taskId, readability) as unknown as PlainJsonValue;
   }
   return created;
 }

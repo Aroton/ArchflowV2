@@ -611,6 +611,9 @@
         "maximum_attempts": {
           "$ref": "#/$defs/safeInteger"
         },
+        "completed_review_rounds": {
+          "$ref": "#/$defs/safeInteger"
+        },
         "review_push_through": {
           "type": "object",
           "properties": {

@@ -26,9 +26,9 @@ var __commonJS = (cb, mod) => function __require2() {
     throw mod = 0, e;
   }
 };
-var __export = (target2, all) => {
+var __export = (target3, all) => {
   for (var name in all)
-    __defProp(target2, name, { get: all[name], enumerable: true });
+    __defProp(target3, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -38,12 +38,12 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
-var __toESM = (mod, isNodeMode, target2) => (target2 = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+var __toESM = (mod, isNodeMode, target3) => (target3 = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
   // If the importer is in node compatibility mode or this is not an ESM
   // file that has been converted to a CommonJS file using a Babel-
   // compatible transform (i.e. "__esModule" has not been set), then set
   // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target2, "default", { value: mod, enumerable: true }) : target2,
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target3, "default", { value: mod, enumerable: true }) : target3,
   mod
 ));
 
@@ -275,8 +275,8 @@ function defineLazy(object3, key, getter) {
 function objectClone(obj) {
   return Object.create(Object.getPrototypeOf(obj), Object.getOwnPropertyDescriptors(obj));
 }
-function assignProp(target2, prop, value) {
-  Object.defineProperty(target2, prop, {
+function assignProp(target3, prop, value) {
+  Object.defineProperty(target3, prop, {
     value,
     writable: true,
     enumerable: true,
@@ -389,35 +389,35 @@ function normalizeParams(_params) {
   return params;
 }
 function createTransparentProxy(getter) {
-  let target2;
+  let target3;
   return new Proxy({}, {
     get(_, prop, receiver) {
-      target2 ?? (target2 = getter());
-      return Reflect.get(target2, prop, receiver);
+      target3 ?? (target3 = getter());
+      return Reflect.get(target3, prop, receiver);
     },
     set(_, prop, value, receiver) {
-      target2 ?? (target2 = getter());
-      return Reflect.set(target2, prop, value, receiver);
+      target3 ?? (target3 = getter());
+      return Reflect.set(target3, prop, value, receiver);
     },
     has(_, prop) {
-      target2 ?? (target2 = getter());
-      return Reflect.has(target2, prop);
+      target3 ?? (target3 = getter());
+      return Reflect.has(target3, prop);
     },
     deleteProperty(_, prop) {
-      target2 ?? (target2 = getter());
-      return Reflect.deleteProperty(target2, prop);
+      target3 ?? (target3 = getter());
+      return Reflect.deleteProperty(target3, prop);
     },
     ownKeys(_) {
-      target2 ?? (target2 = getter());
-      return Reflect.ownKeys(target2);
+      target3 ?? (target3 = getter());
+      return Reflect.ownKeys(target3);
     },
     getOwnPropertyDescriptor(_, prop) {
-      target2 ?? (target2 = getter());
-      return Reflect.getOwnPropertyDescriptor(target2, prop);
+      target3 ?? (target3 = getter());
+      return Reflect.getOwnPropertyDescriptor(target3, prop);
     },
     defineProperty(_, prop, descriptor) {
-      target2 ?? (target2 = getter());
-      return Reflect.defineProperty(target2, prop, descriptor);
+      target3 ?? (target3 = getter());
+      return Reflect.defineProperty(target3, prop, descriptor);
     }
   });
 }
@@ -11377,15 +11377,15 @@ var init_api = __esm({
 
 // node_modules/zod/v4/core/to-json-schema.js
 function initializeContext(params) {
-  let target2 = params?.target ?? "draft-2020-12";
-  if (target2 === "draft-4")
-    target2 = "draft-04";
-  if (target2 === "draft-7")
-    target2 = "draft-07";
+  let target3 = params?.target ?? "draft-2020-12";
+  if (target3 === "draft-4")
+    target3 = "draft-04";
+  if (target3 === "draft-7")
+    target3 = "draft-07";
   return {
     processors: params.processors ?? {},
     metadataRegistry: params?.metadata ?? globalRegistry,
-    target: target2,
+    target: target3,
     unrepresentable: params?.unrepresentable ?? "throw",
     override: params?.override ?? (() => {
     }),
@@ -11731,8 +11731,8 @@ var init_to_json_schema = __esm({
       return finalize(ctx, schema);
     };
     createStandardJSONSchemaMethod = (schema, io5, processors = {}) => (params) => {
-      const { libraryOptions, target: target2 } = params ?? {};
-      const ctx = initializeContext({ ...libraryOptions ?? {}, target: target2, io: io5, processors });
+      const { libraryOptions, target: target3 } = params ?? {};
+      const ctx = initializeContext({ ...libraryOptions ?? {}, target: target3, io: io5, processors });
       process2(schema, ctx);
       extractDefs(ctx, schema);
       return finalize(ctx, schema);
@@ -13621,8 +13621,8 @@ var init_schemas2 = __esm({
         catch(params) {
           return _catch2(this, params);
         },
-        pipe(target2) {
-          return pipe(this, target2);
+        pipe(target3) {
+          return pipe(this, target3);
         },
         readonly() {
           return readonly(this);
@@ -14563,8 +14563,8 @@ function convertBaseSchema(schema, ctx) {
           break;
         }
         const objectSchema2 = z.object(shape).passthrough();
-        const recordSchema = z.looseRecord(keySchema, valueSchema);
-        zodSchema = z.intersection(objectSchema2, recordSchema);
+        const recordSchema2 = z.looseRecord(keySchema, valueSchema);
+        zodSchema = z.intersection(objectSchema2, recordSchema2);
         break;
       }
       if (schema.patternProperties) {
@@ -21713,12 +21713,12 @@ var require_parser = __commonJS({
       }
       return prev.splice(i, prev.length);
     }
-    function arrayPushArray(target2, source) {
+    function arrayPushArray(target3, source) {
       if (source.length < 1e5)
-        Array.prototype.push.apply(target2, source);
+        Array.prototype.push.apply(target3, source);
       else
         for (let i = 0; i < source.length; ++i)
-          target2.push(source[i]);
+          target3.push(source[i]);
     }
     function fixFlowSeqItems(fc) {
       if (fc.start.type === "flow-seq-start") {
@@ -22911,8 +22911,8 @@ function comparePhaseInstances(left, right) {
   if (a.kind === b.kind) return 0;
   return a.kind === "phase-design" ? -1 : 1;
 }
-function isStrictlyEarlierPlanningPhase(target2, current) {
-  return decodePhaseInstance(target2).kind !== "phase-impl" && comparePhaseInstances(target2, current) < 0;
+function isStrictlyEarlierPlanningPhase(target3, current) {
+  return decodePhaseInstance(target3).kind !== "phase-impl" && comparePhaseInstances(target3, current) < 0;
 }
 function parsePhaseInstanceId(value) {
   if (typeof value === "string") {
@@ -22996,7 +22996,8 @@ var init_path_claims = __esm({
       "document",
       "authority-initialization",
       "authority-result",
-      "authority-decision"
+      "authority-decision",
+      "authority-recovery"
     ];
     REPOSITORY_PATH_CLASSES = [
       "shared-workflow",
@@ -24003,8 +24004,8 @@ var init_review = __esm({
 
 // src/contracts/internal/trust-brands.ts
 function observationCapabilityBinding(value, kind) {
-  const binding = observationCapabilities.get(value);
-  return binding?.kind === kind ? binding : void 0;
+  const binding2 = observationCapabilities.get(value);
+  return binding2?.kind === kind ? binding2 : void 0;
 }
 function authenticAuthorityLink(value, identity) {
   const actual = authorityLinks.get(value);
@@ -25029,7 +25030,7 @@ var require_src = __commonJS({
 
 // src/local/main.ts
 init_canonical();
-import { readFile as readFile16 } from "node:fs/promises";
+import { readFile as readFile17 } from "node:fs/promises";
 import process3 from "node:process";
 import { parseArgs } from "node:util";
 
@@ -25197,12 +25198,14 @@ var archivedPreExactCommitAuthorizationContextSchema = legacyExactCommitAuthoriz
 var legacyAttemptsExhaustedContextSchema = external_exports.object({
   step: external_exports.enum(PIPELINE_STEPS),
   attempts: safeInteger,
-  maximum_attempts: safeInteger
+  maximum_attempts: safeInteger,
+  completed_review_rounds: safeInteger.optional()
 }).strict().refine((value) => value.attempts >= value.maximum_attempts, "attempts must be at least maximum_attempts");
 var reviewPushThroughAttemptsExhaustedContextSchema = external_exports.object({
   step: external_exports.enum(PIPELINE_STEPS),
   attempts: safeInteger,
   maximum_attempts: safeInteger,
+  completed_review_rounds: safeInteger.optional(),
   review_push_through: reviewPushThroughContextV1Schema
 }).strict().superRefine((value, context2) => {
   if (value.attempts < value.maximum_attempts) context2.addIssue({ code: "custom", path: ["attempts"], message: "attempts must be at least maximum_attempts" });
@@ -25230,7 +25233,7 @@ var contexts = {
     }
   }),
   "material-drift": external_exports.object({ affected_upstream: external_exports.object({ kind: external_exports.enum(["prd", "architecture", "phase-design", "implementation-result", "review", "adjudication", "constitution", "workflow", "import"]), digest }).strict(), drift: external_exports.literal("material"), affected_claim_ids: canonicalStrings.min(1) }).strict(),
-  "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger, review_push_through: reviewPushThroughContextV1Schema.optional() }).strict().superRefine((value, context2) => {
+  "attempts-exhausted": external_exports.object({ step: external_exports.enum(PIPELINE_STEPS), attempts: safeInteger, maximum_attempts: safeInteger, completed_review_rounds: safeInteger.optional(), review_push_through: reviewPushThroughContextV1Schema.optional() }).strict().superRefine((value, context2) => {
     if (value.attempts < value.maximum_attempts) context2.addIssue({ code: "custom", path: ["attempts"], message: "attempts must be at least maximum_attempts" });
     if (value.review_push_through !== void 0 && value.attempts < value.review_push_through.minimum_attempt) {
       context2.addIssue({ code: "custom", path: ["review_push_through", "minimum_attempt"], message: "attempts must meet the review push-through minimum" });
@@ -25286,14 +25289,14 @@ var contexts = {
       drifted_projections: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest, observed_digest: digest }).strict()),
       deleted_projections: external_exports.array(external_exports.object({ path: repositoryPathClaimV1Schema, recorded_digest: digest }).strict()).optional(),
       uncommitted_paths: external_exports.array(repositoryPathClaimV1Schema)
-    }).strict().superRefine((target2, targetContext) => {
-      const deleted = target2.deleted_projections ?? [];
-      if (!sortedUnique(target2.drifted_projections, (left, right) => left.path.localeCompare(right.path))) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "drifted projections must be sorted by path with no duplicates" });
-      if (target2.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "a drifted projection must differ between its recorded and observed digests" });
+    }).strict().superRefine((target3, targetContext) => {
+      const deleted = target3.deleted_projections ?? [];
+      if (!sortedUnique(target3.drifted_projections, (left, right) => left.path.localeCompare(right.path))) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "drifted projections must be sorted by path with no duplicates" });
+      if (target3.drifted_projections.some((item) => item.recorded_digest === item.observed_digest)) targetContext.addIssue({ code: "custom", path: ["drifted_projections"], message: "a drifted projection must differ between its recorded and observed digests" });
       if (!sortedUnique(deleted, (left, right) => left.path.localeCompare(right.path))) targetContext.addIssue({ code: "custom", path: ["deleted_projections"], message: "deleted projections must be sorted by path with no duplicates" });
-      if (!sortedUnique(target2.uncommitted_paths, (left, right) => left.localeCompare(right))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must be sorted with no duplicates" });
-      if (target2.drifted_projections.length === 0 && deleted.length === 0) targetContext.addIssue({ code: "custom", message: "a secondary baseline target must name drifted or deleted projections" });
-      if (target2.uncommitted_paths.some((path2) => !target2.drifted_projections.some((entry) => entry.path === path2) && !deleted.some((entry) => entry.path === path2))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must belong to the target drift set" });
+      if (!sortedUnique(target3.uncommitted_paths, (left, right) => left.localeCompare(right))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must be sorted with no duplicates" });
+      if (target3.drifted_projections.length === 0 && deleted.length === 0) targetContext.addIssue({ code: "custom", message: "a secondary baseline target must name drifted or deleted projections" });
+      if (target3.uncommitted_paths.some((path2) => !target3.drifted_projections.some((entry) => entry.path === path2) && !deleted.some((entry) => entry.path === path2))) targetContext.addIssue({ code: "custom", path: ["uncommitted_paths"], message: "uncommitted paths must belong to the target drift set" });
     })).refine((items) => sortedUnique(items, (left, right) => left.repository < right.repository ? -1 : left.repository > right.repository ? 1 : 0), "secondary_targets must be sorted by repository with no duplicates").optional()
   }).strict().superRefine((value, context2) => {
     const deleted = value.deleted_projections ?? [];
@@ -26018,14 +26021,14 @@ function assertAdapterFamily(adapter2, family2) {
   const expected = adapter2 === "claude-cli" ? "claude" : adapter2 === "antigravity-cli" ? "gemini" : "codex";
   if (family2 !== expected) throw new TypeError("adapter and model family do not match");
 }
-function createObservation(binding, bytes, rawOutputDigest) {
+function createObservation(binding2, bytes, rawOutputDigest) {
   const storedBytes = copiedBytes(bytes);
-  const observation = { ...binding, raw_output_digest: rawOutputDigest };
+  const observation = { ...binding2, raw_output_digest: rawOutputDigest };
   Object.defineProperty(observation, "raw_output_bytes", { enumerable: true, configurable: false, get: () => copiedBytes(storedBytes) });
   return Object.freeze(observation);
 }
-function assertReviewOutputBindings(output, binding) {
-  for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) {
+function assertReviewOutputBindings(output, binding2) {
+  for (const [key, expected] of [["task_id", binding2.task_id], ["phase_instance", binding2.phase_instance], ["role", binding2.role], ["step", "counter_review"], ["subject_digest", binding2.subject_digest], ["input_fingerprint", binding2.input_fingerprint], ["rubric_digest", binding2.rubric_digest], ["producer_family", binding2.producer_family]]) {
     assertEqual2(output[key], expected, key);
   }
 }
@@ -26049,7 +26052,7 @@ function stampReviewV3Findings(output, assignment) {
   });
   return [...ordinary, ...unresolvedConfirmations.map((raw) => stamp(raw, raw.finding_id))];
 }
-function observeReviewV3(binding, assignment, bytes, rawOutputDigest) {
+function observeReviewV3(binding2, assignment, bytes, rawOutputDigest) {
   if (assignment.focus === "general" !== (assignment.routing_role === "counter-reviewer")) {
     throw new TypeError("review assignment focus and routing role do not match");
   }
@@ -26060,7 +26063,7 @@ function observeReviewV3(binding, assignment, bytes, rawOutputDigest) {
   };
   const decoded = decodeJson(bytes);
   const output = assignment.focus === "general" ? parseGeneralReviewOutputV3(decoded, options) : parseTestReviewOutputV3(decoded, options);
-  assertReviewOutputBindings(output, binding);
+  assertReviewOutputBindings(output, binding2);
   const findings = stampReviewV3Findings(output, assignment);
   const summary = expectedReviewSummaryV2(findings);
   const reviewerRun = {
@@ -26070,19 +26073,19 @@ function observeReviewV3(binding, assignment, bytes, rawOutputDigest) {
     criterion_ids: [...assignment.criterion_ids],
     ...assignment.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: [...assignment.expected_upstream_digests] },
     ...assignment.legacy_confirmations === void 0 ? {} : { legacy_confirmations: assignment.legacy_confirmations.map((entry) => ({ finding_id: entry.finding_id, criterion_ids: [...entry.criterion_ids] })) },
-    rubric_digest: binding.rubric_digest,
-    model_family: binding.family,
-    model: binding.model,
-    effort: binding.effort,
-    adapter: binding.adapter,
-    cli_version: binding.cli_version,
-    invocation_id: binding.invocation_id,
-    envelope_input_digest: binding.envelope_input_digest,
+    rubric_digest: binding2.rubric_digest,
+    model_family: binding2.family,
+    model: binding2.model,
+    effort: binding2.effort,
+    adapter: binding2.adapter,
+    cli_version: binding2.cli_version,
+    invocation_id: binding2.invocation_id,
+    envelope_input_digest: binding2.envelope_input_digest,
     observed_output_digest: rawOutputDigest,
     finding_ids: findings.map((finding) => finding.finding_id),
-    ...binding.provider === void 0 ? {} : { provider: binding.provider },
-    route_source: binding.route_source,
-    ...binding.route_override === void 0 ? {} : { route_override: binding.route_override }
+    ...binding2.provider === void 0 ? {} : { provider: binding2.provider },
+    route_source: binding2.route_source,
+    ...binding2.route_override === void 0 ? {} : { route_override: binding2.route_override }
   };
   const alignment = "upstream_alignment" in output ? output.upstream_alignment : void 0;
   const candidate = {
@@ -26099,82 +26102,82 @@ function observeReviewV3(binding, assignment, bytes, rawOutputDigest) {
     ...summary,
     ...alignment === void 0 ? {} : { upstream_alignment: alignment, drift: expectedUpstreamDrift(alignment) },
     assurance: "server-attested",
-    adapter: binding.adapter,
-    cli_version: binding.cli_version,
-    model_family: binding.family,
-    model: binding.model,
-    effort: binding.effort,
-    invocation_id: binding.invocation_id,
-    envelope_input_digest: binding.envelope_input_digest,
+    adapter: binding2.adapter,
+    cli_version: binding2.cli_version,
+    model_family: binding2.family,
+    model: binding2.model,
+    effort: binding2.effort,
+    invocation_id: binding2.invocation_id,
+    envelope_input_digest: binding2.envelope_input_digest,
     observed_output_digest: rawOutputDigest,
-    result_id: binding.result_id,
-    ...binding.provider === void 0 ? {} : { provider: binding.provider },
-    route_source: binding.route_source,
-    ...binding.route_override === void 0 ? {} : { route_override: binding.route_override },
-    repositories: binding.repositories,
+    result_id: binding2.result_id,
+    ...binding2.provider === void 0 ? {} : { provider: binding2.provider },
+    route_source: binding2.route_source,
+    ...binding2.route_override === void 0 ? {} : { route_override: binding2.route_override },
+    repositories: binding2.repositories,
     reviewer_runs: [reviewerRun]
   };
   return copyFreezeJson(serverAttestedReviewV3Schema.parse(candidate));
 }
 var observationSource = Object.freeze({
   observeReview(capability, observedOutputBytes) {
-    const binding = observationCapabilityBinding(capability, "review");
-    if (binding === void 0 || capability.kind !== "review") throw new TypeError("invalid review observation capability");
-    assertAdapterFamily(binding.adapter, binding.family);
+    const binding2 = observationCapabilityBinding(capability, "review");
+    if (binding2 === void 0 || capability.kind !== "review") throw new TypeError("invalid review observation capability");
+    assertAdapterFamily(binding2.adapter, binding2.family);
     const bytes = copiedBytes(observedOutputBytes);
     const raw_output_digest = digestBytes(bytes);
-    const observation = createObservation(binding, bytes, raw_output_digest);
-    if (binding.assignment !== void 0) {
-      const evidence2 = observeReviewV3(binding, binding.assignment, bytes, raw_output_digest);
+    const observation = createObservation(binding2, bytes, raw_output_digest);
+    if (binding2.assignment !== void 0) {
+      const evidence2 = observeReviewV3(binding2, binding2.assignment, bytes, raw_output_digest);
       return Object.freeze({ observation, evidence: evidence2 });
     }
     const childOutput = childReviewOutputV2Schema.parse(decodeJson(bytes));
-    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["role", binding.role], ["step", "counter_review"], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["rubric_digest", binding.rubric_digest], ["producer_family", binding.producer_family]]) assertEqual2(childOutput[key], expected, key);
+    for (const [key, expected] of [["task_id", binding2.task_id], ["phase_instance", binding2.phase_instance], ["role", binding2.role], ["step", "counter_review"], ["subject_digest", binding2.subject_digest], ["input_fingerprint", binding2.input_fingerprint], ["rubric_digest", binding2.rubric_digest], ["producer_family", binding2.producer_family]]) assertEqual2(childOutput[key], expected, key);
     const summary = expectedReviewSummaryV2(childOutput.findings);
-    const evidence = copyFreezeJson({ schema_version: "2", ...childOutput, ...summary, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.provider === void 0 ? {} : { provider: binding.provider }, route_source: binding.route_source, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override }, repositories: binding.repositories });
+    const evidence = copyFreezeJson({ schema_version: "2", ...childOutput, ...summary, assurance: "server-attested", adapter: binding2.adapter, cli_version: binding2.cli_version, model_family: binding2.family, model: binding2.model, effort: binding2.effort, invocation_id: binding2.invocation_id, envelope_input_digest: binding2.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding2.result_id, ...binding2.provider === void 0 ? {} : { provider: binding2.provider }, route_source: binding2.route_source, ...binding2.route_override === void 0 ? {} : { route_override: binding2.route_override }, repositories: binding2.repositories });
     return Object.freeze({ observation, evidence });
   },
   observeAdjudication(capability, observedOutputBytes) {
-    const binding = observationCapabilityBinding(capability, "adjudication");
-    if (binding === void 0 || capability.kind !== "adjudication") throw new TypeError("invalid adjudication observation capability");
-    assertAdapterFamily(binding.adapter, binding.family);
+    const binding2 = observationCapabilityBinding(capability, "adjudication");
+    if (binding2 === void 0 || capability.kind !== "adjudication") throw new TypeError("invalid adjudication observation capability");
+    assertAdapterFamily(binding2.adapter, binding2.family);
     const bytes = copiedBytes(observedOutputBytes);
     const raw_output_digest = digestBytes(bytes);
-    const observation = createObservation(binding, bytes, raw_output_digest);
-    if (binding.rule_slots !== void 0) {
-      if (binding.approved_upstream_digests !== void 0) throw new TypeError("fresh adjudication cannot carry archived upstream responsibilities");
-      const derived2 = parseAndDeriveAdjudicationV2(decodeJson(bytes), binding.rule_slots);
+    const observation = createObservation(binding2, bytes, raw_output_digest);
+    if (binding2.rule_slots !== void 0) {
+      if (binding2.approved_upstream_digests !== void 0) throw new TypeError("fresh adjudication cannot carry archived upstream responsibilities");
+      const derived2 = parseAndDeriveAdjudicationV2(decodeJson(bytes), binding2.rule_slots);
       const evidence2 = copyFreezeJson({
         ...derived2,
-        task_id: binding.task_id,
-        phase_instance: binding.phase_instance,
+        task_id: binding2.task_id,
+        phase_instance: binding2.phase_instance,
         step: "adjudicate",
-        subject_digest: binding.subject_digest,
-        input_fingerprint: binding.input_fingerprint,
-        pinned_constitution_digest: binding.pinned_constitution_digest,
-        source_review_envelope_digest: binding.source_review_envelope_digest,
+        subject_digest: binding2.subject_digest,
+        input_fingerprint: binding2.input_fingerprint,
+        pinned_constitution_digest: binding2.pinned_constitution_digest,
+        source_review_envelope_digest: binding2.source_review_envelope_digest,
         assurance: "server-attested",
-        adapter: binding.adapter,
-        cli_version: binding.cli_version,
-        model_family: binding.family,
-        model: binding.model,
-        effort: binding.effort,
-        invocation_id: binding.invocation_id,
-        envelope_input_digest: binding.envelope_input_digest,
+        adapter: binding2.adapter,
+        cli_version: binding2.cli_version,
+        model_family: binding2.family,
+        model: binding2.model,
+        effort: binding2.effort,
+        invocation_id: binding2.invocation_id,
+        envelope_input_digest: binding2.envelope_input_digest,
         observed_output_digest: raw_output_digest,
-        result_id: binding.result_id,
-        ...binding.provider === void 0 ? {} : { provider: binding.provider },
-        route_source: binding.route_source,
-        ...binding.route_override === void 0 ? {} : { route_override: binding.route_override },
-        repositories: binding.repositories
+        result_id: binding2.result_id,
+        ...binding2.provider === void 0 ? {} : { provider: binding2.provider },
+        route_source: binding2.route_source,
+        ...binding2.route_override === void 0 ? {} : { route_override: binding2.route_override },
+        repositories: binding2.repositories
       });
       return Object.freeze({ observation, evidence: evidence2 });
     }
-    if (binding.approved_upstream_digests === void 0) throw new TypeError("adjudication observation capability has no rule or archived upstream plan");
+    if (binding2.approved_upstream_digests === void 0) throw new TypeError("adjudication observation capability has no rule or archived upstream plan");
     const derived = parseAndDeriveAdjudication(decodeJson(bytes));
-    for (const [key, expected] of [["task_id", binding.task_id], ["phase_instance", binding.phase_instance], ["subject_digest", binding.subject_digest], ["input_fingerprint", binding.input_fingerprint], ["pinned_constitution_digest", binding.pinned_constitution_digest], ["source_review_envelope_digest", binding.source_review_envelope_digest]]) assertEqual2(derived[key], expected, key);
-    if (!sameArray(derived.approved_upstream_digests, binding.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
-    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding.adapter, cli_version: binding.cli_version, model_family: binding.family, model: binding.model, effort: binding.effort, invocation_id: binding.invocation_id, envelope_input_digest: binding.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding.result_id, ...binding.provider === void 0 ? {} : { provider: binding.provider }, route_source: binding.route_source, ...binding.route_override === void 0 ? {} : { route_override: binding.route_override }, repositories: binding.repositories });
+    for (const [key, expected] of [["task_id", binding2.task_id], ["phase_instance", binding2.phase_instance], ["subject_digest", binding2.subject_digest], ["input_fingerprint", binding2.input_fingerprint], ["pinned_constitution_digest", binding2.pinned_constitution_digest], ["source_review_envelope_digest", binding2.source_review_envelope_digest]]) assertEqual2(derived[key], expected, key);
+    if (!sameArray(derived.approved_upstream_digests, binding2.approved_upstream_digests)) throw new TypeError("approved_upstream_digests do not match observation capability");
+    const evidence = copyFreezeJson({ ...derived, assurance: "server-attested", adapter: binding2.adapter, cli_version: binding2.cli_version, model_family: binding2.family, model: binding2.model, effort: binding2.effort, invocation_id: binding2.invocation_id, envelope_input_digest: binding2.envelope_input_digest, observed_output_digest: raw_output_digest, result_id: binding2.result_id, ...binding2.provider === void 0 ? {} : { provider: binding2.provider }, route_source: binding2.route_source, ...binding2.route_override === void 0 ? {} : { route_override: binding2.route_override }, repositories: binding2.repositories });
     return Object.freeze({ observation, evidence });
   }
 });
@@ -27355,6 +27358,7 @@ var PHASE_INSTANCE = "(?:prd|design|phase-design-[1-9][0-9]*|phase-impl-[1-9][0-
 var PHASE_NUMBER = "[1-9][0-9]*";
 var anchored = (body) => new RegExp(`^${body}$`, "u");
 var TASK_CLASS_RULES = [
+  { path_class: "authority-recovery", pattern: anchored("authority/dispatch-recovery\\.json") },
   { path_class: "task-config", pattern: anchored("config\\.yaml") },
   { path_class: "task-state", pattern: anchored("state\\.json") },
   { path_class: "task-ask", pattern: anchored("ask\\.md") },
@@ -27693,8 +27697,8 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
   }
   const worktreeRoot = runner.location.worktreeRoot;
   const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks", taskId);
-  const target2 = resolvePath(worktreeRoot, repositoryRelative);
-  const parent = dirname(target2);
+  const target3 = resolvePath(worktreeRoot, repositoryRelative);
+  const parent = dirname(target3);
   const parentRepositoryRelative = relative(worktreeRoot, parent);
   const withinWorktree = await containedUnder(worktreeRoot, parentRepositoryRelative);
   if (withinWorktree.kind === "io") return fail2(ioError(context2));
@@ -27716,14 +27720,14 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
   }
   let leafKind;
   try {
-    leafKind = await cleanupLeafKind(target2);
+    leafKind = await cleanupLeafKind(target3);
   } catch {
     return fail2(ioError(context2));
   }
   return ok(Object.freeze({
     workspaceRelative: claim ?? "",
     repositoryRelative,
-    absolute: target2,
+    absolute: target3,
     leaf_kind: leafKind
   }));
 }
@@ -28102,22 +28106,22 @@ async function isCommitAncestor(runner, ancestor, descendant) {
 async function isCommitAncestorOfHead(runner, ancestor) {
   return isCommitAncestor(runner, ancestor, "HEAD");
 }
-async function readFirstParentChildAfter(runner, baseline, target2) {
-  if (baseline === target2) return void 0;
-  const isImmutable = GIT_OID.test(baseline) && GIT_OID.test(target2);
-  const cacheKey = isImmutable ? `${baseline}\0${target2}` : void 0;
+async function readFirstParentChildAfter(runner, baseline, target3) {
+  if (baseline === target3) return void 0;
+  const isImmutable = GIT_OID.test(baseline) && GIT_OID.test(target3);
+  const cacheKey = isImmutable ? `${baseline}\0${target3}` : void 0;
   const cache = getRunnerCache(runner);
   if (cacheKey !== void 0 && cache.firstParentChild.has(cacheKey)) {
     return cache.firstParentChild.get(cacheKey);
   }
-  if (!await isCommitAncestor(runner, baseline, target2)) {
+  if (!await isCommitAncestor(runner, baseline, target3)) {
     if (cacheKey !== void 0) {
       setBoundedCache(cache.firstParentChild, cacheKey, void 0, MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES);
     }
     return void 0;
   }
   const commits = await runner.runText({
-    argv: ["rev-list", "--first-parent", target2],
+    argv: ["rev-list", "--first-parent", target3],
     operation: FIRST_PARENT_PATH_OPERATION
   });
   const chain = commits === "" ? [] : commits.split("\n");
@@ -28684,11 +28688,11 @@ async function ensureResultDirectory(authority, digest12) {
     await ensureRealDirectory(current);
   }
 }
-async function ensurePayloadParent(authority, digest12, target2) {
+async function ensurePayloadParent(authority, digest12, target3) {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
   const root = join2(authority.workspace_root, "cache", "results", digest12, "payload");
-  const parent = join2(target2, "..");
+  const parent = join2(target3, "..");
   const rel = relative2(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) throw new TypeError("payload parent escaped result directory");
   let current = root;
@@ -28697,9 +28701,9 @@ async function ensurePayloadParent(authority, digest12, target2) {
     await ensureRealDirectory(current);
   }
 }
-async function ensureWorkspaceProjectionParent(authority, target2) {
+async function ensureWorkspaceProjectionParent(authority, target3) {
   assertInternalTransactionAuthority(authority);
-  const parent = join2(target2, "..");
+  const parent = join2(target3, "..");
   const rel = relative2(authority.workspace_root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) {
     throw new TypeError("workspace projection parent escaped task workspace");
@@ -28711,9 +28715,9 @@ async function ensureWorkspaceProjectionParent(authority, target2) {
     await ensureRealDirectory(current);
   }
 }
-async function ensureTaskProjectionParent(authority, target2) {
+async function ensureTaskProjectionParent(authority, target3) {
   assertInternalTransactionAuthority(authority);
-  const parent = join2(target2, "..");
+  const parent = join2(target3, "..");
   const rel = relative2(authority.task_root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) return;
   let current = authority.task_root;
@@ -29684,13 +29688,13 @@ async function openRepository(workingDirectory, operationContext) {
   if (canonicalCached !== void 0) return ok4(canonicalCached);
   const environment = await preflightGit(discovered.value, operationContext);
   if (!environment.ok) return environment;
-  const binding = Object.freeze({ runner: discovered.value, environment: environment.value });
+  const binding2 = Object.freeze({ runner: discovered.value, environment: environment.value });
   if (repositoryBindings.size >= MAX_REPOSITORY_BINDINGS) {
     const evictedRoot = repositoryBindings.keys().next().value;
     repositoryBindings.delete(evictedRoot);
   }
-  repositoryBindings.set(rootKey, binding);
-  return ok4(binding);
+  repositoryBindings.set(rootKey, binding2);
+  return ok4(binding2);
 }
 function ordinal3(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -29726,21 +29730,21 @@ function isWithin(parent, candidate) {
   const path2 = relative3(parent, candidate);
   return path2 !== "" && path2 !== ".." && !path2.startsWith(`..${sep3}`) && !isAbsolute3(path2);
 }
-async function observeMember(name, mode, binding, context2, declaredPath) {
-  const identity = await resolveRepositoryIdentity(binding.runner, binding.environment, context2);
+async function observeMember(name, mode, binding2, context2, declaredPath) {
+  const identity = await resolveRepositoryIdentity(binding2.runner, binding2.environment, context2);
   if (!identity.ok) return viewFailure(name, "identity");
   try {
-    const head = await readHeadCommit(binding.runner);
+    const head = await readHeadCommit(binding2.runner);
     return ok4(Object.freeze({
       name,
       mode,
-      binding,
+      binding: binding2,
       identity: identity.value,
       head,
       ...declaredPath === void 0 ? {} : { declared_path: declaredPath }
     }));
   } catch (error51) {
-    if (error51 instanceof GitInvocationError) projectErrorForGitFailure(error51, binding.runner, context2);
+    if (error51 instanceof GitInvocationError) projectErrorForGitFailure(error51, binding2.runner, context2);
     else if (!(error51 instanceof TypeError)) throw error51;
     return viewFailure(name, "head");
   }
@@ -29816,10 +29820,10 @@ async function createExclusive(path2, bytes) {
   if (path2.path_class !== "workspace-intent" && path2.path_class !== "workspace-result-payload" && path2.path_class !== "authority-result" && path2.path_class !== "authority-decision" && path2.path_class !== "authority-initialization") {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
-  const target2 = path2.absolute;
+  const target3 = path2.absolute;
   const temporary = join3(
-    dirname2(target2),
-    `.${basename2(target2)}.${process.pid}.${randomUUID()}.tmp`
+    dirname2(target3),
+    `.${basename2(target3)}.${process.pid}.${randomUUID()}.tmp`
   );
   let handle;
   let linkAttempted = false;
@@ -29831,7 +29835,7 @@ async function createExclusive(path2, bytes) {
     handle = void 0;
     linkAttempted = true;
     try {
-      await link(temporary, target2);
+      await link(temporary, target3);
     } catch (error51) {
       if (errnoOf3(error51) === "EEXIST") return "exists";
       throw error51;
@@ -29853,8 +29857,8 @@ async function createExclusive(path2, bytes) {
   }
 }
 async function replace(path2, bytes) {
-  if (path2.path_class !== "task-state" && path2.path_class !== "workspace-gate-interface" && path2.path_class !== "workspace-staged-request") {
-    throw new TypeError("replace requires a task-state, gate-interface, or staged-request resolved path");
+  if (path2.path_class !== "authority-recovery" && path2.path_class !== "task-state" && path2.path_class !== "workspace-gate-interface" && path2.path_class !== "workspace-staged-request") {
+    throw new TypeError("replace requires a task-state, recovery, gate-interface, or staged-request resolved path");
   }
   await replaceRegularBytes(path2.absolute, bytes, 420);
 }
@@ -29897,8 +29901,8 @@ var PROJECTABLE = /* @__PURE__ */ new Set([
 function requireProjectable(path2) {
   if (!PROJECTABLE.has(path2.path_class)) throw new TypeError("projection requires a declared output path");
 }
-async function replaceRegularBytes(target2, bytes, mode) {
-  const temporary = join3(dirname2(target2), `.${basename2(target2)}.${process.pid}.${randomUUID()}.tmp`);
+async function replaceRegularBytes(target3, bytes, mode) {
+  const temporary = join3(dirname2(target3), `.${basename2(target3)}.${process.pid}.${randomUUID()}.tmp`);
   let handle;
   let renameAttempted = false;
   try {
@@ -29908,7 +29912,7 @@ async function replaceRegularBytes(target2, bytes, mode) {
     await handle.close();
     handle = void 0;
     renameAttempted = true;
-    await rename(temporary, target2);
+    await rename(temporary, target3);
   } catch (error51) {
     throw new AtomicReplaceError({
       operation: "replace",
@@ -29925,12 +29929,12 @@ async function replaceRegular(path2, bytes, executable) {
   requireProjectable(path2);
   await replaceRegularBytes(path2.absolute, bytes, executable ? 493 : 420);
 }
-async function replaceSymlink(path2, target2) {
+async function replaceSymlink(path2, target3) {
   requireProjectable(path2);
   const temporary = join3(dirname2(path2.absolute), `.${basename2(path2.absolute)}.${process.pid}.${randomUUID()}.tmp`);
   let created = false;
   try {
-    await symlink(target2, temporary);
+    await symlink(target3, temporary);
     created = true;
     await rename(temporary, path2.absolute);
     created = false;
@@ -30267,6 +30271,8 @@ var ASSETS = Object.freeze([
   ["constitution/15-dependencies.md", ".archflow/constitution/15-dependencies.md"],
   ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
   ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
+  ["constitution/35-plan-changes.md", ".archflow/constitution/35-plan-changes.md"],
+  ["constitution/45-public-contracts.md", ".archflow/constitution/45-public-contracts.md"],
   ["constitution/40-authentication.md", ".archflow/constitution/40-authentication.md"],
   ["constitution/50-cryptography.md", ".archflow/constitution/50-cryptography.md"],
   ["constitution/60-control-plane.md", ".archflow/constitution/60-control-plane.md"],
@@ -31088,10 +31094,10 @@ async function readBytes(path2) {
 }
 async function readTaskState(path2) {
   if (path2.path_class !== "task-state") throw new TypeError("readTaskState requires a task-state resolved path");
-  const read = await readBytes(path2);
-  if (read.kind !== "bytes") return read;
+  const read2 = await readBytes(path2);
+  if (read2.kind !== "bytes") return read2;
   try {
-    const document2 = parseCanonicalDocument(read.bytes, "task state");
+    const document2 = parseCanonicalDocument(read2.bytes, "task state");
     taskStateV1Schema.parse(document2.value);
     deepFreeze3(document2.value);
     return Object.freeze({ kind: "canonical", document: document2 });
@@ -31101,10 +31107,10 @@ async function readTaskState(path2) {
 }
 async function readIntentReceipt(path2) {
   if (path2.path_class !== "workspace-intent") throw new TypeError("readIntentReceipt requires a workspace-intent resolved path");
-  const read = await readBytes(path2);
-  if (read.kind !== "bytes") return read;
+  const read2 = await readBytes(path2);
+  if (read2.kind !== "bytes") return read2;
   try {
-    const document2 = parseCanonicalDocument(read.bytes, "intent receipt");
+    const document2 = parseCanonicalDocument(read2.bytes, "intent receipt");
     parseIntentReceipt(document2.value);
     return Object.freeze({ kind: "canonical", document: document2 });
   } catch {
@@ -31113,15 +31119,15 @@ async function readIntentReceipt(path2) {
 }
 async function readTaskConfig(path2) {
   if (path2.path_class !== "task-config") throw new TypeError("readTaskConfig requires a task-config resolved path");
-  const read = await readBytes(path2);
-  if (read.kind !== "bytes") return read;
+  const read2 = await readBytes(path2);
+  if (read2.kind !== "bytes") return read2;
   try {
-    const parsed = parseConfigYaml(decoder3.decode(read.bytes), "task config");
+    const parsed = parseConfigYaml(decoder3.decode(read2.bytes), "task config");
     return Object.freeze({
       kind: "valid",
       snapshot: Object.freeze({
-        bytes: read.bytes,
-        digest: sha256Bytes(read.bytes),
+        bytes: read2.bytes,
+        digest: sha256Bytes(read2.bytes),
         parsed
       })
     });
@@ -31129,7 +31135,7 @@ async function readTaskConfig(path2) {
     const issues = describeValidationIssues(error51);
     return Object.freeze({
       kind: "invalid",
-      digest: sha256Bytes(read.bytes),
+      digest: sha256Bytes(read2.bytes),
       ...issues === void 0 ? {} : { issues }
     });
   }
@@ -36156,8 +36162,8 @@ function repositoryCheckpointCorresponds(state) {
   const primary = checkpoint[0];
   if (primary === void 0 || primary.name !== "primary" || primary.declared_path !== void 0) return false;
   return secondaryNames.every((name, index) => {
-    const binding = checkpoint[index + 1];
-    return binding?.name === name && binding.declared_path === repositories?.[name]?.path;
+    const binding2 = checkpoint[index + 1];
+    return binding2?.name === name && binding2.declared_path === repositories?.[name]?.path;
   });
 }
 function isInitialization(artifact) {
@@ -36471,8 +36477,8 @@ function validateDurableSemantics(subject) {
         }
       }
       const declaredPaths = new Set(section.outputs.map((output) => output.path));
-      for (const target2 of section.restore_targets) {
-        if (!declaredPaths.has(target2)) {
+      for (const target3 of section.restore_targets) {
+        if (!declaredPaths.has(target3)) {
           return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.restoreTargetNotDeclared));
         }
       }
@@ -37596,9 +37602,9 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
   const resolved = await resolveAll(runner, output, context2);
   const observed = /* @__PURE__ */ new Map();
   for (const path2 of scope3) {
-    const target2 = resolved.get(path2);
-    if (target2 === void 0) throw new TypeError("declared scope path was not resolved");
-    observed.set(path2, await observePath(runner, target2));
+    const target3 = resolved.get(path2);
+    if (target3 === void 0) throw new TypeError("declared scope path was not resolved");
+    observed.set(path2, await observePath(runner, target3));
   }
   const ancestryRetained = await isCommitAncestorOfHead(runner, output.base_commit);
   const rawPayloads = /* @__PURE__ */ new Map();
@@ -37754,9 +37760,9 @@ function prepareSnapshot(input) {
   const payloads = rawPayloads.map((item, index) => {
     if (item === null || typeof item !== "object") throw new TypeError(`payloads[${index}] must be an object`);
     const path2 = ownEnumerableData2(item, "path");
-    const target2 = ownEnumerableData2(item, "target");
+    const target3 = ownEnumerableData2(item, "target");
     const bytes = cloneBytes(ownEnumerableData2(item, "bytes"), `payloads[${index}].bytes`);
-    if (typeof path2 !== "string" || target2 === null || typeof target2 !== "object") {
+    if (typeof path2 !== "string" || target3 === null || typeof target3 !== "object") {
       throw new TypeError(`payloads[${index}] has invalid path or target`);
     }
     const repositoryDescriptor = Object.getOwnPropertyDescriptor(item, "repository");
@@ -37766,7 +37772,7 @@ function prepareSnapshot(input) {
     return Object.freeze({
       ...repositoryDescriptor?.value === void 0 ? {} : { repository: repositoryDescriptor.value },
       path: path2,
-      target: target2,
+      target: target3,
       bytes
     });
   });
@@ -37847,12 +37853,12 @@ async function prepareDocumentSnapshot(input) {
   }
   return prepared;
 }
-async function installOne(atomic, target2, bytes) {
-  const created = await atomic.createExclusive(target2, bytes);
+async function installOne(atomic, target3, bytes) {
+  const created = await atomic.createExclusive(target3, bytes);
   if (created === "created") return "created";
   let existing;
   try {
-    const handle = await openResolved(target2.absolute, 0);
+    const handle = await openResolved(target3.absolute, 0);
     existing = new Uint8Array(await handle.readFile().finally(() => handle.close()));
   } catch {
     throw new TypeError("immutable snapshot target became unreadable");
@@ -37967,37 +37973,37 @@ async function readSnapshotAccounting(input) {
   return ok11(parseSafeInteger(total));
 }
 async function restoreSnapshotOutput(input) {
-  const read = await readSnapshot({
+  const read2 = await readSnapshot({
     target: input.target,
     expected_result_digest: input.expected_result_digest,
     runner: input.runner,
     worktree_root: input.worktree_root
   });
-  if (!read.ok) return read;
-  const output = read.value.value.outputs.find((candidate) => candidate.path === input.output_path);
-  if (output === void 0) return snapshotInvalid(read.value.value.snapshot_digest, "output-not-declared");
+  if (!read2.ok) return read2;
+  const output = read2.value.value.outputs.find((candidate) => candidate.path === input.output_path);
+  if (output === void 0) return snapshotInvalid(read2.value.value.snapshot_digest, "output-not-declared");
   if (output.operation === "delete") return ok11(Object.freeze({ state: "absent" }));
   let bytes;
   if (output.storage === "git-object") {
     try {
       bytes = output.file_type === "regular" ? await readGitBlobProjectedBytes(input.runner, output.after.oid, output.path) : await readGitBlobBytes(input.runner, output.after.oid);
     } catch {
-      return snapshotInvalid(read.value.value.snapshot_digest, "git-object-proof-unavailable");
+      return snapshotInvalid(read2.value.value.snapshot_digest, "git-object-proof-unavailable");
     }
   } else {
     const manifestMatch = /^\.archflow\/tasks\/([^/]+)\/authority\/results\/([0-9a-f]{64})\.json$/u.exec(input.target.repositoryRelative);
     if (manifestMatch === null) {
-      return snapshotInvalid(read.value.value.snapshot_digest, "manifest-path-mismatch");
+      return snapshotInvalid(read2.value.value.snapshot_digest, "manifest-path-mismatch");
     }
     const expectedPayloadPath = `.archflow/runtime/tasks/${manifestMatch[1]}/cache/results/${manifestMatch[2]}/payload/${output.path}`;
     if (input.payload_target === void 0 || input.payload_target.repositoryRelative !== expectedPayloadPath) {
-      return snapshotInvalid(read.value.value.snapshot_digest, "payload-path-mismatch");
+      return snapshotInvalid(read2.value.value.snapshot_digest, "payload-path-mismatch");
     }
     const payload = await readSnapshotPayload({
       target: input.payload_target,
       expected_digest: output.payload_digest,
       expected_bytes: output.payload_bytes,
-      snapshot_digest: read.value.value.snapshot_digest,
+      snapshot_digest: read2.value.value.snapshot_digest,
       worktree_root: input.worktree_root
     });
     if (!payload.ok) return payload;
@@ -38075,7 +38081,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     assertPlainJson(targetValue, `projection source ${index} target`);
     const suppliedTarget = structuredClone(targetValue);
     if (suppliedTarget.repositoryRelative !== path2) throw new TypeError(`projection source ${index} target path disagrees`);
-    const target2 = Object.freeze({
+    const target3 = Object.freeze({
       ...suppliedTarget,
       absolute: resolvePath5(worktreeRoot, suppliedTarget.repositoryRelative)
     });
@@ -38120,7 +38126,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     }
     return Object.freeze({
       path: path2,
-      target: target2,
+      target: target3,
       desired,
       authenticated_before: structuredClone(beforeValue),
       git_tracked: tracked,
@@ -38299,16 +38305,16 @@ async function readRetainedManifest(runner, authority, reference) {
     "authority-result"
   );
   if (!manifestTarget.ok) return manifestTarget;
-  const read = await readSnapshot({
+  const read2 = await readSnapshot({
     target: manifestTarget.value,
     expected_result_digest: reference.result_digest,
     runner,
     worktree_root: runner.location.worktreeRoot
   });
-  if (!read.ok) return read;
-  const manifest = read.value.value;
+  if (!read2.ok) return read2;
+  const manifest = read2.value.value;
   if (manifest.result_id !== reference.result_id || manifest.phase_instance !== reference.phase_instance || manifest.step !== reference.step || manifest.input_fingerprint !== reference.input_fingerprint) return stateFailure(authority.context.phase_instance, "retained-result-reference-mismatch");
-  return ok12(Object.freeze({ manifest: read.value, manifest_target: manifestTarget.value }));
+  return ok12(Object.freeze({ manifest: read2.value, manifest_target: manifestTarget.value }));
 }
 async function beforeImageForRunner(runner, identity, path2) {
   const symlink3 = identity.mode === "120000";
@@ -38406,8 +38412,8 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
   const beforeImage = async (identity, path2) => beforeImageForRunner(runner, identity, path2);
   const sources = [];
   for (const output of manifest.outputs) {
-    const target2 = await resolveOutput(output.path, output);
-    if (!target2.ok) return target2;
+    const target3 = await resolveOutput(output.path, output);
+    if (!target3.ok) return target3;
     const cached2 = payloadBytes.get(output.path);
     if (cached2 !== void 0 && output.operation === "delete") {
       return stateFailure(authority.context.phase_instance, "retained-result-payload-operation-mismatch");
@@ -38423,7 +38429,7 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
     const before = output.operation === "add" ? void 0 : await beforeImage(output.before, output.operation === "rename" ? output.previous_path : output.path);
     sources.push(Object.freeze({
       path: output.path,
-      target: target2.value,
+      target: target3.value,
       desired: desired.value,
       authenticated_before: before?.observation ?? Object.freeze({ state: "absent" }),
       ...before === void 0 ? {} : { rollback: before.desired },
@@ -38541,12 +38547,12 @@ async function readRetainedRepositoryOutput(input) {
   }
   const output = section.outputs.find((item) => item.path === input.output_path);
   if (output === void 0) return stateFailure(input.authority.context.phase_instance, "retained-secondary-output-not-declared");
-  const target2 = await resolveRepositoryPath({
+  const target3 = await resolveRepositoryPath({
     runner: member.binding.runner,
     claim: input.output_path,
     context: input.authority.context
   });
-  if (!target2.ok) return target2;
+  if (!target3.ok) return target3;
   let desired;
   if (output.operation === "delete") {
     desired = Object.freeze({ state: "absent" });
@@ -38586,7 +38592,7 @@ async function readRetainedRepositoryOutput(input) {
   const before = output.operation === "add" || output.operation === "rename" ? Object.freeze({ observation: Object.freeze({ state: "absent" }), desired: Object.freeze({ state: "absent" }) }) : await beforeImageForRunner(member.binding.runner, output.before, output.path);
   return ok12(Object.freeze({
     path: output.path,
-    target: target2.value,
+    target: target3.value,
     desired,
     authenticated_before: before.observation,
     rollback: before.desired,
@@ -38754,11 +38760,8 @@ init_evidence();
 init_phase_instance();
 init_plain_json();
 
-// src/contracts/semantic-workflow.ts
+// src/contracts/workflow-progress.ts
 init_zod();
-init_canonical();
-init_config();
-init_config();
 
 // src/contracts/dispatch-failure.ts
 init_zod();
@@ -38771,11 +38774,20 @@ var DISPATCH_FAILURE_CODES = [
   "CLI_MISSING",
   "AUTH_UNAVAILABLE",
   "RATE_LIMITED",
+  "TIMEOUT",
+  "RECOVERY_STATE_INVALID",
   "UNSUPPORTED_MODEL",
   "CLI_VERSION_UNSUPPORTED",
   "PROCESS_FAILED",
+  "MODEL_OUTPUT_INVALID",
   "REPOSITORY_VIEW_UNAVAILABLE"
 ];
+var dispatchRecoveryProgressV1Schema = external_exports.object({
+  status: external_exports.enum(["retrying", "exhausted", "repair-required"]),
+  dispatches: external_exports.number().int().min(0).max(3),
+  maximum_dispatches: external_exports.literal(3),
+  next_retry_at: external_exports.iso.datetime().optional()
+}).strict();
 var boundedMessage = external_exports.string().min(1).max(256);
 var REPOSITORY_NAME_PRESENCE_RULE = Object.freeze({
   allOf: [{
@@ -38810,6 +38822,7 @@ var dispatchFailureObservationV1Schema = external_exports.object({
   observed_at_revision: safeIntegerV1Schema
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE });
 var publicDispatchFailureV1Schema = external_exports.object({
+  recovery: dispatchRecoveryProgressV1Schema.optional(),
   role: external_exports.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   code: external_exports.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
@@ -38826,7 +38839,22 @@ function projectDispatchFailureObservation(observation) {
   });
 }
 
+// src/contracts/workflow-progress.ts
+var workflowProgressV1Schema = external_exports.object({
+  step: external_exports.enum(["produce", "counter_review", "triage", "adjudicate"]),
+  step_status: external_exports.enum(["running", "succeeded", "failed"]),
+  review_rounds_completed: external_exports.number().int().nonnegative().safe(),
+  review_round_limit: external_exports.number().int().positive().safe(),
+  boundary: external_exports.enum(["none", "configured-approval", "exception", "step-transition", "complete", "abandoned"]),
+  reason: external_exports.string().min(1),
+  dispatch_recovery: dispatchRecoveryProgressV1Schema.optional()
+}).strict();
+
 // src/contracts/semantic-workflow.ts
+init_zod();
+init_canonical();
+init_config();
+init_config();
 init_effort_review();
 init_evidence();
 init_plain_json();
@@ -39149,6 +39177,7 @@ var publicReviewPushThroughAuditV1Schema = external_exports.discriminatedUnion("
   }).strict()
 ]);
 var workflowViewV1Schema = external_exports.object({
+  progress: workflowProgressV1Schema.optional(),
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
   condition: external_exports.enum(WORKFLOW_CONDITIONS),
@@ -39339,8 +39368,8 @@ function waiverContext(value) {
   return value !== null && typeof value === "object" && "origin" in value ? value : void 0;
 }
 async function stateOrFailure(dependencies, authority) {
-  const read = await dependencies.read_state(authority.state);
-  return read.kind === "canonical" ? ok13(read.document) : read.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read.kind}`);
+  const read2 = await dependencies.read_state(authority.state);
+  return read2.kind === "canonical" ? ok13(read2.document) : read2.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read2.kind}`);
 }
 
 // src/state/legacy-import-resume.ts
@@ -39632,7 +39661,7 @@ function expectedProduceUpstreamBindings(state) {
     Object.freeze({ phase_instance: encodePhaseInstance({ kind: "design" }), path: parseTaskPathClaim("design.md"), artifact_kind: "design" })
   ]);
 }
-async function loadProduceUpstreamSubject(dependencies, authority, state, binding) {
+async function loadProduceUpstreamSubject(dependencies, authority, state, binding2) {
   const candidateOwners = [];
   let retainedOwnerExists = false;
   const loadManifest = dependencies.load_retained_manifest;
@@ -39643,7 +39672,7 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
       if (!retained.ok) return retained;
       const manifest = retained.value.manifest.value;
       const artifact2 = manifest.source_artifact;
-      const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding.path);
+      const ownsPath = artifact2.artifact_kind === "document" && documentProjectionDescriptors(artifact2).some((entry) => entry.document_path === binding2.path);
       if (ownsPath) retainedOwnerExists = true;
       if (artifact2.artifact_kind !== "document" || canonicalJsonDigest(artifact2) !== manifest.artifact_digest || !ownsPath) continue;
       candidateOwners.push(Object.freeze({
@@ -39695,15 +39724,15 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
   if (!initialization.ok || initialization.value === void 0) {
     return fail14(state.phase_instance, "current-upstream-produce-result-missing");
   }
-  const destination = `.archflow/tasks/${state.task_id}/${binding.path}`;
+  const destination = `.archflow/tasks/${state.task_id}/${binding2.path}`;
   const mapping = initialization.value.mapping.find((entry) => entry.destination_path === destination);
   const staged = mapping === void 0 ? void 0 : initialization.value.staged_payload_refs.find((entry) => entry.legacy_path === mapping.legacy_path);
   if (mapping === void 0 || staged === void 0) return fail14(state.phase_instance, "current-upstream-import-missing");
-  const target2 = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding.path, context: authority.context });
-  if (!target2.ok) return target2;
+  const target3 = await resolveTaskPath({ runner: dependencies.runner, taskId: authority.task_id, claim: binding2.path, context: authority.context });
+  if (!target3.ok) return target3;
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile6(target2.value.absolute));
+    bytes = new Uint8Array(await readFile6(target3.value.absolute));
   } catch {
     return fail14(state.phase_instance, "current-upstream-import-unavailable");
   }
@@ -39712,24 +39741,24 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
     schema_version: "1",
     artifact_kind: "document",
     task_id: state.task_id,
-    phase_instance: binding.phase_instance,
+    phase_instance: binding2.phase_instance,
     step: "produce",
-    document_path: binding.path,
+    document_path: binding2.path,
     path_class: "document",
     byte_count: staged.byte_count,
     content_digest: staged.digest,
     declared_inputs: Object.freeze([]),
     input_fingerprint: state.input_fingerprint,
-    snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding.path, content_digest: staged.digest }),
-    projection_target: target2.value.repositoryRelative
+    snapshot_digest: canonicalJsonDigest({ schema_version: "1", imported_document: binding2.path, content_digest: staged.digest }),
+    projection_target: target3.value.repositoryRelative
   });
   return Object.freeze({
     schema_version: "1",
     ok: true,
     value: Object.freeze({
-      artifact_digest: canonicalJsonDigest({ schema_version: "1", initialization_digest: state.initialization_digest, imported_document: binding.path, content_digest: staged.digest }),
+      artifact_digest: canonicalJsonDigest({ schema_version: "1", initialization_digest: state.initialization_digest, imported_document: binding2.path, content_digest: staged.digest }),
       artifact,
-      imported_projection: Object.freeze({ path: binding.path, content_digest: staged.digest })
+      imported_projection: Object.freeze({ path: binding2.path, content_digest: staged.digest })
     })
   });
 }
@@ -39789,7 +39818,7 @@ function produceProjectionPins(artifact) {
 function produceUpstreamBindingsForSubject(state, artifact) {
   const bindings = expectedProduceUpstreamBindings(state);
   const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
-  return Object.freeze(bindings.filter((binding) => !owned.has(binding.path)));
+  return Object.freeze(bindings.filter((binding2) => !owned.has(binding2.path)));
 }
 async function changedCoProducedDocumentPaths(dependencies, state, subject) {
   const artifact = subject.artifact;
@@ -39821,18 +39850,18 @@ async function changedCoProducedDocumentPaths(dependencies, state, subject) {
   });
 }
 async function readProduceProjection(runner, authority, subject, artifactPath) {
-  const target2 = await resolveTaskPath({
+  const target3 = await resolveTaskPath({
     runner,
     taskId: authority.task_id,
     claim: artifactPath,
     context: authority.context
   });
-  if (!target2.ok) return target2;
+  if (!target3.ok) return target3;
   const retainedDigest = "imported_projection" in subject ? subject.imported_projection.path === artifactPath ? subject.imported_projection.content_digest : void 0 : subject.artifact.artifact_kind === "implementation-output" ? subject.artifact.parent_documents.find((candidate) => candidate.document_path === artifactPath)?.content_digest : documentProjectionDescriptors(subject.artifact).find((candidate) => candidate.document_path === artifactPath)?.content_digest;
   if (retainedDigest === void 0) return fail14(authority.context.phase_instance, "produce-projection-not-retained");
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile6(target2.value.absolute));
+    bytes = new Uint8Array(await readFile6(target3.value.absolute));
   } catch {
     return fail14(authority.context.phase_instance, "produce-projection-unavailable");
   }
@@ -40403,11 +40432,55 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
   return ok14(current);
 }
 
-// src/state/status.ts
+// src/dispatch/recovery.ts
+import { readFile as readFile8 } from "node:fs/promises";
+init_zod();
+init_plain_json();
 init_canonical();
-import { readFile as readFile10 } from "node:fs/promises";
-init_phase_instance();
-init_review();
+init_path_claims();
+
+// src/dispatch/failure-observation.ts
+init_canonical();
+import { readFile as readFile7 } from "node:fs/promises";
+var supportedCodes = new Set(DISPATCH_FAILURE_CODES);
+var SAFE_MESSAGES = Object.freeze({
+  CONFIG_INVALID: "The selected reviewer route configuration is invalid.",
+  CONFIG_MODEL_UNSUPPORTED: "The selected reviewer model is not supported by the dispatcher.",
+  CLI_MISSING: "The required reviewer CLI is not installed or is not available on PATH.",
+  AUTH_UNAVAILABLE: "The required reviewer authentication is unavailable.",
+  TIMEOUT: "The reviewer timed out before producing a usable result.",
+  RECOVERY_STATE_INVALID: "Durable reviewer recovery state is unreadable; repair it before retrying.",
+  RATE_LIMITED: "The reviewer service rate limit prevented this dispatch.",
+  UNSUPPORTED_MODEL: "The reviewer service does not support the selected model.",
+  CLI_VERSION_UNSUPPORTED: "The installed reviewer CLI version is not supported.",
+  MODEL_OUTPUT_INVALID: "The reviewer returned invalid structured output. Repair the response contract before retrying.",
+  PROCESS_FAILED: "The reviewer process failed before producing a usable result.",
+  REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review."
+});
+function observationClaim(phaseInstance5, attempt) {
+  return parseWorkspacePathClaim(
+    `diagnostics/attempts/${phaseInstance5}/dispatch-counter-review-${String(attempt)}.json`
+  );
+}
+async function readCurrentDispatchFailure(dependencies, authority, state) {
+  if (state.terminal !== void 0 || state.task_id !== authority.task_id || state.step !== "counter_review" || state.status !== "running") return void 0;
+  try {
+    const target3 = await resolveTaskWorkspacePath({
+      runner: dependencies.runner,
+      taskId: authority.task_id,
+      claim: observationClaim(state.phase_instance, state.attempt),
+      expectedClass: "workspace-attempt",
+      context: authority.context
+    });
+    if (!target3.ok) return void 0;
+    const parsed = dispatchFailureObservationV1Schema.parse(JSON.parse(
+      await readFile7(target3.value.absolute, "utf8")
+    ));
+    return parsed.task_id === state.task_id && parsed.phase_instance === state.phase_instance && parsed.step === state.step && parsed.attempt === state.attempt && parsed.observed_at_revision === state.revision ? Object.freeze(parsed) : void 0;
+  } catch {
+    return void 0;
+  }
+}
 
 // src/dispatch/routing.ts
 init_evidence();
@@ -40578,6 +40651,87 @@ function resolveDispatchRoute(config2, phaseKind2, role, host) {
   return selectDispatchRoute(config2, phaseKind2, role, void 0, void 0, host).route;
 }
 
+// src/dispatch/recovery.ts
+var MAX_DISPATCHES = 3;
+var entrySchema = external_exports.object({
+  key: external_exports.string().regex(/^[0-9a-f]{64}$/u),
+  envelope_digest: external_exports.string().regex(/^[0-9a-f]{64}$/u).optional(),
+  role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator", "effort-reviewer"]),
+  dispatches: external_exports.number().int().min(0).max(MAX_DISPATCHES),
+  status: external_exports.enum(["running", "retrying", "failed", "succeeded"]),
+  failure: publicDispatchFailureV1Schema.optional(),
+  next_retry_at: external_exports.iso.datetime().optional()
+}).strict();
+var recordSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  binding: external_exports.string().regex(/^[0-9a-f]{64}$/u),
+  entries: external_exports.array(entrySchema).max(64)
+}).strict();
+function binding(state) {
+  return canonicalJsonDigest({
+    task_id: state.task_id,
+    phase_instance: state.phase_instance,
+    attempt: state.attempt,
+    input_fingerprint: state.input_fingerprint,
+    produce: state.authoritative_results.find((ref) => ref.phase_instance === state.phase_instance && ref.step === "produce") ?? null
+  });
+}
+async function target(context2) {
+  const resolved = await resolveTaskPath({
+    runner: context2.dependencies.runner,
+    taskId: context2.authority.task_id,
+    claim: parseTaskPathClaim("authority/dispatch-recovery.json"),
+    expectedClass: "authority-recovery",
+    context: context2.authority.context
+  });
+  if (!resolved.ok) throw new Error("Durable dispatch recovery path is unavailable");
+  return resolved.value;
+}
+async function read(context2) {
+  let bytes;
+  try {
+    bytes = await readFile8((await target(context2)).absolute);
+  } catch (error51) {
+    if (error51 !== null && typeof error51 === "object" && "code" in error51 && error51.code === "ENOENT") {
+      return { schema_version: "1", binding: binding(context2.state), entries: [] };
+    }
+    throw error51;
+  }
+  const record2 = recordSchema.parse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+  if (Buffer.compare(Buffer.from(bytes), Buffer.from(canonicalJsonBytes(record2))) !== 0 || new Set(record2.entries.map((entry) => entry.key)).size !== record2.entries.length) {
+    throw new Error("Durable dispatch recovery record is not canonical");
+  }
+  return record2.binding === binding(context2.state) ? record2 : { schema_version: "1", binding: binding(context2.state), entries: [] };
+}
+async function readDispatchRecovery(context2) {
+  if (context2.state.terminal !== void 0 || context2.state.step !== "counter_review" || context2.state.status !== "running") return void 0;
+  try {
+    const record2 = await read(context2);
+    const pending = record2.entries.filter((entry2) => entry2.status !== "succeeded" && entry2.failure !== void 0);
+    const entry = pending.find((item) => item.status === "failed") ?? pending[0];
+    if (entry?.failure === void 0) return record2.entries.length === 0 ? void 0 : null;
+    return { ...entry.failure, recovery: {
+      status: entry.status === "failed" ? entry.dispatches >= MAX_DISPATCHES ? "exhausted" : "repair-required" : "retrying",
+      dispatches: entry.dispatches,
+      maximum_dispatches: MAX_DISPATCHES,
+      ...entry.next_retry_at === void 0 ? {} : { next_retry_at: entry.next_retry_at }
+    } };
+  } catch {
+    return {
+      role: "counter-reviewer",
+      code: "RECOVERY_STATE_INVALID",
+      message: "Durable reviewer recovery state is unreadable; repair it before retrying.",
+      recovery: { status: "repair-required", dispatches: 0, maximum_dispatches: MAX_DISPATCHES }
+    };
+  }
+}
+
+// src/state/status.ts
+init_canonical();
+import { readFile as readFile11 } from "node:fs/promises";
+init_phase_instance();
+init_review();
+
 // src/review/adjudication.ts
 var AdjudicationServiceError = class extends Error {
   constructor(project_error) {
@@ -40700,14 +40854,28 @@ function selectPolicyReviewGates(registry2, evidence) {
 }
 function gateDeclaredByReviewTrigger(gate) {
   if (gate.kind !== "constitution-review" || !("matched_trigger_rules" in gate.context)) return false;
-  return gate.context.matched_trigger_rules.length > 0 || gate.context.uncertain_trigger_rules.length > 0;
+  return gate.context.matched_trigger_rules.length > 0;
 }
 
 // src/review/fixed-point.ts
 init_evidence();
 init_review();
 init_phase_instance();
-var DEFAULT_MAX_ATTEMPTS = 3;
+var DEFAULT_MAX_ATTEMPTS = 5;
+function completedReviewRoundCount(state, retained) {
+  const triage = triageAt(retained);
+  const history = triage?.review_round_history;
+  if (history === void 0) {
+    const artifact = retained.get("counter_review")?.manifest.source_artifact;
+    if (artifact?.artifact_kind !== "review-evidence") return 0;
+    if (artifact.evidence.schema_version === "3") return 1;
+    return state.attempt;
+  }
+  const attempts = new Set(history.filter((round) => round.attempt <= state.attempt).map((round) => round.attempt));
+  const review = retained.get("counter_review");
+  if (review !== void 0 && review.reference.phase_instance === state.phase_instance && !history.some((round) => round.review_evidence_digest === review.manifest.artifact_digest) && (state.step === "triage" || state.step === "counter_review" && state.status === "succeeded")) attempts.add(state.attempt);
+  return attempts.size;
+}
 var EVIDENCE_STEPS = Object.freeze([
   "counter_review",
   "triage",
@@ -41058,7 +41226,7 @@ function resolveAdjudicationGateStep(state, retained, subject, maximum) {
   const gate = gates.find((candidate) => !adjudicationGateSatisfied(state, retained, subject, candidate));
   if (gate === void 0) return decision2("advance");
   const pending = adjudicationGatePending(state, gate);
-  if (!pending && !gateDeclaredByReviewTrigger(gate) && state.attempt < maximum) {
+  if (!pending && !gateDeclaredByReviewTrigger(gate) && completedReviewRoundCount(state, retained) < maximum) {
     return decision2("produce", { reentry_required: true, policy_reentry_required: true });
   }
   return decision2("adjudication-gate", { adjudication_gate_pending: pending });
@@ -41128,8 +41296,11 @@ function assessCurrentEvidence(state, retained, subject) {
     maximum,
     acceptedSettled
   );
-  const exhausted = action3.reentry_required && state.attempt >= maximum;
+  const completedRounds = completedReviewRoundCount(state, retained);
+  const exhausted = action3.reentry_required && completedRounds >= maximum;
   return Object.freeze({
+    completed_review_rounds: completedRounds,
+    maximum_review_rounds: maximum,
     current: Object.freeze([...current]),
     stale: Object.freeze([...stale]),
     every_finding_dispositioned: disposition.complete,
@@ -41400,8 +41571,8 @@ function buildGateDecisionTemplates(active) {
     ]);
   }
   const templates = [];
-  const baselineLiveCount = request.kind === "baseline-adoption" ? request.context.drifted_projections.length + (request.context.secondary_targets ?? []).reduce((count, target2) => count + target2.drifted_projections.length, 0) : 0;
-  const baselineDeletedCount = request.kind === "baseline-adoption" ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? []).reduce((count, target2) => count + (target2.deleted_projections?.length ?? 0), 0) : 0;
+  const baselineLiveCount = request.kind === "baseline-adoption" ? request.context.drifted_projections.length + (request.context.secondary_targets ?? []).reduce((count, target3) => count + target3.drifted_projections.length, 0) : 0;
+  const baselineDeletedCount = request.kind === "baseline-adoption" ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? []).reduce((count, target3) => count + (target3.deleted_projections?.length ?? 0), 0) : 0;
   for (const decision3 of request.allowed_decisions) {
     if (decision3 === "cancel") {
       templates.push(cancellation);
@@ -41564,8 +41735,8 @@ function policyFindingReasons(findings) {
         text: `${identity} has a ${finding.compliance} policy-compliance finding.`
       })],
       ...finding.trigger === "not-matched" ? [] : [Object.freeze({
-        class: "exception",
-        text: `${identity} has a ${finding.trigger} human-review trigger.`
+        class: finding.trigger === "matched" ? "configured-approval" : "exception",
+        text: `${identity} has a ${finding.trigger} human-review trigger. ${finding.trigger_evidence}`
       })]
     ];
   });
@@ -41619,7 +41790,7 @@ function ordinaryReasons(active, authenticatedDetails) {
   return Object.freeze(reasons);
 }
 function baselineAffectedCount(context2) {
-  return context2.drifted_projections.length + (context2.deleted_projections?.length ?? 0) + (context2.secondary_targets ?? []).reduce((count, target2) => count + target2.drifted_projections.length + (target2.deleted_projections?.length ?? 0), 0);
+  return context2.drifted_projections.length + (context2.deleted_projections?.length ?? 0) + (context2.secondary_targets ?? []).reduce((count, target3) => count + target3.drifted_projections.length + (target3.deleted_projections?.length ?? 0), 0);
 }
 function baselineProjectionDetails(context2) {
   const projectionLines = (repository, drifted, deleted) => {
@@ -41644,10 +41815,10 @@ function baselineProjectionDetails(context2) {
       `${context2.uncommitted_paths.length} drifted path${context2.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted; the remaining drift is committed on that target.`
     ],
     ...projectionLines(void 0, context2.drifted_projections, context2.deleted_projections ?? []),
-    ...(context2.secondary_targets ?? []).flatMap((target2) => [
-      `Repository ${target2.repository} target ${target2.target_ref} was observed at ${target2.target_head}.`,
-      `${target2.uncommitted_paths.length} drifted path${target2.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted in repository ${target2.repository}; the remaining drift there is committed.`,
-      ...projectionLines(target2.repository, target2.drifted_projections, target2.deleted_projections ?? [])
+    ...(context2.secondary_targets ?? []).flatMap((target3) => [
+      `Repository ${target3.repository} target ${target3.target_ref} was observed at ${target3.target_head}.`,
+      `${target3.uncommitted_paths.length} drifted path${target3.uncommitted_paths.length === 1 ? " is" : "s are"} uncommitted in repository ${target3.repository}; the remaining drift there is committed.`,
+      ...projectionLines(target3.repository, target3.drifted_projections, target3.deleted_projections ?? [])
     ])
   ]);
 }
@@ -41659,7 +41830,7 @@ function exceptionalReasons(active) {
       case "material-drift":
         return "The reviewed work materially diverges from approved upstream work and requires a recovery decision.";
       case "attempts-exhausted":
-        return active.context.review_push_through === void 0 ? `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.` : `Automated review reached its limit after ${active.context.review_push_through.minimum_attempt} or more completed review rounds; continuing despite the exact accepted findings is an explicit exception.`;
+        return active.context.completed_review_rounds !== void 0 ? `Automated review completed ${active.context.completed_review_rounds} of ${active.context.maximum_attempts} allowed rounds and still has unresolved material findings. Human direction is required.` : active.context.review_push_through === void 0 ? `Automated review reached its limit after ${active.context.attempts} attempts and requires human direction.` : `Automated review reached its limit after ${active.context.review_push_through.minimum_attempt} or more completed review rounds; continuing despite the exact accepted findings is an explicit exception.`;
       case "validation-override":
         return "The producer could not or should not run the named validations, and only a human may grant this recorded exception.";
       case "constitution-edit":
@@ -41752,7 +41923,7 @@ function buildHumanGatePresentation(active, authenticatedDetails = {}) {
     ...details.length === 0 ? {} : { details: Object.freeze(details) },
     question: hasEscalations ? `${copy2.question} Escalated review findings require your decision. Choose an option and briefly explain why.` : `${copy2.question} Choose an option and briefly explain why.`,
     reasons,
-    options: Object.freeze(presentationBindings(request).map((binding) => binding.option))
+    options: Object.freeze(presentationBindings(request).map((binding2) => binding2.option))
   });
 }
 
@@ -41820,6 +41991,9 @@ function policyReentryDetail(findings) {
   for (const rule4 of findings?.rules ?? []) {
     const verdict = rule4.compliance === "fail" ? "is not met" : "could not be shown to be met";
     lines.push(`Constitution rule ${rule4.rule_id} (v${rule4.rule_version}) ${verdict}: ${rule4.rationale}`);
+  }
+  for (const trigger of findings?.triggers ?? []) {
+    lines.push(`Whether approval rule ${trigger.rule_id} (v${trigger.rule_version}) applies is uncertain: ${trigger.rationale}`);
   }
   for (const drift of findings?.drift ?? []) {
     lines.push(`The work departs materially from ${drift.path} (${drift.affected_claim_ids.join(", ")}): ${drift.rationale}`);
@@ -41955,8 +42129,8 @@ function advanceAction(input, state) {
       skill_args: Object.freeze([String(phase3.phase)])
     });
   }
-  const target2 = designPhase && migrationApproval && input.legacy_resume_phase !== void 0 ? input.legacy_resume_phase : nextPhaseInstance(state.phase_instance);
-  if (target2 === void 0) {
+  const target3 = designPhase && migrationApproval && input.legacy_resume_phase !== void 0 ? input.legacy_resume_phase : nextPhaseInstance(state.phase_instance);
+  if (target3 === void 0) {
     return action(
       "inspect-state",
       "Inspect the phase plan: the current phase has no representable fixed-workflow successor.",
@@ -41964,13 +42138,13 @@ function advanceAction(input, state) {
       state
     );
   }
-  const targetPhase = decodePhaseInstance(target2);
+  const targetPhase = decodePhaseInstance(target3);
   const targetSkill = WORKFLOW_V1.phases.find((candidate) => candidate.id === targetPhase.kind)?.skill;
   if (targetSkill === void 0) {
     return action("inspect-state", "Inspect the fixed workflow: the successor phase has no skill.", true, state);
   }
   return action("advance-phase", "Advance to the next phase in the fixed workflow.", false, state, {
-    target_phase_instance: target2,
+    target_phase_instance: target3,
     skill: targetSkill,
     skill_args: targetPhase.kind === "phase-design" || targetPhase.kind === "phase-impl" ? Object.freeze([String(targetPhase.phase)]) : Object.freeze([])
   });
@@ -42213,7 +42387,7 @@ function deriveNextAction(input) {
 // src/state/phase-documents.ts
 init_canonical();
 init_phase_instance();
-import { readFile as readFile7 } from "node:fs/promises";
+import { readFile as readFile9 } from "node:fs/promises";
 var STATUS_RESOURCE_ROLES = Object.freeze([
   "current-artifact",
   "user-ask",
@@ -42311,7 +42485,7 @@ function phaseDocumentDefaults(taskId, phaseInstance5) {
 }
 async function validatePlanningRestartAskAppend(input) {
   if (input.target.path_class !== "task-ask") return false;
-  const existing = new Uint8Array(await readFile7(input.target.absolute));
+  const existing = new Uint8Array(await readFile9(input.target.absolute));
   const suffix = restartAskSuffix(input.restart_id, input.request);
   if (!bytesEndWith(existing, suffix)) return false;
   return sha256Bytes(existing.subarray(0, existing.byteLength - suffix.byteLength)) === input.expected_base_digest;
@@ -42342,7 +42516,7 @@ async function installPlanningRestartAskAppend(writer, input) {
     throw new TypeError("planning restart ask append requires the canonical ask document");
   }
   if (input.request.trim() === "") throw new TypeError("planning restart request must not be blank");
-  const existing = new Uint8Array(await readFile7(input.target.absolute));
+  const existing = new Uint8Array(await readFile9(input.target.absolute));
   const suffix = restartAskSuffix(input.restart_id, input.request);
   const existingDigest = sha256Bytes(existing);
   if (bytesEndWith(existing, suffix)) {
@@ -42371,7 +42545,7 @@ async function installPlanningRestartAskAppend(writer, input) {
 
 // src/state/workspace-cleanup.ts
 init_canonical();
-import { lstat as lstat8, readFile as readFile8, readdir as readdir2, rm, rmdir as rmdir2, stat, unlink as unlink2 } from "node:fs/promises";
+import { lstat as lstat8, readFile as readFile10, readdir as readdir2, rm, rmdir as rmdir2, stat, unlink as unlink2 } from "node:fs/promises";
 import { basename as basename3, dirname as dirname5, join as join7, relative as relative4, sep as sep4 } from "node:path";
 init_evidence();
 var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
@@ -42424,7 +42598,7 @@ function phaseNumber(phaseInstance5) {
 async function receiptIsRecoveryBuffer(entry, state) {
   if (!/^transient\/intents\/.+\.json$/u.test(entry.relative) || entry.relative.endsWith(".request.json")) return false;
   try {
-    const document2 = parseCanonicalDocument(await readFile8(entry.absolute), "intent receipt");
+    const document2 = parseCanonicalDocument(await readFile10(entry.absolute), "intent receipt");
     const receipt = parseIntentReceipt(document2.value);
     return receipt.prior_revision === state.revision && receipt.resulting_revision === state.revision + 1;
   } catch {
@@ -42469,7 +42643,7 @@ async function referencedDecisionDigests(authority) {
   const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
     if (file2.symlink) return /* @__PURE__ */ new Set(["*"]);
-    const text4 = await readFile8(file2.absolute, "utf8").catch(() => "");
+    const text4 = await readFile10(file2.absolute, "utf8").catch(() => "");
     for (const match of text4.matchAll(pattern)) digests.add(match[0]);
   }
   return digests;
@@ -42490,7 +42664,7 @@ async function decisionProtectedAuthorityResults(authority) {
     if (digest12 === void 0) continue;
     try {
       const document2 = parseCanonicalDocument(
-        await readFile8(file2.absolute),
+        await readFile10(file2.absolute),
         "result manifest"
       );
       const manifest = parseResultManifest(document2.value);
@@ -42567,7 +42741,7 @@ async function unreferencedAuthorityDecisions(authority, state) {
       }
       for (const entry of entries) {
         if (entry.symlink) return Object.freeze([]);
-        const text4 = await readFile8(entry.absolute, "utf8").catch(() => "");
+        const text4 = await readFile10(entry.absolute, "utf8").catch(() => "");
         for (const candidate of known) {
           if (!live.has(candidate) && text4.includes(`"${candidate}"`)) {
             live.add(candidate);
@@ -42628,10 +42802,10 @@ async function cleanupTarget(dependencies, authority) {
 }
 async function inspectWorkspaceCleanup(dependencies, authority, state) {
   assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
-  const target2 = await cleanupTarget(dependencies, authority);
-  if (!target2.ok) return target2;
+  const target3 = await cleanupTarget(dependencies, authority);
+  if (!target3.ok) return target3;
   try {
-    const workspaceFiles = await filesBelow(target2.value.absolute);
+    const workspaceFiles = await filesBelow(target3.value.absolute);
     const authorityFiles = await filesBelow(join7(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
@@ -42666,10 +42840,10 @@ async function inspectWorkspaceCleanup(dependencies, authority, state) {
 }
 async function cleanTaskWorkspace(dependencies, authority, state) {
   assertInternalTransactionAuthority(authority, { runner: dependencies.runner, environment: dependencies.environment });
-  const target2 = await cleanupTarget(dependencies, authority);
-  if (!target2.ok) return target2;
+  const target3 = await cleanupTarget(dependencies, authority);
+  if (!target3.ok) return target3;
   try {
-    const workspaceFiles = await filesBelow(target2.value.absolute);
+    const workspaceFiles = await filesBelow(target3.value.absolute);
     const authorityFiles = await filesBelow(join7(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
@@ -42690,12 +42864,12 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
         continue;
       }
       await removeFile(entry);
-      await removeEmptyParents(dirname5(entry.absolute), authorityFile ? join7(authority.task_root, "authority") : target2.value.absolute);
+      await removeEmptyParents(dirname5(entry.absolute), authorityFile ? join7(authority.task_root, "authority") : target3.value.absolute);
       removedFiles += 1;
       removedBytes += entry.byte_count;
     }
-    await removeEmptyDirectories(target2.value.absolute, /* @__PURE__ */ new Set([
-      join7(target2.value.absolute, "transient", ".transaction-lock")
+    await removeEmptyDirectories(target3.value.absolute, /* @__PURE__ */ new Set([
+      join7(target3.value.absolute, "transient", ".transaction-lock")
     ]));
     await removeEmptyDirectories(join7(authority.task_root, "authority", "results"));
     await removeEmptyDirectories(join7(authority.task_root, "authority", "decisions"));
@@ -42712,8 +42886,8 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
 }
 async function removeSupersededPhaseDocuments(dependencies, authority, targetPhaseInstance) {
   const planning = /^phase-design-([1-9][0-9]*)$/u.exec(targetPhaseInstance);
-  const target2 = targetPhaseInstance === "prd" || targetPhaseInstance === "design" ? 0 : planning === null ? NaN : Number(planning[1]);
-  if (!Number.isInteger(target2)) return Object.freeze([]);
+  const target3 = targetPhaseInstance === "prd" || targetPhaseInstance === "design" ? 0 : planning === null ? NaN : Number(planning[1]);
+  if (!Number.isInteger(target3)) return Object.freeze([]);
   const prefix = `.archflow/tasks/${authority.task_id}/`;
   const untracked = await dependencies.runner.runNulFields({
     argv: [
@@ -42733,7 +42907,7 @@ async function removeSupersededPhaseDocuments(dependencies, authority, targetPha
     const document2 = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relative9);
     if (document2 === null) continue;
     const phase3 = Number(document2[1]);
-    const superseded = document2[2] === "impl-notes" ? phase3 >= target2 : phase3 > target2;
+    const superseded = document2[2] === "impl-notes" ? phase3 >= target3 : phase3 > target3;
     if (!superseded) continue;
     const absolute = join7(authority.task_root, ...relative9.split("/"));
     if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
@@ -42744,11 +42918,11 @@ async function removeSupersededPhaseDocuments(dependencies, authority, targetPha
   return Object.freeze(removed.sort());
 }
 async function cleanTerminalTaskWorkspace(dependencies, authority) {
-  const target2 = await cleanupTarget(dependencies, authority);
-  if (!target2.ok) return target2;
+  const target3 = await cleanupTarget(dependencies, authority);
+  if (!target3.ok) return target3;
   try {
-    const files = await filesBelow(target2.value.absolute);
-    await rm(target2.value.absolute, { recursive: true, force: true });
+    const files = await filesBelow(target3.value.absolute);
+    await rm(target3.value.absolute, { recursive: true, force: true });
     return ok15(Object.freeze({
       removed_files: parseSafeInteger(files.length),
       removed_bytes: parseSafeInteger(files.reduce((sum, entry) => sum + entry.byte_count, 0)),
@@ -42861,14 +43035,14 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
       for (const projection of manifest.projections) {
         const pathClass3 = outputClassFor(manifest, projection.path);
         if (pathClass3 === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
-        const target2 = await resolveDeclaredOutputPath({
+        const target3 = await resolveDeclaredOutputPath({
           runner: primaryRunner,
           taskId: authority.task_id,
           claim: projection.path,
           pathClass: pathClass3,
           context: authority.context
         });
-        if (!target2.ok) return target2;
+        if (!target3.ok) return target3;
         const measuredAtRevision = manifest.accounting.measured_at_revision;
         const prior = newest.get(repositoryPathKey(void 0, projection.path));
         if (prior === void 0 || measuredAtRevision > prior.measured_at_revision) {
@@ -42877,7 +43051,7 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
             path: projection.path,
             projection,
             measured_at_revision: measuredAtRevision,
-            target: target2.value,
+            target: target3.value,
             reference,
             runner: primaryRunner
           });
@@ -42912,14 +43086,14 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
         for (const projection of section.projections) {
           const output = outputSection.outputs.find((candidate) => candidate.path === projection.path || candidate.operation === "rename" && candidate.previous_path === projection.path);
           if (output === void 0) return stateInvalid2(authority, "reconciliation-projection-unbound");
-          const target2 = await resolveDeclaredOutputPath({
+          const target3 = await resolveDeclaredOutputPath({
             runner: member.binding.runner,
             taskId: authority.task_id,
             claim: projection.path,
             pathClass: output.path_class,
             context: authority.context
           });
-          if (!target2.ok) return target2;
+          if (!target3.ok) return target3;
           const prior = newest.get(repositoryPathKey(projection.repository, projection.path));
           if (prior === void 0 || manifest.accounting.measured_at_revision > prior.measured_at_revision) {
             newest.set(repositoryPathKey(projection.repository, projection.path), Object.freeze({
@@ -42928,7 +43102,7 @@ async function discoverNewestProjections(dependencies, authority, state, reposit
               path: projection.path,
               projection,
               measured_at_revision: manifest.accounting.measured_at_revision,
-              target: target2.value,
+              target: target3.value,
               reference,
               runner: member.binding.runner
             }));
@@ -43058,15 +43232,15 @@ async function discoverIntent(dependencies, authority, state) {
   for (const name of names.sort()) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/u.test(name)) continue;
     if (name.endsWith(".request.json")) continue;
-    const target2 = await resolveTaskWorkspacePath({
+    const target3 = await resolveTaskWorkspacePath({
       runner: dependencies.runner,
       taskId: authority.task_id,
       claim: intentReceiptClaim(parsePathSafeId(name.slice(0, -5))),
       expectedClass: "workspace-intent",
       context: authority.context
     });
-    if (!target2.ok) return target2;
-    const receipt2 = await readCanonical2(target2.value, "intent receipt", parseIntentReceipt);
+    if (!target3.ok) return target3;
+    const receipt2 = await readCanonical2(target3.value, "intent receipt", parseIntentReceipt);
     if (receipt2 === "missing" || receipt2 === "invalid") continue;
     if (receipt2.value.prior_revision !== state.value.revision || receipt2.value.resulting_revision !== state.value.revision + 1 || receipt2.value.prepared_state.revision !== receipt2.value.resulting_revision) continue;
     if (!validateDurableSemantics(createPreparedIntentSubject(state, receipt2)).ok) continue;
@@ -43116,9 +43290,9 @@ function activeGateHead(active, request) {
 function baselinePresentedTargets(context2) {
   return Object.freeze([
     ...context2.target_head === void 0 ? [] : [Object.freeze({ repository: "primary", target_head: context2.target_head })],
-    ...(context2.secondary_targets ?? []).map((target2) => Object.freeze({
-      repository: target2.repository,
-      target_head: target2.target_head
+    ...(context2.secondary_targets ?? []).map((target3) => Object.freeze({
+      repository: target3.repository,
+      target_head: target3.target_head
     }))
   ]);
 }
@@ -43126,14 +43300,14 @@ function assessBaselineSubjectFreshness(request, liveContext, presentedHeadOnCur
   assertPlainJson(request, "baseline adoption request");
   assertPlainJson(liveContext, "live baseline adoption context");
   const live = structuredClone(liveContext);
-  const presented = new Map((request.context.secondary_targets ?? []).map((target2) => [target2.repository, target2.target_head]));
+  const presented = new Map((request.context.secondary_targets ?? []).map((target3) => [target3.repository, target3.target_head]));
   const context2 = presentedHeadOnCurrentFirstParent ? {
     ...live,
     ...request.context.target_head === void 0 ? {} : { target_head: request.context.target_head },
     ...live.secondary_targets === void 0 ? {} : {
-      secondary_targets: live.secondary_targets.map((target2) => {
-        const targetHead = presented.get(target2.repository);
-        return targetHead === void 0 ? target2 : { ...target2, target_head: targetHead };
+      secondary_targets: live.secondary_targets.map((target3) => {
+        const targetHead = presented.get(target3.repository);
+        return targetHead === void 0 ? target3 : { ...target3, target_head: targetHead };
       })
     }
   } : live;
@@ -43292,46 +43466,6 @@ function reconcileCurrentAuthority(value) {
     classification: findings.length === 0 ? "consistent" : "reconciliation-required",
     findings: Object.freeze(findings)
   });
-}
-
-// src/dispatch/failure-observation.ts
-init_canonical();
-import { readFile as readFile9 } from "node:fs/promises";
-var supportedCodes = new Set(DISPATCH_FAILURE_CODES);
-var SAFE_MESSAGES = Object.freeze({
-  CONFIG_INVALID: "The selected reviewer route configuration is invalid.",
-  CONFIG_MODEL_UNSUPPORTED: "The selected reviewer model is not supported by the dispatcher.",
-  CLI_MISSING: "The required reviewer CLI is not installed or is not available on PATH.",
-  AUTH_UNAVAILABLE: "The required reviewer authentication is unavailable.",
-  RATE_LIMITED: "The reviewer service rate limit prevented this dispatch.",
-  UNSUPPORTED_MODEL: "The reviewer service does not support the selected model.",
-  CLI_VERSION_UNSUPPORTED: "The installed reviewer CLI version is not supported.",
-  PROCESS_FAILED: "The reviewer process failed before producing a usable result.",
-  REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review."
-});
-function observationClaim(phaseInstance5, attempt) {
-  return parseWorkspacePathClaim(
-    `diagnostics/attempts/${phaseInstance5}/dispatch-counter-review-${String(attempt)}.json`
-  );
-}
-async function readCurrentDispatchFailure(dependencies, authority, state) {
-  if (state.terminal !== void 0 || state.task_id !== authority.task_id || state.step !== "counter_review" || state.status !== "running") return void 0;
-  try {
-    const target2 = await resolveTaskWorkspacePath({
-      runner: dependencies.runner,
-      taskId: authority.task_id,
-      claim: observationClaim(state.phase_instance, state.attempt),
-      expectedClass: "workspace-attempt",
-      context: authority.context
-    });
-    if (!target2.ok) return void 0;
-    const parsed = dispatchFailureObservationV1Schema.parse(JSON.parse(
-      await readFile9(target2.value.absolute, "utf8")
-    ));
-    return parsed.task_id === state.task_id && parsed.phase_instance === state.phase_instance && parsed.step === state.step && parsed.attempt === state.attempt && parsed.observed_at_revision === state.revision ? Object.freeze(parsed) : void 0;
-  } catch {
-    return void 0;
-  }
 }
 
 // src/state/validation-overrides.ts
@@ -43539,13 +43673,13 @@ function reviewedRepositoryGateDetails(active, currentEvidence, reviewed, reposi
 async function baselinePresentedTargetsOnCurrentFirstParent(dependencies, context2, live, repositorySet) {
   const presented = baselinePresentedTargets(context2);
   if (presented.length === 0) return false;
-  return (await Promise.all(presented.map(async (target2) => {
-    const liveTarget = target2.repository === "primary" ? live : live.secondary_targets?.find((candidate) => candidate.repository === target2.repository);
-    const runner = target2.repository === "primary" ? dependencies.runner : repositorySet?.members.find((member) => member.name === target2.repository)?.binding.runner;
-    return liveTarget !== void 0 && runner !== void 0 && (target2.target_head === liveTarget.target_head || await readFirstParentChildAfter(runner, target2.target_head, liveTarget.target_head) !== void 0);
+  return (await Promise.all(presented.map(async (target3) => {
+    const liveTarget = target3.repository === "primary" ? live : live.secondary_targets?.find((candidate) => candidate.repository === target3.repository);
+    const runner = target3.repository === "primary" ? dependencies.runner : repositorySet?.members.find((member) => member.name === target3.repository)?.binding.runner;
+    return liveTarget !== void 0 && runner !== void 0 && (target3.target_head === liveTarget.target_head || await readFirstParentChildAfter(runner, target3.target_head, liveTarget.target_head) !== void 0);
   }))).every(Boolean);
 }
-function baselineAdoptionInputFromFindings(task_id, state, findings, target2) {
+function baselineAdoptionInputFromFindings(task_id, state, findings, target3) {
   const mismatches = findings.filter((finding) => finding.kind === "projection-mismatch");
   const primaryMismatches = mismatches.filter((finding) => finding.repository === void 0);
   const drifted = primaryMismatches.filter((finding) => finding.observed_digest !== void 0);
@@ -43554,7 +43688,7 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target2) {
     const repositoryMismatches = mismatches.filter((finding) => finding.repository === repository);
     const repositoryDrifted = repositoryMismatches.filter((finding) => finding.observed_digest !== void 0);
     const repositoryDeleted = repositoryMismatches.filter((finding) => finding.observed_digest === void 0 && finding.restore_unavailable === true && finding.committed_absent === true);
-    const facts = target2?.secondary_targets?.find((candidate) => candidate.repository === repository);
+    const facts = target3?.secondary_targets?.find((candidate) => candidate.repository === repository);
     if (facts === void 0 || repositoryDrifted.length + repositoryDeleted.length !== repositoryMismatches.length) return void 0;
     return Object.freeze({
       ...facts,
@@ -43575,10 +43709,10 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target2) {
   const context2 = Object.freeze({
     drifted_projections: Object.freeze(drifted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest })).sort((left, right) => left.path.localeCompare(right.path))),
     deleted_projections: Object.freeze(deleted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest })).sort((left, right) => left.path.localeCompare(right.path))),
-    ...target2 === void 0 || primaryMismatches.length === 0 ? {} : {
-      target_ref: target2.target_ref,
-      target_head: target2.target_head,
-      uncommitted_paths: Object.freeze([...target2.uncommitted_paths].sort((left, right) => left.localeCompare(right)))
+    ...target3 === void 0 || primaryMismatches.length === 0 ? {} : {
+      target_ref: target3.target_ref,
+      target_head: target3.target_head,
+      uncommitted_paths: Object.freeze([...target3.uncommitted_paths].sort((left, right) => left.localeCompare(right)))
     },
     ...secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets) }
   });
@@ -43598,8 +43732,8 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target2) {
   });
 }
 async function currentBaselineTargetFacts(dependencies, findings, repositorySet) {
-  const target2 = await currentTargetRef(dependencies);
-  const targetHead = await resolveCommit(dependencies.runner, target2.value);
+  const target3 = await currentTargetRef(dependencies);
+  const targetHead = await resolveCommit(dependencies.runner, target3.value);
   const changed = await readChangedGitPaths(dependencies.runner);
   const driftPaths = findings.filter((finding) => finding.kind === "projection-mismatch" && finding.repository === void 0).map((finding) => finding.path);
   const changedPaths = new Set(changed.paths);
@@ -43621,7 +43755,7 @@ async function currentBaselineTargetFacts(dependencies, findings, repositorySet)
     }));
   }
   return Object.freeze({
-    target_ref: target2.value,
+    target_ref: target3.value,
     target_head: targetHead,
     uncommitted_paths: Object.freeze(driftPaths.filter((path2) => changedPaths.has(path2)).sort((left, right) => left.localeCompare(right))),
     ...secondaryTargets.length === 0 ? {} : { secondary_targets: Object.freeze(secondaryTargets) }
@@ -43679,15 +43813,15 @@ function unavailableConfig(issue4, issues) {
 }
 async function readActiveGateProjection(dependencies, authority) {
   try {
-    const target2 = await resolveTaskWorkspacePath({
+    const target3 = await resolveTaskWorkspacePath({
       runner: dependencies.runner,
       taskId: authority.task_id,
       claim: parseWorkspacePathClaim("cache/gates/gate.json"),
       expectedClass: "workspace-gate-interface",
       context: authority.context
     });
-    if (!target2.ok) return void 0;
-    const bytes = new Uint8Array(await readFile10(target2.value.absolute));
+    if (!target3.ok) return void 0;
+    const bytes = new Uint8Array(await readFile11(target3.value.absolute));
     return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
   } catch {
     return void 0;
@@ -43695,15 +43829,15 @@ async function readActiveGateProjection(dependencies, authority) {
 }
 async function readArchivedGateRequest(dependencies, authority, gateId) {
   try {
-    const target2 = await resolveTaskPath({
+    const target3 = await resolveTaskPath({
       runner: dependencies.runner,
       taskId: authority.task_id,
       claim: gateRequestClaim(gateId),
       expectedClass: "authority-decision",
       context: authority.context
     });
-    if (!target2.ok) return void 0;
-    const bytes = new Uint8Array(await readFile10(target2.value.absolute));
+    if (!target3.ok) return void 0;
+    const bytes = new Uint8Array(await readFile11(target3.value.absolute));
     return parsePersistedGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
@@ -43725,9 +43859,9 @@ function currentReviewPredecessor(state, produceSubject) {
 }
 async function currentGoverningPhaseDesignDigest(dependencies, authority, state) {
   if (decodePhaseInstance(state.phase_instance).kind !== "phase-impl") return void 0;
-  const binding = expectedProduceUpstreamBindings(state).find((candidate) => candidate.artifact_kind === "phase-design");
-  if (binding === void 0) return void 0;
-  const governing = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+  const binding2 = expectedProduceUpstreamBindings(state).find((candidate) => candidate.artifact_kind === "phase-design");
+  if (binding2 === void 0) return void 0;
+  const governing = await loadProduceUpstreamSubject(dependencies, authority, state, binding2);
   return governing.ok ? governing.value.artifact_digest : void 0;
 }
 async function currentApprovedUpstreams(dependencies, authority, state, authenticated, subject) {
@@ -43735,8 +43869,8 @@ async function currentApprovedUpstreams(dependencies, authority, state, authenti
   let settlementPolicyLoaded = false;
   const bindings = subject === void 0 ? expectedProduceUpstreamBindings(state) : produceUpstreamBindingsForSubject(state, subject.artifact);
   const digests = /* @__PURE__ */ new Set();
-  for (const binding of bindings) {
-    const loaded = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+  for (const binding2 of bindings) {
+    const loaded = await loadProduceUpstreamSubject(dependencies, authority, state, binding2);
     if (!loaded.ok) throw new TypeError("current upstream produced authority invalid");
     if ("imported_projection" in loaded.value) {
       if (state.phase_instance !== "design" && !authenticated.some((item) => item.request.kind === "migration-audit" && item.decision.envelope.payload.decision === "accept-import-audit")) {
@@ -43934,11 +44068,11 @@ async function buildSecondaryCommitAuthorizationFacts(output, repositories) {
     if (member === void 0 || member.mode !== "writable" || member.identity.digest !== section.repository_identity_digest) {
       throw new SecondaryCommitObservationError(section.repository, "repository-observation-failed");
     }
-    let target2;
+    let target3;
     let targetHead;
     try {
-      target2 = await currentTargetRefForRunner(member.binding.runner);
-      targetHead = await resolveCommit(member.binding.runner, target2.value);
+      target3 = await currentTargetRefForRunner(member.binding.runner);
+      targetHead = await resolveCommit(member.binding.runner, target3.value);
     } catch (error51) {
       if (error51 instanceof SecondaryCommitObservationError) throw error51;
       throw new SecondaryCommitObservationError(section.repository, "repository-observation-failed");
@@ -43947,7 +44081,7 @@ async function buildSecondaryCommitAuthorizationFacts(output, repositories) {
     facts.push(Object.freeze({
       repository: section.repository,
       repository_identity_digest: section.repository_identity_digest,
-      target_ref: target2.value,
+      target_ref: target3.value,
       target_head: targetHead,
       baseline_commit: section.base_commit,
       commit_message: implementationCommitMessage(output),
@@ -43974,7 +44108,7 @@ var SecondaryCommitObservationError = class extends TypeError {
   repository;
   reason;
 };
-function buildCommitAuthorizationInput(subject, currentEvidence, target2, baselineCommit, secondaryCommits = []) {
+function buildCommitAuthorizationInput(subject, currentEvidence, target3, baselineCommit, secondaryCommits = []) {
   if (subject.artifact.artifact_kind !== "implementation-output") {
     throw new TypeError("commit authorization requires retained implementation output");
   }
@@ -43993,7 +44127,7 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target2, baseli
     subject_digest: subject.artifact_digest,
     current_evidence: currentEvidence,
     context: Object.freeze({
-      target_ref: target2.value,
+      target_ref: target3.value,
       baseline_commit: baselineCommit,
       commit_message: `ArchFlow: Implement ${subject.artifact.task_id} phase ${phase3.kind === "phase-impl" ? String(phase3.phase) : subject.artifact.phase_instance}`,
       paths: Object.freeze([...paths].sort()),
@@ -44002,7 +44136,7 @@ function buildCommitAuthorizationInput(subject, currentEvidence, target2, baseli
       parent_document_digests: Object.freeze(subject.artifact.parent_documents.map((item) => item.content_digest).sort()),
       ...secondaryCommits.length === 0 ? {} : { secondary_commits: Object.freeze([...secondaryCommits]) }
     }),
-    target_ref_guidance: target2.guidance
+    target_ref_guidance: target3.guidance
   });
 }
 function buildAutonomousImplementationCommitInput(output, targetRef) {
@@ -44053,9 +44187,9 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     const reason2 = stateRead.kind === "missing" ? "state-missing" : `state-${stateRead.kind}`;
     let liveConfigDigest2;
     try {
-      const read = await dependencies.read_config(authority.config);
-      if (read.kind === "valid") liveConfigDigest2 = read.snapshot.digest;
-      else if (read.kind === "invalid") liveConfigDigest2 = read.digest;
+      const read2 = await dependencies.read_config(authority.config);
+      if (read2.kind === "valid") liveConfigDigest2 = read2.snapshot.digest;
+      else if (read2.kind === "invalid") liveConfigDigest2 = read2.digest;
     } catch {
     }
     const next = deriveNextAction({ repository_initialized: true });
@@ -44080,19 +44214,19 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   let repositorySet;
   let liveConfigDigest;
   try {
-    const read = await dependencies.read_config(authority.config);
-    if (read.kind !== "valid") {
+    const read2 = await dependencies.read_config(authority.config);
+    if (read2.kind !== "valid") {
       config2 = unavailableConfig(
-        `config-${read.kind}`,
-        read.kind === "invalid" ? read.issues : void 0
+        `config-${read2.kind}`,
+        read2.kind === "invalid" ? read2.issues : void 0
       );
-      blockers.push(`config-${read.kind}`);
-      if (read.kind === "invalid") liveConfigDigest = read.digest;
+      blockers.push(`config-${read2.kind}`);
+      if (read2.kind === "invalid") liveConfigDigest = read2.digest;
     } else {
-      liveConfigDigest = read.snapshot.digest;
+      liveConfigDigest = read2.snapshot.digest;
       const resolved = await resolveRepositorySet(
         { runner: dependencies.runner, environment: dependencies.environment },
-        read.snapshot.parsed,
+        read2.snapshot.parsed,
         authority.context
       );
       const continuity = resolved.ok ? validateRepositorySetContinuity(state, resolved.value) : resolved;
@@ -44104,7 +44238,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         throw new TypeError("repository-set continuity unexpectedly succeeded after resolution failed");
       } else {
         config2 = Object.freeze({ verified: true });
-        parsedConfig = read.snapshot.parsed;
+        parsedConfig = read2.snapshot.parsed;
         repositorySet = resolved.value;
         repositories = Object.freeze(resolved.value.members.map((member) => Object.freeze({
           name: member.name,
@@ -44354,16 +44488,16 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     if (milestoneRecoveryRequired) implementationCommit = void 0;
     if (!commitObserved && !humanImplementationCommitAuthority && implementationCommit === void 0 && acceptedSettlement !== void 0) {
       const legacyTarget = acceptedSettlement.milestone_target_ref === void 0;
-      const target2 = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
+      const target3 = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
       const autonomousCommit = buildAutonomousImplementationCommitInput(
         produceSubject.artifact,
-        target2.value
+        target3.value
       );
       try {
         const observedProof = await resolveAutonomousImplementationMilestoneProof(
           dependencies.runner,
           produceSubject.artifact,
-          target2.value,
+          target3.value,
           autonomousCommit.message
         );
         const proof = legacyTarget && observedProof.kind === "proven" && observedProof.commit !== observedProof.target_head ? Object.freeze({
@@ -44448,15 +44582,15 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     }
     if (!commitObserved && designCommit === void 0 && acceptedSettlement?.milestone_baseline_commit !== void 0) {
       const legacyTarget = acceptedSettlement.milestone_target_ref === void 0;
-      const target2 = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
-      designCommit = buildAutonomousDesignCommitInput(state, acceptedSettlement, target2.value);
+      const target3 = legacyTarget ? await currentTargetRef(dependencies) : Object.freeze({ value: acceptedSettlement.milestone_target_ref, guidance: "Pinned autonomous milestone target." });
+      designCommit = buildAutonomousDesignCommitInput(state, acceptedSettlement, target3.value);
       try {
         const observedProof = await resolveAutonomousDesignMilestoneProof(
           dependencies.runner,
           state,
           produceSubject.artifact,
           produceSubject.retained.manifest.value.outputs,
-          target2.value,
+          target3.value,
           acceptedSettlement.milestone_baseline_commit,
           designCommit.message,
           authority.context
@@ -44539,17 +44673,17 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         if (!projection.ok) produceSubjectDrift.push(repositoryPath(pin.path));
       }
       const coProduced = produceOwnedTaskDocumentPaths(produceSubject.artifact);
-      for (const binding of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
-        const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+      for (const binding2 of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
+        const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding2);
         if (!upstream.ok) continue;
         const projections = await readProduceProjectionSet(
           dependencies.runner,
           authority,
           upstream.value,
-          binding.path,
+          binding2.path,
           coProduced
         );
-        if (!projections.ok) upstreamDocumentDrift.push(repositoryPath(binding.path));
+        if (!projections.ok) upstreamDocumentDrift.push(repositoryPath(binding2.path));
       }
     } catch {
       blockers.push("review-projection-unavailable");
@@ -44563,10 +44697,10 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       const upstreamPaths2 = /* @__PURE__ */ new Map();
       if (produceSubject !== void 0) {
         try {
-          for (const binding of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
-            const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding);
+          for (const binding2 of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {
+            const upstream = await loadProduceUpstreamSubject(dependencies, authority, state, binding2);
             if (upstream.ok) {
-              upstreamPaths2.set(upstream.value.artifact_digest, `.archflow/tasks/${state.task_id}/${binding.path}`);
+              upstreamPaths2.set(upstream.value.artifact_digest, `.archflow/tasks/${state.task_id}/${binding2.path}`);
             }
           }
         } catch {
@@ -44580,6 +44714,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
           [...constitution.rules.values()].some((rule4) => rule4.status === "active")
         );
         policyFindings = Object.freeze({
+          triggers: Object.freeze(facts.constitution.rule_findings.filter((finding) => finding.trigger === "uncertain").map((finding) => Object.freeze({ rule_id: finding.rule_id, rule_version: finding.rule_version, rationale: finding.trigger_evidence }))),
           rules: Object.freeze(facts.constitution.rule_findings.filter((finding) => finding.compliance !== "pass").map((finding) => Object.freeze({
             rule_id: finding.rule_id,
             rule_version: finding.rule_version,
@@ -44625,13 +44760,13 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       upstreamDocumentDrift.push(...dependentGoverningPaths.filter((path2) => !upstreamDocumentDrift.includes(path2)));
       if (recoverableOwnedGoverningPaths.length !== 0 && (phaseKind2 === "prd" || phaseKind2 === "design" || phaseKind2 === "phase-design") && governingRecoverySubjectDigest !== void 0) {
         try {
-          const target2 = await currentTargetRef(dependencies);
+          const target3 = await currentTargetRef(dependencies);
           governingDocumentRecoveryRequired = true;
           milestoneRecoveryRequired = true;
           milestoneRecoveryFacts = Object.freeze({
             cause: "governing-document-drift",
-            target_ref: target2.value,
-            target_head: await resolveCommit(dependencies.runner, target2.value),
+            target_ref: target3.value,
+            target_head: await resolveCommit(dependencies.runner, target3.value),
             subject_digest: governingRecoverySubjectDigest
           });
         } catch {
@@ -44732,18 +44867,18 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         gateBindingBlocker = "active-gate-mismatch";
       } else {
         if (request?.kind === "baseline-adoption" && statusReconciliation !== void 0) {
-          const target2 = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
+          const target3 = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
           const live = baselineAdoptionInputFromFindings(
             authority.task_id,
             state,
             statusReconciliation.findings,
-            target2
+            target3
           );
           if (live !== void 0) {
             const continuous = await baselinePresentedTargetsOnCurrentFirstParent(
               dependencies,
               request.context,
-              target2,
+              target3,
               repositorySet
             );
             staleBaselineRefreshRequired = assessBaselineSubjectFreshness(
@@ -44912,12 +45047,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   let baselineAdoptionInput;
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "commit-authorization" && produceSubject?.artifact.artifact_kind === "implementation-output" && evidence.available) {
     try {
-      const target2 = await currentTargetRef(dependencies);
+      const target3 = await currentTargetRef(dependencies);
       const secondaryCommits = repositorySet === void 0 ? Object.freeze([]) : await buildSecondaryCommitAuthorizationFacts(produceSubject.artifact, repositorySet);
       gateInput = buildCommitAuthorizationInput(
         produceSubject,
         evidence.current_evidence,
-        target2,
+        target3,
         await resolveCommit(dependencies.runner, "HEAD"),
         secondaryCommits
       );
@@ -44933,12 +45068,12 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   }
   if (nextAction.code === "open-gate" && nextAction.gate_kind === "baseline-adoption" && statusReconciliation !== void 0) {
     try {
-      const target2 = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
+      const target3 = await currentBaselineTargetFacts(dependencies, statusReconciliation.findings, repositorySet);
       baselineAdoptionInput = baselineAdoptionInputFromFindings(
         authority.task_id,
         state,
         statusReconciliation.findings,
-        target2
+        target3
       );
     } catch (error51) {
       if (!(error51 instanceof BaselineRepositoryUnavailableError)) throw error51;
@@ -44970,6 +45105,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     if (observed !== void 0) dispatchFailure = projectDispatchFailureObservation(observed);
   } catch {
   }
+  const durableDispatchFailure = await readDispatchRecovery({ dependencies, authority, state });
+  if (durableDispatchFailure !== void 0) dispatchFailure = durableDispatchFailure ?? void 0;
   const validationOverrides = (state.validation_overrides ?? []).map((record2) => {
     const authenticated = authenticatedValidationOverrides2.find((item) => item.record.gate_id === record2.gate_id);
     if (authenticated === void 0) {
@@ -45033,6 +45170,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   if (!reviewPolicy.ok) return reviewPolicy;
   const status = Object.freeze({
     task_id: authority.task_id,
+    review_round_limit: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
     state: state.terminal ?? "active",
     revision: state.revision,
     phase_instance: state.phase_instance,
@@ -45082,7 +45220,7 @@ async function computeTaskStatus(dependencies, authority) {
 }
 async function recoverStatePosition(statePath) {
   try {
-    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile10(statePath))));
+    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile11(statePath))));
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return void 0;
     const candidate = raw;
     const position2 = Object.freeze({
@@ -45229,27 +45367,27 @@ function planningTargetsBefore(current) {
   ];
   const maximum = decoded.kind === "phase-design" || decoded.kind === "phase-impl" ? decoded.phase : 0;
   for (let phase3 = 1; phase3 <= maximum; phase3 += 1) {
-    const target2 = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(phase3) });
-    if (comparePhaseInstances(target2, current) < 0) candidates.push(target2);
+    const target3 = encodePhaseInstance({ kind: "phase-design", phase: parsePositiveSafePhaseNumber(phase3) });
+    if (comparePhaseInstances(target3, current) < 0) candidates.push(target3);
   }
-  return Object.freeze(candidates.filter((target2) => comparePhaseInstances(target2, current) < 0));
+  return Object.freeze(candidates.filter((target3) => comparePhaseInstances(target3, current) < 0));
 }
 function reopenImpacts(state, status) {
   if (state.terminal !== void 0 || state.open_gate !== void 0 || status.blocking_reasons.length !== 0) return Object.freeze([]);
-  return Object.freeze(planningTargetsBefore(state.phase_instance).map((target2) => {
+  return Object.freeze(planningTargetsBefore(state.phase_instance).map((target3) => {
     const affected = /* @__PURE__ */ new Set([state.phase_instance]);
     for (const reference of state.authoritative_results) {
-      if (comparePhaseInstances(reference.phase_instance, target2) >= 0) affected.add(reference.phase_instance);
+      if (comparePhaseInstances(reference.phase_instance, target3) >= 0) affected.add(reference.phase_instance);
     }
-    const targetKind = decodePhaseInstance(target2).kind;
+    const targetKind = decodePhaseInstance(target3).kind;
     const authorityEffects = [];
-    if (state.authoritative_results.some((reference) => comparePhaseInstances(reference.phase_instance, target2) >= 0)) authorityEffects.push("supersede-results");
+    if (state.authoritative_results.some((reference) => comparePhaseInstances(reference.phase_instance, target3) >= 0)) authorityEffects.push("supersede-results");
     if (state.waivers.length !== 0) authorityEffects.push("clear-active-waivers");
     if (state.pending_human_revision !== void 0) authorityEffects.push("clear-pending-human-revision");
     if ((targetKind === "prd" || targetKind === "design") && state.planned_final_phase !== void 0) authorityEffects.push("clear-planned-final-phase");
     return Object.freeze({
-      target: workflowPosition(target2),
-      affected_positions: Object.freeze([...affected].filter((phase3) => comparePhaseInstances(phase3, target2) >= 0).sort(comparePhaseInstances).map(workflowPosition)),
+      target: workflowPosition(target3),
+      affected_positions: Object.freeze([...affected].filter((phase3) => comparePhaseInstances(phase3, target3) >= 0).sort(comparePhaseInstances).map(workflowPosition)),
       authority_effects: Object.freeze(authorityEffects),
       planned_final_phase: targetKind === "prd" || targetKind === "design" ? "clear" : "retain",
       preserves_existing_git_index_and_worktree_bytes: true,
@@ -45722,11 +45860,11 @@ function invocationOwnsCurrentPosition(invocation, status, actionKind) {
   if (!semanticInvocationEnabled(invocation)) return false;
   if (status.state === "missing") return invocation.skill === "archflow-prd" && invocation.intent === "resume";
   if (invocation.intent !== "resume") return false;
-  const target2 = invocationTarget(invocation);
+  const target3 = invocationTarget(invocation);
   if (actionKind === "start-next-skill") {
-    return status.next_action.code === "advance-phase" && target2 === status.next_action.target_phase_instance;
+    return status.next_action.code === "advance-phase" && target3 === status.next_action.target_phase_instance;
   }
-  return status.phase_instance !== void 0 && target2 === status.phase_instance;
+  return status.phase_instance !== void 0 && target3 === status.phase_instance;
 }
 function samePosition(left, right) {
   if (left.kind !== right.kind) return false;
@@ -45735,8 +45873,8 @@ function samePosition(left, right) {
 }
 function reopenImpactFor(snapshot2, invocation) {
   if (invocation.intent !== "reopen") return void 0;
-  const target2 = positionFromPhase(invocationTarget(invocation));
-  return target2 === void 0 ? void 0 : snapshot2.reopen_impacts.find((impact) => samePosition(impact.target, target2));
+  const target3 = positionFromPhase(invocationTarget(invocation));
+  return target3 === void 0 ? void 0 : snapshot2.reopen_impacts.find((impact) => samePosition(impact.target, target3));
 }
 function markerStatus(value) {
   if (value === void 0 || value === null || Array.isArray(value) || typeof value !== "object") return void 0;
@@ -45902,6 +46040,7 @@ function mapRunStep(status, action3, snapshot2) {
   }
 }
 function mapNextAction(status, snapshot2) {
+  if (status.dispatch_failure?.code === "RECOVERY_STATE_INVALID") return inspect2(status.dispatch_failure.message);
   if (markerStatus(snapshot2.pending_waiver_origin) === "invalid") {
     return inspect2("The pending waiver origin is stale or unauthenticated.");
   }
@@ -45980,8 +46119,17 @@ function mapNextAction(status, snapshot2) {
         presentation
       });
     }
-    case "run-step":
-      return mapRunStep(status, action3, snapshot2);
+    case "run-step": {
+      const step = mapRunStep(status, action3, snapshot2);
+      const recovery = status.dispatch_failure?.recovery;
+      return step.action_kind === "review" && recovery !== void 0 && recovery.status !== "retrying" ? Object.freeze({
+        ...step,
+        condition: "awaiting-human",
+        headline: "Reviewer recovery needs human attention",
+        detail: status.dispatch_failure.message,
+        instruction: "Repair the reviewer route or explicitly authorize a one-dispatch retry or substitute, then resume this review."
+      }) : step;
+    }
     case "recover-approval-trigger-authority":
       return Object.freeze({
         condition: "ready",
@@ -46163,7 +46311,19 @@ function projectSemanticStatus(snapshot2, invocation) {
   const position2 = positionFromPhase(status.phase_instance);
   const context2 = reviewContext(status);
   const strength = reviewStrength(status, snapshot2);
+  const recovery = status.dispatch_failure?.recovery;
+  const boundary = status.state === "abandoned" ? "abandoned" : status.state === "complete" ? "complete" : shape.presentation !== void 0 ? shape.presentation.class : status.dispatch_failure !== void 0 && recovery?.status !== "retrying" ? "exception" : shape.action_kind === "start-next-skill" ? "step-transition" : shape.action_kind === "inspect" ? "exception" : "none";
+  const progress = status.step === void 0 || status.status === void 0 ? void 0 : {
+    step: status.step,
+    step_status: status.status,
+    review_rounds_completed: status.evidence?.assessment?.completed_review_rounds ?? 0,
+    review_round_limit: status.evidence?.assessment?.maximum_review_rounds ?? status.review_round_limit ?? DEFAULT_MAX_ATTEMPTS,
+    boundary,
+    reason: shape.presentation !== void 0 ? shape.instruction : recovery?.status === "retrying" ? "A transient reviewer failure is being retried automatically on the same route." : status.dispatch_failure !== void 0 ? status.dispatch_failure.message : shape.action_kind === "start-next-skill" ? "This skill is complete. Waiting for the user to launch the named successor." : shape.instruction,
+    ...recovery === void 0 ? {} : { dispatch_recovery: recovery }
+  };
   const view = Object.freeze({
+    ...progress === void 0 ? {} : { progress },
     schema_version: "1",
     task_id: status.task_id,
     condition: shape.condition,
@@ -46199,7 +46359,7 @@ init_evidence();
 init_phase_instance();
 
 // src/init/diagnostics.ts
-import { readFile as readFile12, stat as stat4 } from "node:fs/promises";
+import { readFile as readFile13, stat as stat4 } from "node:fs/promises";
 import { join as join12 } from "node:path";
 init_evidence();
 
@@ -46801,6 +46961,9 @@ function classifyMessage(adapter2, message) {
     const model = modelFromMessage(message);
     if (model !== void 0) return createProjectError("UNSUPPORTED_MODEL", { model });
   }
+  if (/\b(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|service temporarily unavailable|bad gateway|gateway timeout)\b|\bHTTP\s+(?:502|503|504)\b/iu.test(message)) {
+    return createProjectError("PROCESS_FAILED", { adapter: adapter2, exit_class: "transient-transport" });
+  }
   return void 0;
 }
 function claudeFailureMessage(result) {
@@ -47257,7 +47420,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir5, open as open6, readFile as readFile11, rename as rename3, unlink as unlink3 } from "node:fs/promises";
+import { mkdir as mkdir5, open as open6, readFile as readFile12, rename as rename3, unlink as unlink3 } from "node:fs/promises";
 import { basename as basename4, dirname as dirname6, join as join11 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
@@ -47337,7 +47500,7 @@ function runCommand(command, argv, cwd, environment) {
 }
 async function readOptional(path2) {
   try {
-    return await readFile11(path2, "utf8");
+    return await readFile12(path2, "utf8");
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;
@@ -47735,7 +47898,7 @@ function codexTimeoutFinding(source) {
 }
 async function readHostConfig(path2) {
   try {
-    return await readFile12(path2, "utf8");
+    return await readFile13(path2, "utf8");
   } catch {
     return void 0;
   }
@@ -47852,7 +48015,7 @@ async function runInit(input) {
 // src/init/legacy-upgrade.ts
 init_canonical();
 init_config();
-import { lstat as lstat11, readdir as readdir5, readFile as readFile15, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
+import { lstat as lstat11, readdir as readdir5, readFile as readFile16, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute6, join as join16, relative as relative7, sep as sep5 } from "node:path";
 init_evidence();
 init_path_claims();
@@ -48007,14 +48170,14 @@ function identifyTransactionRequest(call, authority, recomputedInputFingerprint)
 // src/state/legacy-stage.ts
 init_canonical();
 init_config();
-import { readFile as readFile13 } from "node:fs/promises";
+import { readFile as readFile14 } from "node:fs/promises";
 import { join as join13 } from "node:path";
 function importRoot(authority, initialization) {
   return join13(authority.workspace_root, "cache", "imports", initialization.import_digest);
 }
 async function readStagedLegacyConfig(authority, initialization) {
   try {
-    const bytes = new Uint8Array(await readFile13(join13(importRoot(authority, initialization), "config.yaml")));
+    const bytes = new Uint8Array(await readFile14(join13(importRoot(authority, initialization), "config.yaml")));
     const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest12 = sha256Bytes(bytes);
     if (digest12 !== initialization.config_digest) return void 0;
@@ -48025,7 +48188,7 @@ async function readStagedLegacyConfig(authority, initialization) {
 }
 async function readStagedLegacyPayload(authority, initialization, reference) {
   try {
-    const bytes = new Uint8Array(await readFile13(join13(importRoot(authority, initialization), "payload", reference.legacy_path)));
+    const bytes = new Uint8Array(await readFile14(join13(importRoot(authority, initialization), "payload", reference.legacy_path)));
     if (bytes.byteLength !== reference.byte_count || sha256Bytes(bytes) !== reference.digest) return void 0;
     return bytes;
   } catch {
@@ -48232,9 +48395,9 @@ async function installLegacyDestination(request, initialization, initializationB
       if (bytes === void 0) return contract("legacy-staged-payload-invalid");
       const prefix = `.archflow/tasks/${initialization.task_id}/`;
       const relativeDestination = entry.destination_path.slice(prefix.length);
-      const target2 = join14(temporary, relativeDestination);
-      await mkdir6(dirname7(target2), { recursive: true });
-      await writeFile3(target2, bytes, { flag: "wx", mode: 420 });
+      const target3 = join14(temporary, relativeDestination);
+      await mkdir6(dirname7(target3), { recursive: true });
+      await writeFile3(target3, bytes, { flag: "wx", mode: 420 });
     }
     await writeFile3(join14(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
     await writeFile3(join14(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
@@ -48608,7 +48771,7 @@ init_evidence();
 init_path_claims();
 init_plain_json();
 init_phase_instance();
-import { readdir as readdir4, readFile as readFile14 } from "node:fs/promises";
+import { readdir as readdir4, readFile as readFile15 } from "node:fs/promises";
 import { join as join15 } from "node:path";
 var legacyUpgradeStageDescriptorV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
@@ -48638,7 +48801,7 @@ async function inspectLegacyUpgradeStage(importsRoot, taskId) {
   for (const digest12 of digests) {
     try {
       const descriptor = parseLegacyUpgradeStageDescriptor(
-        JSON.parse(await readFile14(join15(importsRoot, digest12, "stage.json"), "utf8"))
+        JSON.parse(await readFile15(join15(importsRoot, digest12, "stage.json"), "utf8"))
       );
       if (descriptor.task_id === taskId && descriptor.import_digest === digest12 && descriptor.manifest_path === expectedManifestPath(taskId, digest12)) {
         matches.push(descriptor);
@@ -48765,7 +48928,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       const resolved = await resolveLegacySourcePath({ sourceRoot, claim, context: context2 });
       if (!resolved.ok) return resolved;
       try {
-        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile15(resolved.value.absolute)) }));
+        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile16(resolved.value.absolute)) }));
       } catch {
         return fail22(ioError3(context2));
       }
@@ -48807,7 +48970,7 @@ async function stageLegacyUpgrade(input) {
     }
     let configBytes;
     try {
-      configBytes = new Uint8Array(await readFile15(join16(runner.location.worktreeRoot, ".archflow", "config.yaml")));
+      configBytes = new Uint8Array(await readFile16(join16(runner.location.worktreeRoot, ".archflow", "config.yaml")));
     } catch {
       return fail22(createProjectError("CONFIG_INVALID", { issue_code: "archflow-initialization-required" }));
     }
@@ -48926,13 +49089,13 @@ async function stageLegacyUpgrade(input) {
     const stagedByLegacy = /* @__PURE__ */ new Map();
     for (const file2 of selected.value.files) {
       const claim = parseWorkspacePathClaim(`cache/imports/${importDigest}/payload/${file2.legacy_path}`);
-      const target2 = await resolveTaskWorkspacePath({ runner, taskId, claim, expectedClass: "workspace-import", context: context2 });
-      if (!target2.ok) return target2;
+      const target3 = await resolveTaskWorkspacePath({ runner, taskId, claim, expectedClass: "workspace-import", context: context2 });
+      if (!target3.ok) return target3;
       if (operation === "stage") {
-        await ensureWorkspaceProjectionParent(authority, target2.value.absolute);
-        await writer.replaceRegular(target2.value, file2.bytes, false);
+        await ensureWorkspaceProjectionParent(authority, target3.value.absolute);
+        await writer.replaceRegular(target3.value, file2.bytes, false);
       }
-      const stagedPath = target2.value.repositoryRelative;
+      const stagedPath = target3.value.repositoryRelative;
       stagedPaths.push(stagedPath);
       stagedByLegacy.set(file2.legacy_path, stagedPath);
     }
@@ -49033,8 +49196,8 @@ async function discardLegacyUpgrade(input) {
     }
     if (entries.includes("config.yaml")) {
       const [actual, template] = await Promise.all([
-        readFile15(join16(destination, "config.yaml")),
-        readFile15(join16(root, ".archflow", "config.yaml"))
+        readFile16(join16(destination, "config.yaml")),
+        readFile16(join16(root, ".archflow", "config.yaml"))
       ]);
       if (!actual.equals(template)) {
         return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-config-modified" }));
@@ -49073,7 +49236,7 @@ async function adoptLegacyUpgrade(input) {
       }));
     }
     const descriptor = inspected.descriptor;
-    const manifestBytes = new Uint8Array(await readFile15(
+    const manifestBytes = new Uint8Array(await readFile16(
       join16(services2.authority.workspace_root, "cache", "imports", descriptor.import_digest, "manifest.json")
     ));
     const manifest = parseCanonicalDocument(manifestBytes, "staged legacy import manifest");
@@ -49356,6 +49519,31 @@ function createAutomationStatusV2(document2, authority) {
   return Object.freeze(automationStatusV2Schema.parse({ ...observed, observation_id }));
 }
 var createAutomationStatus = createAutomationStatusV1;
+var commonShapeV3 = { ...commonShapeV2, schema_version: external_exports.literal("3"), progress: workflowProgressV1Schema.nullable() };
+var automationStatusV3Schema = external_exports.xor([
+  external_exports.object({ ...commonShapeV3, condition: external_exports.literal("awaiting-client"), next_action: skillActionV1Schema }).strict(),
+  external_exports.object({ ...commonShapeV3, condition: external_exports.literal("awaiting-human"), next_action: humanActionV1Schema, human_boundary: automationHumanBoundaryV2Schema }).strict(),
+  external_exports.object({ ...commonShapeV3, condition: external_exports.literal("awaiting-transition"), next_action: launchActionV1Schema.extend({ actor: external_exports.literal("human") }) }).strict(),
+  external_exports.object({ ...commonShapeV3, condition: external_exports.literal("blocked"), next_action: repairActionV1Schema, blocked: positionedBlockedV1Schema }).strict(),
+  external_exports.object({ ...commonShapeV3, position: external_exports.null(), condition: external_exports.literal("blocked"), next_action: repairActionV1Schema, blocked: positionlessBlockedV1Schema }).strict(),
+  external_exports.object({ ...commonShapeV3, condition: external_exports.literal("complete"), next_action: noneActionV1Schema }).strict()
+]);
+function parseAutomationStatusV3(value) {
+  assertPlainJson(value, "automation status v3");
+  return automationStatusV3Schema.parse(structuredClone(value));
+}
+function createAutomationStatusV3(document2, authority) {
+  assertPlainJson(document2, "automation status v3 without observation id");
+  assertPlainJson(authority, "automation observation authority");
+  const observed = structuredClone(document2);
+  const identity = authorityV1Schema.parse(structuredClone(authority));
+  return parseAutomationStatusV3({ ...observed, observation_id: canonicalJsonDigest({
+    schema_version: "3",
+    purpose: "archflow-automation-observation-v3",
+    observation: observed,
+    authority: identity
+  }) });
+}
 
 // src/local/automation-status.ts
 init_canonical();
@@ -49666,6 +49854,32 @@ function projectAutomationStatusV2(snapshot2, view) {
 function assertNeverCondition(condition) {
   throw new TypeError(`unmapped semantic workflow condition: ${String(condition)}`);
 }
+function projectAutomationStatusV3(snapshot2, view) {
+  const retrying = view.dispatch_failure?.recovery?.status === "retrying";
+  const { dispatch_failure: _failure, ...withoutFailure } = view;
+  const legacy = projectAutomationStatusV2(snapshot2, retrying || view.condition === "blocked" || view.presentation !== void 0 ? withoutFailure : view);
+  const { observation_id: _id, schema_version: _version, ...rest } = legacy;
+  const document2 = {
+    ...rest,
+    schema_version: "3",
+    progress: view.progress ?? null,
+    ...legacy.condition !== "ready" ? {} : {
+      condition: "awaiting-transition",
+      next_action: {
+        ...legacy.next_action,
+        actor: "human",
+        instruction: "Launch the named successor skill when ready. This completed invocation must stop here."
+      }
+    }
+  };
+  return createAutomationStatusV3(document2, {
+    kind: "readable",
+    repository_identity_digest: snapshot2.repository_identity_digest,
+    state_document_digest: snapshot2.state_document_digest,
+    live_config_digest: snapshot2.live_config_digest ?? null,
+    semantic_snapshot_digest: canonicalJsonDigest(snapshot2)
+  });
+}
 
 // src/local/automation-status-edges.ts
 init_canonical();
@@ -49677,9 +49891,10 @@ var NOT_APPLICABLE_RECOMMENDATION = Object.freeze({
 function identityDigest(value) {
   return canonicalJsonDigest(value);
 }
-function newTaskAutomationStatusV2(taskId, authority) {
+function newTaskAutomationStatusV3(taskId, authority) {
   const document2 = Object.freeze({
-    schema_version: "2",
+    schema_version: "3",
+    progress: null,
     task_id: taskId,
     state_revision: null,
     position: Object.freeze({ kind: "prd" }),
@@ -49694,14 +49909,15 @@ function newTaskAutomationStatusV2(taskId, authority) {
       instruction: "Continue the PRD workflow in its owning interactive session."
     })
   });
-  return createAutomationStatusV2(document2, Object.freeze({ kind: "absent", ...authority }));
+  return createAutomationStatusV3(document2, Object.freeze({ kind: "absent", ...authority }));
 }
-function stagedTaskAutomationStatusV2(taskId, staged, authority) {
+function stagedTaskAutomationStatusV3(taskId, staged, authority) {
   const current = staged.mode === "upgrade-staged";
   const category = current ? "legacy-upgrade-staged" : "legacy-upgrade-restart-required";
   const instruction = current ? "Resolve the authenticated legacy import stage in an interactive upgrade session before continuing." : "Discard the incompatible legacy import staging and restart upgrade preview in an interactive session.";
   const document2 = Object.freeze({
-    schema_version: "2",
+    schema_version: "3",
+    progress: null,
     task_id: taskId,
     state_revision: null,
     position: null,
@@ -49717,14 +49933,14 @@ function stagedTaskAutomationStatusV2(taskId, staged, authority) {
     mode: staged.mode,
     input: staged.next_action.input ?? null
   });
-  return createAutomationStatusV2(document2, Object.freeze({
+  return createAutomationStatusV3(document2, Object.freeze({
     kind: "staged",
     ...authority,
     classification: current ? "current" : "restart-required",
     identity_digest: identityDigest(facts)
   }));
 }
-function unreadableTaskAutomationStatusV2(taskId, unreadable) {
+function unreadableTaskAutomationStatusV3(taskId, unreadable) {
   if (unreadable.details.reason === "status-authority-invalid") {
     throw new TypeError("repository authority failure cannot be projected as workflow status");
   }
@@ -49732,7 +49948,8 @@ function unreadableTaskAutomationStatusV2(taskId, unreadable) {
     throw new TypeError("unreadable state classification is missing repository or config identity");
   }
   const document2 = Object.freeze({
-    schema_version: "2",
+    schema_version: "3",
+    progress: null,
     task_id: taskId,
     state_revision: null,
     position: null,
@@ -49754,7 +49971,7 @@ function unreadableTaskAutomationStatusV2(taskId, unreadable) {
     task_id: taskId,
     details: unreadable.details
   });
-  return createAutomationStatusV2(document2, Object.freeze({
+  return createAutomationStatusV3(document2, Object.freeze({
     kind: "unreadable",
     repository_identity_digest: unreadable.repository_identity_digest,
     live_config_digest: unreadable.live_config_digest,
@@ -50347,8 +50564,8 @@ function expectedInstallationSource(call, source) {
   if (call.name === "archflow_counter_review" && source.artifact_kind === "review-evidence" && source.evidence.role === "counter-review" && source.evidence.step === "counter_review") return "counter_review";
   throw new TypeError("result installation tool and source kind do not match");
 }
-function targetIsInside(root, target2) {
-  const rel = relative8(root, target2.absolute);
+function targetIsInside(root, target3) {
+  const rel = relative8(root, target3.absolute);
   return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute7(rel);
 }
 function projectionTargetMatchesRepositoryRoot(root, entry) {
@@ -50366,13 +50583,13 @@ function resultPayloadTargetIsContained(taskId, resultDigest, workspaceRoot, pay
   const root = `.archflow/runtime/tasks/${taskId}/cache/results/${resultDigest}/` + (payload.repository === void 0 ? "payload/" : `repositories/${payload.repository}/payload/`);
   return payload.target.repositoryRelative === `${root}${payload.path}` && targetIsInside(workspaceRoot, payload.target);
 }
-function resultProjectionTargetIsContained(artifactKind, taskRoot, worktreeRoot, target2) {
-  if (artifactKind === "implementation-output" && isRepositoryControlPath(target2.repositoryRelative)) {
+function resultProjectionTargetIsContained(artifactKind, taskRoot, worktreeRoot, target3) {
+  if (artifactKind === "implementation-output" && isRepositoryControlPath(target3.repositoryRelative)) {
     return false;
   }
-  return target2.absolute === resolvePath8(worktreeRoot, target2.repositoryRelative) && targetIsInside(
+  return target3.absolute === resolvePath8(worktreeRoot, target3.repositoryRelative) && targetIsInside(
     artifactKind === "implementation-output" ? worktreeRoot : taskRoot,
-    target2
+    target3
   );
 }
 function validateInstallationFacts(request, current, identified, nextState, facts, expectedStep, authenticatedWorktreeRoot) {
@@ -51082,8 +51299,8 @@ function pipeline(instance) {
   if (configured === void 0) throw new TypeError("phase instance is absent from the fixed workflow");
   return configured.pipeline;
 }
-function sameSubject(current, target2) {
-  return current.phase_instance === target2.phase_instance && current.step === target2.step;
+function sameSubject(current, target3) {
+  return current.phase_instance === target3.phase_instance && current.step === target3.step;
 }
 function artifactApprovalKind(instance) {
   const kind = decodePhaseInstance(instance).kind;
@@ -51123,35 +51340,35 @@ function hasAuthenticatedMigrationAudit(input) {
   return false;
 }
 function legalMovement(input) {
-  const { current, target: target2 } = input;
+  const { current, target: target3 } = input;
   if (current.terminal !== void 0 || current.open_gate !== void 0) return false;
-  if (sameSubject(current, target2)) {
+  if (sameSubject(current, target3)) {
     if (current.status === "running") {
-      return target2.attempt === current.attempt && (target2.status === "succeeded" || target2.status === "failed");
+      return target3.attempt === current.attempt && (target3.status === "succeeded" || target3.status === "failed");
     }
     if (current.status === "failed") {
-      return target2.status === "running" && target2.attempt === current.attempt + 1;
+      return target3.status === "running" && target3.attempt === current.attempt + 1;
     }
   }
-  if (target2.phase_instance === current.phase_instance && target2.step === "produce" && target2.status === "running") {
-    return input.human_revision_reentry === true ? target2.attempt === current.attempt : target2.attempt === current.attempt + 1;
+  if (target3.phase_instance === current.phase_instance && target3.step === "produce" && target3.status === "running") {
+    return input.human_revision_reentry === true ? target3.attempt === current.attempt : target3.attempt === current.attempt + 1;
   }
-  if (current.status !== "succeeded" || target2.status !== "running") return false;
+  if (current.status !== "succeeded" || target3.status !== "running") return false;
   const steps = pipeline(current.phase_instance);
   const index = steps.indexOf(current.step);
   if (index < 0) return false;
   if (index + 1 < steps.length) {
-    return target2.phase_instance === current.phase_instance && target2.step === steps[index + 1] && target2.attempt === current.attempt;
+    return target3.phase_instance === current.phase_instance && target3.step === steps[index + 1] && target3.attempt === current.attempt;
   }
-  if (current.phase_instance === "design" && target2.step === "produce" && target2.attempt === 1 && target2.phase_instance !== nextPhaseInstance(current.phase_instance) && hasAuthenticatedMigrationAudit(input)) return true;
+  if (current.phase_instance === "design" && target3.step === "produce" && target3.attempt === 1 && target3.phase_instance !== nextPhaseInstance(current.phase_instance) && hasAuthenticatedMigrationAudit(input)) return true;
   const following = nextPhaseInstance(current.phase_instance);
-  return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
+  return following !== void 0 && target3.phase_instance === following && target3.step === pipeline(following)[0] && target3.attempt === 1;
 }
 function legalSettledDocumentProduceExitMovement(input) {
-  const { current, target: target2 } = input;
-  if (phaseKind(current.phase_instance) === "phase-impl" || current.step !== "produce" || current.status !== "succeeded" || target2.status !== "running") return false;
+  const { current, target: target3 } = input;
+  if (phaseKind(current.phase_instance) === "phase-impl" || current.step !== "produce" || current.status !== "succeeded" || target3.status !== "running") return false;
   const following = nextPhaseInstance(current.phase_instance);
-  return following !== void 0 && target2.phase_instance === following && target2.step === pipeline(following)[0] && target2.attempt === 1;
+  return following !== void 0 && target3.phase_instance === following && target3.step === pipeline(following)[0] && target3.attempt === 1;
 }
 function artifactMatches(input) {
   const artifact = input.artifact;
@@ -51681,7 +51898,7 @@ var contractInvalid2 = (issueCode) => Object.freeze({
     issue_code: issueCode
   })
 });
-async function target(services2, claim, expectedClass) {
+async function target2(services2, claim, expectedClass) {
   return resolveTaskPath({
     runner: services2.runner,
     taskId: services2.authority.task_id,
@@ -51748,7 +51965,7 @@ async function prepareDocumentResult(input) {
   }
   const observedDocuments = [];
   for (const document2 of declaredDocuments) {
-    const documentTarget = await target(input.services, document2.document_path, "document");
+    const documentTarget = await target2(input.services, document2.document_path, "document");
     if (!documentTarget.ok) return documentTarget;
     if (documentTarget.value.repositoryRelative !== document2.projection_target) {
       return contractInvalid2("document-projection-target-mismatch");
@@ -51813,7 +52030,7 @@ async function prepareDocumentResult(input) {
     secret_scan: capture.result()
   };
   const manifest = canonicalDocument(manifestValue);
-  const manifestTarget = await target(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
+  const manifestTarget = await target2(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
   if (!manifestTarget.ok) return manifestTarget;
   const payloads = [];
   for (const document2 of observedDocuments) {
@@ -52023,7 +52240,7 @@ async function prepareImplementationResult(input) {
   };
   parseResultManifest(manifestValue);
   const manifest = canonicalDocument(manifestValue);
-  const manifestTarget = await target(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
+  const manifestTarget = await target2(input.services, resultAuthorityClaim(manifest.digest), "authority-result");
   if (!manifestTarget.ok) return manifestTarget;
   const payloads = [];
   for (const [path2, bytes] of facts.raw_payloads) {
@@ -52217,12 +52434,12 @@ async function handleState(call, context2) {
           const discovered = await discoverReconciliationInput(services2.dependencies, services2.authority, current, session.value.repository_set);
           if (!discovered.ok) return discovered;
           const reconciliation = reconcileCurrentAuthority(discovered.value);
-          const target2 = await currentBaselineTargetFacts(services2.dependencies, reconciliation.findings, session.value.repository_set);
+          const target3 = await currentBaselineTargetFacts(services2.dependencies, reconciliation.findings, session.value.repository_set);
           const live = baselineAdoptionInputFromFindings(
             services2.authority.task_id,
             current.value,
             reconciliation.findings,
-            target2
+            target3
           );
           if (live === void 0) {
             return fail25(createProjectError("STATE_INVALID", {
@@ -52233,7 +52450,7 @@ async function handleState(call, context2) {
           const continuous = await baselinePresentedTargetsOnCurrentFirstParent(
             services2.dependencies,
             request.context,
-            target2,
+            target3,
             session.value.repository_set
           );
           return Object.freeze({
@@ -52748,8 +52965,8 @@ async function handleState(call, context2) {
               issue_code: "validation-override-governing-authority-invalid"
             }));
           }
-          const binding = expectedProduceUpstreamBindings(state).find((candidate) => candidate.artifact_kind === "phase-design");
-          if (binding === void 0) {
+          const binding2 = expectedProduceUpstreamBindings(state).find((candidate) => candidate.artifact_kind === "phase-design");
+          if (binding2 === void 0) {
             return fail25(createProjectError("STATE_INVALID", {
               phase_instance: state.phase_instance,
               issue_code: "validation-override-governing-phase-design-missing"
@@ -52759,7 +52976,7 @@ async function handleState(call, context2) {
             services2.dependencies,
             services2.authority,
             state,
-            binding
+            binding2
           );
           if (!governing.ok) return governing;
           if (!approvedUpstreams.includes(governing.value.artifact_digest)) {
@@ -53439,17 +53656,17 @@ async function automationStatus(input) {
         repository_identity_digest: snapshot2.value.repository_identity_digest,
         live_config_digest: snapshot2.value.live_config_digest ?? null
       });
-      return staged === void 0 ? newTaskAutomationStatusV2(taskId, edgeAuthority) : stagedTaskAutomationStatusV2(taskId, staged, edgeAuthority);
+      return staged === void 0 ? newTaskAutomationStatusV3(taskId, edgeAuthority) : stagedTaskAutomationStatusV3(taskId, staged, edgeAuthority);
     }
     const semantic = projectSemanticStatus(snapshot2.value);
-    return projectAutomationStatusV2(snapshot2.value, semantic.view);
+    return projectAutomationStatusV3(snapshot2.value, semantic.view);
   }
   const readability = await classifyDurableStateReadability({
     working_directory: input.working_directory,
     task_id: taskId
   });
   if (readability.readability === "unreadable" && readability.details.reason !== "status-authority-invalid") {
-    return unreadableTaskAutomationStatusV2(taskId, readability);
+    return unreadableTaskAutomationStatusV3(taskId, readability);
   }
   return created;
 }
@@ -53467,10 +53684,10 @@ async function snapshot(input) {
     const path2 = parseRepositoryPathClaim(item.path);
     const bytes = Buffer.from(String(item.bytes_base64), "base64");
     const claim = parseWorkspacePathClaim(`cache/results/${resultDigest}/payload/${path2}`);
-    const target2 = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim, expectedClass: "workspace-result-payload", context: created.value.authority.context });
-    if (!target2.ok) return target2;
-    await ensurePayloadParent(created.value.authority, resultDigest, target2.value.absolute);
-    payloads.push({ path: path2, target: target2.value, bytes: new Uint8Array(bytes) });
+    const target3 = await resolveTaskWorkspacePath({ runner: created.value.runner, taskId: created.value.authority.task_id, claim, expectedClass: "workspace-result-payload", context: created.value.authority.context });
+    if (!target3.ok) return target3;
+    await ensurePayloadParent(created.value.authority, resultDigest, target3.value.absolute);
+    payloads.push({ path: path2, target: target3.value, bytes: new Uint8Array(bytes) });
   }
   const prepared = prepareSnapshot({ manifest, payloads, retained_task_bytes: parseSafeInteger(value.retained_task_bytes), validate_manifest: parseResultManifest });
   if (!prepared.ok) return prepared;
@@ -53650,7 +53867,7 @@ async function readInput(command, path2) {
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
-  }) : await readFile16(path2);
+  }) : await readFile17(path2);
   if (bytes.byteLength === 0) throw missingPayload();
   try {
     return JSON.parse(bytes.toString("utf8"));

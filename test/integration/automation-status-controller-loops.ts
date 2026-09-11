@@ -99,7 +99,7 @@ function observe(workspace: TaskWorkspace): AutomationObservation {
   const result = runAutomationStatus(localBundle, workspace.root, workspace.taskId);
   expect(result.status, result.stderr).toBe(0);
   if (result.observation === undefined) throw new Error("automation observation unavailable");
-  expect(result.observation.schema_version).toBe("2");
+  expect(result.observation.schema_version).toBe("3");
   expect(result.observation.implementation_recommendation).toBeDefined();
   return result.observation;
 }
@@ -140,13 +140,13 @@ export function registerAutomationStatusControllerLoop(selected: string): void {
       let status = observe(workspace);
 
       while (status.condition !== "complete") {
-        expect(status.condition).toMatch(/^(awaiting-client|ready)$/u);
-        expect(status.next_action.actor).toMatch(/^(skill|orchestrator)$/u);
+        expect(status.condition).toMatch(/^(awaiting-client|awaiting-transition)$/u);
+        expect(status.next_action.actor).toMatch(/^(skill|human)$/u);
         expect(status).not.toHaveProperty("human_boundary");
         expect(status).not.toHaveProperty("blocked");
         observations.push(status);
         const action = status.next_action;
-        if (action.actor !== "skill" && action.actor !== "orchestrator") {
+        if (action.actor !== "skill" && action.actor !== "human") {
           throw new Error(`controller cannot launch automation actor ${action.actor}`);
         }
         const invocation = invocationFromAutomation(status);
@@ -296,8 +296,8 @@ The final task reaches complete.
 
       const launch = observe(workspace);
       expect(launch).toMatchObject({
-        condition: "ready",
-        next_action: { actor: "orchestrator", kind: "launch-skill", skill: "archflow-phase-impl", skill_args: ["1"] },
+        condition: "awaiting-transition",
+        next_action: { actor: "human", kind: "launch-skill", skill: "archflow-phase-impl", skill_args: ["1"] },
       });
       const invocation = invocationFromAutomation(launch);
       let view = await harness.status(invocation);
@@ -408,8 +408,8 @@ approval_rules:
         reason: "The configured PRD is approved.",
       });
       expect(observe(workspace)).toMatchObject({
-        condition: "ready",
-        next_action: { actor: "orchestrator", kind: "launch-skill", skill: "archflow-design", skill_args: [] },
+        condition: "awaiting-transition",
+        next_action: { actor: "human", kind: "launch-skill", skill: "archflow-design", skill_args: [] },
       });
 
       const designInvocation = invocationFromAutomation(observe(workspace));
@@ -457,7 +457,7 @@ approval_rules:
       expect(failed.ok).toBe(false);
       if (failed.ok) throw new Error("invalid invocation route unexpectedly dispatched");
       expect(failed.view).toMatchObject({
-        condition: "awaiting-client",
+        condition: "awaiting-human",
         next_action: { kind: "review" },
         dispatch_failure: { role: "counter-reviewer", code: "CONFIG_MODEL_UNSUPPORTED" },
       });
@@ -481,8 +481,8 @@ approval_rules:
       expect(view.dispatch_failure).toBeUndefined();
       const advanced = observe(workspace);
       expect(advanced).toMatchObject({
-        condition: "ready",
-        next_action: { actor: "orchestrator", kind: "launch-skill", skill: "archflow-design" },
+        condition: "awaiting-transition",
+        next_action: { actor: "human", kind: "launch-skill", skill: "archflow-design" },
       });
       expect(advanced).not.toHaveProperty("human_boundary");
     });

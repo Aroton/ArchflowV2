@@ -1,3 +1,4 @@
+import { createAutomationStatusV3, type AutomationStatusV3, type AutomationStatusWithoutIdV3 } from "../contracts/automation-status.js";
 import {
   createAutomationStatus,
   createAutomationStatusV2,
@@ -354,4 +355,25 @@ export function projectAutomationStatusV2(
 
 function assertNeverCondition(condition: never): never {
   throw new TypeError(`unmapped semantic workflow condition: ${String(condition)}`);
+}
+
+
+export function projectAutomationStatusV3(snapshot: SemanticStatusSnapshotV1, view: WorkflowViewV1): AutomationStatusV3 {
+  // Legacy projections retain their published shape. Only V3 distinguishes automatic retries.
+  const retrying = view.dispatch_failure?.recovery?.status === "retrying";
+  const { dispatch_failure: _failure, ...withoutFailure } = view;
+  const legacy = projectAutomationStatusV2(snapshot, retrying || view.condition === "blocked" || view.presentation !== undefined ? withoutFailure : view);
+  const { observation_id: _id, schema_version: _version, ...rest } = legacy;
+  const document = {
+    ...rest, schema_version: "3", progress: view.progress ?? null,
+    ...(legacy.condition !== "ready" ? {} : {
+      condition: "awaiting-transition", next_action: { ...legacy.next_action, actor: "human",
+        instruction: "Launch the named successor skill when ready. This completed invocation must stop here." },
+    }),
+  } as AutomationStatusWithoutIdV3;
+  return createAutomationStatusV3(document, {
+    kind: "readable", repository_identity_digest: snapshot.repository_identity_digest,
+    state_document_digest: snapshot.state_document_digest!, live_config_digest: snapshot.live_config_digest ?? null,
+    semantic_snapshot_digest: canonicalJsonDigest(snapshot as unknown as PlainJsonValue),
+  });
 }

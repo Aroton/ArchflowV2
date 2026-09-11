@@ -1575,6 +1575,95 @@
     "workflowView": {
       "type": "object",
       "properties": {
+        "progress": {
+          "type": "object",
+          "properties": {
+            "step": {
+              "type": "string",
+              "enum": [
+                "produce",
+                "counter_review",
+                "triage",
+                "adjudicate"
+              ]
+            },
+            "step_status": {
+              "type": "string",
+              "enum": [
+                "running",
+                "succeeded",
+                "failed"
+              ]
+            },
+            "review_rounds_completed": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "review_round_limit": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "boundary": {
+              "type": "string",
+              "enum": [
+                "none",
+                "configured-approval",
+                "exception",
+                "step-transition",
+                "complete",
+                "abandoned"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dispatch_recovery": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "retrying",
+                    "exhausted",
+                    "repair-required"
+                  ]
+                },
+                "dispatches": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "maximum_dispatches": {
+                  "type": "number",
+                  "const": 3
+                },
+                "next_retry_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                }
+              },
+              "required": [
+                "status",
+                "dispatches",
+                "maximum_dispatches"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "step",
+            "step_status",
+            "review_rounds_completed",
+            "review_round_limit",
+            "boundary",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
         "schema_version": {
           "type": "string",
           "const": "1"
@@ -2165,9 +2254,12 @@
             "CLI_MISSING",
             "AUTH_UNAVAILABLE",
             "RATE_LIMITED",
+            "TIMEOUT",
+            "RECOVERY_STATE_INVALID",
             "UNSUPPORTED_MODEL",
             "CLI_VERSION_UNSUPPORTED",
             "PROCESS_FAILED",
+            "MODEL_OUTPUT_INVALID",
             "REPOSITORY_VIEW_UNAVAILABLE"
           ]
         },
@@ -3021,6 +3113,95 @@
   },
   "type": "object",
   "properties": {
+    "progress": {
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "string",
+          "enum": [
+            "produce",
+            "counter_review",
+            "triage",
+            "adjudicate"
+          ]
+        },
+        "step_status": {
+          "type": "string",
+          "enum": [
+            "running",
+            "succeeded",
+            "failed"
+          ]
+        },
+        "review_rounds_completed": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "review_round_limit": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "boundary": {
+          "type": "string",
+          "enum": [
+            "none",
+            "configured-approval",
+            "exception",
+            "step-transition",
+            "complete",
+            "abandoned"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dispatch_recovery": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "retrying",
+                "exhausted",
+                "repair-required"
+              ]
+            },
+            "dispatches": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "maximum_dispatches": {
+              "type": "number",
+              "const": 3
+            },
+            "next_retry_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            }
+          },
+          "required": [
+            "status",
+            "dispatches",
+            "maximum_dispatches"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "step",
+        "step_status",
+        "review_rounds_completed",
+        "review_round_limit",
+        "boundary",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
     "schema_version": {
       "type": "string",
       "const": "1"

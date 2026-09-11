@@ -1,3 +1,4 @@
+import { workflowProgressV1Schema, type WorkflowProgressV1 } from "./workflow-progress.js";
 import { z } from "zod";
 
 import { canonicalJsonDigest } from "./canonical.js";
@@ -467,4 +468,39 @@ export function parseAutomationStatusV2(value: unknown): AutomationStatusV2 {
 /** Compatibility parser for strict v1 consumers. */
 export function parseAutomationStatus(value: unknown): AutomationStatusV1 {
   return parseAutomationStatusV1(value);
+}
+
+
+/** V3 makes manual skill handoffs explicit and publishes operational progress. */
+type UpgradeV3<Arm> = Arm extends AutomationStatusV2 ?
+  Omit<Arm, "schema_version" | "condition" | "next_action"> & {
+    readonly schema_version: "3";
+    readonly progress: WorkflowProgressV1 | null;
+  } & (Arm extends { condition: "ready" } ? {
+    readonly condition: "awaiting-transition";
+    readonly next_action: Omit<AutomationLaunchActionV1, "actor"> & { readonly actor: "human" };
+  } : { readonly condition: Arm["condition"]; readonly next_action: Arm["next_action"] }) : never;
+export type AutomationStatusV3 = UpgradeV3<AutomationStatusV2>;
+export type AutomationStatusWithoutIdV3 = AutomationStatusV3 extends infer Arm ? Arm extends AutomationStatusV3 ? Omit<Arm, "observation_id"> : never : never;
+const commonShapeV3 = { ...commonShapeV2, schema_version: z.literal("3"), progress: workflowProgressV1Schema.nullable() };
+export const automationStatusV3Schema = z.xor([
+  z.object({ ...commonShapeV3, condition: z.literal("awaiting-client"), next_action: skillActionV1Schema }).strict(),
+  z.object({ ...commonShapeV3, condition: z.literal("awaiting-human"), next_action: humanActionV1Schema, human_boundary: automationHumanBoundaryV2Schema }).strict(),
+  z.object({ ...commonShapeV3, condition: z.literal("awaiting-transition"), next_action: launchActionV1Schema.extend({ actor: z.literal("human") }) }).strict(),
+  z.object({ ...commonShapeV3, condition: z.literal("blocked"), next_action: repairActionV1Schema, blocked: positionedBlockedV1Schema }).strict(),
+  z.object({ ...commonShapeV3, position: z.null(), condition: z.literal("blocked"), next_action: repairActionV1Schema, blocked: positionlessBlockedV1Schema }).strict(),
+  z.object({ ...commonShapeV3, condition: z.literal("complete"), next_action: noneActionV1Schema }).strict(),
+]) as unknown as z.ZodType<AutomationStatusV3>;
+export function parseAutomationStatusV3(value: unknown): AutomationStatusV3 {
+  assertPlainJson(value, "automation status v3");
+  return automationStatusV3Schema.parse(structuredClone(value));
+}
+export function createAutomationStatusV3(document: AutomationStatusWithoutIdV3, authority: AutomationObservationAuthorityV1): AutomationStatusV3 {
+  assertPlainJson(document, "automation status v3 without observation id");
+  assertPlainJson(authority, "automation observation authority");
+  const observed = structuredClone(document);
+  const identity = authorityV1Schema.parse(structuredClone(authority));
+  return parseAutomationStatusV3({ ...observed, observation_id: canonicalJsonDigest({
+    schema_version: "3", purpose: "archflow-automation-observation-v3", observation: observed, authority: identity,
+  } as unknown as PlainJsonValue) });
 }

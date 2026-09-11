@@ -938,6 +938,7 @@ describe("review services", () => {
       },
     });
     const subject = {
+      max_attempts: 1, // Uncertainty reaches a human after its bounded remediation budget.
       subject_digest: D("8"),
       input_fingerprint: D("2"),
       constitution,

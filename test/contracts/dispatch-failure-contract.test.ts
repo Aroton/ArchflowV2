@@ -31,7 +31,7 @@ describe("dispatch-failure contract", () => {
     expect(dispatchFailureObservationV1Schema.parse(observation)).toEqual(observation);
     expect(dispatchFailureObservationV1Schema.safeParse({ ...observation, stderr_tail: "secret" }).success).toBe(false);
     expect(dispatchFailureObservationV1Schema.safeParse({ ...observation, message: "x".repeat(257) }).success).toBe(false);
-    expect(dispatchFailureObservationV1Schema.safeParse({ ...observation, code: "MODEL_OUTPUT_INVALID" }).success).toBe(false);
+    expect(dispatchFailureObservationV1Schema.safeParse({ ...observation, code: "MODEL_OUTPUT_INVALID" }).success).toBe(true);
     expect(dispatchFailureObservationV1Schema.safeParse({
       ...observation, route: { ...observation.route, effort: "extreme" },
     }).success).toBe(false);

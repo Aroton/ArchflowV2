@@ -924,7 +924,7 @@ async function composeGate(
     services.runner, state.policy_base_commit, services.authority.context,
   );
   let pendingGate: ReturnType<typeof pendingAdjudicationGate>;
-  let exhaustion: Readonly<{ attempts: number; maximum_attempts: number }> | undefined;
+  let exhaustion: Readonly<{ attempts: number; maximum_attempts: number; completed_review_rounds?: number }> | undefined;
   // The same eligibility filter status applies: an approval superseded by a later planning
   // restart must not make the composer disagree with the advertised action.
   const authenticated: AuthenticatedGateApproval[] = [];
@@ -977,7 +977,7 @@ async function composeGate(
       };
       assessment = assessCurrentEvidence(state, loaded.value, evidenceSubject);
       if (assessment.next === "attempts-exhausted") {
-        exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS });
+        exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS, completed_review_rounds: assessment.completed_review_rounds ?? state.attempt });
         reviewPushThroughContext = deriveReviewPushThroughCandidate(
           state,
           loaded.value,
