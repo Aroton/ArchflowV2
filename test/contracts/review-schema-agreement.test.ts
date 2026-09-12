@@ -38,7 +38,7 @@ describe("review and adjudication schema agreement", () => {
     const value = {
       schema_version: "2", task_id: "demo", phase_instance: "phase-design-1",
       step: "effort_review", role: "effort-reviewer", subject_digest: "1".repeat(64),
-      input_fingerprint: "2".repeat(64), policy_id: "implementation-agent-selector-v3",
+      input_fingerprint: "2".repeat(64), policy_id: "implementation-agent-selector-v4",
       profile_id: "gpt-6-astra-low",
     };
     const before = structuredClone(value);

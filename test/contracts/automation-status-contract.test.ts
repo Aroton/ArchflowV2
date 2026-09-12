@@ -262,6 +262,25 @@ describe("automation status v2 contract", () => {
     expect(changed.next_action).toEqual(first.next_action);
   });
 
+  it("resolves current advice and its explanation through the published automation schemas", () => {
+    const validateV3 = createJsonSchemaValidator(automationStatusV3Schema, [primitivesSchema, semanticWorkflowSchema, automationStatusV2Schema]);
+    for (const effort of ["low", "high"] as const) {
+      const input = { ...readyV2(), implementation_recommendation: {
+        status: "ready" as const, model: "gpt-6-astra" as const, effort,
+        rationale: "The selected mechanism requires implementation reasoning within the specified contract.",
+      } };
+      const v2 = createAutomationStatusV2(input, authority);
+      expect(validateV2.assert(v2)).toEqual(v2);
+      const v3 = createAutomationStatusV3({ ...input, schema_version: "3", progress: null,
+        position: { kind: "phase-design", phase: 2 }, condition: "awaiting-transition",
+        next_action: { actor: "human", kind: "launch-skill", skill: "archflow-phase-impl", task_id: task,
+          skill_args: ["2"], instruction: "Launch the server-derived successor." },
+      }, authority);
+      expect(validateV3.assert(v3)).toEqual(v3);
+      expect(v3.next_action).toEqual({ ...v2.next_action, actor: "human" });
+    }
+  });
+
   it("admits effort-reviewer only in the v2 dispatch-failure vocabulary", () => {
     const document: AutomationStatusWithoutIdV2 = {
       schema_version: "2", task_id: task, state_revision: parseSafeInteger(7), position: { kind: "phase-design", phase: 2 },

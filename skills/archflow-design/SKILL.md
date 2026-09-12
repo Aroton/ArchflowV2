@@ -29,46 +29,23 @@ If entry status returns `start-next-skill` with `next_action.offer`, apply that 
 
 For a finite plan, make phase outcomes, boundaries, dependencies, and verification observable in the artifact. The default phase is one coherent repository-ready increment: it has one primary behavioral or enabling outcome, leaves the repository in a valid completion state, consumes named approved predecessors or stable inputs, and has one understandable verification story. Repository-ready does not require separate deployment or user visibility, and a phase may cross technical layers when they jointly deliver that outcome. Work chunks may divide or parallelize implementation inside one governed phase without becoming phase authority.
 
-Use the following rubric internally while choosing boundaries. Scores are advisory planning guidance, not a required worksheet in the design artifact or an additional review or approval criterion. Target roughly one phase per ~300k-token implementation pass; score the design rather than estimate tokens. This is a calibration target, not a promised budget. Oversized phases risk context compaction mid-work and loss of the reasoning behind decisions; undersized phases pay a full design cycle for too little work. Undersizing is cheaper to fix, so bias toward splitting.
+Design for economical implementation after strong architecture and phase design: most phases should be executable by GPT-5.6 Sol medium or GPT-6 Astra low. This is a planning objective, not a model quota or authority condition. Reserve stronger implementation effort for identifiable reasoning that remains difficult after design.
 
-#### Score (0–3 each)
+Assess the work remaining, rather than adding file/test counts or targeting a token budget:
 
-| Axis | What to count | 0 | 1 | 2 | 3 |
-|---|---|---|---|---|---|
-| **F — File surface** | New or substantially rewritten files; read-only dependencies do not count | 1–2 | 3–5 | 6–10 | 11+ |
-| **I — Interface novelty** | Types, traits, signatures to invent rather than conform to | All exist | 1–2 new | 3–5 new, or one trait with several implementers | 6+, or a new abstraction layer |
-| **V — Verification surface** | Distinct behaviors needing test coverage | 1–3 | 4–8 | 9–15 | 16+, or fixtures/harness built in-phase |
-| **U — Unknowns** | Decisions the design leaves to implementation | None | 1–2 local | 3+, or one that shapes the interface | An unresolved approach question |
-| **C — Coupling** | Files that must change together for compilation | Independent | One cluster of 2–3 | One cluster of 4+, or two clusters | Change ripples unpredictably |
+| Parameter | Normal target | When to reconsider |
+|---|---|---|
+| Material decisions | Approach, important semantics, and interfaces settled; ordinary local choices remain with implementation | Resolve unanswered architectural decisions during design |
+| New mechanisms | Typically one coherent mechanism plus routine wiring | Separate independently testable mechanisms when doing so reduces implementation and rework cost |
+| Existing foundations | Named APIs, guarantees, and relevant working examples | Investigate missing foundations before downstream work depends on them |
+| Verification | A credible way to expose important failures, reusing existing checks | Establish a useful oracle; long-running tests alone do not require stronger reasoning |
+| Coupling | Explicit interfaces make changes understandable together | Improve boundaries or explain the concrete reason work is inseparable |
 
-#### Verdict
+A large mechanical edit can suit an economical agent; a small synchronization algorithm can require deeper reasoning. Distinguish implementing an ownership mechanism from calling its tested API. Security labels, timers, shared state, document length, and tool duration alone do not establish implementation difficulty.
 
-| Sum | Suggested action |
-|---|---|
-| 0–3 | **Merge** with an adjacent phase |
-| 4–9 | **Ship** |
-| 10–12 | **Split** |
-| 13–15 | **Split, then rescore** — likely three phases |
+Prefer a tested internal prerequisite followed by its consumers when that removes substantial reasoning from later implementation. For example, bounded record decoding can be verified before its transactional importer is wired. An intermediate phase need not complete the whole user capability; “the feature would remain unfinished” is not a reason to reject a useful split. Preserve compiling, testable completion states and keep required safety behavior with the capability it protects.
 
-Overrides guide the boundary judgment:
-
-- **U = 3** → split regardless of the sum. Unknowns expand during implementation and drive overruns.
-- **C = 3** → fix the design first; it cannot yet split cleanly.
-- **F ≤ 1 and I = 0 and V ≤ 1** → merge even if the sum reaches 4; the work is unlikely to justify a full design cycle.
-- **Any axis = 3 with sum ≤ 9** → split anyway; one extreme axis can dominate the pass.
-
-Apply both split and merge judgment, preserving useful completion states. Retain an unusually broad phase only with a concrete atomicity, repository-validity, or inseparable-verification rationale; retain an unusually small phase only when its stable interface, capability, or risk reduction justifies another full phase lifecycle. If no useful adjacent merge or valid split exists, use that concrete boundary rationale rather than force the score's suggestion.
-
-#### Where to cut
-
-Prefer these boundaries, in order:
-
-1. **Interface, then implementers.** Define types and traits with a trivial implementation first, then fill in implementers. This can drop I to 0 for later phases and expose parallel work where dependencies permit it.
-2. **Harness, then usage.** Give substantial fixtures or simulators their own phase so later failures can be distinguished from verifier defects.
-3. **Happy path, then edge cases.** Use this cut only when the error taxonomy is already specified.
-4. **File clusters**, along coupling boundaries.
-
-Avoid splitting mid-cluster: two phases that cannot compile independently are one phase. Each cut should leave an intermediate state that compiles and passes its tests.
+Avoid fragmenting routine work into many design/review cycles. Compare total design, implementation, verification, and likely rework cost. A small hard component can be isolated in a useful phase or a bounded implementation assignment with an explicit integration/checking responsibility; do not assume unspecified delegation makes a difficult phase cheap. Keep inseparable hard work together when splitting would add more cost or weaken its verification.
 
 #### Automation
 
@@ -78,9 +55,7 @@ A cut that depends on human inspection to establish that the intermediate state 
 
 #### Calibration
 
-Score the design artifact, not the prose describing its ambition. If F, I, V, or C cannot be counted from the design, treat that as an unknowns problem and clarify the design. Split aggressively when phases are cheap to merge and expensive to overflow.
-
-As optional future calibration, compare actual token spend with the sums across roughly 20 phases and refit the bands. F and V are likely the strongest predictors of spend; U is likely the strongest predictor of overrun. This does not require token tracking machinery or implementation logs to record scores.
+Treat model choices as provisional engineering judgments. Use a small sample of real implementations to compare actual model/effort, total work including design/review and rework, and consequential defects. Existing notes and usage evidence are enough; no scoring worksheet, token-tracking subsystem, or extra model call is required. Reconsider repeated expensive recommendations by identifying the remaining hard problem, rather than forcing a cheaper label or a preferred phase count.
 
 ### Finalize and submit
 

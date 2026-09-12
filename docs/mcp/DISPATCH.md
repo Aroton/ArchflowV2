@@ -1,6 +1,6 @@
 # mcp/DISPATCH
 
-**Explored:** 2026-09-12 · **Commit:** `c72e902` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
+**Explored:** 2026-09-12 · **Commit:** `1f89243` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
 
 Review delivery continues to use the existing CLI adapters. Fresh child output prefers one report string, and locally extracted JSON with other shapes is preserved as feedback. Successful extracted bytes are retained before server evidence construction; failures there retain bounded validation diagnostics rather than triggering another model call.
 
@@ -48,7 +48,7 @@ Other properties worth knowing:
 
 ## Fragility to watch
 
-Public recommendation output reports only the selected implementation model and effort. Selector route provenance and internal scoring remain private evidence, and dispatch never copies the advice into invocation routing.
+Public recommendation output reports the selected implementation model and effort plus optional advisory rationale. Dispatch never copies advice into invocation routing; a suggestion to settle or isolate costly work grants no authority.
 
 Two parts of this subsystem are version-coupled to the external CLIs and will drift over time: the lockdown argv (flag sets written out literally per CLI release) and the failure classifier, which parses free-text CLI error messages with regexes to detect rate limits and extract model names. When a host CLI updates, look here first.
 
@@ -62,7 +62,7 @@ For implementation review, a changed writable secondary now receives its authent
 
 Phase-design review also dispatches an effort selector using the configured `effort-reviewer` route (shipped default `gpt-5.6-luna` at `xhigh`). The server captures the phase plan and hazard registry once, while ordinary reviewer routes retain their existing prevalidation. Rubric, dedicated test, selector, and constitution children share the byte-identical repository workspace.
 
-The selector's strict schema accepts only exact subject bindings and one allowed profile ID. It cannot return findings or analysis. Any selector input, route, process, schema, or binding failure produces the server-owned `gpt-5.6-sol`/`medium` default; it is excluded from the round's failure list, creates no retry or substitution boundary, and cannot discard or delay ordinary review evidence.
+The selector schema accepts exact subject bindings, one allowed profile ID, and an optional free-form rationale about remaining implementation difficulty. Missing rationale is tolerated locally; Codex strict projection requires the field and accepts an empty string. The explanation is informational and cannot select a workflow action. Any selector input, route, process, schema, or binding failure produces the server-owned `gpt-5.6-sol`/`medium` default; it is excluded from the round's failure list, creates no retry or substitution boundary, and cannot discard or delay ordinary review evidence.
 
 
 ## Automation responsibility

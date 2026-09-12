@@ -32,7 +32,7 @@ criteria:
     text: "Report layers, custom machinery, or speculative scope only when they create a concrete design problem or disproportionate implementation or maintenance cost. The availability of a library or a preferred simpler design is not itself a defect."
     blocking: true
   - id: phase-plan-soundness
-    text: "Assess whether the proposed ordering and boundaries allow implementable, verifiable progress with usable predecessor inputs. Recommend a split or merge only to resolve a concrete delivery, dependency, or verification problem; do not require evidence of a sizing exercise or enforce a preferred phase count."
+    text: "Assess whether settled decisions, explicit interfaces, and usable predecessor guarantees make phases practical for economical implementation agents, normally Sol medium or Astra low. Identify concrete remaining reasoning, coupling, or missing verification that would drive avoidable implementation or rework cost. A tested internal prerequisite is a valid phase even when the whole capability comes later. Suggest settling a decision, isolating a hard mechanism, or merging routine work only when the total benefit justifies another design/review cycle. Do not enforce model quotas, file counts, token budgets, or a scoring worksheet; inherently difficult work can justify stronger effort."
     blocking: true
   - id: test-strategy
     text: "Check existing code and tests before requesting additional verification. Name a concrete failure that could escape the planned and existing checks, accept equivalent behavioral evidence at any credible layer, and prefer the cheapest useful addition. Flag duplicate or expensive fixtures only for a material delivery cost; avoid raw coverage targets and exhaustive matrices."

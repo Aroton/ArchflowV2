@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-09-12 · **Commit:** `1f89243` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -48,7 +48,7 @@ The default phase is one coherent repository-ready increment: it has one primary
 
 Architecture design performs observable checks in both directions. It merges neighboring phases when neither is a useful outcome without the other, and splits a phase when it contains independently valuable outcomes with separate completion and verification stories. Work chunks do not automatically become phases, and crossing UI, service, persistence, documentation, or other repository layers is normal when the changes jointly deliver one outcome. A broad or unusually small phase can remain when the design names its concrete exception value. A genuinely open-ended plan can remain open-ended for the same reason; the marker is not an escape from boundary reasoning.
 
-The numbered phase-design skill performs one bounded fit check against the reviewed parent plan. If it discovers a materially harmful split, merge, or sequencing defect, the correction travels through the existing compound parent-document result and server authority; it does not create a side-channel planning decision. Phase sizing remains engineering judgment. ArchFlow does not pretend that file counts, layer counts, phase counts, token estimates, or a one-session heuristic can determine the right boundary.
+The numbered phase-design skill performs one bounded fit check against the reviewed parent plan. If it discovers a materially harmful boundary, sequencing defect, or avoidable implementation/rework cost, the correction travels through the existing compound parent-document result and server authority; it does not create a side-channel planning decision. Phase sizing remains engineering judgment. ArchFlow does not pretend that file counts, layer counts, phase counts, token estimates, or a one-session heuristic can determine the right boundary.
 
 ## The pipeline inside each gated stage
 
@@ -180,9 +180,9 @@ One implementation result can cover primary plus configured writable secondaries
 
 ## Effort selection during phase-design review
 
-At phase-design completion, generic status, and phase-implementation entry, clients render the same authenticated `ready | unavailable` advice before the unchanged server-derived action. A ready result contains only model and effort. It can inform a human's out-of-band model selection, but it never selects a producer, completes a hand-off, grants implementation authority, or records which route actually ran.
+At phase-design completion, generic status, and phase-implementation entry, clients render the same authenticated `ready | unavailable` advice before the unchanged server-derived action. A ready result contains model, effort, and optional advisory rationale. It can inform a human's out-of-band model selection, but it never selects a producer, completes a hand-off, grants implementation authority, or records which route actually ran.
 
-Only phase design adds the effort selector. Review captures the current plan and hazard registry and dispatches the configured selector alongside the ordinary review group. The selector silently applies the existing component/A–E policy and returns one profile ID. Ready advice exposes only model and effort and does not change the successor or authority path.
+Only phase design adds the effort selector. Review captures the current plan and hazard registry and dispatches the configured selector alongside the ordinary review group. The selector assesses remaining implementation reasoning under the economical V4 policy and returns one profile ID with optional explanation. The producer may assess suggestions about settling decisions or isolating costly work through existing review/triage or reopen actions; the explanation itself does not change the successor or authority path.
 
 Effort selection has no fixed-point authority. It cannot create findings, blockers, re-entry, attempt exhaustion, or a human gate. If it cannot return a valid bound profile, the server records the Sol-medium default and the ordinary review continues without retry. Archived blocker-shaped effort evidence remains readable but is likewise ignored by action selection.
 

@@ -33,7 +33,7 @@ describe("benchmark V2 contract and vocabulary", () => {
   it("pins the production design rubric digest and criteria", async () => {
     const designRubric = await loadTestRubric("design");
     expect(designRubric.rubric_id).toBe("design-v3");
-    expect(designRubric.rubric_digest).toBe("5067a17e533a9b5dbf1dab63b97db4abc117171eaecc98a9e9b94db4e317b22c");
+    expect(designRubric.rubric_digest).toBe("324c57bb6eeca3a763b95dfed9fb9814bbb1bebf362aedccbc12e4addb1b807c");
     expect(designRubric.rubric.criteria.map((c) => c.id)).toEqual([
       "substantive-correctness",
       "upstream-coverage",

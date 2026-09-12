@@ -14,7 +14,7 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 // installed bundle, and it fails in-flight tasks' input fingerprints closed.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
   "prd-v1": "2c9729a74f9544749c6bde4c693d2c19f533de46e080f520e46142a55af42aae",
-  "design-v3": "5067a17e533a9b5dbf1dab63b97db4abc117171eaecc98a9e9b94db4e317b22c",
+  "design-v3": "324c57bb6eeca3a763b95dfed9fb9814bbb1bebf362aedccbc12e4addb1b807c",
   "implementation-v1": "710e92fb4eb3719a52bd76afca0ac86135b8f86bb6d980b272b3e0bcc73a932f",
 } satisfies Record<CanonicalRubricId, string>);
 

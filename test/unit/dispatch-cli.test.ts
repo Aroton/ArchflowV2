@@ -404,7 +404,7 @@ describe("CLI invocation construction", () => {
         phase_instance: "phase-design-1",
         subject_digest: "1".repeat(64),
         input_fingerprint: "2".repeat(64),
-        policy_id: "implementation-agent-selector-v3",
+        policy_id: "implementation-agent-selector-v4",
       } as const;
       const subject: Record<string, PlainJsonValue> = {
         task_id: values.task_id,
@@ -426,7 +426,7 @@ describe("CLI invocation construction", () => {
     },
   );
 
-  it("projects a strict profile-only effort selector schema for Codex", () => {
+  it("projects a strict effort selector schema with advisory rationale for Codex", () => {
     const projected = projectCliOutputSchema(
       effortReviewSchema as PlainJsonValue,
       "effort-review",
@@ -450,12 +450,14 @@ describe("CLI invocation construction", () => {
       role: "effort-reviewer",
       subject_digest: "a".repeat(64),
       input_fingerprint: "b".repeat(64),
-      policy_id: "implementation-agent-selector-v3",
+      policy_id: "implementation-agent-selector-v4",
       profile_id: "gpt-6-astra-high",
+      rationale: "The coupled cancellation mechanism still requires deep implementation reasoning.",
     };
     expect(() => validateProjected.assert(sampleOutput, "sample effort review")).not.toThrow();
 
-    expect(() => validateProjected.assert({ ...sampleOutput, rationale: "not allowed" }, "extra selector work")).toThrow();
+    expect(() => validateProjected.assert({ ...sampleOutput, rationale: "" }, "unavailable explanation")).not.toThrow();
+    expect(() => validateProjected.assert({ ...sampleOutput, scores: [] }, "extra selector work")).toThrow();
   });
 
   it("keeps Claude-supported simple patterns while simplifying only the task-slug lookahead", () => {

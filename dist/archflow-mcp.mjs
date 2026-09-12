@@ -37221,8 +37221,8 @@ var effortAssessmentV1Schema = external_exports.object({
   reviewer: effortReviewerProvenanceV1Schema,
   recommendation
 }).strict();
-var IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v3";
-var EFFORT_SELECTOR_INSTRUCTIONS = "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-high only when every axis is at most 1, the component is confidently short, and a long tool loop is confidently unnecessary; unknown short-task or loop suitability disqualifies Gemini. Otherwise totals 0-7 select gpt-5-6-sol-medium; totals 8-11 select gpt-6-astra-low; totals 12-15 select gpt-6-astra-high. Apply these floors after the total: A, C, or E equal to 3 requires at least gpt-6-astra-low; B and C both equal to 3 requires gpt-6-astra-high. Return the highest-ranked selected profile across all components in this order: gemini-3-7-flash-high, gpt-5-6-sol-medium, gpt-6-astra-low, gpt-6-astra-high. Never select Astra max. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis.";
+var IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v4";
+var EFFORT_SELECTOR_INSTRUCTIONS = "Recommend an economical implementation profile for the phase as written, assessing the reasoning remaining after architecture and phase design. Default to gpt-5-6-sol-medium for settled patterns, ordinary migrations, CRUD, UI composition, API/dependency wiring, and tests. Use gemini-3-7-flash-high for narrow, well-understood, short work with a cheap reliable check; otherwise prefer Sol medium. Use gpt-6-astra-low when implementation still needs substantive reasoning within a settled approach, such as bounded parsing, nontrivial state transitions, artifact handling, or tricky integration. Reserve gpt-6-astra-high for identifiable difficult algorithmic derivation or interacting correctness mechanisms that still require deep reasoning after design. Never select Astra max. Assess material decisions remaining, mechanisms to implement versus established APIs to call, available examples, credible verification, and coupling. Credit specified mechanisms and tested predecessor guarantees; using an ownership transaction does not inherit the difficulty of inventing it. Repository hazards are context for the changed work, not automatic model floors. File counts, document length, security labels, timers, shared state, lengthy tool loops, and expensive tests alone do not justify escalation. Do not add axis scores or automatically take the strongest component's profile. Consider the actual work and integration burden, without averaging away an essential difficult mechanism or assuming unplanned delegation. In a short free-form rationale, explain the remaining implementation difficulty; for high effort identify the concrete hard problem. If a material unanswered design question or a separable hard component drives cost, mention what could be settled or isolated to make implementation cheaper. Recommend for the current plan, not a hypothetical revised one. This is advisory feedback, never a blocker, revision command, or authority. Return the bound profile_id and a rationale when available; no scoring worksheet or additional review call is needed.";
 var selectorHazardInputSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   state: external_exports.enum(["absent", "present"]),
@@ -37238,7 +37238,8 @@ var rawEffortSelectionV2Schema = external_exports.object({
   subject_digest: digest2,
   input_fingerprint: digest2,
   policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
-  profile_id: external_exports.enum(SELECTOR_PROFILE_IDS)
+  profile_id: external_exports.enum(SELECTOR_PROFILE_IDS),
+  rationale: external_exports.string().optional()
 }).strict();
 var effortEnvelopeV2Schema = external_exports.object({
   schema_version: external_exports.literal("2"),
@@ -37270,19 +37271,24 @@ var selectionSchema = external_exports.object({
   input_fingerprint: sha256DigestV1Schema,
   policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
   profile: selectorProfileSchema,
+  rationale: external_exports.string().optional(),
   source: external_exports.discriminatedUnion("kind", [
     external_exports.object({ kind: external_exports.literal("reviewer"), reviewer: effortReviewerProvenanceV1Schema }).strict(),
     external_exports.object({ kind: external_exports.literal("default") }).strict()
   ])
 }).strict();
 var effortSelectionV2Schema = selectionSchema;
-var archivedEffortSelectionV2Schema = selectionSchema.extend({
+var archivedEffortSelectionV2Schema = selectionSchema.omit({ rationale: true }).extend({
   policy_id: external_exports.literal("implementation-agent-selector-v2"),
   profile: effortProfileV1Schema
+});
+var archivedEffortSelectionV3Schema = selectionSchema.omit({ rationale: true }).extend({
+  policy_id: external_exports.literal("implementation-agent-selector-v3")
 });
 var effortEvidenceSchema = external_exports.union([
   effortAssessmentV1Schema,
   archivedEffortSelectionV2Schema,
+  archivedEffortSelectionV3Schema,
   effortSelectionV2Schema
 ]);
 function parseEffortEnvelopeV2(value) {
@@ -37318,6 +37324,7 @@ function createEffortSelectionV2(value, envelope, reviewer) {
   return effortSelectionV2Schema.parse({
     ...selectionCommon(envelope),
     profile: SELECTOR_PROFILES[raw.profile_id],
+    ...raw.rationale === void 0 ? {} : { rationale: raw.rationale },
     source: { kind: "reviewer", reviewer }
   });
 }
@@ -39070,11 +39077,11 @@ var IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
   "legacy-evidence"
 ];
 var readyImplementationRecommendationSchema = external_exports.discriminatedUnion("model", [
-  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash-high"), effort: external_exports.literal("high") }).strict(),
-  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.enum(["low", "high"]) }).strict(),
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash-high"), effort: external_exports.literal("high"), rationale: external_exports.string().optional() }).strict(),
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.enum(["low", "high"]), rationale: external_exports.string().optional() }).strict(),
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash"), effort: external_exports.literal("max") }).strict(),
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("glm-5.3-flash"), effort: external_exports.literal("max") }).strict(),
-  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.enum(["medium", "xhigh"]) }).strict()
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.enum(["medium", "xhigh"]), rationale: external_exports.string().optional() }).strict()
 ]);
 var implementationRecommendationV1Schema = external_exports.union([
   readyImplementationRecommendationSchema,
@@ -39109,7 +39116,8 @@ function implementationRecommendationFromAssessment(value, phase3) {
   return Object.freeze(implementationRecommendationV1Schema.parse({
     status: "ready",
     model: profile.model,
-    effort: profile.effort
+    effort: profile.effort,
+    ..."rationale" in assessment && assessment.rationale !== void 0 ? { rationale: assessment.rationale } : {}
   }));
 }
 var SEMANTIC_ACTION_KINDS = [
@@ -54204,6 +54212,9 @@ var semantic_workflow_schema_default = {
                 effort: {
                   type: "string",
                   const: "high"
+                },
+                rationale: {
+                  type: "string"
                 }
               },
               required: [
@@ -54230,6 +54241,9 @@ var semantic_workflow_schema_default = {
                     "low",
                     "high"
                   ]
+                },
+                rationale: {
+                  type: "string"
                 }
               },
               required: [
@@ -54302,6 +54316,9 @@ var semantic_workflow_schema_default = {
                     "medium",
                     "xhigh"
                   ]
+                },
+                rationale: {
+                  type: "string"
                 }
               },
               required: [
@@ -56072,14 +56089,15 @@ var JSON_SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 var MCP_SCHEMA_ID = "https://archflow.dev/schemas/v1/mcp-tools";
 var ADVERTISED_IMPLEMENTATION_RECOMMENDATION = deepFreeze3({
   type: "object",
-  description: "Authenticated advisory implementation agent; successful selection exposes only model and effort.",
+  description: "Authenticated advisory implementation agent with optional explanation; never workflow authority.",
   properties: {
     status: { enum: ["ready", "unavailable"] },
-    model: { enum: ["gemini-3.7-flash", "glm-5.3-flash", "gpt-5.6-sol"] },
-    effort: { enum: ["medium", "xhigh", "max"] },
+    model: { enum: ["gemini-3.7-flash-high", "gpt-6-astra", "gemini-3.7-flash", "glm-5.3-flash", "gpt-5.6-sol"] },
+    effort: { enum: ["low", "medium", "high", "xhigh", "max"] },
     phase: { type: "integer", minimum: 1 },
     reason: { enum: ["not-applicable", "not-produced", "subject-stale", "legacy-evidence"] },
-    explanation: { type: "string" }
+    explanation: { type: "string" },
+    rationale: { type: "string", description: "Advisory explanation of the implementation difficulty; never workflow authority." }
   },
   required: ["status"]
 });
@@ -84985,7 +85003,7 @@ var effort_review_schema_default = {
     },
     policy_id: {
       type: "string",
-      const: "implementation-agent-selector-v3"
+      const: "implementation-agent-selector-v4"
     },
     profile_id: {
       type: "string",
@@ -84995,6 +85013,9 @@ var effort_review_schema_default = {
         "gpt-6-astra-low",
         "gpt-6-astra-high"
       ]
+    },
+    rationale: {
+      type: "string"
     }
   },
   required: [

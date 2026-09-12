@@ -2355,6 +2355,9 @@
                 "effort": {
                   "type": "string",
                   "const": "high"
+                },
+                "rationale": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -2381,6 +2384,9 @@
                     "low",
                     "high"
                   ]
+                },
+                "rationale": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -2453,6 +2459,9 @@
                     "medium",
                     "xhigh"
                   ]
+                },
+                "rationale": {
+                  "type": "string"
                 }
               },
               "required": [

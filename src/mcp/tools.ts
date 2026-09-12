@@ -35,14 +35,15 @@ const MCP_SCHEMA_ID = "https://archflow.dev/schemas/v1/mcp-tools";
 // without admitting any client input or strengthening server-output validation.
 const ADVERTISED_IMPLEMENTATION_RECOMMENDATION = deepFreeze({
   type: "object",
-  description: "Authenticated advisory implementation agent; successful selection exposes only model and effort.",
+  description: "Authenticated advisory implementation agent with optional explanation; never workflow authority.",
   properties: {
     status: { enum: ["ready", "unavailable"] },
-    model: { enum: ["gemini-3.7-flash", "glm-5.3-flash", "gpt-5.6-sol"] },
-    effort: { enum: ["medium", "xhigh", "max"] },
+    model: { enum: ["gemini-3.7-flash-high", "gpt-6-astra", "gemini-3.7-flash", "glm-5.3-flash", "gpt-5.6-sol"] },
+    effort: { enum: ["low", "medium", "high", "xhigh", "max"] },
     phase: { type: "integer", minimum: 1 },
     reason: { enum: ["not-applicable", "not-produced", "subject-stale", "legacy-evidence"] },
     explanation: { type: "string" },
+    rationale: { type: "string", description: "Advisory explanation of the implementation difficulty; never workflow authority." },
   },
   required: ["status"],
 } as const);

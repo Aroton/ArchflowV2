@@ -201,6 +201,7 @@ export type ImplementationRecommendationV1 =
       readonly status: "ready";
       readonly model: ImplementationProfileV1["model"] | SelectorProfile["model"];
       readonly effort: ImplementationProfileV1["effort"] | SelectorProfile["effort"];
+      readonly rationale?: string;
     }
   | {
       readonly status: "unavailable";
@@ -209,11 +210,11 @@ export type ImplementationRecommendationV1 =
       readonly explanation: string;
     };
 const readyImplementationRecommendationSchema = z.discriminatedUnion("model", [
-  z.object({ status: z.literal("ready"), model: z.literal("gemini-3.7-flash-high"), effort: z.literal("high") }).strict(),
-  z.object({ status: z.literal("ready"), model: z.literal("gpt-6-astra"), effort: z.enum(["low", "high"]) }).strict(),
+  z.object({ status: z.literal("ready"), model: z.literal("gemini-3.7-flash-high"), effort: z.literal("high"), rationale: z.string().optional() }).strict(),
+  z.object({ status: z.literal("ready"), model: z.literal("gpt-6-astra"), effort: z.enum(["low", "high"]), rationale: z.string().optional() }).strict(),
   z.object({ status: z.literal("ready"), model: z.literal("gemini-3.7-flash"), effort: z.literal("max") }).strict(),
   z.object({ status: z.literal("ready"), model: z.literal("glm-5.3-flash"), effort: z.literal("max") }).strict(),
-  z.object({ status: z.literal("ready"), model: z.literal("gpt-5.6-sol"), effort: z.enum(["medium", "xhigh"]) }).strict(),
+  z.object({ status: z.literal("ready"), model: z.literal("gpt-5.6-sol"), effort: z.enum(["medium", "xhigh"]), rationale: z.string().optional() }).strict(),
 ]);
 export const implementationRecommendationV1Schema = z.union([
   readyImplementationRecommendationSchema,
@@ -246,7 +247,7 @@ export function defaultImplementationRecommendation(): ImplementationRecommendat
   }));
 }
 
-/** Projects only the selected implementation agent; all selector work remains private evidence. */
+/** Projects the selected agent and optional explanation, never workflow authority. */
 export function implementationRecommendationFromAssessment(
   value: EffortEvidence,
   phase: number,
@@ -264,6 +265,7 @@ export function implementationRecommendationFromAssessment(
     status: "ready",
     model: profile.model,
     effort: profile.effort,
+    ...("rationale" in assessment && assessment.rationale !== undefined ? { rationale: assessment.rationale } : {}),
   }));
 }
 

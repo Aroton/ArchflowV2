@@ -4134,7 +4134,7 @@
       ]
     },
     "src/contracts/effort-review.ts": {
-      "bytes": 29745,
+      "bytes": 31067,
       "format": "esm",
       "imports": [
         {
@@ -4653,7 +4653,7 @@
       }
     },
     "src/contracts/schemas/v1/effort-review.schema.json": {
-      "bytes": 1584,
+      "bytes": 1633,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4749,7 +4749,7 @@
       }
     },
     "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-      "bytes": 114365,
+      "bytes": 114620,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4807,7 +4807,7 @@
       ]
     },
     "src/contracts/semantic-workflow.ts": {
-      "bytes": 48870,
+      "bytes": 49111,
       "format": "esm",
       "imports": [
         {
@@ -7055,7 +7055,7 @@
       ]
     },
     "src/mcp/tools.ts": {
-      "bytes": 11635,
+      "bytes": 11822,
       "format": "esm",
       "imports": [
         {
@@ -10369,7 +10369,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2403444,
+      "bytes": 2404791,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11461,7 +11461,7 @@
           "bytesInOutput": 41509
         },
         "src/contracts/effort-review.ts": {
-          "bytesInOutput": 18479
+          "bytesInOutput": 19567
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17401
@@ -11512,7 +11512,7 @@
           "bytesInOutput": 1323
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 28052
+          "bytesInOutput": 28311
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 377
@@ -11772,7 +11772,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3658417,
+      "bytes": 3660255,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12939,7 +12939,7 @@
           "bytesInOutput": 41449
         },
         "src/contracts/effort-review.ts": {
-          "bytesInOutput": 18417
+          "bytesInOutput": 19521
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17416
@@ -12993,7 +12993,7 @@
           "bytesInOutput": 26507
         },
         "src/contracts/schemas/v1/effort-review.schema.json": {
-          "bytesInOutput": 1542
+          "bytesInOutput": 1587
         },
         "src/contracts/schemas/v1/evidence-slots.schema.json": {
           "bytesInOutput": 1352
@@ -13029,7 +13029,7 @@
           "bytesInOutput": 3054
         },
         "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-          "bytesInOutput": 109599
+          "bytesInOutput": 109842
         },
         "src/contracts/schemas/v1/task-initialization.schema.json": {
           "bytesInOutput": 1432
@@ -13044,7 +13044,7 @@
           "bytesInOutput": 1255
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 28867
+          "bytesInOutput": 29126
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 495
@@ -13158,7 +13158,7 @@
           "bytesInOutput": 5006
         },
         "src/mcp/tools.ts": {
-          "bytesInOutput": 7888
+          "bytesInOutput": 8075
         },
         "src/repository/git.ts": {
           "bytesInOutput": 21274

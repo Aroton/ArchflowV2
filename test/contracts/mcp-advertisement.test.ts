@@ -3,8 +3,21 @@ import { describe, expect, it } from "vitest";
 
 import { ADVERTISED_TOOL_NAMES } from "../../src/contracts/tool-names.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
+import { SELECTOR_PROFILES } from "../../src/review/effort-policy.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 describe("advertised MCP tool catalogue", () => {
+  it("advertises every current recommendation profile with optional explanation", () => {
+    for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
+      const output = descriptor.outputSchema as { $defs: Record<string, object> };
+      const { validate } = createJsonSchemaValidator(output.$defs.implementationRecommendation!);
+      for (const { model, effort } of Object.values(SELECTOR_PROFILES)) {
+        for (const explanation of [{}, { rationale: "The tested predecessor settles ownership; this phase wires its consumers." }]) {
+          expect(validate({ status: "ready", model, effort, ...explanation }), JSON.stringify(validate.errors)).toBe(true);
+        }
+      }
+    }
+  });
   it("passes the SDK ListToolsResult schema with the fixed non-paginated surface", () => {
     const listed = { tools: ADVERTISED_TOOL_CATALOGUE };
     const validation = specTypeSchemas.ListToolsResult["~standard"].validate(listed);

@@ -1,66 +1,36 @@
 # Model and effort recommendations
 
-Updated 2026-09-11. This is the rationale for fresh selector policy `implementation-agent-selector-v3`; older research and archived evidence do not define current recommendations.
+Updated 2026-09-12. Fresh selector policy `implementation-agent-selector-v4` favors economical implementation after strong architecture and phase design. Model recommendations are engineering judgments, not capability guarantees or instructions to switch the session.
 
 ## Implementation ladder
 
-Architecture and phase design should use **GPT-6 Astra high**. This is advice for the producing session, not a server-enforced model switch. Implementation selection scores what remains to be done after that design.
+Architecture and phase design recommend GPT-6 Astra high. Their job includes settling material decisions, identifying existing guarantees, and providing meaningful verification so implementation usually suits Sol medium or Astra low.
 
-| Component assessment | Model and effort |
+| Remaining implementation work | Starting recommendation |
 |---|---|
-| Total 0–2, every axis ≤1, confidently short, confidently no long tool loop | Gemini 3.7 Flash high |
-| Total 0–7 otherwise | GPT-5.6 Sol medium |
-| Total 8–11 | GPT-6 Astra low |
-| Total 12–15 | GPT-6 Astra high |
+| Narrow, well-understood, short task with a cheap reliable check | Gemini 3.7 Flash high |
+| Settled patterns, ordinary migrations, CRUD, UI composition, API/dependency wiring, ordinary tests | GPT-5.6 Sol medium (default) |
+| Substantive reasoning within a settled approach: bounded parsing, state transitions, artifact handling, tricky integration | GPT-6 Astra low |
+| Identifiable difficult algorithmic derivation or interacting correctness mechanisms still requiring deep reasoning after design | GPT-6 Astra high |
 
-A, C, or E equal to 3 imposes an Astra-low floor. B and C both equal to 3 imposes an Astra-high floor. Apply floors before selecting the highest-ranked component profile for the phase. Unknown short-task or loop suitability excludes Gemini.
+There are no additive axis scores, automatic risk floors, or highest-component aggregation. Distinguish calling an established ownership transaction from inventing ownership. Timers, shared state, security labels, file counts, document length, and lengthy tests or tool loops alone do not justify escalation. A hard mechanism that is essential to the current implementation still counts: do not average it away or assume an unspecified stronger subagent will solve it. Never select Astra max; existing explicit-route restrictions remain.
 
-The fresh profiles are `gemini-3-7-flash-high`, `gpt-5-6-sol-medium`, `gpt-6-astra-low`, and `gpt-6-astra-high`, in that order. The Gemini profile uses the existing Antigravity route `gemini-3.7-flash-high` with effort `high`. GLM is no longer a fresh implementation tier. Sol high/xhigh and Astra medium/xhigh are omitted from automatic selection. **Never recommend or dispatch Astra max.** Explicit Astra-max reviewer routes are rejected before launch; they are not silently downgraded.
+## Phase boundaries and feedback
 
-## Private rubric
+Assess material decisions remaining, new mechanisms versus tested predecessor APIs, relevant examples, credible verification, and coupling. Typically plan one coherent mechanism plus routine wiring. A tested internal prerequisite is a useful increment even when the full feature comes later. Isolate an independently difficult component when the reduction in implementation and rework cost justifies the extra design/review cycle; a bounded implementation assignment can sometimes suffice. Avoid fragmenting routine work merely to obtain a cheaper label. Keep required safety behavior with the capability it protects.
 
-Score each inferred implementation component 0–3:
+The selector recommends for the plan as written. Its optional free-form `rationale` explains remaining difficulty and can identify a decision to settle or a component to isolate. High-effort recommendations should identify the concrete hard problem. Missing rationale does not invalidate a valid profile. The producer assesses useful feedback through existing review/triage or server-returned reopen actions. No scoring worksheet, automatic plan rewrite, extra model call, new gate, or model quota is introduced.
 
-- **A — Derivation depth:** transcription; known pattern with local adaptation; approach given but mechanism unresolved; mechanism must be derived from constraints.
-- **B — Verifier weakness:** compiler catches errors; deterministic unit tests; reproducible simulation; timing-dependent, nondeterministic, or tail-metric verification.
-- **C — State space:** pure or straight-line IO; sequential error paths; shared state or async without timers; timers, cancellation, partial failure, or cross-component invariants.
-- **D — Specification uncertainty:** specified thresholds and priorities; minor gaps with obvious defaults; material decision unstated; conflicting goals without priorities.
-- **E — Codebase hazard:** new module; stable interfaces; known hazardous module; unsafe mechanisms or an open correctness bug. Use the supplied repository hazard registry as context.
+## Cost and calibration
 
-The selector privately infers components and includes D in the total. It returns only one bound profile ID. There is no required component manifest, public scoring worksheet, or effort-review blocker. Ordinary review still owns material specification findings and workflow authority. Any selector failure produces Sol medium without a retry or human boundary.
+The objective is total useful work per resource spent, including architecture, phase design, implementation, verification, and review/rework. Model and effort are separate choices: lower effort does not change the model's per-token price. Consult current official [Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol) and [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) pricing when estimating API cost; CLI/account billing and actual token consumption need separate evidence.
 
-## Quality, cost, and evidence
+The earlier seven-case V3 calibration tested whether a selector followed that policy. It did not benchmark implementation capability or justify the old thresholds. Calibrate V4 with a small sample of actual implementations and existing notes/usage evidence: chosen and actual model/effort, total work including review/rework, and consequential defects. Include routine wiring that calls concurrency primitives, broad mechanical edits, bounded new mechanisms, and genuinely difficult algorithms. A simulated selector or scripted CLI test cannot establish model quality or cost savings. No new telemetry or benchmark framework is needed.
 
-The user's calibration places Sol high around 52 and Astra low around 54, with little benefit from Astra medium over low and a small task-cost premium at that cutover. These are **user-supplied observations**, not independently verified benchmark measurements. They support skipping Sol high in favor of Astra low, but do not establish universal equivalence.
+## Reviewer roles and authority
 
-Official standard API prices are $4 input / $20 output per million tokens for Sol and $10 / $50 for Astra: Astra is 2.5× per token. OpenAI reports that Astra uses substantially fewer output tokens on some evaluations. Total task cost therefore depends on input, cache use, reasoning/output volume, and retries; a small premium is plausible but not guaranteed. For illustration, at equal uncached input I and output O, cost scales 2.5×; lower reasoning volume must offset that premium. Sol's documented promotional pricing lasts at least through November 21, 2026. Recheck pricing when recalibrating.
+The effort selector remains Luna xhigh, the test reviewer Luna xhigh, and constitution adjudication Gemini 3.7 Flash high. Configured counter-reviewer rosters and explicit routes retain their meaning. This policy does not rewrite task configuration or switch implementation sessions. Any selector failure defaults to Sol medium without retry or a human boundary. Advice, including its rationale, cannot grant edits, bypass review, change offers, or approve work.
 
-Sources inspected for this update:
+## Retained evidence
 
-- [Sol specifications and pricing](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
-- [Astra specifications and pricing](https://developers.openai.com/api/docs/models/gpt-6-astra)
-- [Astra task-efficiency guidance](https://developers.openai.com/api/docs/guides/latest-model)
-- [Fable 5.1 model ID](https://platform.claude.com/docs/en/models/overview)
-
-The earlier unsourced index table is not carried forward as current evidence. Aggregate benchmarks are workload-dependent; they do not prove Gemini unsuitable for all work or turn these scoring thresholds into measured accuracy boundaries. Its implementation role here is deliberately narrow: a short task with cheap, reliable verification. A failed Gemini implementation should be reconsidered at Sol medium or above; this is human-facing guidance, not a new automatic retry system.
-
-## Reviewer roles
-
-Implementation advice and reviewer routing are separate decisions:
-
-| Role | Shipped default |
-|---|---|
-| Effort selector | Luna xhigh |
-| Test reviewer | Luna xhigh |
-| Constitution adjudicator | Gemini 3.7 Flash high |
-| Counter-review for Claude producers / fallback | Sol medium |
-| Counter-review for Codex producers | Fable 5.1 medium |
-| Counter-review for Antigravity producers | Sol medium and Fable 5.1 medium |
-
-Luna and Gemini remain for these bounded, inexpensive review assignments, as explicitly requested. This update changes existing shipped Fable routes to `claude-fable-5-1`, preserving effort and family assignments. It does not rewrite explicit repository or task configuration.
-
-## Compatibility and calibration
-
-The payload shape remains version 2, while the fresh policy identity becomes `implementation-agent-selector-v3`. Archived V1 assessments and V2-policy selections retain their original profiles and interpretation. Reading them neither reruns completed reviews nor upgrades their advice.
-
-Strict validation proves profile membership and subject bindings, not the correctness of hidden model judgments. Calibrate with representative trivial, routine, complex, concurrency-heavy, and mixed-component phase designs. Record actual outputs and mismatches; do not mistake scripted test outputs for live model evidence. No new benchmark framework or machine-global installation is required.
+The payload remains schema version 2 with an optional rationale; fresh policy identity is V4. V1 assessments and V2/V3-policy selections remain readable with their original profiles. Their private judgments are not reinterpreted. A policy change alone does not rerun completed reviews; changed phase-design bytes require fresh selection. Contract tests validate profile membership, binding, archival readability, and explanation projection, not the quality of the model's judgment.

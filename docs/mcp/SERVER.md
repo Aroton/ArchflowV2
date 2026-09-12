@@ -1,6 +1,6 @@
 # mcp/SERVER
 
-**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `src/main.ts`, `src/mcp/`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/state/status.ts`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
+**Explored:** 2026-09-12 · **Commit:** `1f89243` · **Covers:** `src/main.ts`, `src/mcp/`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/state/status.ts`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
@@ -112,7 +112,7 @@ After one human decision or authenticated no-wait settlement, status returns onl
 
 ## Effort review at the semantic boundary
 
-The read-only semantic snapshot selects authenticated effort evidence for the governing phase design and exposes it as required `implementation_recommendation` on every view. `ready` contains only model and effort; `unavailable` distinguishes non-applicability, no produced evidence, stale subject bytes, and exact legacy evidence. The renderer copies this union after action derivation, so every offer, successor, presentation, and commit fact is identical regardless of the advice.
+The read-only semantic snapshot selects authenticated effort evidence for the governing phase design and exposes it as required `implementation_recommendation` on every view. `ready` contains model, effort, and optional advisory `rationale`; `unavailable` distinguishes non-applicability, no produced evidence, stale subject bytes, and exact legacy evidence. The renderer copies this union after action derivation, so every offer, successor, presentation, and commit fact is identical regardless of the advice.
 
 The public catalogue remains the same two semantic tools. Effort selection is an internal best-effort child of the existing phase-design `review` action, not a new operation. The server passes the authenticated design projection and one captured `.archflow/hazards.yaml` snapshot, then commits either the returned profile or the Sol-medium default with the ordinary review after the existing post-dispatch subject and repository recheck.
 

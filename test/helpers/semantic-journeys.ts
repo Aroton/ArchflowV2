@@ -23,7 +23,7 @@ import type { TaskWorkspace } from "./task-workspace.js";
 /** Shared child-process source so specialized semantic stubs answer phase-design effort dispatches identically. */
 export const SEMANTIC_EFFORT_STUB_SOURCE = `
 function generateEffortOutput(envelope) {
-  if (envelope.policy_id !== "implementation-agent-selector-v3") return undefined;
+  if (envelope.policy_id !== "implementation-agent-selector-v4") return undefined;
   return { schema_version: "2", task_id: envelope.task_id, phase_instance: envelope.phase_instance,
     step: "effort_review", role: "effort-reviewer", subject_digest: envelope.subject_digest,
     input_fingerprint: envelope.input_fingerprint,
@@ -132,6 +132,7 @@ export function installSemanticReviewStub(
     implementationFailingRule?: boolean;
     /** Fail only the fixed Luna effort route so the server-owned default can be observed. */
     failFixedEffortRoute?: boolean;
+    effortRationale?: string;
   }> = {},
 ): () => void {
   const adjudicationCompliance = options.adjudicationCompliance ?? "pass";
@@ -147,7 +148,8 @@ export function installSemanticReviewStub(
   const generatorScript = `
 ${SEMANTIC_EFFORT_STUB_SOURCE}
 function generateOutput(envelope, countPath, findingsByReview, adjudicationCompliance, implementationFailingRule, phaseDesignTrigger) {
-  const effort = generateEffortOutput(envelope); if (effort !== undefined) return effort;
+  const effort = generateEffortOutput(envelope);
+  if (effort !== undefined) return { ...effort, ...${JSON.stringify(options.effortRationale === undefined ? {} : { rationale: options.effortRationale })} };
   const subject = envelope.subject;
   if (subject.role === "counter-review") {
     let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
@@ -214,7 +216,7 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-agent-selector-v3" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
+  if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-agent-selector-v4" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)}, ${JSON.stringify(options.phaseDesignTrigger ?? "")});
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');

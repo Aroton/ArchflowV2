@@ -215,7 +215,6 @@ describe("canonical skill contracts", () => {
     expect(source).not.toContain("## Implementation Components");
     expect(source).not.toContain("archflow-components-v1");
     expect(source).toContain("implementation approach");
-    expect(source).toContain("silently applies its rubric");
   });
 
 
@@ -390,7 +389,6 @@ describe("canonical skill contracts", () => {
       expect(source).toMatch(/for `unavailable`/iu);
       expect(source).not.toContain("For `blocked`");
       expect(source).toContain("model and effort");
-      expect(source).toContain("scores");
       expect(source).toContain("`next_action`");
     }
     expect(skill("archflow-phase-design")).toContain("Every changed phase-design subject");
@@ -468,8 +466,6 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("valid completion state");
     expect(source).toContain("approved predecessors or stable inputs");
     expect(source).toContain("one understandable verification story");
-    expect(source).toMatch(/unusually broad phase only with a concrete/u);
-    expect(source).toMatch(/unusually small phase only when/u);
   });
 
   it("requires open-ended rationale and one bounded numbered-phase fit check", () => {
@@ -479,8 +475,6 @@ describe("canonical skill contracts", () => {
 
     const phaseDesign = skill("archflow-phase-design");
     expect(phaseDesign).toContain("perform one bounded fit check");
-    expect(phaseDesign).toContain("Preserve a sound approved boundary");
-    expect(phaseDesign).toContain("phase-worthy increment");
     expect(phaseDesign).toContain("returned writable task-design or PRD parent");
     expect(phaseDesign).toContain("existing compound production result");
     expect(phaseDesign).toContain("revised final bound would be below the current phase");

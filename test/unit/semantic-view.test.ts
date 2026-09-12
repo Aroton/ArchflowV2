@@ -197,6 +197,17 @@ describe("semantic status projection", () => {
       .toEqual(projectSemanticStatus(unavailable, invocation).view.next_action);
   });
 
+  it("keeps a selector suggestion informational rather than turning it into a revision action", () => {
+    const status = fullStatus(action("run-step", { step: "produce" }));
+    const ready = { status: "ready" as const, model: "gpt-6-astra" as const, effort: "high" as const,
+      rationale: "Consider isolating the cancellation protocol before implementing the remaining routine wiring." };
+    const baseline = projectSemanticStatus(snapshot(status), invocation).view;
+    const view = projectSemanticStatus(snapshot(status, { implementation_recommendation: ready }), invocation).view;
+    expect(view.implementation_recommendation).toEqual(ready);
+    expect(view.next_action).toEqual(baseline.next_action);
+    expect(view.presentation).toEqual(baseline.presentation);
+  });
+
   it("maps archived blockers to a ready default and keeps unavailable states informational", () => {
     const status = fullStatus(action("run-step", { step: "produce" }));
     const baseline = projectSemanticStatus(snapshot(status), invocation).view.next_action;

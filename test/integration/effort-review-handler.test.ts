@@ -50,15 +50,20 @@ describe("phase-design effort review handler", { timeout: 180_000 }, () => {
   it("accepts a manifest-less phase design", async () => {
     const workspace = await createTaskWorkspace({ taskId: "effort-no-manifest", label: "effort-no-manifest" });
     workspaces.push(workspace);
-    restorers.push(installSemanticReviewStub(workspace.root, [[], []]));
+    const rationale = "The specified parser needs bounded decoding; ownership uses the tested predecessor API.";
+    restorers.push(installSemanticReviewStub(workspace.root, [[], []], { effortRationale: rationale }));
     const h = semanticJourneyHarness(workspace);
     const boundary = await reachPhaseDesignReviewOffer(workspace, h, "# Phase 1: Missing manifest\n");
     const result = await h.apply(boundary.invocation, boundary.view);
     expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) throw new Error(result.error.code);
+    expect(result.value.implementation_recommendation).toEqual({ status: "ready", model: "gpt-6-astra", effort: "low", rationale });
+    expect((await h.status(boundary.invocation)).implementation_recommendation).toEqual(result.value.implementation_recommendation);
     expect((await retainedReview(workspace)).effort_review).toMatchObject({
       schema_version: "2",
-      policy_id: "implementation-agent-selector-v3",
+      policy_id: "implementation-agent-selector-v4",
       profile: { model: "gpt-6-astra", effort: "low" },
+      rationale,
     });
   });
 

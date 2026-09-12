@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-09-12 · **Commit:** `60176a2` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-09-12 · **Commit:** `1f89243` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review supplies independent feedback to the working AI. The initial review runs the configured general and test reviewers, alongside separate constitution review when rules are active. Reviewers return readable reports; the working AI interprets them, makes worthwhile revisions, and selects previous reviewers to verify the changes. Useful feedback and economical follow-up matter more than agreement on every suggestion.
 
@@ -203,13 +203,11 @@ Content globs match each repository's own repository-relative path and run indep
 
 ## Phase-design effort evidence
 
-Phase-design review captures the current plan and repository hazards and dispatches the configured effort selector (Luna/xhigh by default). The selector privately infers components and scores derivation depth, verifier weakness, state space, specification uncertainty, and codebase hazard. A component manifest is not required.
+Phase-design review captures the current plan and repository hazards and dispatches the configured effort selector (Luna/xhigh by default). Fresh policy `implementation-agent-selector-v4` assesses the reasoning remaining after design. Sol medium is the default for settled patterns; Astra low handles substantive implementation reasoning within a settled approach; Astra high is reserved for a concrete difficult algorithm or interacting correctness mechanisms. Gemini high remains available for narrow, short work with a cheap reliable check. There are no additive scores, automatic risk floors, or strongest-component aggregation. Calling a tested mechanism does not inherit its invention cost.
 
-Fresh policy `implementation-agent-selector-v3` uses Gemini high only for totals 0–2 with every axis ≤1, confidently short work, and confidently no long tool loop. Other totals 0–7 select Sol medium, 8–11 Astra low, and 12–15 Astra high. A, C, or E equal to 3 imposes an Astra-low floor; B and C both equal to 3 imposes an Astra-high floor. The highest component profile wins. See `../research/effort-research.md` for the rationale and calibration limits.
+The child returns a bound profile ID with an optional free-form rationale about remaining difficulty and opportunities to settle or isolate costly work. Missing explanation does not invalidate the profile. The recommendation describes the current plan, without assuming unplanned delegation. The producer assesses the feedback through existing review/triage or reopen actions; rationale is never an instruction or authority. Any selector failure produces the fixed Sol-medium default without retry or a human boundary. Public ready advice exposes model, effort, and the explanation when present; unavailable advice explains why no current recommendation can be rendered.
 
-The child returns only the bound profile ID. It cannot return findings, blockers, or analysis and cannot change approval authority. Any selector failure produces the fixed Sol-medium default without retry or a human boundary. Public ready advice exposes only model and effort; unavailable advice explains why no current advice can be rendered.
-
-Archived V1 assessments and selections under the V2 policy remain readable with their original profile meanings. The old V1 decomposition, per-axis judgments, and blockers are historical evidence, not fresh workflow requirements. Fresh selection accepts only V3-policy profiles. A policy update alone does not force a completed review to rerun; changed phase-design bytes require fresh selection.
+Archived V1 assessments and V2/V3-policy selections remain readable with their original profile meanings. Their old scores and blockers do not become fresh workflow requirements. A policy update alone does not rerun a completed review; changed phase-design bytes require fresh selection. See `../research/effort-research.md` for planning guidance and calibration limits.
 
 ## Intentional approval versus exceptional intervention
 

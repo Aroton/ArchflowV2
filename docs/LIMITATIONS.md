@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-09-12 · **Commit:** `1f89243` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 Review V4 deliberately does not prove that every reported concern was addressed. The working AI interprets reports and may finish with explained disagreement. Server-attested provenance identifies who reviewed which subject; it does not attest correctness. Partial and previous-version reports are not current completed review authority.
 
@@ -34,11 +34,11 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Phase sizing remains approximate
 
-**Not deterministic:** ArchFlow cannot calculate a uniquely correct phase boundary or guarantee a token budget. The overall design skill's five-axis rubric estimates relative implementation scope from file surface, interface novelty, verification surface, unknowns, and coupling. Its roughly 300k-token target and score bands are uncalibrated guidance; context compaction and overruns remain possible.
+**Not deterministic:** ArchFlow cannot calculate a uniquely correct phase boundary or guarantee a token budget or implementation model's success. Planning targets economical agents using settled decisions, tested predecessors, coherent mechanisms, and meaningful verification. These are engineering judgments, not calibrated thresholds. A smaller phase can still contain hard reasoning, and a larger mechanical change can suit a cheaper agent. Evaluate total design, implementation, verification, and rework cost; compaction and overruns remain possible.
 
 **Existing mitigation:** Architecture design uses the rubric internally to guide splits and merges, with a bias toward splitting, while preserving coherent outcomes, valid completion states, stable predecessor inputs, and meaningful verification. Intermediate phases have machine-verifiable exit criteria; genuinely manual validation belongs at the end. Scores are not a required artifact or review criterion. Numbered phase design retains its bounded fit check, and counter-review raises materially harmful boundary defects rather than enforcing numeric preferences. Existing human approval gates are unaffected.
 
-**Why accepted:** A lightweight heuristic helps the design agent choose manageable phases without introducing a scoring engine or false guarantees. Actual spend could inform later calibration across roughly 20 phases, but tracking and refitting are optional future work. Concrete boundary rationale and material consequences still govern exceptions.
+**Why accepted:** A lightweight heuristic helps the design agent choose manageable phases without introducing a scoring engine or false guarantees. A small sample of actual implementation and review/rework outcomes can inform calibration without mandatory tracking. Concrete boundary rationale and material consequences still govern exceptions.
 
 ## Adversarial stdio peers at the JSON-RPC layer
 
@@ -230,11 +230,11 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Effort recommendations are policy judgments, not measurements
 
-**Not provided:** The A–E scores do not predict elapsed time, token use, cost, or a universal model ranking. The hand-maintained hazard registry can be incomplete, and an unmatched path means only that no entry matched—not that the code is safe or easy.
+**Not provided:** Model selection does not predict elapsed time, token use, cost, or a universal ranking. A detailed design can still leave hard implementation reasoning, and the hazard registry can be incomplete. An unmatched path does not prove the code safe or easy.
 
-**Existing mitigation:** Every score keeps its rationale, explicit hazards impose a mandatory E floor, uncertain route-changing classifications choose the conservative GLM branch with a caveat, and the server derives totals and profiles from a versioned policy instead of trusting model-authored routes. A material specification gap or undifferentiated component blocks phase design rather than producing false precision.
+**Existing mitigation:** V4 selection assesses remaining implementation reasoning, credits tested predecessors, defaults to Sol medium, and can explain why a stronger profile or a better boundary would help. It uses no additive scores or risk floors. Missing rationale is tolerated. Bindings and profile membership are validated, but the selector's judgment can still be wrong. Its explanation is advisory text, not authority.
 
-**Why accepted:** This is bounded planning evidence for a prototype workflow. Outcome telemetry and automatic calibration are deliberately deferred; the recommendation remains advisory and cannot launch a producer or grant authority.
+**Why accepted:** A small sample of real implementation outcomes can guide calibration without a telemetry subsystem. The recommendation cannot switch the producing session, rewrite the plan, or bypass approval. Earlier scored assessments remain historical evidence only.
 
 ## Automation v1 retains its legacy effort-failure surrogate
 

@@ -43,7 +43,7 @@
     },
     "policy_id": {
       "type": "string",
-      "const": "implementation-agent-selector-v3"
+      "const": "implementation-agent-selector-v4"
     },
     "profile_id": {
       "type": "string",
@@ -53,6 +53,9 @@
         "gpt-6-astra-low",
         "gpt-6-astra-high"
       ]
+    },
+    "rationale": {
+      "type": "string"
     }
   },
   "required": [

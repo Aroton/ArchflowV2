@@ -86,7 +86,7 @@ describe("effort review contracts", () => {
     repositories: [{ name: "primary", repository_identity_digest: digest("e"), commit: "f".repeat(40) }],
   } as unknown as EffortEnvelopeV2;
 
-  it("accepts only a bound profile from the fresh selector", () => {
+  it("preserves optional selector feedback alongside bound profiles", () => {
     const rawSelection = {
       schema_version: "2", task_id: "effort-review", phase_instance: "phase-design-1",
       step: "effort_review", role: "effort-reviewer", subject_digest: digest("a"),
@@ -110,6 +110,14 @@ describe("effort review contracts", () => {
       expect(effortEvidenceSchema.parse(evidence)).toEqual(evidence);
       expect(implementationRecommendationFromAssessment(evidence, 1)).toEqual({ status: "ready", model: profile.model, effort: profile.effort });
     }
+    const rationale = "The existing transaction API settles ownership; only ordinary wiring remains. Consider isolating the independent parser work.";
+    const explained = createEffortSelectionV2({ ...rawSelection, rationale }, selectorEnvelope, selected.source.reviewer);
+    expect(effortEvidenceSchema.parse(explained)).toMatchObject({ rationale });
+    expect(implementationRecommendationFromAssessment(explained, 1)).toEqual({
+      status: "ready", model: "gpt-6-astra", effort: "low", rationale,
+    });
+    const reviewer = selected.source.reviewer;
+    expect(() => createEffortSelectionV2({ ...rawSelection, rationale, subject_digest: digest("9") }, selectorEnvelope, reviewer)).toThrow(/subject_digest/);
     for (const profile_id of ["gemini-3-7-flash-max", "glm-5-3-flash-max", "gpt-5-6-sol-xhigh", "gpt-6-astra-medium", "gpt-6-astra-xhigh", "gpt-6-astra-max"]) {
       expect(() => rawEffortSelectionV2Schema.parse({ ...rawSelection, profile_id })).toThrow();
     }
@@ -127,6 +135,11 @@ describe("effort review contracts", () => {
     expect(implementationRecommendationFromAssessment(parsed, 1)).toEqual({ status: "ready", model: "gpt-5.6-sol", effort: "xhigh" });
     expect(() => effortSelectionV2Schema.parse(archived)).toThrow();
     expect(() => effortEvidenceSchema.parse({ ...archived, profile: SELECTOR_PROFILES["gpt-6-astra-low"] })).toThrow();
+    const v3 = { ...current, policy_id: "implementation-agent-selector-v3", profile: SELECTOR_PROFILES["gpt-6-astra-high"] };
+    const parsedV3 = effortEvidenceSchema.parse(v3);
+    expect(parsedV3).toEqual(v3);
+    expect(implementationRecommendationFromAssessment(parsedV3, 1)).toEqual({ status: "ready", model: "gpt-6-astra", effort: "high" });
+    expect(() => effortSelectionV2Schema.parse(v3)).toThrow();
   });
 
   it("mints the fixed Sol-medium default without selector work", () => {

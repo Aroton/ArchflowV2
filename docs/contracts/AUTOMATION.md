@@ -1,6 +1,6 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `src/contracts/automation-status.ts`, `src/contracts/workflow-progress.ts`, `src/local/automation-status*.ts`, `src/local/commands.ts`, `src/state/semantic-*.ts`, `src/dispatch/recovery.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-09-12 · **Commit:** `1f89243` · **Covers:** `src/contracts/automation-status.ts`, `src/contracts/workflow-progress.ts`, `src/local/automation-status*.ts`, `src/local/commands.ts`, `src/state/semantic-*.ts`, `src/dispatch/recovery.ts`, `test/integration/automation-status-*.test.ts`
 
 For Review V4, `awaiting-client` at triage means the working AI must interpret reports and submit finish, revise, or escalate. It is not itself a human boundary. Partial feedback remains visible during retry, and successful siblings are reused. Completed-round progress remains independent of dispatch retries.
 
@@ -78,7 +78,7 @@ Raw `.archflow` files, offers, gate archives, and decision tokens are not contro
 
 ## Advice, audit fields, and adoption
 
-`implementation_recommendation`, `validation_overrides`, and `review_push_throughs` retain their v2 meanings. Both audit arrays are copied after action selection and cannot change the selected actor, successor, approval, or commit authority. Advice never changes authority or reviewer routing. Validation exceptions never report skipped checks as passed, and review push-through never bypasses configured approvals, policy, or commit proof. Current effort-selector failures retain their advisory fallback and never create a human boundary.
+`implementation_recommendation`, `validation_overrides`, and `review_push_throughs` retain their v2 meanings. Both audit arrays are copied after action selection and cannot change the selected actor, successor, approval, or commit authority. Ready implementation advice may include an optional free-form `rationale` explaining remaining difficulty. Advice never changes authority or reviewer routing. Validation exceptions never report skipped checks as passed, and review push-through never bypasses configured approvals, policy, or commit proof. Current effort-selector failures retain their advisory fallback and never create a human boundary.
 
 Update controllers to understand v3 before consuming the new CLI. Existing task-local configurations and pinned constitutions are not silently rewritten. To adopt the defaults, explicitly review the repository seed policy and the task's approval rules: keep intentional custom content rules, remove the old blanket parent-document path rule only when adopting the independently reviewed material-plan-change rule, and preserve the SQL rule. Existing pinned tasks retain their old governing policy until an explicit policy-adoption action. Adoption never retroactively clears an open gate or changes archived human decisions. Rebuilding the tracked distribution does not authorize a machine-global install.
 

@@ -431,10 +431,10 @@ export function createEffortAssessmentV1(
   });
 }
 
-export const IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v3" as const;
+export const IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v4" as const;
 
 export const EFFORT_SELECTOR_INSTRUCTIONS =
-  "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-high only when every axis is at most 1, the component is confidently short, and a long tool loop is confidently unnecessary; unknown short-task or loop suitability disqualifies Gemini. Otherwise totals 0-7 select gpt-5-6-sol-medium; totals 8-11 select gpt-6-astra-low; totals 12-15 select gpt-6-astra-high. Apply these floors after the total: A, C, or E equal to 3 requires at least gpt-6-astra-low; B and C both equal to 3 requires gpt-6-astra-high. Return the highest-ranked selected profile across all components in this order: gemini-3-7-flash-high, gpt-5-6-sol-medium, gpt-6-astra-low, gpt-6-astra-high. Never select Astra max. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis." as const;
+  "Recommend an economical implementation profile for the phase as written, assessing the reasoning remaining after architecture and phase design. Default to gpt-5-6-sol-medium for settled patterns, ordinary migrations, CRUD, UI composition, API/dependency wiring, and tests. Use gemini-3-7-flash-high for narrow, well-understood, short work with a cheap reliable check; otherwise prefer Sol medium. Use gpt-6-astra-low when implementation still needs substantive reasoning within a settled approach, such as bounded parsing, nontrivial state transitions, artifact handling, or tricky integration. Reserve gpt-6-astra-high for identifiable difficult algorithmic derivation or interacting correctness mechanisms that still require deep reasoning after design. Never select Astra max. Assess material decisions remaining, mechanisms to implement versus established APIs to call, available examples, credible verification, and coupling. Credit specified mechanisms and tested predecessor guarantees; using an ownership transaction does not inherit the difficulty of inventing it. Repository hazards are context for the changed work, not automatic model floors. File counts, document length, security labels, timers, shared state, lengthy tool loops, and expensive tests alone do not justify escalation. Do not add axis scores or automatically take the strongest component's profile. Consider the actual work and integration burden, without averaging away an essential difficult mechanism or assuming unplanned delegation. In a short free-form rationale, explain the remaining implementation difficulty; for high effort identify the concrete hard problem. If a material unanswered design question or a separable hard component drives cost, mention what could be settled or isolated to make implementation cheaper. Recommend for the current plan, not a hypothetical revised one. This is advisory feedback, never a blocker, revision command, or authority. Return the bound profile_id and a rationale when available; no scoring worksheet or additional review call is needed." as const;
 
 export type RawEffortSelectionV2 = {
   readonly schema_version: "2";
@@ -446,6 +446,7 @@ export type RawEffortSelectionV2 = {
   readonly input_fingerprint: Sha256Digest;
   readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
   readonly profile_id: (typeof SELECTOR_PROFILE_IDS)[number];
+  readonly rationale?: string;
 };
 
 export type EffortEnvelopeV2 = {
@@ -473,17 +474,22 @@ export type EffortSelectionV2 = {
   readonly input_fingerprint: Sha256Digest;
   readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
   readonly profile: SelectorProfile;
+  readonly rationale?: string;
   readonly source:
     | { readonly kind: "reviewer"; readonly reviewer: EffortReviewerProvenanceV1 }
     | { readonly kind: "default" };
 };
 
-type ArchivedEffortSelectionV2 = Omit<EffortSelectionV2, "policy_id" | "profile"> & {
+type ArchivedEffortSelectionV2 = Omit<EffortSelectionV2, "policy_id" | "profile" | "rationale"> & {
   readonly policy_id: "implementation-agent-selector-v2";
   readonly profile: ImplementationProfileV1;
 };
 
-export type EffortEvidence = EffortAssessmentV1 | ArchivedEffortSelectionV2 | EffortSelectionV2;
+type ArchivedEffortSelectionV3 = Omit<EffortSelectionV2, "policy_id" | "rationale"> & {
+  readonly policy_id: "implementation-agent-selector-v3";
+};
+
+export type EffortEvidence = EffortAssessmentV1 | ArchivedEffortSelectionV2 | ArchivedEffortSelectionV3 | EffortSelectionV2;
 
 const selectorHazardInputSchema = z.object({
   schema_version: z.literal("1"),
@@ -502,6 +508,7 @@ export const rawEffortSelectionV2Schema = z.object({
   input_fingerprint: digest,
   policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
   profile_id: z.enum(SELECTOR_PROFILE_IDS),
+  rationale: z.string().optional(),
 }).strict() as unknown as z.ZodType<RawEffortSelectionV2>;
 
 export const effortEnvelopeV2Schema = z.object({
@@ -536,6 +543,7 @@ const selectionSchema = z.object({
   input_fingerprint: sha256DigestV1Schema,
   policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
   profile: selectorProfileSchema,
+  rationale: z.string().optional(),
   source: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("reviewer"), reviewer: effortReviewerProvenanceV1Schema }).strict(),
     z.object({ kind: z.literal("default") }).strict(),
@@ -544,14 +552,19 @@ const selectionSchema = z.object({
 
 export const effortSelectionV2Schema = selectionSchema as unknown as z.ZodType<EffortSelectionV2>;
 
-const archivedEffortSelectionV2Schema = selectionSchema.extend({
+const archivedEffortSelectionV2Schema = selectionSchema.omit({ rationale: true }).extend({
   policy_id: z.literal("implementation-agent-selector-v2"),
   profile: effortProfileV1Schema,
+});
+
+const archivedEffortSelectionV3Schema = selectionSchema.omit({ rationale: true }).extend({
+  policy_id: z.literal("implementation-agent-selector-v3"),
 });
 
 export const effortEvidenceSchema = z.union([
   effortAssessmentV1Schema,
   archivedEffortSelectionV2Schema,
+  archivedEffortSelectionV3Schema,
   effortSelectionV2Schema,
 ]) as unknown as z.ZodType<EffortEvidence>;
 
@@ -595,6 +608,7 @@ export function createEffortSelectionV2(
   return effortSelectionV2Schema.parse({
     ...selectionCommon(envelope),
     profile: SELECTOR_PROFILES[raw.profile_id],
+    ...(raw.rationale === undefined ? {} : { rationale: raw.rationale }),
     source: { kind: "reviewer", reviewer },
   });
 }
