@@ -78,7 +78,11 @@ export function classifiedDispatchFailure(error: unknown): Readonly<{
   const repositoryName = code === "REPOSITORY_VIEW_UNAVAILABLE"
     ? (projectError.diagnostic.parameters as Readonly<Record<string, unknown>>).repository_name
     : undefined;
-  return Object.freeze({ code, message: SAFE_MESSAGES[code], ...(typeof repositoryName === "string" ? { repository_name: repositoryName } : {}) });
+  const astraMax = code === "CONFIG_INVALID" &&
+    (projectError.diagnostic.parameters as Readonly<Record<string, unknown>>).issue_code === "astra-max-disallowed";
+  return Object.freeze({ code, message: astraMax
+    ? "GPT-6 Astra max effort is disabled. Choose low or high effort."
+    : SAFE_MESSAGES[code], ...(typeof repositoryName === "string" ? { repository_name: repositoryName } : {}) });
 }
 
 function observationClaim(phaseInstance: PhaseInstanceId, attempt: SafeInteger) {

@@ -30,8 +30,9 @@ import {
   EFFORT_CAVEAT_CODES,
   DEFAULT_IMPLEMENTATION_PROFILE,
   IMPLEMENTATION_EFFORT_POLICY_ID,
-  IMPLEMENTATION_PROFILES,
-  IMPLEMENTATION_PROFILE_IDS,
+  SELECTOR_PROFILES,
+  SELECTOR_PROFILE_IDS,
+  type SelectorProfile,
   deriveImplementationEffortV1,
   type DerivedImplementationEffortV1,
   type EffortBlockerV1,
@@ -430,10 +431,10 @@ export function createEffortAssessmentV1(
   });
 }
 
-export const IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v2" as const;
+export const IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v3" as const;
 
 export const EFFORT_SELECTOR_INSTRUCTIONS =
-  "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-max; totals 3-5 select glm-5-3-flash-max when E is at least 2 or a long tool loop is yes or unknown, otherwise gemini-3-7-flash-max; totals 6-7 select gemini-3-7-flash-max only when B is at most 1 and the component is confidently short, otherwise glm-5-3-flash-max; totals 8-11 select gpt-5-6-sol-medium; totals 12-15 select gpt-5-6-sol-xhigh. Return the highest-ranked selected profile across all components in that same order. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis." as const;
+  "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-high only when every axis is at most 1, the component is confidently short, and a long tool loop is confidently unnecessary; unknown short-task or loop suitability disqualifies Gemini. Otherwise totals 0-7 select gpt-5-6-sol-medium; totals 8-11 select gpt-6-astra-low; totals 12-15 select gpt-6-astra-high. Apply these floors after the total: A, C, or E equal to 3 requires at least gpt-6-astra-low; B and C both equal to 3 requires gpt-6-astra-high. Return the highest-ranked selected profile across all components in this order: gemini-3-7-flash-high, gpt-5-6-sol-medium, gpt-6-astra-low, gpt-6-astra-high. Never select Astra max. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis." as const;
 
 export type RawEffortSelectionV2 = {
   readonly schema_version: "2";
@@ -444,7 +445,7 @@ export type RawEffortSelectionV2 = {
   readonly subject_digest: Sha256Digest;
   readonly input_fingerprint: Sha256Digest;
   readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
-  readonly profile_id: (typeof IMPLEMENTATION_PROFILE_IDS)[number];
+  readonly profile_id: (typeof SELECTOR_PROFILE_IDS)[number];
 };
 
 export type EffortEnvelopeV2 = {
@@ -471,13 +472,18 @@ export type EffortSelectionV2 = {
   readonly subject_digest: Sha256Digest;
   readonly input_fingerprint: Sha256Digest;
   readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
-  readonly profile: ImplementationProfileV1;
+  readonly profile: SelectorProfile;
   readonly source:
     | { readonly kind: "reviewer"; readonly reviewer: EffortReviewerProvenanceV1 }
     | { readonly kind: "default" };
 };
 
-export type EffortEvidence = EffortAssessmentV1 | EffortSelectionV2;
+type ArchivedEffortSelectionV2 = Omit<EffortSelectionV2, "policy_id" | "profile"> & {
+  readonly policy_id: "implementation-agent-selector-v2";
+  readonly profile: ImplementationProfileV1;
+};
+
+export type EffortEvidence = EffortAssessmentV1 | ArchivedEffortSelectionV2 | EffortSelectionV2;
 
 const selectorHazardInputSchema = z.object({
   schema_version: z.literal("1"),
@@ -495,7 +501,7 @@ export const rawEffortSelectionV2Schema = z.object({
   subject_digest: digest,
   input_fingerprint: digest,
   policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
-  profile_id: z.enum(IMPLEMENTATION_PROFILE_IDS),
+  profile_id: z.enum(SELECTOR_PROFILE_IDS),
 }).strict() as unknown as z.ZodType<RawEffortSelectionV2>;
 
 export const effortEnvelopeV2Schema = z.object({
@@ -514,7 +520,14 @@ export const effortEnvelopeV2Schema = z.object({
   repositories: reviewedRepositoriesV1Schema,
 }).strict() as unknown as z.ZodType<EffortEnvelopeV2>;
 
-export const effortSelectionV2Schema = z.object({
+const selectorProfileSchema = z.discriminatedUnion("profile_id", [
+  z.object({ profile_id: z.literal("gemini-3-7-flash-high"), model: z.literal("gemini-3.7-flash-high"), effort: z.literal("high") }).strict(),
+  z.object({ profile_id: z.literal("gpt-5-6-sol-medium"), model: z.literal("gpt-5.6-sol"), effort: z.literal("medium") }).strict(),
+  z.object({ profile_id: z.literal("gpt-6-astra-low"), model: z.literal("gpt-6-astra"), effort: z.literal("low") }).strict(),
+  z.object({ profile_id: z.literal("gpt-6-astra-high"), model: z.literal("gpt-6-astra"), effort: z.literal("high") }).strict(),
+]);
+
+const selectionSchema = z.object({
   schema_version: z.literal("2"),
   task_id: taskSlugV1Schema,
   phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
@@ -522,15 +535,23 @@ export const effortSelectionV2Schema = z.object({
   subject_digest: sha256DigestV1Schema,
   input_fingerprint: sha256DigestV1Schema,
   policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
-  profile: effortProfileV1Schema,
+  profile: selectorProfileSchema,
   source: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("reviewer"), reviewer: effortReviewerProvenanceV1Schema }).strict(),
     z.object({ kind: z.literal("default") }).strict(),
   ]),
-}).strict() as unknown as z.ZodType<EffortSelectionV2>;
+}).strict();
+
+export const effortSelectionV2Schema = selectionSchema as unknown as z.ZodType<EffortSelectionV2>;
+
+const archivedEffortSelectionV2Schema = selectionSchema.extend({
+  policy_id: z.literal("implementation-agent-selector-v2"),
+  profile: effortProfileV1Schema,
+});
 
 export const effortEvidenceSchema = z.union([
   effortAssessmentV1Schema,
+  archivedEffortSelectionV2Schema,
   effortSelectionV2Schema,
 ]) as unknown as z.ZodType<EffortEvidence>;
 
@@ -573,7 +594,7 @@ export function createEffortSelectionV2(
   }
   return effortSelectionV2Schema.parse({
     ...selectionCommon(envelope),
-    profile: IMPLEMENTATION_PROFILES[raw.profile_id],
+    profile: SELECTOR_PROFILES[raw.profile_id],
     source: { kind: "reviewer", reviewer },
   });
 }

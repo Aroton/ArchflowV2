@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ConfigV1 } from "../../src/contracts/config.js";
 import { EFFORT_VALUES } from "../../src/contracts/review.js";
+import { classifiedDispatchFailure } from "../../src/dispatch/failure-observation.js";
 import { DispatchRoutingError, resolveDispatchRoute, resolveDispatchRoutes, routeFromConfiguredRoute, selectDispatchRoute, type RoutingRole } from "../../src/dispatch/routing.js";
 
 const config = (roles: ConfigV1["roles"], overrides?: ConfigV1["overrides"]): ConfigV1 => ({
@@ -24,6 +25,23 @@ function expectRoutingError(run: () => unknown, code: DispatchRoutingError["proj
 }
 
 describe("dispatch routing", () => {
+  it("rejects Astra max in configured, invocation, and substitution routes", () => {
+    const forbidden = { model: "gpt-6-astra", effort: "max" } as const;
+    const allowed = config({ "counter-reviewer": { model: "gpt-5.6-sol", effort: "medium" } });
+    for (const run of [
+      () => selectDispatchRoute(config({ "counter-reviewer": forbidden }), "design", "counter-reviewer"),
+      () => selectDispatchRoute(allowed, "design", "counter-reviewer", forbidden),
+      () => selectDispatchRoute(allowed, "design", "counter-reviewer", undefined, forbidden),
+    ]) {
+      expectRoutingError(run, "CONFIG_INVALID", { issue_code: "astra-max-disallowed" });
+      try { run(); } catch (error) {
+        expect(classifiedDispatchFailure(error)?.message).toBe("GPT-6 Astra max effort is disabled. Choose low or high effort.");
+      }
+    }
+    for (const effort of ["low", "high"] as const) {
+      expect(routeFromConfiguredRoute({ model: "gpt-6-astra", effort })).toMatchObject({ model: "gpt-6-astra", effort, adapter: "codex-cli" });
+    }
+  });
   it("derives family and adapter from configured full model slugs", () => {
     expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } }), "design", "counter-reviewer"))
       .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "high" });

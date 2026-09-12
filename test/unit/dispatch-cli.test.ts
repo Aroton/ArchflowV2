@@ -416,7 +416,7 @@ describe("CLI invocation construction", () => {
         phase_instance: "phase-design-1",
         subject_digest: "1".repeat(64),
         input_fingerprint: "2".repeat(64),
-        policy_id: "implementation-agent-selector-v2",
+        policy_id: "implementation-agent-selector-v3",
       } as const;
       const subject: Record<string, PlainJsonValue> = {
         task_id: values.task_id,
@@ -462,8 +462,8 @@ describe("CLI invocation construction", () => {
       role: "effort-reviewer",
       subject_digest: "a".repeat(64),
       input_fingerprint: "b".repeat(64),
-      policy_id: "implementation-agent-selector-v2",
-      profile_id: "gpt-5-6-sol-medium",
+      policy_id: "implementation-agent-selector-v3",
+      profile_id: "gpt-6-astra-high",
     };
     expect(() => validateProjected.assert(sampleOutput, "sample effort review")).not.toThrow();
 

@@ -37017,12 +37017,6 @@ async function captureHazardRegistrySnapshot(readRegistry, resolvedRepositoryNam
 
 // src/review/effort-policy.ts
 var IMPLEMENTATION_EFFORT_POLICY_ID = "implementation-effort-v1";
-var IMPLEMENTATION_PROFILE_IDS = [
-  "gemini-3-7-flash-max",
-  "glm-5-3-flash-max",
-  "gpt-5-6-sol-medium",
-  "gpt-5-6-sol-xhigh"
-];
 var EFFORT_CAVEAT_CODES = [
   "long-loop-unknown-conservative-glm",
   "short-component-unknown-conservative-glm"
@@ -37033,7 +37027,19 @@ var IMPLEMENTATION_PROFILES = Object.freeze({
   "gpt-5-6-sol-medium": Object.freeze({ profile_id: "gpt-5-6-sol-medium", model: "gpt-5.6-sol", effort: "medium" }),
   "gpt-5-6-sol-xhigh": Object.freeze({ profile_id: "gpt-5-6-sol-xhigh", model: "gpt-5.6-sol", effort: "xhigh" })
 });
-var DEFAULT_IMPLEMENTATION_PROFILE = IMPLEMENTATION_PROFILES["gpt-5-6-sol-medium"];
+var SELECTOR_PROFILE_IDS = [
+  "gemini-3-7-flash-high",
+  "gpt-5-6-sol-medium",
+  "gpt-6-astra-low",
+  "gpt-6-astra-high"
+];
+var SELECTOR_PROFILES = Object.freeze({
+  "gemini-3-7-flash-high": Object.freeze({ profile_id: "gemini-3-7-flash-high", model: "gemini-3.7-flash-high", effort: "high" }),
+  "gpt-5-6-sol-medium": Object.freeze({ profile_id: "gpt-5-6-sol-medium", model: "gpt-5.6-sol", effort: "medium" }),
+  "gpt-6-astra-low": Object.freeze({ profile_id: "gpt-6-astra-low", model: "gpt-6-astra", effort: "low" }),
+  "gpt-6-astra-high": Object.freeze({ profile_id: "gpt-6-astra-high", model: "gpt-6-astra", effort: "high" })
+});
+var DEFAULT_IMPLEMENTATION_PROFILE = SELECTOR_PROFILES["gpt-5-6-sol-medium"];
 var PROFILE_RANK = Object.freeze({
   "gemini-3-7-flash-max": 0,
   "glm-5-3-flash-max": 1,
@@ -37215,8 +37221,8 @@ var effortAssessmentV1Schema = external_exports.object({
   reviewer: effortReviewerProvenanceV1Schema,
   recommendation
 }).strict();
-var IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v2";
-var EFFORT_SELECTOR_INSTRUCTIONS = "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-max; totals 3-5 select glm-5-3-flash-max when E is at least 2 or a long tool loop is yes or unknown, otherwise gemini-3-7-flash-max; totals 6-7 select gemini-3-7-flash-max only when B is at most 1 and the component is confidently short, otherwise glm-5-3-flash-max; totals 8-11 select gpt-5-6-sol-medium; totals 12-15 select gpt-5-6-sol-xhigh. Return the highest-ranked selected profile across all components in that same order. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis.";
+var IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v3";
+var EFFORT_SELECTOR_INSTRUCTIONS = "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-high only when every axis is at most 1, the component is confidently short, and a long tool loop is confidently unnecessary; unknown short-task or loop suitability disqualifies Gemini. Otherwise totals 0-7 select gpt-5-6-sol-medium; totals 8-11 select gpt-6-astra-low; totals 12-15 select gpt-6-astra-high. Apply these floors after the total: A, C, or E equal to 3 requires at least gpt-6-astra-low; B and C both equal to 3 requires gpt-6-astra-high. Return the highest-ranked selected profile across all components in this order: gemini-3-7-flash-high, gpt-5-6-sol-medium, gpt-6-astra-low, gpt-6-astra-high. Never select Astra max. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis.";
 var selectorHazardInputSchema = external_exports.object({
   schema_version: external_exports.literal("1"),
   state: external_exports.enum(["absent", "present"]),
@@ -37232,7 +37238,7 @@ var rawEffortSelectionV2Schema = external_exports.object({
   subject_digest: digest2,
   input_fingerprint: digest2,
   policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
-  profile_id: external_exports.enum(IMPLEMENTATION_PROFILE_IDS)
+  profile_id: external_exports.enum(SELECTOR_PROFILE_IDS)
 }).strict();
 var effortEnvelopeV2Schema = external_exports.object({
   schema_version: external_exports.literal("2"),
@@ -37249,7 +37255,13 @@ var effortEnvelopeV2Schema = external_exports.object({
   hazard_registry: selectorHazardInputSchema,
   repositories: reviewedRepositoriesV1Schema
 }).strict();
-var effortSelectionV2Schema = external_exports.object({
+var selectorProfileSchema = external_exports.discriminatedUnion("profile_id", [
+  external_exports.object({ profile_id: external_exports.literal("gemini-3-7-flash-high"), model: external_exports.literal("gemini-3.7-flash-high"), effort: external_exports.literal("high") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal("gpt-5-6-sol-medium"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.literal("medium") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal("gpt-6-astra-low"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.literal("low") }).strict(),
+  external_exports.object({ profile_id: external_exports.literal("gpt-6-astra-high"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.literal("high") }).strict()
+]);
+var selectionSchema = external_exports.object({
   schema_version: external_exports.literal("2"),
   task_id: taskSlugV1Schema,
   phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
@@ -37257,14 +37269,20 @@ var effortSelectionV2Schema = external_exports.object({
   subject_digest: sha256DigestV1Schema,
   input_fingerprint: sha256DigestV1Schema,
   policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
-  profile: effortProfileV1Schema,
+  profile: selectorProfileSchema,
   source: external_exports.discriminatedUnion("kind", [
     external_exports.object({ kind: external_exports.literal("reviewer"), reviewer: effortReviewerProvenanceV1Schema }).strict(),
     external_exports.object({ kind: external_exports.literal("default") }).strict()
   ])
 }).strict();
+var effortSelectionV2Schema = selectionSchema;
+var archivedEffortSelectionV2Schema = selectionSchema.extend({
+  policy_id: external_exports.literal("implementation-agent-selector-v2"),
+  profile: effortProfileV1Schema
+});
 var effortEvidenceSchema = external_exports.union([
   effortAssessmentV1Schema,
+  archivedEffortSelectionV2Schema,
   effortSelectionV2Schema
 ]);
 function parseEffortEnvelopeV2(value) {
@@ -37299,7 +37317,7 @@ function createEffortSelectionV2(value, envelope, reviewer) {
   }
   return effortSelectionV2Schema.parse({
     ...selectionCommon(envelope),
-    profile: IMPLEMENTATION_PROFILES[raw.profile_id],
+    profile: SELECTOR_PROFILES[raw.profile_id],
     source: { kind: "reviewer", reviewer }
   });
 }
@@ -38676,6 +38694,8 @@ var IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
   "legacy-evidence"
 ];
 var readyImplementationRecommendationSchema = external_exports.discriminatedUnion("model", [
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash-high"), effort: external_exports.literal("high") }).strict(),
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.enum(["low", "high"]) }).strict(),
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash"), effort: external_exports.literal("max") }).strict(),
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("glm-5.3-flash"), effort: external_exports.literal("max") }).strict(),
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.enum(["medium", "xhigh"]) }).strict()
@@ -53369,6 +53389,55 @@ var semantic_workflow_schema_default = {
       anyOf: [
         {
           oneOf: [
+            {
+              type: "object",
+              properties: {
+                status: {
+                  type: "string",
+                  const: "ready"
+                },
+                model: {
+                  type: "string",
+                  const: "gemini-3.7-flash-high"
+                },
+                effort: {
+                  type: "string",
+                  const: "high"
+                }
+              },
+              required: [
+                "status",
+                "model",
+                "effort"
+              ],
+              additionalProperties: false
+            },
+            {
+              type: "object",
+              properties: {
+                status: {
+                  type: "string",
+                  const: "ready"
+                },
+                model: {
+                  type: "string",
+                  const: "gpt-6-astra"
+                },
+                effort: {
+                  type: "string",
+                  enum: [
+                    "low",
+                    "high"
+                  ]
+                }
+              },
+              required: [
+                "status",
+                "model",
+                "effort"
+              ],
+              additionalProperties: false
+            },
             {
               type: "object",
               properties: {
@@ -72922,7 +72991,8 @@ function classifiedDispatchFailure(error51) {
   if (projectError === void 0 || !supportedCodes.has(projectError.code)) return void 0;
   const code2 = projectError.code;
   const repositoryName7 = code2 === "REPOSITORY_VIEW_UNAVAILABLE" ? projectError.diagnostic.parameters.repository_name : void 0;
-  return Object.freeze({ code: code2, message: SAFE_MESSAGES[code2], ...typeof repositoryName7 === "string" ? { repository_name: repositoryName7 } : {} });
+  const astraMax = code2 === "CONFIG_INVALID" && projectError.diagnostic.parameters.issue_code === "astra-max-disallowed";
+  return Object.freeze({ code: code2, message: astraMax ? "GPT-6 Astra max effort is disabled. Choose low or high effort." : SAFE_MESSAGES[code2], ...typeof repositoryName7 === "string" ? { repository_name: repositoryName7 } : {} });
 }
 function observationClaim(phaseInstance5, attempt) {
   return parseWorkspacePathClaim(
@@ -73042,6 +73112,9 @@ function assertSupportedEffort(adapter2, effort) {
   }
 }
 function routeFromConfiguredRoute(configured) {
+  if (configured.model === "gpt-6-astra" && configured.effort === "max") {
+    return fail14(createProjectError("CONFIG_INVALID", { issue_code: "astra-max-disallowed" }));
+  }
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail14(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }
@@ -83948,15 +84021,15 @@ var effort_review_schema_default = {
     },
     policy_id: {
       type: "string",
-      const: "implementation-agent-selector-v2"
+      const: "implementation-agent-selector-v3"
     },
     profile_id: {
       type: "string",
       enum: [
-        "gemini-3-7-flash-max",
-        "glm-5-3-flash-max",
+        "gemini-3-7-flash-high",
         "gpt-5-6-sol-medium",
-        "gpt-5-6-sol-xhigh"
+        "gpt-6-astra-low",
+        "gpt-6-astra-high"
       ]
     }
   },

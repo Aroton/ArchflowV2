@@ -66,3 +66,9 @@ The selector's strict schema accepts only exact subject bindings and one allowed
 ## Automation responsibility
 
 The handler wraps general and constitution dispatch in the durable retry journal. Two retries are allowed only for positively classified transient failures, using the same normalized route and existing sibling-output reuse. The journal is operational state, not evidence or approval. Repair and substitute-route authorization remain explicit after exhaustion; the effort selector retains its separate default-on-failure behavior.
+
+## Model defaults and limits
+
+Shipped counter-review defaults use Sol medium for Claude producers and Fable 5.1 medium (`claude-fable-5-1`) for Codex producers; Antigravity producers receive both. Luna/xhigh test and effort reviewers and Gemini/high adjudicators remain unchanged. Existing explicit task/repository routes are not rewritten by a template update.
+
+Route validation rejects `gpt-6-astra` at `max` effort before dispatch, including configured, invocation-declared, and substitution routes. The error explains that Astra max is disabled; no silent downgrade occurs. An invalid effort-selector route still takes its existing Sol-medium advice fallback. Astra low/high are valid Codex routes. Implementation recommendations remain separate from these dispatch routes.

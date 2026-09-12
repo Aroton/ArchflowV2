@@ -4134,7 +4134,7 @@
       ]
     },
     "src/contracts/effort-review.ts": {
-      "bytes": 28492,
+      "bytes": 29745,
       "format": "esm",
       "imports": [
         {
@@ -4648,7 +4648,7 @@
       }
     },
     "src/contracts/schemas/v1/effort-review.schema.json": {
-      "bytes": 1586,
+      "bytes": 1584,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4752,7 +4752,7 @@
       }
     },
     "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-      "bytes": 99576,
+      "bytes": 100914,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4810,7 +4810,7 @@
       ]
     },
     "src/contracts/semantic-workflow.ts": {
-      "bytes": 47441,
+      "bytes": 47762,
       "format": "esm",
       "imports": [
         {
@@ -5170,7 +5170,7 @@
       ]
     },
     "src/dispatch/failure-observation.ts": {
-      "bytes": 8761,
+      "bytes": 9012,
       "format": "esm",
       "imports": [
         {
@@ -5339,7 +5339,7 @@
       ]
     },
     "src/dispatch/routing.ts": {
-      "bytes": 11228,
+      "bytes": 11402,
       "format": "esm",
       "imports": [
         {
@@ -7412,7 +7412,7 @@
       ]
     },
     "src/review/effort-policy.ts": {
-      "bytes": 6660,
+      "bytes": 7510,
       "format": "esm",
       "imports": []
     },
@@ -10259,7 +10259,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2384667,
+      "bytes": 2387142,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11346,7 +11346,7 @@
           "bytesInOutput": 41509
         },
         "src/contracts/effort-review.ts": {
-          "bytesInOutput": 17071
+          "bytesInOutput": 18479
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17401
@@ -11397,7 +11397,7 @@
           "bytesInOutput": 1323
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 27195
+          "bytesInOutput": 27557
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 377
@@ -11436,7 +11436,7 @@
           "bytesInOutput": 3743
         },
         "src/dispatch/routing.ts": {
-          "bytesInOutput": 7178
+          "bytesInOutput": 7354
         },
         "src/dispatch/workspace.ts": {
           "bytesInOutput": 2231
@@ -11514,7 +11514,7 @@
           "bytesInOutput": 6327
         },
         "src/review/effort-policy.ts": {
-          "bytesInOutput": 1368
+          "bytesInOutput": 1897
         },
         "src/review/envelopes.ts": {
           "bytesInOutput": 606
@@ -11654,7 +11654,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3644158,
+      "bytes": 3647970,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12816,7 +12816,7 @@
           "bytesInOutput": 41449
         },
         "src/contracts/effort-review.ts": {
-          "bytesInOutput": 17124
+          "bytesInOutput": 18417
         },
         "src/contracts/errors.ts": {
           "bytesInOutput": 17416
@@ -12870,7 +12870,7 @@
           "bytesInOutput": 26507
         },
         "src/contracts/schemas/v1/effort-review.schema.json": {
-          "bytesInOutput": 1544
+          "bytesInOutput": 1542
         },
         "src/contracts/schemas/v1/evidence-slots.schema.json": {
           "bytesInOutput": 1352
@@ -12909,7 +12909,7 @@
           "bytesInOutput": 3054
         },
         "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-          "bytesInOutput": 95438
+          "bytesInOutput": 96724
         },
         "src/contracts/schemas/v1/task-initialization.schema.json": {
           "bytesInOutput": 1432
@@ -12924,7 +12924,7 @@
           "bytesInOutput": 1255
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 28025
+          "bytesInOutput": 28387
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 495
@@ -12960,7 +12960,7 @@
           "bytesInOutput": 6939
         },
         "src/dispatch/failure-observation.ts": {
-          "bytesInOutput": 5658
+          "bytesInOutput": 5859
         },
         "src/dispatch/process.ts": {
           "bytesInOutput": 7822
@@ -12972,7 +12972,7 @@
           "bytesInOutput": 5721
         },
         "src/dispatch/routing.ts": {
-          "bytesInOutput": 7146
+          "bytesInOutput": 7322
         },
         "src/dispatch/workspace.ts": {
           "bytesInOutput": 11299
@@ -13059,7 +13059,7 @@
           "bytesInOutput": 33685
         },
         "src/review/effort-policy.ts": {
-          "bytesInOutput": 1062
+          "bytesInOutput": 1558
         },
         "src/review/envelopes.ts": {
           "bytesInOutput": 29994

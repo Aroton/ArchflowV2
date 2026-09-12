@@ -38,14 +38,14 @@ producers:
     counter-reviewers:
       - model: gpt-5.6-sol
         effort: medium
-      - model: claude-fable-5
+      - model: claude-fable-5-1
         effort: medium
     adjudicator:
       model: gemini-3.7-flash-high
       effort: high
   codex:
     counter-reviewer:
-      model: claude-fable-5
+      model: claude-fable-5-1
       effort: medium
     adjudicator:
       model: gemini-3.7-flash-high

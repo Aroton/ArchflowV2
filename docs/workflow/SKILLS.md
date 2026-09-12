@@ -121,3 +121,7 @@ From there the task is an ordinary semantic workflow: the imported design is sub
 ## Automation responsibility
 
 Producer skills continue through the exact authenticated commit, then report the successor and stop. Automation status v3 exposes this manual handoff as `awaiting-transition`. Skills do not turn a pending server-managed transient retry into a human question. Five completed review rounds are permitted by default; intentional SQL/public-contract rules and real exceptions remain human decisions.
+
+## Model recommendations
+
+Architecture and phase design recommend Astra high for the producing session. This does not switch models or change workflow authority. The implementation ladder is Gemini high for trivial, short, readily verified work, Sol medium for routine work, Astra low for complex work, and Astra high for the hardest work. Astra max is never recommended and is rejected for reviewer dispatch. The exact private scoring thresholds and complexity floors are documented in `../research/effort-research.md`. Reviewer defaults retain Luna and Gemini in their existing roles and upgrade shipped Fable counter-review routes to Fable 5.1 medium.

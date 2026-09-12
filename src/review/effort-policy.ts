@@ -68,8 +68,24 @@ export const IMPLEMENTATION_PROFILES: Readonly<Record<ImplementationProfileIdV1,
   "gpt-5-6-sol-xhigh": Object.freeze({ profile_id: "gpt-5-6-sol-xhigh", model: "gpt-5.6-sol", effort: "xhigh" }),
 });
 
-export const DEFAULT_IMPLEMENTATION_PROFILE: ImplementationProfileV1 =
-  IMPLEMENTATION_PROFILES["gpt-5-6-sol-medium"];
+// Fresh selector profiles are separate from the immutable historical V1/V2 ladder.
+export const SELECTOR_PROFILE_IDS = [
+  "gemini-3-7-flash-high",
+  "gpt-5-6-sol-medium",
+  "gpt-6-astra-low",
+  "gpt-6-astra-high",
+] as const;
+
+export const SELECTOR_PROFILES = Object.freeze({
+  "gemini-3-7-flash-high": Object.freeze({ profile_id: "gemini-3-7-flash-high", model: "gemini-3.7-flash-high", effort: "high" } as const),
+  "gpt-5-6-sol-medium": Object.freeze({ profile_id: "gpt-5-6-sol-medium", model: "gpt-5.6-sol", effort: "medium" } as const),
+  "gpt-6-astra-low": Object.freeze({ profile_id: "gpt-6-astra-low", model: "gpt-6-astra", effort: "low" } as const),
+  "gpt-6-astra-high": Object.freeze({ profile_id: "gpt-6-astra-high", model: "gpt-6-astra", effort: "high" } as const),
+});
+
+export type SelectorProfile = (typeof SELECTOR_PROFILES)[(typeof SELECTOR_PROFILE_IDS)[number]];
+
+export const DEFAULT_IMPLEMENTATION_PROFILE = SELECTOR_PROFILES["gpt-5-6-sol-medium"];
 
 const PROFILE_RANK: Readonly<Record<ImplementationProfileIdV1, number>> = Object.freeze({
   "gemini-3-7-flash-max": 0,
@@ -118,7 +134,7 @@ function profileFor(judgment: RawEffortReviewV1["components"][number], total: nu
 }
 
 /**
- * The sole implementation-recommendation policy. Its input is already schema-validated raw
+ * Historical V1 policy, retained for archived evidence. Its input is schema-validated raw
  * reviewer output; it derives every total, blocker, conditional fallback, and phase maximum.
  */
 export function deriveImplementationEffortV1(raw: RawEffortReviewV1): DerivedImplementationEffortV1 {

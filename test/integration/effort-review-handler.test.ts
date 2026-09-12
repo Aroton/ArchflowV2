@@ -57,7 +57,8 @@ describe("phase-design effort review handler", { timeout: 180_000 }, () => {
     expect(result.ok, JSON.stringify(result)).toBe(true);
     expect((await retainedReview(workspace)).effort_review).toMatchObject({
       schema_version: "2",
-      profile: { model: "gemini-3.7-flash", effort: "max" },
+      policy_id: "implementation-agent-selector-v3",
+      profile: { model: "gpt-6-astra", effort: "low" },
     });
   });
 

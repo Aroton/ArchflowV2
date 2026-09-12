@@ -9,7 +9,7 @@
     },
     "instructions": {
       "type": "string",
-      "const": "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-max; totals 3-5 select glm-5-3-flash-max when E is at least 2 or a long tool loop is yes or unknown, otherwise gemini-3-7-flash-max; totals 6-7 select gemini-3-7-flash-max only when B is at most 1 and the component is confidently short, otherwise glm-5-3-flash-max; totals 8-11 select gpt-5-6-sol-medium; totals 12-15 select gpt-5-6-sol-xhigh. Return the highest-ranked selected profile across all components in that same order. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis."
+      "const": "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-high only when every axis is at most 1, the component is confidently short, and a long tool loop is confidently unnecessary; unknown short-task or loop suitability disqualifies Gemini. Otherwise totals 0-7 select gpt-5-6-sol-medium; totals 8-11 select gpt-6-astra-low; totals 12-15 select gpt-6-astra-high. Apply these floors after the total: A, C, or E equal to 3 requires at least gpt-6-astra-low; B and C both equal to 3 requires gpt-6-astra-high. Return the highest-ranked selected profile across all components in this order: gemini-3-7-flash-high, gpt-5-6-sol-medium, gpt-6-astra-low, gpt-6-astra-high. Never select Astra max. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis."
     },
     "artifact": {
       "type": "string"
@@ -37,7 +37,7 @@
     },
     "policy_id": {
       "type": "string",
-      "const": "implementation-agent-selector-v2"
+      "const": "implementation-agent-selector-v3"
     },
     "hazard_registry": {
       "type": "object",

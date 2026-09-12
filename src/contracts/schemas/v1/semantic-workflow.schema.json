@@ -2137,6 +2137,55 @@
                 },
                 "model": {
                   "type": "string",
+                  "const": "gemini-3.7-flash-high"
+                },
+                "effort": {
+                  "type": "string",
+                  "const": "high"
+                }
+              },
+              "required": [
+                "status",
+                "model",
+                "effort"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "ready"
+                },
+                "model": {
+                  "type": "string",
+                  "const": "gpt-6-astra"
+                },
+                "effort": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "high"
+                  ]
+                }
+              },
+              "required": [
+                "status",
+                "model",
+                "effort"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "ready"
+                },
+                "model": {
+                  "type": "string",
                   "const": "gemini-3.7-flash"
                 },
                 "effort": {

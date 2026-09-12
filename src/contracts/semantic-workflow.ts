@@ -32,6 +32,7 @@ import {
 } from "./review.js";
 import {
   DEFAULT_IMPLEMENTATION_PROFILE,
+  type SelectorProfile,
   type ImplementationProfileV1,
 } from "../review/effort-policy.js";
 
@@ -196,8 +197,8 @@ export const IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
 export type ImplementationRecommendationV1 =
   | {
       readonly status: "ready";
-      readonly model: ImplementationProfileV1["model"];
-      readonly effort: ImplementationProfileV1["effort"];
+      readonly model: ImplementationProfileV1["model"] | SelectorProfile["model"];
+      readonly effort: ImplementationProfileV1["effort"] | SelectorProfile["effort"];
     }
   | {
       readonly status: "unavailable";
@@ -206,6 +207,8 @@ export type ImplementationRecommendationV1 =
       readonly explanation: string;
     };
 const readyImplementationRecommendationSchema = z.discriminatedUnion("model", [
+  z.object({ status: z.literal("ready"), model: z.literal("gemini-3.7-flash-high"), effort: z.literal("high") }).strict(),
+  z.object({ status: z.literal("ready"), model: z.literal("gpt-6-astra"), effort: z.enum(["low", "high"]) }).strict(),
   z.object({ status: z.literal("ready"), model: z.literal("gemini-3.7-flash"), effort: z.literal("max") }).strict(),
   z.object({ status: z.literal("ready"), model: z.literal("glm-5.3-flash"), effort: z.literal("max") }).strict(),
   z.object({ status: z.literal("ready"), model: z.literal("gpt-5.6-sol"), effort: z.enum(["medium", "xhigh"]) }).strict(),

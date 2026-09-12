@@ -43,15 +43,15 @@
     },
     "policy_id": {
       "type": "string",
-      "const": "implementation-agent-selector-v2"
+      "const": "implementation-agent-selector-v3"
     },
     "profile_id": {
       "type": "string",
       "enum": [
-        "gemini-3-7-flash-max",
-        "glm-5-3-flash-max",
+        "gemini-3-7-flash-high",
         "gpt-5-6-sol-medium",
-        "gpt-5-6-sol-xhigh"
+        "gpt-6-astra-low",
+        "gpt-6-astra-high"
       ]
     }
   },

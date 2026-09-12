@@ -1,156 +1,66 @@
-# Effort Review
+# Model and effort recommendations
 
-> Runtime note: this document preserves the research behind the scoring ladder. The shipped selector applies the breakdown privately and returns only one phase-wide model/effort profile. Decomposition and specification observations are scoring inputs, not findings or blockers; selector failure defaults to GPT-5.6 Sol at medium effort without retry.
+Updated 2026-09-11. This is the rationale for fresh selector policy `implementation-agent-selector-v3`; older research and archived evidence do not define current recommendations.
 
-A new reviewer in the **phase design** counter-review stage, alongside counter / constitution / test.
+## Implementation ladder
 
-Its job: assign an implementation **model + effort** per component, so phase impl stops defaulting to Sol max.
+Architecture and phase design should use **GPT-6 Astra high**. This is advice for the producing session, not a server-enforced model switch. Implementation selection scores what remains to be done after that design.
 
-Phase design itself always runs at Sol high. That is fixed and not scored.
+| Component assessment | Model and effort |
+|---|---|
+| Total 0–2, every axis ≤1, confidently short, confidently no long tool loop | Gemini 3.7 Flash high |
+| Total 0–7 otherwise | GPT-5.6 Sol medium |
+| Total 8–11 | GPT-6 Astra low |
+| Total 12–15 | GPT-6 Astra high |
 
----
+A, C, or E equal to 3 imposes an Astra-low floor. B and C both equal to 3 imposes an Astra-high floor. Apply floors before selecting the highest-ranked component profile for the phase. Unknown short-task or loop suitability excludes Gemini.
 
-## Adding the reviewer
+The fresh profiles are `gemini-3-7-flash-high`, `gpt-5-6-sol-medium`, `gpt-6-astra-low`, and `gpt-6-astra-high`, in that order. The Gemini profile uses the existing Antigravity route `gemini-3.7-flash-high` with effort `high`. GLM is no longer a fresh implementation tier. Sol high/xhigh and Astra medium/xhigh are omitted from automatic selection. **Never recommend or dispatch Astra max.** Explicit Astra-max reviewer routes are rejected before launch; they are not silently downgraded.
 
-- **Run it on GLM 5.3 Flash (max thinking).** Rubric scoring against a fixed schema is instruction-following, not open-ended reasoning. GLM's family ranks #6 of 140 on agentic tool use versus #15 of 146 on coding, and that asymmetry is the right shape for a reviewer. Luna xhigh is the fallback. No case for Sol here.
-- Inputs: the phase design artifact and the hazard registry.
-- Scores each component in the phase separately. If the phase has one undifferentiated component, that is a decomposition failure — return it.
-- Nothing changes in PRD or overall design.
+## Private rubric
 
----
+Score each inferred implementation component 0–3:
 
-## Rubric
+- **A — Derivation depth:** transcription; known pattern with local adaptation; approach given but mechanism unresolved; mechanism must be derived from constraints.
+- **B — Verifier weakness:** compiler catches errors; deterministic unit tests; reproducible simulation; timing-dependent, nondeterministic, or tail-metric verification.
+- **C — State space:** pure or straight-line IO; sequential error paths; shared state or async without timers; timers, cancellation, partial failure, or cross-component invariants.
+- **D — Specification uncertainty:** specified thresholds and priorities; minor gaps with obvious defaults; material decision unstated; conflicting goals without priorities.
+- **E — Codebase hazard:** new module; stable interfaces; known hazardous module; unsafe mechanisms or an open correctness bug. Use the supplied repository hazard registry as context.
 
-Score each component 0–3 on five axes.
+The selector privately infers components and includes D in the total. It returns only one bound profile ID. There is no required component manifest, public scoring worksheet, or effort-review blocker. Ordinary review still owns material specification findings and workflow authority. Any selector failure produces Sol medium without a retry or human boundary.
 
-**A. Derivation depth** — how much search is left for the implementation?
-`0` transcription · `1` known pattern needing local adaptation · `2` approach given, mechanism not · `3` no known-good pattern, must derive from constraints
+## Quality, cost, and evidence
 
-**B. Verifier weakness** — how hard is it to know the code is wrong?
-`0` compiler catches it · `1` deterministic unit tests · `2` needs simulation, but reproducible · `3` timing-dependent, nondeterministic, or tail-metric only
+The user's calibration places Sol high around 52 and Astra low around 54, with little benefit from Astra medium over low and a small task-cost premium at that cutover. These are **user-supplied observations**, not independently verified benchmark measurements. They support skipping Sol high in favor of Astra low, but do not establish universal equivalence.
 
-**C. State space** — how many interleavings must be reasoned about?
-`0` pure or straight-line IO · `1` sequential with error paths · `2` shared state or async, no timers · `3` timers, cancellation, partial failure, cross-component invariants
+Official standard API prices are $4 input / $20 output per million tokens for Sol and $10 / $50 for Astra: Astra is 2.5× per token. OpenAI reports that Astra uses substantially fewer output tokens on some evaluations. Total task cost therefore depends on input, cache use, reasoning/output volume, and retries; a small premium is plausible but not guaranteed. For illustration, at equal uncached input I and output O, cost scales 2.5×; lower reasoning volume must offset that premium. Sol's documented promotional pricing lasts at least through November 21, 2026. Recheck pricing when recalibrating.
 
-**D. Specification gaps**
-`0` thresholds and priority orderings given as numbers · `1` minor gaps with obvious defaults · `2` a material decision unstated · `3` two or more goals conflict with no priority ordering
+Sources inspected for this update:
 
-**E. Codebase hazard** — from the hazard registry
-`0` new module · `1` stable code, clear interfaces · `2` registry module · `3` `unsafe`, `Pin`, hand-rolled lifetimes, or open correctness bug
+- [Sol specifications and pricing](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+- [Astra specifications and pricing](https://developers.openai.com/api/docs/models/gpt-6-astra)
+- [Astra task-efficiency guidance](https://developers.openai.com/api/docs/guides/latest-model)
+- [Fable 5.1 model ID](https://platform.claude.com/docs/en/models/overview)
 
----
+The earlier unsourced index table is not carried forward as current evidence. Aggregate benchmarks are workload-dependent; they do not prove Gemini unsuitable for all work or turn these scoring thresholds into measured accuracy boundaries. Its implementation role here is deliberately narrow: a short task with cheap, reliable verification. A failed Gemini implementation should be reconsidered at Sol medium or above; this is human-facing guidance, not a new automatic retry system.
 
-## Reference data
+## Reviewer roles
 
-Artificial Analysis Intelligence Index v4.1.1, per effort tier. Tokens and TTFT are what justify the ladder, not the index score.
+Implementation advice and reviewer routing are separate decisions:
 
-| Config | Index | Tokens to run index | TTFT | Price in/out |
-|---|---|---|---|---|
-| Luna xhigh | 50 | 67M | 61.5s | $0.20 / $1.20 |
-| Luna max | 52 | 130M | 168.0s | $0.20 / $1.20 |
-| Sol medium | **56** | **12M** | **6.9s** | $4.00 / $20.00 |
-| Sol high | 57 | 21M | 20.0s | $4.00 / $20.00 |
-| Sol xhigh | 59 | — | 52.4s | $4.00 / $20.00 |
-| Sol max | 61 | 70M | 120.4s | $4.00 / $20.00 |
+| Role | Shipped default |
+|---|---|
+| Effort selector | Luna xhigh |
+| Test reviewer | Luna xhigh |
+| Constitution adjudicator | Gemini 3.7 Flash high |
+| Counter-review for Claude producers / fallback | Sol medium |
+| Counter-review for Codex producers | Fable 5.1 medium |
+| Counter-review for Antigravity producers | Sol medium and Fable 5.1 medium |
 
-Three things fall out.
+Luna and Gemini remain for these bounded, inexpensive review assignments, as explicitly requested. This update changes existing shipped Fable routes to `claude-fable-5-1`, preserving effort and family assignments. It does not rewrite explicit repository or task configuration.
 
-**Luna max is dead.** +2 index points for 1.9x the tokens and 2.7x the TTFT. Never use it. xhigh is the Luna ceiling.
+## Compatibility and calibration
 
-**Sol max is dead for routine work.** +4 over Sol high for 3.3x the tokens and 6x the TTFT. Your 2h05m run is what a 120s TTFT plus 70M-token-class reasoning looks like inside an iteration loop. The gap is real, so it stays as break-glass, but it should never be a tier anything routes to.
+The payload shape remains version 2, while the fresh policy identity becomes `implementation-agent-selector-v3`. Archived V1 assessments and V2-policy selections retain their original profiles and interpretation. Reading them neither reruns completed reviews nor upgrades their advice.
 
-**Sol medium dominates Luna xhigh on capability *and* wall clock.** 56 vs 50 on the index, 12M tokens against 67M, 6.9s TTFT against 61.5s. Sol medium runs the whole index in roughly a third of Luna xhigh's decode time while scoring six points higher. AA notes Sol defines a new Pareto frontier of intelligence versus output tokens per task, and medium is where that shows up hardest.
-
-So the only reason to run Luna xhigh is plan limits. It is not the faster option and it is not the safer option. That is what makes aggressive escalation correct: stepping up to Sol medium buys speed, not just quality.
-
----
-
-## Mapping: sum → model
-
-GPT is the primary driver. **Max is not a tier.** The bottom of the ladder is a cheap model at its highest thinking setting, never Sol at low.
-
-| Sum | Default | Alternate |
-|---|---|---|
-| 0–2 | **Luna xhigh** | Gemini 3.7 Flash (max thinking), if B ≤ 1 |
-| 3–5 | **Luna xhigh** | GLM 5.3 Flash (max thinking) |
-| 6–7 | **Luna xhigh** | GLM 5.3 Flash if E ≥ 2 and A ≤ 1 |
-| 8–10 | **Sol medium** | — |
-| 11–15 | **Sol high** | — |
-
-Luna xhigh is the spine of 0–7 and should carry the most volume. Gemini and GLM are opt-in plays for speed and limit preservation, not required rungs — when in doubt at 0–7, Luna.
-
-### Fable
-
-Out of the impl ladder. It stays the code reviewer, and it is break-glass for impl only after Sol high fails.
-
-The data supports that. SWE-Bench Pro is the one benchmark where the GPT-5.6 family trails Claude significantly and Fable 5 still leads it, while Sol's advantage concentrates in agentic and computer-use work. Fable's edge is subtle repo-level correctness, which is what a reviewer needs and what a review pass gets in one call instead of a two-hour loop.
-
-**Fable review is mandatory when impl tier ≤ Luna xhigh and B ≥ 2.** Cheap model plus weak verifier is where subtle bugs survive to merge. Everywhere else it is optional, which is the budget lever.
-
----
-
-## Routing overrides
-
-- **B ≥ 2** → Gemini disqualified. Not deprioritized, disqualified.
-- **B ≥ 2 and C = 3** → floor at Sol medium.
-- **B = 3 and C = 3** → floor at Sol high. Nothing downstream catches an error here, so the model has to be right by reasoning. This is the liveness-detection shape.
-- **A = 0** → cap at Luna xhigh regardless of sum. Transcription needs no search.
-- **E ≥ 2 with A ≤ 1** → prefer GLM. Messy repo, written procedure, shallow reasoning is GLM's whole pitch.
-
-Reviewer may move one tier either way with a written reason. More than one means return to author.
-
-### Gemini is one-shot, not iterative
-
-Gemini is bimodal in practice: correct or not, with little useful middle. That is a variance property, and the index hides it completely — Gemini 3.7 Flash scores 56 on the AA Intelligence Index, level with Sol medium. Log evidence beats the index here.
-
-- **Gate on B, not on difficulty.** Bimodal is fine when a wrong answer is caught immediately and cheaply. It is dangerous when nothing catches it.
-- **No iteration.** On failure, promote. A retry is the same coin flip.
-- **No long agentic loops.** Terminal-Bench 3.0 puts Gemini 3.7 Flash at 14.9 against Terra's 20.8, and its model card lists occasional slowness and timeouts, which erases the speed argument on long runs.
-
-GLM sits above it because it degrades gracefully. Lower ceiling, but it makes progress across iterations and holds to instructions, so it is the right pick for anything that needs to converge rather than land.
-
-### Escalation
-
-Be aggressive. Escalation skips rather than creeps, because Sol medium is faster in wall clock than everything below it.
-
-- Gemini fails → Sol medium. Do not detour through GLM or Luna.
-- GLM or Luna xhigh fails → Sol medium.
-- Sol medium fails → Sol high.
-- Sol high fails → Fable review, or return to phase design. Sol max only if both are exhausted, and log every use.
-
-Never retry the same config. Never push Luna past xhigh.
-
----
-
-## Blocking rule
-
-**D ≥ 2 on any component: assign no tier, fail the review, emit blocking questions.**
-
-Routing to a better model against an underspecified problem buys a well-argued solution to the wrong problem. A gap a human closes in ten minutes costs hours when an impl run closes it by exhaustion.
-
-Blocking questions must be answerable with a number or an ordering. "Acceptable false-positive reconnect rate per hour?" is usable. "How should we balance battery and responsiveness?" is not.
-
----
-
-## Hazard registry
-
-Short, hand-maintained. The reviewer cannot see repo history and will underscore axis E without it.
-
-| Module | Hazard | Score |
-|---|---|---|
-| transport/conn.rs | hand-rolled Pin projection, manual waker | 3 |
-| transport/flow.rs | window accounting, off-by-one caused prod bug 2026-04 | 2 |
-
-Add an entry whenever a component takes far longer than expected for reasons specific to the code it touched.
-
----
-
-## Notes
-
-AA index numbers are a general-intelligence aggregate on Python-heavy evals. Rust async is not represented in any of them. The token and TTFT columns transfer better than the index scores do, because they are properties of the effort setting rather than of the task mix.
-
-Watch the 7/8 boundary first. It is the only place a component crosses from free to limit-consuming, so a band one point too wide there costs more than anything else in the table.
-
-On Rust: the compiler is a strong verifier for safe sequential code, pushing axis B toward 0 and making most components land lower than instinct suggests. It is weak for async timing, cancellation correctness, and cross-task invariants. Let axis B carry that rather than applying a blanket language-level bump.
-
-Axis B overlaps the existing test reviewer, which already forms a view on how detectable a failure is. Consider having test review emit B rather than judging it twice.
+Strict validation proves profile membership and subject bindings, not the correctness of hidden model judgments. Calibrate with representative trivial, routine, complex, concurrency-heavy, and mixed-component phase designs. Record actual outputs and mismatches; do not mistake scripted test outputs for live model evidence. No new benchmark framework or machine-global installation is required.

@@ -23080,16 +23080,10 @@ var init_hazard_registry = __esm({
 });
 
 // src/review/effort-policy.ts
-var IMPLEMENTATION_EFFORT_POLICY_ID, IMPLEMENTATION_PROFILE_IDS, EFFORT_CAVEAT_CODES, IMPLEMENTATION_PROFILES, DEFAULT_IMPLEMENTATION_PROFILE, PROFILE_RANK;
+var IMPLEMENTATION_EFFORT_POLICY_ID, EFFORT_CAVEAT_CODES, IMPLEMENTATION_PROFILES, SELECTOR_PROFILE_IDS, SELECTOR_PROFILES, DEFAULT_IMPLEMENTATION_PROFILE, PROFILE_RANK;
 var init_effort_policy = __esm({
   "src/review/effort-policy.ts"() {
     IMPLEMENTATION_EFFORT_POLICY_ID = "implementation-effort-v1";
-    IMPLEMENTATION_PROFILE_IDS = [
-      "gemini-3-7-flash-max",
-      "glm-5-3-flash-max",
-      "gpt-5-6-sol-medium",
-      "gpt-5-6-sol-xhigh"
-    ];
     EFFORT_CAVEAT_CODES = [
       "long-loop-unknown-conservative-glm",
       "short-component-unknown-conservative-glm"
@@ -23100,7 +23094,19 @@ var init_effort_policy = __esm({
       "gpt-5-6-sol-medium": Object.freeze({ profile_id: "gpt-5-6-sol-medium", model: "gpt-5.6-sol", effort: "medium" }),
       "gpt-5-6-sol-xhigh": Object.freeze({ profile_id: "gpt-5-6-sol-xhigh", model: "gpt-5.6-sol", effort: "xhigh" })
     });
-    DEFAULT_IMPLEMENTATION_PROFILE = IMPLEMENTATION_PROFILES["gpt-5-6-sol-medium"];
+    SELECTOR_PROFILE_IDS = [
+      "gemini-3-7-flash-high",
+      "gpt-5-6-sol-medium",
+      "gpt-6-astra-low",
+      "gpt-6-astra-high"
+    ];
+    SELECTOR_PROFILES = Object.freeze({
+      "gemini-3-7-flash-high": Object.freeze({ profile_id: "gemini-3-7-flash-high", model: "gemini-3.7-flash-high", effort: "high" }),
+      "gpt-5-6-sol-medium": Object.freeze({ profile_id: "gpt-5-6-sol-medium", model: "gpt-5.6-sol", effort: "medium" }),
+      "gpt-6-astra-low": Object.freeze({ profile_id: "gpt-6-astra-low", model: "gpt-6-astra", effort: "low" }),
+      "gpt-6-astra-high": Object.freeze({ profile_id: "gpt-6-astra-high", model: "gpt-6-astra", effort: "high" })
+    });
+    DEFAULT_IMPLEMENTATION_PROFILE = SELECTOR_PROFILES["gpt-5-6-sol-medium"];
     PROFILE_RANK = Object.freeze({
       "gemini-3-7-flash-max": 0,
       "glm-5-3-flash-max": 1,
@@ -23111,7 +23117,7 @@ var init_effort_policy = __esm({
 });
 
 // src/contracts/effort-review.ts
-var EFFORT_CLASSIFICATIONS, EFFORT_REVIEW_INSTRUCTIONS, nonblank2, componentId, ADAPTER_IDS_LOCAL, MODEL_FAMILIES_LOCAL, EFFORT_VALUES_LOCAL, routeOverrideRecordSchema, displacedEffortRouteRecordSchema, effortRouteSourceRecordSchema, repositoryName3, reviewedRepositorySchema, reviewedRepositoriesV1Schema, score, effortAxisJudgmentV1Schema, effortClassificationV1Schema, axes, componentEffortJudgmentV1Schema, decomposition, digest2, taskSlug, phaseInstance, rawEffortReviewV1Schema, effortEnvelopeV1Schema, effortProfileV1Schema, caveat, componentProfile, blocker, recommendation, effortReviewerProvenanceV1Schema, effortAssessmentV1Schema, IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID, EFFORT_SELECTOR_INSTRUCTIONS, selectorHazardInputSchema, rawEffortSelectionV2Schema, effortEnvelopeV2Schema, effortSelectionV2Schema, effortEvidenceSchema;
+var EFFORT_CLASSIFICATIONS, EFFORT_REVIEW_INSTRUCTIONS, nonblank2, componentId, ADAPTER_IDS_LOCAL, MODEL_FAMILIES_LOCAL, EFFORT_VALUES_LOCAL, routeOverrideRecordSchema, displacedEffortRouteRecordSchema, effortRouteSourceRecordSchema, repositoryName3, reviewedRepositorySchema, reviewedRepositoriesV1Schema, score, effortAxisJudgmentV1Schema, effortClassificationV1Schema, axes, componentEffortJudgmentV1Schema, decomposition, digest2, taskSlug, phaseInstance, rawEffortReviewV1Schema, effortEnvelopeV1Schema, effortProfileV1Schema, caveat, componentProfile, blocker, recommendation, effortReviewerProvenanceV1Schema, effortAssessmentV1Schema, IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID, EFFORT_SELECTOR_INSTRUCTIONS, selectorHazardInputSchema, rawEffortSelectionV2Schema, effortEnvelopeV2Schema, selectorProfileSchema, selectionSchema, effortSelectionV2Schema, archivedEffortSelectionV2Schema, effortEvidenceSchema;
 var init_effort_review = __esm({
   "src/contracts/effort-review.ts"() {
     init_zod();
@@ -23297,8 +23303,8 @@ var init_effort_review = __esm({
       reviewer: effortReviewerProvenanceV1Schema,
       recommendation
     }).strict();
-    IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v2";
-    EFFORT_SELECTOR_INSTRUCTIONS = "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-max; totals 3-5 select glm-5-3-flash-max when E is at least 2 or a long tool loop is yes or unknown, otherwise gemini-3-7-flash-max; totals 6-7 select gemini-3-7-flash-max only when B is at most 1 and the component is confidently short, otherwise glm-5-3-flash-max; totals 8-11 select gpt-5-6-sol-medium; totals 12-15 select gpt-5-6-sol-xhigh. Return the highest-ranked selected profile across all components in that same order. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis.";
+    IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v3";
+    EFFORT_SELECTOR_INSTRUCTIONS = "Select exactly one implementation profile for the phase design. Silently infer independently scoreable implementation components and score each 0-3 on A derivation depth, B verifier weakness, C state space, D specification uncertainty, and E codebase hazard; use the supplied hazard registry as repository context and include D in the sum without blocking. For each component: totals 0-2 select gemini-3-7-flash-high only when every axis is at most 1, the component is confidently short, and a long tool loop is confidently unnecessary; unknown short-task or loop suitability disqualifies Gemini. Otherwise totals 0-7 select gpt-5-6-sol-medium; totals 8-11 select gpt-6-astra-low; totals 12-15 select gpt-6-astra-high. Apply these floors after the total: A, C, or E equal to 3 requires at least gpt-6-astra-low; B and C both equal to 3 requires gpt-6-astra-high. Return the highest-ranked selected profile across all components in this order: gemini-3-7-flash-high, gpt-5-6-sol-medium, gpt-6-astra-low, gpt-6-astra-high. Never select Astra max. Specification uncertainty and coarse decomposition affect private scoring only: never critique the plan, report an issue, ask a question, return a blocker, or suggest a revision. Return only the bound profile identifier; do not return components, scores, totals, rationales, classifications, findings, or analysis.";
     selectorHazardInputSchema = external_exports.object({
       schema_version: external_exports.literal("1"),
       state: external_exports.enum(["absent", "present"]),
@@ -23314,7 +23320,7 @@ var init_effort_review = __esm({
       subject_digest: digest2,
       input_fingerprint: digest2,
       policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
-      profile_id: external_exports.enum(IMPLEMENTATION_PROFILE_IDS)
+      profile_id: external_exports.enum(SELECTOR_PROFILE_IDS)
     }).strict();
     effortEnvelopeV2Schema = external_exports.object({
       schema_version: external_exports.literal("2"),
@@ -23331,7 +23337,13 @@ var init_effort_review = __esm({
       hazard_registry: selectorHazardInputSchema,
       repositories: reviewedRepositoriesV1Schema
     }).strict();
-    effortSelectionV2Schema = external_exports.object({
+    selectorProfileSchema = external_exports.discriminatedUnion("profile_id", [
+      external_exports.object({ profile_id: external_exports.literal("gemini-3-7-flash-high"), model: external_exports.literal("gemini-3.7-flash-high"), effort: external_exports.literal("high") }).strict(),
+      external_exports.object({ profile_id: external_exports.literal("gpt-5-6-sol-medium"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.literal("medium") }).strict(),
+      external_exports.object({ profile_id: external_exports.literal("gpt-6-astra-low"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.literal("low") }).strict(),
+      external_exports.object({ profile_id: external_exports.literal("gpt-6-astra-high"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.literal("high") }).strict()
+    ]);
+    selectionSchema = external_exports.object({
       schema_version: external_exports.literal("2"),
       task_id: taskSlugV1Schema,
       phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
@@ -23339,14 +23351,20 @@ var init_effort_review = __esm({
       subject_digest: sha256DigestV1Schema,
       input_fingerprint: sha256DigestV1Schema,
       policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
-      profile: effortProfileV1Schema,
+      profile: selectorProfileSchema,
       source: external_exports.discriminatedUnion("kind", [
         external_exports.object({ kind: external_exports.literal("reviewer"), reviewer: effortReviewerProvenanceV1Schema }).strict(),
         external_exports.object({ kind: external_exports.literal("default") }).strict()
       ])
     }).strict();
+    effortSelectionV2Schema = selectionSchema;
+    archivedEffortSelectionV2Schema = selectionSchema.extend({
+      policy_id: external_exports.literal("implementation-agent-selector-v2"),
+      profile: effortProfileV1Schema
+    });
     effortEvidenceSchema = external_exports.union([
       effortAssessmentV1Schema,
+      archivedEffortSelectionV2Schema,
       effortSelectionV2Schema
     ]);
   }
@@ -38886,6 +38904,8 @@ var IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
   "legacy-evidence"
 ];
 var readyImplementationRecommendationSchema = external_exports.discriminatedUnion("model", [
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash-high"), effort: external_exports.literal("high") }).strict(),
+  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.enum(["low", "high"]) }).strict(),
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash"), effort: external_exports.literal("max") }).strict(),
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("glm-5.3-flash"), effort: external_exports.literal("max") }).strict(),
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.enum(["medium", "xhigh"]) }).strict()
@@ -40520,6 +40540,9 @@ function assertSupportedEffort(adapter2, effort) {
   }
 }
 function routeFromConfiguredRoute(configured) {
+  if (configured.model === "gpt-6-astra" && configured.effort === "max") {
+    return fail15(createProjectError("CONFIG_INVALID", { issue_code: "astra-max-disallowed" }));
+  }
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail15(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }

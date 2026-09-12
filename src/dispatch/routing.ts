@@ -72,6 +72,9 @@ function assertSupportedEffort(adapter: AdapterId, effort: string): void {
  * the per-dispatch override, so an override is held to exactly the same rules as a pinned route.
  */
 export function routeFromConfiguredRoute(configured: ModelRouteV1): DispatchRoute {
+  if (configured.model === "gpt-6-astra" && configured.effort === "max") {
+    return fail(createProjectError("CONFIG_INVALID", { issue_code: "astra-max-disallowed" }));
+  }
   if (!safeIdV1Schema.safeParse(configured.model).success) {
     return fail(createProjectError("CONFIG_INVALID", { issue_code: "model-not-safe-id" }));
   }

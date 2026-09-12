@@ -23,12 +23,12 @@ import type { TaskWorkspace } from "./task-workspace.js";
 /** Shared child-process source so specialized semantic stubs answer phase-design effort dispatches identically. */
 export const SEMANTIC_EFFORT_STUB_SOURCE = `
 function generateEffortOutput(envelope) {
-  if (envelope.policy_id !== "implementation-agent-selector-v2") return undefined;
+  if (envelope.policy_id !== "implementation-agent-selector-v3") return undefined;
   return { schema_version: "2", task_id: envelope.task_id, phase_instance: envelope.phase_instance,
     step: "effort_review", role: "effort-reviewer", subject_digest: envelope.subject_digest,
     input_fingerprint: envelope.input_fingerprint,
     policy_id: envelope.policy_id,
-    profile_id: "gemini-3-7-flash-max" };
+    profile_id: "gpt-6-astra-low" };
 }
 `;
 
@@ -205,7 +205,7 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-agent-selector-v2" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
+  if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-agent-selector-v3" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)}, ${JSON.stringify(options.phaseDesignTrigger ?? "")});
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');

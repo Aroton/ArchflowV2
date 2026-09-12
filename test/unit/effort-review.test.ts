@@ -7,10 +7,14 @@ import {
   createEffortSelectionV2,
   deriveBoundImplementationEffortV1,
   rawEffortSelectionV2Schema,
+  effortEvidenceSchema,
+  effortSelectionV2Schema,
   parseRawEffortReviewV1,
   type EffortEnvelopeV2,
   type EffortReviewExpectedBindingsV1,
 } from "../../src/contracts/effort-review.js";
+import { SELECTOR_PROFILES } from "../../src/review/effort-policy.js";
+import { implementationRecommendationFromAssessment } from "../../src/contracts/semantic-workflow.js";
 
 const digest = (character: string): string => character.repeat(64);
 const component = (id: string) => ({
@@ -87,7 +91,7 @@ describe("effort review contracts", () => {
       schema_version: "2", task_id: "effort-review", phase_instance: "phase-design-1",
       step: "effort_review", role: "effort-reviewer", subject_digest: digest("a"),
       input_fingerprint: digest("b"), policy_id: IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
-      profile_id: "gpt-5-6-sol-xhigh",
+      profile_id: "gpt-6-astra-low",
     };
     expect(rawEffortSelectionV2Schema.parse(rawSelection)).toEqual(rawSelection);
     for (const forbidden of ["components", "scores", "rationale", "findings", "questions", "blockers", "total"]) {
@@ -99,7 +103,30 @@ describe("effort review contracts", () => {
       envelope_input_digest: digest("1") as never, observed_output_digest: digest("2") as never, route_source: { provenance: "configured" },
       repositories: selectorEnvelope.repositories,
     });
-    expect(selected.profile).toMatchObject({ model: "gpt-5.6-sol", effort: "xhigh" });
+    expect(selected.profile).toMatchObject({ model: "gpt-6-astra", effort: "low" });
+    if (selected.source.kind !== "reviewer") throw new Error("expected reviewer provenance");
+    for (const profile of Object.values(SELECTOR_PROFILES)) {
+      const evidence = createEffortSelectionV2({ ...rawSelection, profile_id: profile.profile_id }, selectorEnvelope, selected.source.reviewer);
+      expect(effortEvidenceSchema.parse(evidence)).toEqual(evidence);
+      expect(implementationRecommendationFromAssessment(evidence, 1)).toEqual({ status: "ready", model: profile.model, effort: profile.effort });
+    }
+    for (const profile_id of ["gemini-3-7-flash-max", "glm-5-3-flash-max", "gpt-5-6-sol-xhigh", "gpt-6-astra-medium", "gpt-6-astra-xhigh", "gpt-6-astra-max"]) {
+      expect(() => rawEffortSelectionV2Schema.parse({ ...rawSelection, profile_id })).toThrow();
+    }
+    expect(() => rawEffortSelectionV2Schema.parse({ ...rawSelection, policy_id: "implementation-agent-selector-v2" })).toThrow();
+    expect(() => effortSelectionV2Schema.parse({ ...selected, profile: { ...selected.profile, effort: "max" } })).toThrow();
+  });
+
+  it("reads the old selector policy without accepting it as fresh evidence or reinterpreting profiles", () => {
+    const current = createDefaultEffortSelectionV2(selectorEnvelope);
+    const archived = { ...current, policy_id: "implementation-agent-selector-v2", profile: {
+      profile_id: "gpt-5-6-sol-xhigh", model: "gpt-5.6-sol", effort: "xhigh",
+    } };
+    const parsed = effortEvidenceSchema.parse(archived);
+    expect(parsed).toEqual(archived);
+    expect(implementationRecommendationFromAssessment(parsed, 1)).toEqual({ status: "ready", model: "gpt-5.6-sol", effort: "xhigh" });
+    expect(() => effortSelectionV2Schema.parse(archived)).toThrow();
+    expect(() => effortEvidenceSchema.parse({ ...archived, profile: SELECTOR_PROFILES["gpt-6-astra-low"] })).toThrow();
   });
 
   it("mints the fixed Sol-medium default without selector work", () => {
