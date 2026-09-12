@@ -502,8 +502,17 @@ const documentArtifactAdditionalDocuments: JsonObject = {
  * after the Phase 8 split *there is no sequence in this phase*, so an array missing from this table
  * is either an unordered collection that should not exist or a set nobody is testing.
  */
+const taskStateSupersededProductions: JsonObject = {
+  ...taskState.sample,
+  superseded_production_results: ["1", "2"].map((fill) => ({
+    ...retainedCounter, step: "produce", result_id: `phase-impl-1:produce:${fill}`,
+    result_digest: fill.repeat(64),
+  })),
+};
+
 const DECLARED_SETS: readonly { readonly shape: string; readonly path: string; readonly base?: JsonObject }[] = [
   { shape: "task-state", path: "authoritative_results" },
+  { shape: "task-state", path: "superseded_production_results", base: taskStateSupersededProductions },
   { shape: "task-state", path: "approvals" },
   { shape: "task-state", path: "waivers", base: taskStateTwoWaivers },
   { shape: "task-state", path: "pending_human_revision.evidence", base: taskStateRevisionCollections },
@@ -665,6 +674,7 @@ describe("no array in this phase is exempt from set ordering", () => {
         "task-state/$defs/validationOverrideRecord/properties/displaced_validations",
         "task-state/properties/approvals",
         "task-state/properties/authoritative_results",
+        "task-state/properties/superseded_production_results",
         "task-state/properties/baseline_adoptions",
         "task-state/properties/baseline_adoptions/items/properties/adopted_absences",
         "task-state/properties/baseline_adoptions/items/properties/adopted_projections",

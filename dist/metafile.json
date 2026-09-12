@@ -4011,7 +4011,7 @@
       ]
     },
     "src/contracts/durable-state.ts": {
-      "bytes": 54335,
+      "bytes": 54971,
       "format": "esm",
       "imports": [
         {
@@ -4768,7 +4768,7 @@
       }
     },
     "src/contracts/schemas/v1/task-state.schema.json": {
-      "bytes": 44076,
+      "bytes": 44219,
       "format": "esm",
       "imports": [],
       "with": {
@@ -8777,7 +8777,7 @@
       ]
     },
     "src/state/next-action.ts": {
-      "bytes": 35796,
+      "bytes": 35788,
       "format": "esm",
       "imports": [
         {
@@ -8907,7 +8907,7 @@
       ]
     },
     "src/state/produce-subject.ts": {
-      "bytes": 22570,
+      "bytes": 24195,
       "format": "esm",
       "imports": [
         {
@@ -9450,7 +9450,7 @@
       ]
     },
     "src/state/retained-result-graph.ts": {
-      "bytes": 1399,
+      "bytes": 1451,
       "format": "esm",
       "imports": []
     },
@@ -9756,7 +9756,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 129929,
+      "bytes": 130466,
       "format": "esm",
       "imports": [
         {
@@ -10073,7 +10073,7 @@
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 38340,
+      "bytes": 39394,
       "format": "esm",
       "imports": [
         {
@@ -10259,7 +10259,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2387142,
+      "bytes": 2390007,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11337,7 +11337,7 @@
           "bytesInOutput": 3847
         },
         "src/contracts/durable-state.ts": {
-          "bytesInOutput": 30069
+          "bytesInOutput": 30512
         },
         "src/contracts/durable-task-initialization.ts": {
           "bytesInOutput": 597
@@ -11583,7 +11583,7 @@
           "bytesInOutput": 578
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 21951
+          "bytesInOutput": 22017
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 6279
@@ -11595,7 +11595,7 @@
           "bytesInOutput": 1164
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 12727
+          "bytesInOutput": 13702
         },
         "src/state/production.ts": {
           "bytesInOutput": 23102
@@ -11616,7 +11616,7 @@
           "bytesInOutput": 9516
         },
         "src/state/retained-result-graph.ts": {
-          "bytesInOutput": 915
+          "bytesInOutput": 965
         },
         "src/state/review-push-throughs.ts": {
           "bytesInOutput": 4668
@@ -11634,13 +11634,13 @@
           "bytesInOutput": 31878
         },
         "src/state/status.ts": {
-          "bytesInOutput": 88054
+          "bytesInOutput": 88559
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50783
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 26109
+          "bytesInOutput": 26935
         },
         "src/state/validation-overrides.ts": {
           "bytesInOutput": 5986
@@ -11654,7 +11654,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3647970,
+      "bytes": 3650973,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12807,7 +12807,7 @@
           "bytesInOutput": 3761
         },
         "src/contracts/durable-state.ts": {
-          "bytesInOutput": 29964
+          "bytesInOutput": 30407
         },
         "src/contracts/durable-task-initialization.ts": {
           "bytesInOutput": 531
@@ -12915,7 +12915,7 @@
           "bytesInOutput": 1432
         },
         "src/contracts/schemas/v1/task-state.schema.json": {
-          "bytesInOutput": 42349
+          "bytesInOutput": 42484
         },
         "src/contracts/schemas/v1/triage.schema.json": {
           "bytesInOutput": 21366
@@ -13140,7 +13140,7 @@
           "bytesInOutput": 561
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 21918
+          "bytesInOutput": 21984
         },
         "src/state/pending-waiver.ts": {
           "bytesInOutput": 3062
@@ -13155,7 +13155,7 @@
           "bytesInOutput": 1605
         },
         "src/state/produce-subject.ts": {
-          "bytesInOutput": 14082
+          "bytesInOutput": 15060
         },
         "src/state/production.ts": {
           "bytesInOutput": 23053
@@ -13179,7 +13179,7 @@
           "bytesInOutput": 9509
         },
         "src/state/retained-result-graph.ts": {
-          "bytesInOutput": 913
+          "bytesInOutput": 963
         },
         "src/state/review-push-throughs.ts": {
           "bytesInOutput": 4648
@@ -13200,13 +13200,13 @@
           "bytesInOutput": 31961
         },
         "src/state/status.ts": {
-          "bytesInOutput": 85642
+          "bytesInOutput": 86147
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50729
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 26676
+          "bytesInOutput": 27502
         },
         "src/state/validation-overrides.ts": {
           "bytesInOutput": 5966

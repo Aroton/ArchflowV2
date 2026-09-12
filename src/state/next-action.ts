@@ -98,11 +98,11 @@ export type NextActionInput = Readonly<{
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
   /**
-   * Task documents recorded by the current phase's work result whose worktree bytes have since
-   * changed, set only while a review of that result is still owed. The review re-reads exactly
-   * these before it dispatches, so while any remain it cannot record a terminal result — and no
-   * human baseline decision can help, because adoption re-baselines a *path* while the recorded
-   * result stays pinned to the bytes it recorded. Re-recording the result is the only move.
+   * Task documents that drifted, or implementation projections superseded by a later adoption,
+   * set only while a review of the current work result is still owed. Review re-reads document
+   * pins and reconstructs implementation outputs from retained bytes. Adoption re-baselines a
+   * path while the result stays pinned to its original bytes; a fresh result is needed to review
+   * the corrections.
    */
   produce_subject_drift?: readonly string[];
   /**
@@ -232,7 +232,7 @@ function produceSubjectDriftAction(state: TaskStateV1, paths: readonly string[])
   const rest = paths.length - shown.length;
   return action(
     "run-step",
-    `${paths.length === 1 ? "A file" : `${paths.length} files`} this phase's recorded work result covers changed afterwards (${listed}${rest > 0 ? `, and ${rest} more` : ""}). The independent review re-reads them and will not review bytes the result never recorded, and no baseline decision can re-bind a recorded result to different bytes. Re-open the work window and submit a fresh result over the current bytes; the review then covers what is actually there.`,
+    `${paths.length === 1 ? "A file" : `${paths.length} files`} this phase's recorded work result covers changed afterwards (${listed}${rest > 0 ? `, and ${rest} more` : ""}). The independent review is pinned to the original result; keeping current versions does not replace that snapshot. Re-open the work window and submit a fresh result with current files and verification evidence. This supersedes the old production subject while preserving its archived evidence; normal secret scanning and independent review still apply.`,
     false,
     state,
     { step: "produce" },

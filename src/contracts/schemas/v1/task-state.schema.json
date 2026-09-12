@@ -1374,6 +1374,12 @@
     "pending_validation_override": {
       "$ref": "#/$defs/pendingValidationOverride"
     },
+    "superseded_production_results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/authoritativeResultRef"
+      }
+    },
     "human_revision_history": {
       "type": "array",
       "items": {

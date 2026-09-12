@@ -768,6 +768,18 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     withResultReference(currentReferences, input.result_reference),
     input.constitution_result_reference,
   );
+  // Replacing an implementation snapshot retires its active reference, not its evidence. Keep
+  // the old result in the durable retention graph so cleanup cannot erase the recovery history.
+  let supersededProductions = preserved.superseded_production_results;
+  if (input.artifact?.artifact_kind === "implementation-output" && input.result_reference !== undefined) {
+    const previous = currentReferences.find((entry) =>
+      entry.phase_instance === input.target.phase_instance && entry.step === "produce");
+    if (previous !== undefined && previous.result_digest !== input.result_reference.result_digest &&
+        !supersededProductions?.some((entry) => entry.result_digest === previous.result_digest)) {
+      supersededProductions = Object.freeze([...(supersededProductions ?? []), previous]
+        .sort((left, right) => left.result_digest < right.result_digest ? -1 : left.result_digest > right.result_digest ? 1 : 0));
+    }
+  }
   let humanRevisionHistory = preserved.human_revision_history;
   if (completingHumanRevision) {
     const declaration = input.human_revision!;
@@ -806,6 +818,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     attempt: significantHumanRevision ? parseSafeInteger(1) : input.target.attempt,
     input_fingerprint: input.target.input_fingerprint,
     authoritative_results: authoritativeResults,
+    ...(supersededProductions === undefined ? {} : { superseded_production_results: supersededProductions }),
     ...(humanRevisionHistory === undefined ? {} : { human_revision_history: humanRevisionHistory }),
     ...(!completingHumanRevision && pendingHumanRevision !== undefined
       ? { pending_human_revision: pendingHumanRevision }

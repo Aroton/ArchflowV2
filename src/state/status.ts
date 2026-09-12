@@ -81,7 +81,7 @@ import {
 } from "./gate-decision-interface.js";
 import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js";
 import { deriveNextAction, type NextAction, type PolicyReentryFindings } from "./next-action.js";
-import { changedCoProducedDocumentPaths, expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet } from "./produce-subject.js";
+import { adoptedProduceProjectionDrift, changedCoProducedDocumentPaths, expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
 import { approvalRuleContext, evaluateApprovalRules } from "./approval-rules.js";
 import {
@@ -1901,6 +1901,14 @@ async function computeTaskStatusDetailedInternal(
   const produceSubjectDrift: string[] = [];
   const upstreamDocumentDrift: string[] = [];
   if (!midProduce && produceSubject !== undefined && assessment?.next === "counter_review") {
+    if (produceSubject.artifact.artifact_kind === "implementation-output") {
+      const manifest = produceSubject.retained.manifest.value;
+      produceSubjectDrift.push(...adoptedProduceProjectionDrift(
+        state.baseline_adoptions,
+        [...manifest.projections, ...(manifest.secondary_projections ?? []).flatMap((section) => section.projections)],
+        manifest.accounting.measured_at_revision,
+      ));
+    }
     // Reported repository-relative: these reach a human who is about to look for the file.
     const repositoryPath = (claim: string) => `.archflow/tasks/${state.task_id}/${claim}`;
     try {
@@ -1908,7 +1916,9 @@ async function computeTaskStatusDetailedInternal(
         const projection = await readProduceProjection(
           dependencies.runner, authority, produceSubject, pin.path,
         );
-        if (!projection.ok) produceSubjectDrift.push(repositoryPath(pin.path));
+        if (!projection.ok && !produceSubjectDrift.includes(repositoryPath(pin.path))) {
+          produceSubjectDrift.push(repositoryPath(pin.path));
+        }
       }
       const coProduced = produceOwnedTaskDocumentPaths(produceSubject.artifact);
       for (const binding of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {

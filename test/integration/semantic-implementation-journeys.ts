@@ -1,10 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
+import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
+import { cleanTaskWorkspace } from "../../src/state/workspace-cleanup.js";
+import { readRetainedResult } from "../../src/state/production.js";
+import { retainedResultDigests } from "../../src/state/retained-result-graph.js";
 import type { WorkflowViewV1 } from "../../src/contracts/semantic-workflow.js";
 import {
   installSemanticReviewStub,
@@ -443,11 +447,17 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
       step: "counter_review", status: "running", last_transition: { tool: "archflow_gate", operation: "gate" },
     });
 
-    // The review resumes and dispatches a real counter-review rather than failing forever.
+    // Adoption cannot rebind the original subject. Resume reopens production before dispatch.
     const resumed = await h.status(invocation);
-    expect(resumed.next_action.kind).toBe("review");
+    expect(resumed.next_action.kind).toBe("begin-work");
+    const reopened = await h.apply(invocation, resumed);
+    expect(reopened.ok, JSON.stringify(reopened)).toBe(true);
+    if (!reopened.ok) return;
+    const fresh = await h.apply(invocation, reopened.value, implementationSubmission(workspace, work.outputs));
+    expect(fresh.ok, JSON.stringify(fresh)).toBe(true);
+    if (!fresh.ok) return;
     const dispatchesBefore = Number(reviewCount(workspace));
-    const reviewed = await h.apply(invocation, resumed);
+    const reviewed = await h.apply(invocation, fresh.value);
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
     expect(reviewed.value.findings).toEqual([]);
@@ -505,6 +515,110 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(redeclared.value.condition).not.toBe("blocked");
     expect(redeclared.value.next_action.kind).toBe("review");
     expect(existsSync(work.sourceAbsolute)).toBe(false);
+  });
+
+  register("recaptures adopted implementation corrections after secret rejection without losing prior evidence", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-secret-recovery", label: "semantic-impl-secret-recovery" });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, view } = await consumeImplementationHandoff(workspace, h);
+    // Assemble the detector fixture at runtime so this regression does not introduce a literal
+    // credential URL into the repository's own review subject.
+    const credentialFixture = (password: string) => `export const fixture = "${["https://", "fixture-user", ":", password, "@example.test/"].join("")}";\n`;
+    const work = writeClientImplementationWork(workspace, view, {
+      source: credentialFixture("dummy-secret"), notes: IMPLEMENTATION_NOTES, transcript: TRANSCRIPT_BYTES,
+    });
+    const head = gitHead(workspace);
+    let submitted = await h.apply(invocation, view, implementationSubmission(workspace, work.outputs));
+    expect(submitted.ok, JSON.stringify(submitted)).toBe(true);
+    if (!submitted.ok) return;
+    const dispatchesBefore = Number(reviewCount(workspace));
+    const resultPath = () => {
+      const state = readTaskState(workspace) as { authoritative_results: { phase_instance: string; step: string; result_digest: string }[] };
+      const reference = state.authoritative_results.find((entry) => entry.phase_instance === "phase-impl-1" && entry.step === "produce")!;
+      return join(workspace.services.authority.task_root, "authority", "results", `${reference.result_digest}.json`);
+    };
+    const originalPath = resultPath();
+    const originalManifest = JSON.parse(readFileSync(originalPath, "utf8"));
+    const authorityRoot = join(workspace.services.authority.task_root, "authority");
+    const priorEvidence = new Map(readdirSync(authorityRoot, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile() && (
+        entry.parentPath.startsWith(join(authorityRoot, "results")) ||
+        entry.parentPath.startsWith(join(authorityRoot, "decisions")) || entry.name === "initialization.json"))
+      .map((entry) => { const path = join(entry.parentPath, entry.name); return [path, readFileSync(path)] as const; }));
+
+    // A first attempted correction deliberately still contains credentials. Recovery must never
+    // waive the detector: each new snapshot passes through the unchanged review loader.
+    for (const corrected of [credentialFixture("still-a-secret"), SOURCE_BYTES_REVISED]) {
+      if (!submitted.ok) throw new Error("submission failed");
+      const failed = await h.apply(invocation, submitted.value);
+      expect(failed).toMatchObject({ ok: false, error: { code: "SECRET_DETECTED" } });
+      expect(readTaskState(workspace)).toMatchObject({ step: "counter_review", status: "running" });
+      expect(Number(reviewCount(workspace))).toBe(dispatchesBefore);
+      writeFileSync(work.sourceAbsolute, corrected);
+      const drifted = await h.status(invocation);
+      expect(drifted.next_action.kind).toBe("decide");
+      const opened = await h.apply(invocation, drifted, { kind: "gate-summary", summary: "Keep the corrected implementation files." });
+      expect(opened.ok, JSON.stringify(opened)).toBe(true);
+      if (!opened.ok) return;
+      const adopted = await h.apply(invocation, opened.value, {
+        kind: "decision", choice: "keep-current-versions", reason: "Keep these corrections and review a freshly captured result.",
+      });
+      expect(adopted.ok, JSON.stringify(adopted)).toBe(true);
+      if (!adopted.ok) return;
+      expect(adopted.value.next_action).toMatchObject({ kind: "begin-work", expected_submission: "none" });
+      const stateBeforeResume = readFileSync(workspace.services.authority.state.absolute);
+      for (let repeat = 0; repeat < 3; repeat++) {
+        expect((await h.status(invocation)).next_action).toEqual(adopted.value.next_action);
+        expect((await h.status()).next_action.kind).toBe("begin-work");
+      }
+      expect(readFileSync(workspace.services.authority.state.absolute)).toEqual(stateBeforeResume);
+      const reopened = await h.applyAndAssertFreshStatus(invocation, adopted.value);
+      expect(reopened.ok, JSON.stringify(reopened)).toBe(true);
+      if (!reopened.ok) return;
+      expect(reopened.value.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
+      expect(readFileSync(work.sourceAbsolute, "utf8")).toBe(corrected);
+      expect(readFileSync(work.notesAbsolute, "utf8")).toBe(IMPLEMENTATION_NOTES);
+      expect((await h.apply(invocation, adopted.value)).ok).toBe(false);
+      expect((await h.status(invocation)).next_action.kind).toBe("submit-work");
+      writeFileSync(work.transcriptAbsolute, TRANSCRIPT_BYTES_FRESH);
+      const previousPath = resultPath();
+      submitted = await h.applyAndAssertFreshStatus(invocation, reopened.value, implementationSubmission(workspace, work.outputs));
+      expect(submitted.ok, JSON.stringify(submitted)).toBe(true);
+      if (!submitted.ok) return;
+      expect(submitted.value.next_action.kind).toBe("review");
+      expect(resultPath()).not.toBe(previousPath);
+      expect(readFileSync(work.sourceAbsolute, "utf8")).toBe(corrected);
+    }
+    const freshManifest = JSON.parse(readFileSync(resultPath(), "utf8"));
+    const recoveredState = taskStateV1Schema.parse(readTaskState(workspace));
+    expect(recoveredState.superseded_production_results).toHaveLength(2);
+    for (const reference of recoveredState.superseded_production_results ?? []) {
+      expect(retainedResultDigests(recoveredState).has(reference.result_digest)).toBe(true);
+      expect(recoveredState.authoritative_results).not.toContainEqual(reference);
+    }
+    expect(freshManifest.artifact_digest).not.toBe(originalManifest.artifact_digest);
+    expect(freshManifest.source_artifact.snapshot_digest).not.toBe(originalManifest.source_artifact.snapshot_digest);
+    expect(freshManifest.source_artifact.verification_evidence).not.toEqual(originalManifest.source_artifact.verification_evidence);
+    expect((readTaskState(workspace).baseline_adoptions as unknown[]).length).toBe(2);
+    expect(submitted.ok).toBe(true);
+    if (!submitted.ok) return;
+    const reviewed = await h.apply(invocation, submitted.value);
+    expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
+    if (!reviewed.ok) return;
+    expect(reviewed.value.findings ?? []).toEqual([]);
+    expect(Number(reviewCount(workspace))).toBe(dispatchesBefore + 1);
+    expect(gitHead(workspace)).toBe(head);
+    const cleaned = await cleanTaskWorkspace(workspace.services.dependencies, workspace.services.authority,
+      taskStateV1Schema.parse(readTaskState(workspace)));
+    expect(cleaned.ok, JSON.stringify(cleaned)).toBe(true);
+    for (const [path, bytes] of priorEvidence) expect(readFileSync(path), path).toEqual(bytes);
+    // Old payloads remain authentic and still rejected; cleanup must not erase or sanitize them.
+    for (const reference of recoveredState.superseded_production_results ?? []) {
+      const retained = await readRetainedResult(workspace.services.dependencies.runner, workspace.services.authority, reference);
+      expect(retained).toMatchObject({ ok: false, error: { code: "SECRET_DETECTED" } });
+    }
   });
 
   register("supersedes stale baseline interfaces and refuses replay across changed and replaced history", async () => {

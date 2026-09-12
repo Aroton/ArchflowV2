@@ -50294,6 +50294,12 @@ var task_state_schema_default = {
     pending_validation_override: {
       $ref: "#/$defs/pendingValidationOverride"
     },
+    superseded_production_results: {
+      type: "array",
+      items: {
+        $ref: "#/$defs/authoritativeResultRef"
+      }
+    },
     human_revision_history: {
       type: "array",
       items: {
@@ -56990,6 +56996,7 @@ var taskStateV1Schema = external_exports.object({
   open_gate: openGateRefV1Schema.optional(),
   pending_human_revision: pendingHumanRevisionV1Schema.optional(),
   pending_validation_override: pendingValidationOverrideV1Schema.optional(),
+  superseded_production_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("result_digest")), "superseded production results must be sorted by result_digest with no duplicates").refine((items) => items.every((item) => item.step === "produce" && item.phase_instance.startsWith("phase-impl-")), "superseded production results must reference implementation production").optional(),
   human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
   restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
   milestone_recovery_history: external_exports.array(milestoneRecoveryRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("recovery_id")), "milestone recovery history must be sorted by recovery_id with no duplicates").optional(),
@@ -68054,6 +68061,23 @@ function produceProjectionPins(artifact) {
     content_digest: parent.content_digest
   })));
 }
+function adoptedProduceProjectionDrift(adoptions, projections, producedAtRevision) {
+  const key2 = (projection) => JSON.stringify([projection.repository, projection.path]);
+  const latest = /* @__PURE__ */ new Map();
+  for (const adoption of adoptions ?? []) {
+    if (adoption.adopted_at_revision <= producedAtRevision) continue;
+    for (const projection of adoption.adopted_projections) {
+      const identity = key2(projection);
+      if ((latest.get(identity)?.revision ?? producedAtRevision) < adoption.adopted_at_revision) {
+        latest.set(identity, { revision: adoption.adopted_at_revision, digest: projection.content_digest });
+      }
+    }
+  }
+  return Object.freeze(projections.filter((projection) => {
+    const adopted = latest.get(key2(projection));
+    return adopted !== void 0 && adopted.digest !== projection.content_digest;
+  }).map((projection) => projection.repository === void 0 ? projection.path : `${projection.repository}:${projection.path}`));
+}
 function produceUpstreamBindingsForSubject(state, artifact) {
   const bindings = expectedProduceUpstreamBindings(state);
   const owned = new Set(produceOwnedTaskDocumentPaths(artifact));
@@ -70815,6 +70839,13 @@ function planStateTransition(value) {
     withResultReference(currentReferences, input.result_reference),
     input.constitution_result_reference
   );
+  let supersededProductions = preserved.superseded_production_results;
+  if (input.artifact?.artifact_kind === "implementation-output" && input.result_reference !== void 0) {
+    const previous = currentReferences.find((entry) => entry.phase_instance === input.target.phase_instance && entry.step === "produce");
+    if (previous !== void 0 && previous.result_digest !== input.result_reference.result_digest && !supersededProductions?.some((entry) => entry.result_digest === previous.result_digest)) {
+      supersededProductions = Object.freeze([...supersededProductions ?? [], previous].sort((left, right) => left.result_digest < right.result_digest ? -1 : left.result_digest > right.result_digest ? 1 : 0));
+    }
+  }
   let humanRevisionHistory = preserved.human_revision_history;
   if (completingHumanRevision) {
     const declaration = input.human_revision;
@@ -70846,6 +70877,7 @@ function planStateTransition(value) {
     attempt: significantHumanRevision ? parseSafeInteger(1) : input.target.attempt,
     input_fingerprint: input.target.input_fingerprint,
     authoritative_results: authoritativeResults,
+    ...supersededProductions === void 0 ? {} : { superseded_production_results: supersededProductions },
     ...humanRevisionHistory === void 0 ? {} : { human_revision_history: humanRevisionHistory },
     ...!completingHumanRevision && pendingHumanRevision !== void 0 ? { pending_human_revision: pendingHumanRevision } : {},
     ...plannedFinalPhase === void 0 || plannedFinalPhase === null ? {} : { planned_final_phase: parseSafeInteger(plannedFinalPhase) },
@@ -72076,6 +72108,7 @@ function retainedResultReferences(state) {
   const restartHistory = state.restart_history ?? [];
   const roots = [
     ...state.authoritative_results,
+    ...state.superseded_production_results ?? [],
     ...state.pending_human_revision?.evidence ?? [],
     ...(state.human_revision_history ?? []).flatMap((revision) => revision.evidence),
     ...restartHistory.flatMap((restart) => restart.superseded_results),
@@ -73479,7 +73512,7 @@ function produceSubjectDriftAction(state, paths) {
   const rest = paths.length - shown.length;
   return action(
     "run-step",
-    `${paths.length === 1 ? "A file" : `${paths.length} files`} this phase's recorded work result covers changed afterwards (${listed}${rest > 0 ? `, and ${rest} more` : ""}). The independent review re-reads them and will not review bytes the result never recorded, and no baseline decision can re-bind a recorded result to different bytes. Re-open the work window and submit a fresh result over the current bytes; the review then covers what is actually there.`,
+    `${paths.length === 1 ? "A file" : `${paths.length} files`} this phase's recorded work result covers changed afterwards (${listed}${rest > 0 ? `, and ${rest} more` : ""}). The independent review is pinned to the original result; keeping current versions does not replace that snapshot. Re-open the work window and submit a fresh result with current files and verification evidence. This supersedes the old production subject while preserving its archived evidence; normal secret scanning and independent review still apply.`,
     false,
     state,
     { step: "produce" }
@@ -75268,6 +75301,14 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   const produceSubjectDrift = [];
   const upstreamDocumentDrift = [];
   if (!midProduce && produceSubject !== void 0 && assessment?.next === "counter_review") {
+    if (produceSubject.artifact.artifact_kind === "implementation-output") {
+      const manifest = produceSubject.retained.manifest.value;
+      produceSubjectDrift.push(...adoptedProduceProjectionDrift(
+        state.baseline_adoptions,
+        [...manifest.projections, ...(manifest.secondary_projections ?? []).flatMap((section) => section.projections)],
+        manifest.accounting.measured_at_revision
+      ));
+    }
     const repositoryPath = (claim) => `.archflow/tasks/${state.task_id}/${claim}`;
     try {
       for (const pin of produceProjectionPins(produceSubject.artifact)) {
@@ -75277,7 +75318,9 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
           produceSubject,
           pin.path
         );
-        if (!projection.ok) produceSubjectDrift.push(repositoryPath(pin.path));
+        if (!projection.ok && !produceSubjectDrift.includes(repositoryPath(pin.path))) {
+          produceSubjectDrift.push(repositoryPath(pin.path));
+        }
       }
       const coProduced = produceOwnedTaskDocumentPaths(produceSubject.artifact);
       for (const binding2 of produceUpstreamBindingsForSubject(state, produceSubject.artifact)) {

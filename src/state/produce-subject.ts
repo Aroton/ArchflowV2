@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
 import type { DocumentArtifactV1 } from "../contracts/durable-document.js";
 import type { ImplementationOutputV1 } from "../contracts/durable-implementation-output.js";
+import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, type ProjectResult } from "../contracts/errors.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
@@ -300,6 +301,37 @@ export function produceProjectionPins(
       path: parent.document_path,
       content_digest: parent.content_digest,
     })));
+}
+
+/**
+ * Adoption changes path authority, never the retained review subject. Compare only the newest
+ * adoption after this production: an older adoption must not invalidate its replacement. This
+ * uses authenticated manifest metadata and durable adoption records, without reconstructing (or
+ * secret-scanning) the unusable snapshot just to discover its recovery action.
+ */
+export function adoptedProduceProjectionDrift(
+  adoptions: TaskStateV1["baseline_adoptions"],
+  projections: readonly ProjectionDigestRef[],
+  producedAtRevision: number,
+): readonly string[] {
+  const key = (projection: ProjectionDigestRef) => JSON.stringify([projection.repository, projection.path]);
+  const latest = new Map<string, { revision: number; digest: Sha256Digest }>();
+  for (const adoption of adoptions ?? []) {
+    if (adoption.adopted_at_revision <= producedAtRevision) continue;
+    for (const projection of adoption.adopted_projections) {
+      const identity = key(projection);
+      if ((latest.get(identity)?.revision ?? producedAtRevision) < adoption.adopted_at_revision) {
+        latest.set(identity, { revision: adoption.adopted_at_revision, digest: projection.content_digest });
+      }
+    }
+  }
+  return Object.freeze(projections
+    .filter((projection) => {
+      const adopted = latest.get(key(projection));
+      return adopted !== undefined && adopted.digest !== projection.content_digest;
+    })
+    .map((projection) => projection.repository === undefined
+      ? projection.path : `${projection.repository}:${projection.path}`));
 }
 
 /** Canonical upstream bindings exclude parent documents co-produced by the current subject. */

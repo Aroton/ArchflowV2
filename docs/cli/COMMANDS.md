@@ -91,3 +91,16 @@ Repository-aware recovery keeps the existing primary spelling and adds `--reposi
 ## Automation responsibility
 
 `automation-status` now emits schema version 3. A completed skill yields `awaiting-transition` with a human-owned `launch-skill` descriptor. Controllers must wait for the user to launch it. Current-skill continuation and transient retries remain automatic. The v1/v2 contract readers remain available for archived observations; neither may parse v3 as automatic launch permission.
+
+## Recovering an adopted implementation snapshot
+
+After installing a recovery fix, restart the host's ArchFlow MCP server so it loads the new bundle. In the affected repository, resume the current implementation skill. Status derives recovery from durable records, including adoptions made before the fix; no state migration or hand-edited archive is needed. If review is pending over an older snapshot, follow `begin-work`, then submit a fresh `work-result` over the preserved current files and verification transcript. The next review uses the newly captured subject and runs the normal secret scanner and independent reviewer. A credential that remains in the new subject still blocks review.
+
+For the reported `management-dashboard` task in `/home/aroton/MealDeals-Website.feature/management-dashboard`, the observed position is `phase-impl-4`, `counter_review/running`, with no completed implementation review. The decision at revision 117 adopted corrections in `discovery.test.ts`, `preflight.test.ts`, and `scanProcessor.test.ts` after production at revision 113. Recover as follows:
+
+1. Open that repository with the restarted MCP server and invoke `$archflow-phase-impl management-dashboard 4` in Codex (or `/archflow-phase-impl management-dashboard 4` in Claude Code/Antigravity).
+2. Read fresh status with the phase-4 implementation resume invocation and apply its `begin-work` offer without a submission. This preserves the working tree and opens production; the earlier approval to keep corrections remains archived.
+3. Keep the existing implementation and its log. Verify the current bytes, retain the reported 305-test and corrected 102-test results as prior evidence, and write the verification transcript used for this submission. Submit a succeeded `work-result` with the current base commit, complete output/restore declarations, and declared inputs. Follow the server-returned resources and submission shape.
+4. Apply the fresh review offer. Only the normal review/triage and any returned human gate can establish subsequent commit authority. If review detects another secret, correct it and repeat the supported adoption/revision path.
+
+The implementation remains uncommitted throughout recovery. Do not restore the old snapshot, remove the task, edit retained evidence, or reuse a stale review offer. Read-only polling is available with `archflow-local automation-status --task management-dashboard`; workflow mutations use MCP, not a CLI resume command.

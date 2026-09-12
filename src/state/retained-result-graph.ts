@@ -9,6 +9,7 @@ export function retainedResultReferences(state: TaskStateV1): readonly Authorita
   const restartHistory = state.restart_history ?? [];
   const roots = [
     ...state.authoritative_results,
+    ...(state.superseded_production_results ?? []),
     ...(state.pending_human_revision?.evidence ?? []),
     ...(state.human_revision_history ?? []).flatMap((revision) => revision.evidence),
     ...restartHistory.flatMap((restart) => restart.superseded_results),

@@ -430,6 +430,8 @@ export type TaskStateV1 = {
   readonly pending_human_revision?: PendingHumanRevision;
   readonly pending_validation_override?: PendingValidationOverrideV1;
   readonly human_revision_history?: readonly HumanRevisionRecord[];
+  /** Audit/retention only: implementation productions replaced by fresh work results, sorted by result_digest. */
+  readonly superseded_production_results?: readonly AuthoritativeResultRef[];
   /** Sorted by `restart_id`; absent means no planning restart has occurred. */
   readonly restart_history?: readonly PlanningRestartRecord[];
   /** Sorted by `recovery_id`; absent means no same-position milestone recovery has occurred. */
@@ -945,6 +947,10 @@ export const taskStateV1Schema = z.object({
   open_gate: openGateRefV1Schema.optional(),
   pending_human_revision: pendingHumanRevisionV1Schema.optional(),
   pending_validation_override: pendingValidationOverrideV1Schema.optional(),
+  superseded_production_results: z.array(authoritativeResultRefV1Schema)
+    .refine((items) => isSortedUniqueBy(items, tupleKey("result_digest")), "superseded production results must be sorted by result_digest with no duplicates")
+    .refine((items) => items.every((item) => item.step === "produce" && item.phase_instance.startsWith("phase-impl-")), "superseded production results must reference implementation production")
+    .optional(),
   human_revision_history: z.array(humanRevisionRecordV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates")
     .optional(),
