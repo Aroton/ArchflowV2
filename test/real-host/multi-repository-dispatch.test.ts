@@ -262,7 +262,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
           cli_version: succeeded.cli_version,
           route,
           repositories: reviewedRepositories,
-          assignment: { ...assignment, routing_role: "counter-reviewer" },
+          assignment: { ...assignment, routing_role: "counter-reviewer", report_format: true },
           envelope_input_digest: envelope.digest,
           extracted_output_bytes: succeeded.extracted_output_bytes,
         });
@@ -283,11 +283,12 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
         // Reviewer prose is not a contract. Either outcome satisfies the journey: the reviewer read
         // the secondary and cited it, or it returned a verdict while the evidence still carries the
         // `api` pin asserted above. Record which one happened instead of failing on wording.
-        const texts = findingTexts(observed.evidence);
+        if (observed.evidence.schema_version !== "4") throw new Error("expected report evidence");
+        const texts = observed.evidence.reports.map(report => report.report);
         const citedSecondary = texts.some((text) => text.includes(SECONDARY_CITATION) || text.includes(SECONDARY_FUNCTION));
-        expect(["pass", "advisory", "review-raised"]).toContain(observed.evidence.verdict);
+        expect(texts.length).toBeGreaterThan(0);
         console.info(
-          `[real-host] ${direction.name}: verdict=${observed.evidence.verdict} findings=${String(observed.evidence.findings.length)} cited-secondary=${String(citedSecondary)}${citedSecondary ? "" : ` (no finding cited ${SECONDARY_CITATION}; api pin still attested)`}`,
+          `[real-host] ${direction.name}: reports=${String(texts.length)} cited-secondary=${String(citedSecondary)}${citedSecondary ? "" : ` (no finding cited ${SECONDARY_CITATION}; api pin still attested)`}`,
         );
       } finally {
         workspace.dispose();

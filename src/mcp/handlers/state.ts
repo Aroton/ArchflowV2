@@ -862,7 +862,7 @@ export async function handleState(
             );
             if (!retained.ok) return retained;
             const triage = retained.value.get("triage")?.manifest.source_artifact;
-            if (triage?.artifact_kind === "triage" && triage.evidence.accepted_count > 0) {
+            if (triage?.artifact_kind === "triage" && (triage.evidence.accepted_count > 0 || triage.evidence.response?.decision === "revise")) {
               return fail(createProjectError("CONTRACT_INVALID", {
                 tool: "archflow_state",
                 issue_code: "simple-human-revision-cannot-resolve-accepted-finding",

@@ -91,6 +91,13 @@ export function renderReviewEvidence(
     authenticQualifiedEvidence(value, "review", evidence.assurance) ||
     authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
   if (!authenticated) throw new TypeError("authenticated review evidence is required");
+  if (evidence.schema_version === "4") return new TextEncoder().encode([
+    "# ArchFlow Review Reports", `Reviewed subject: ${evidence.subject_digest}`,
+    ...provenanceMetadata(evidence),
+    ...renderRouteSource(evidence.route_source),
+    ...(evidence.route_override === undefined ? [] : renderRouteOverride(evidence.route_override)),
+    ...evidence.reports.flatMap(report => ["", `## ${report.reviewer_id} (${report.focus})`, "", report.report]),
+  ].join("\n"));
   const summaryMetadata = evidence.schema_version === "2" || evidence.schema_version === "3"
     ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] as const
     : [["blocking_count", evidence.blocking_count]] as const;
@@ -121,6 +128,7 @@ function renderDisposition(disposition: TriageDisposition): string[] {
 }
 export function renderTriage(value: ValidatedTriage): Uint8Array {
   if (!authenticValidatedTriage(value)) throw new TypeError("validated triage is required");
+  if (value.response !== undefined) return new TextEncoder().encode(`# Review response\n\n${value.response.decision}\n\n${value.response.rationale}\n${value.response.decision === "revise" ? value.response.reviewers.map(reviewer => `${reviewer.reviewer_id}: ${reviewer.request}`).join("\n") : ""}`);
   const lines = ["# ArchFlow Review Triage", ...metadata([
     ["schema_version", value.schema_version], ["task_id", value.task_id], ["phase_instance", value.phase_instance], ["step", value.step], ["subject_digest", value.subject_digest], ["input_fingerprint", value.input_fingerprint], ["current_evidence_set_digest", value.current_evidence_set_digest], ["source_evidence_digests", value.source_evidence_digests], ["accepted_count", value.accepted_count], ["accepted_editorial_count", value.accepted_editorial_count], ["rejected_count", value.rejected_count], ["escalated_human_count", value.escalated_human_count], ["deferred_count", value.deferred_count],
   ]), "", "## Dispositions"];

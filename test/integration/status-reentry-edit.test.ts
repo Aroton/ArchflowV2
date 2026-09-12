@@ -363,11 +363,7 @@ describe("post-triage re-entry edits are expected", () => {
       await h.invoke(triageEntry.request.tool, triageEntry.request.input);
       const triageComposed = await h.compose({
         intent_id: "triage-1", kind: "triage",
-        dispositions: [{
-          finding_id: "general-requirement-untestable", disposition: "accepted",
-          rationale: "The requirement is indeed untestable as written.",
-          revision_intent: "Restate the requirement as observable behavior in prd.md.",
-        }],
+        response: { decision: "revise", rationale: "Make the requirement testable.", reviewers: [{ reviewer_id: "general", request: "Verify the revised requirement." }] },
       });
       await h.invoke(triageComposed.request.tool, triageComposed.request.input);
 
@@ -431,196 +427,6 @@ describe("post-triage re-entry edits are expected", () => {
       expect(parseRefused.ok).toBe(false);
       expect(parseRefused.error?.code).toBe("CONTRACT_INVALID");
       expect(await h.status()).toMatchObject({ step: "produce", status: "succeeded" });
-    } finally {
-      stub.restore();
-    }
-  }, TIMEOUT);
-
-  it("routes editorial-only acceptance through the evidence-preserving produce re-entry", async () => {
-    const fixture = await repository();
-    const h = harness(fixture.root);
-    const prdPath = join(fixture.root, ".archflow", "tasks", task, "prd.md");
-    const prdClaim = `.archflow/tasks/${task}/prd.md`;
-    const rubric = {
-      schema_version: "1", kind: "artifact", mode: "adversarial",
-      criteria: [{ id: "scope", text: "Check scope against the ask.", blocking: true }],
-    };
-
-    // Drive the PRD phase to counter_review-succeeded with one blocking and one purely
-    // editorial finding, so both the compose-time refusal and the editorial route are real.
-    const created = await h.status();
-    expect(created.next_action.code).toBe("create-task");
-    const createComposed = await h.compose({ intent_id: "initialize-1", kind: "initialize" });
-    await h.invoke("archflow_state", createComposed.request.input);
-    writeFileSync(join(fixture.root, ".archflow", "tasks", task, "ask.md"), "Build the editorial proof.\n");
-    const originalPrd = "# PRD\n\nEditorial requirements, teh original wording.\n";
-    writeFileSync(prdPath, originalPrd);
-    const produceComposed = await h.compose({ intent_id: "produce-1" });
-    await h.invoke(produceComposed.request.tool, produceComposed.request.input);
-
-    // The adjudicate entry no longer exists as a composable movement from any position: the
-    // constitution review rides the counter-review call instead.
-    await expect(h.compose({ intent_id: "adjudicate-entry-refused", kind: "running", step: "adjudicate" }))
-      .rejects.toThrow(/TRANSITION_INVALID/u);
-    expect(await h.status()).toMatchObject({ step: "produce", status: "succeeded", attempt: 1 });
-    const counterEntry = await h.compose({ intent_id: "counter-entry-1", kind: "running", step: "counter_review" });
-    await h.invoke(counterEntry.request.tool, counterEntry.request.input);
-    const counterComposed = await h.compose({ intent_id: "counter-1", kind: "counter-review" });
-    const stub = installReviewerStub(fixture.root, [
-      {
-        finding_id: "scope-mismatch", severity: "blocker", blocking: true,
-        summary: "The stated scope contradicts the ask.", evidence: "prd.md scope section.",
-        suggested_resolution: "Align the scope with the ask.",
-      },
-      {
-        finding_id: "wording-typo", severity: "minor", blocking: false,
-        summary: "A requirement sentence contains a typo.", evidence: "prd.md line 3: 'teh'.",
-        suggested_resolution: "Fix the typo; no meaning change.",
-      },
-    ]);
-    try {
-      await h.invoke(counterComposed.request.tool, counterComposed.request.input);
-      const triageEntry = await h.compose({ intent_id: "triage-entry-1", kind: "running", step: "triage" });
-      await h.invoke(triageEntry.request.tool, triageEntry.request.input);
-
-      // Compose-time refusal: an editorial acceptance of a blocking finding never composes.
-      await expect(h.compose({
-        intent_id: "triage-refused", kind: "triage",
-        dispositions: [
-          { finding_id: "general-scope-mismatch", disposition: "accepted-editorial", rationale: "Wording only.", revision_intent: "Reword the scope." },
-          { finding_id: "general-wording-typo", disposition: "rejected", rationale: "Not a defect.", evidence: "Reads fine." },
-        ],
-      })).rejects.toThrow(/substantive/u);
-
-      // The recorded triage: the blocker is rejected with evidence, the typo accepted as
-      // purely editorial. accepted_count stays 0; only the editorial count is populated.
-      const triageComposed = await h.compose({
-        intent_id: "triage-1", kind: "triage",
-        dispositions: [
-          {
-            finding_id: "general-scope-mismatch", disposition: "rejected",
-            rationale: "The scope matches the recorded ask verbatim.",
-            evidence: "ask.md and prd.md scope wording agree.",
-          },
-          {
-            finding_id: "general-wording-typo", disposition: "accepted-editorial",
-            rationale: "The typo changes wording, not meaning.",
-            revision_intent: "Replace 'teh' with 'the' in the requirements sentence.",
-          },
-        ],
-      });
-      const composedTriage = (triageComposed.request.input as { artifact: { evidence: Record<string, unknown> } }).artifact.evidence;
-      expect(composedTriage).toMatchObject({ accepted_count: 0, accepted_editorial_count: 1, rejected_count: 1 });
-      await h.invoke(triageComposed.request.tool, triageComposed.request.input);
-
-      // Editorial-only acceptance is not a re-entry: the attempt budget is untouched and the
-      // next action is the produce step with the editorial wording, not a fresh review loop.
-      const pending = await h.status();
-      expect(pending).toMatchObject({ step: "triage", status: "succeeded", attempt: 1 });
-      expect(pending.evidence?.assessment).toMatchObject({
-        editorial_revision_required: true,
-        reentry_required: false,
-        exhausted: false,
-        next: "produce",
-      });
-      expect(pending.next_action).toMatchObject({ code: "run-step", step: "produce", editorial_revision: true });
-      expect(pending.next_action.detail).toMatch(/editorial/u);
-      const predecessorDigest = pending.subject_digest;
-      expect(predecessorDigest).toBe(produceComposed.artifact_digest);
-
-      // The artifact edit is expected under the editorial flag exactly as under full re-entry.
-      writeFileSync(prdPath, "# PRD\n\nEditorial requirements, the original wording.\n");
-      const afterEdit = await h.status();
-      expect(afterEdit.reconciliation?.classification).toBe("consistent");
-      expect(afterEdit.reconciliation?.expected_reentry_edits).toEqual([prdClaim]);
-      expect(afterEdit.next_action).toMatchObject({ code: "run-step", step: "produce" });
-      writeFileSync(prdPath, originalPrd);
-
-      // Enter the produce re-entry. The shared triage-succeeded -> produce-running movement
-      // rule still increments the durable attempt; only the fixed point treats the editorial
-      // pass as attempt-neutral (it never demands re-entry, so it can never exhaust).
-      const produceEntry = await h.compose({ intent_id: "produce-editorial-entry", kind: "running", step: "produce" });
-      await h.invoke(produceEntry.request.tool, produceEntry.request.input);
-
-      // Degenerate self-link: recording without changing any byte is refused.
-      const degenerate = await h.compose({ intent_id: "produce-editorial-degenerate" });
-      const degenerateArtifact = (degenerate.request.input as {
-        artifact: { editorial_predecessor?: Record<string, string> };
-      }).artifact;
-      expect(degenerateArtifact.editorial_predecessor).toMatchObject({ subject_digest: predecessorDigest });
-      const unchanged = await h.invokeRaw(degenerate.request.tool, degenerate.request.input);
-      expect(unchanged.ok).toBe(false);
-      expect(unchanged.error?.diagnostic?.parameters).toMatchObject({ issue_code: "editorial-revision-unchanged-bytes" });
-
-      // A predecessor digest that is not the retained produce result is refused.
-      const wrongPredecessor = structuredClone(degenerate.request.input) as {
-        intent_id: string; artifact: { editorial_predecessor: Record<string, string> };
-      } & Record<string, PlainJsonValue>;
-      wrongPredecessor.intent_id = "produce-editorial-wrong-predecessor";
-      wrongPredecessor.artifact.editorial_predecessor.subject_digest = "f".repeat(64);
-      const wrongPredecessorResolved = await h.envelope({
-        tool: "archflow_state", input: wrongPredecessor,
-      } as unknown as PlainJsonValue);
-      const wrongPredecessorResult = await h.invokeRaw(wrongPredecessorResolved.request.tool, wrongPredecessorResolved.request.input);
-      expect(wrongPredecessorResult.ok).toBe(false);
-      expect(wrongPredecessorResult.error?.diagnostic?.parameters).toMatchObject({ issue_code: "editorial-predecessor-not-current-produce" });
-
-      // A triage result digest that is not the retained authorizing triage is refused.
-      const wrongTriage = structuredClone(degenerate.request.input) as {
-        intent_id: string; artifact: { editorial_predecessor: Record<string, string> };
-      } & Record<string, PlainJsonValue>;
-      wrongTriage.intent_id = "produce-editorial-wrong-triage";
-      wrongTriage.artifact.editorial_predecessor.triage_result_digest = "e".repeat(64);
-      const wrongTriageResolved = await h.envelope({
-        tool: "archflow_state", input: wrongTriage,
-      } as unknown as PlainJsonValue);
-      const wrongTriageResult = await h.invokeRaw(wrongTriageResolved.request.tool, wrongTriageResolved.request.input);
-      expect(wrongTriageResult.ok).toBe(false);
-      expect(wrongTriageResult.error?.diagnostic?.parameters).toMatchObject({ issue_code: "editorial-authorizing-triage-invalid" });
-
-      // The genuine editorial revision: apply exactly the revision intent and record produce.
-      // The composer attaches the predecessor link from durable authority.
-      writeFileSync(prdPath, "# PRD\n\nEditorial requirements, the original wording.\n");
-      const revisedComposed = await h.compose({ intent_id: "produce-editorial-2" });
-      expect((revisedComposed.request.input as {
-        artifact: { editorial_predecessor?: Record<string, string> };
-      }).artifact.editorial_predecessor).toMatchObject({ subject_digest: predecessorDigest });
-      await h.invoke(revisedComposed.request.tool, revisedComposed.request.input);
-
-      // After the editorial produce: the reviews and triage stay current for exactly this one
-      // hop, nothing is re-run — with no active constitution rules the loop closes at "advance"
-      // immediately — and status surfaces the editorial block the gate presenter needs, with the
-      // review-set subject still naming the predecessor bytes the reviews actually evaluated.
-      const revised = await h.status();
-      expect(revised.subject_digest).toBe(revisedComposed.artifact_digest);
-      expect(revised.subject_digest).not.toBe(predecessorDigest);
-      expect(revised.evidence?.available).toBe(true);
-      expect(revised.evidence?.available === true && revised.evidence.subject_digest).toBe(predecessorDigest);
-      expect(revised.evidence?.assessment).toMatchObject({
-        current: ["counter_review", "triage"],
-        stale: [],
-        reentry_required: false,
-        editorial_revision_required: false,
-        next: "advance",
-      });
-      expect(revised.next_action).toMatchObject({ code: "open-gate", gate_kind: "artifact-approval" });
-      expect(revised.editorial_revision).toMatchObject({
-        predecessor_subject_digest: predecessorDigest,
-        dispositions: [{
-          finding_id: "general-wording-typo",
-          revision_intent: "Replace 'teh' with 'the' in the requirements sentence.",
-        }],
-      });
-      expect(revised.reconciliation?.classification).toBe("consistent");
-
-      // The gate composes and opens using the predecessor's rule authority
-      const gateComposed = await h.compose({
-        intent_id: "gate-summary-editorial",
-        kind: "gate",
-        summary: "Editorial wording fix applied.",
-      });
-      expect(gateComposed.request.tool).toBe("archflow_gate");
-      await h.invoke(gateComposed.request.tool, gateComposed.request.input);
     } finally {
       stub.restore();
     }
@@ -775,11 +581,7 @@ describe("post-triage re-entry edits are expected", () => {
       await h.invoke(triageEntry.request.tool, triageEntry.request.input);
       const triageComposed = await h.compose({
         intent_id: "triage-1", kind: "triage",
-        dispositions: [{
-          finding_id: "general-requirement-untestable", disposition: "rejected",
-          rationale: "The restated requirement names observable behavior.",
-          evidence: "prd.md restated requirement.",
-        }],
+        response: { decision: "finish", rationale: "The reproduced requirement meets the review intent." },
       });
       await h.invoke(triageComposed.request.tool, triageComposed.request.input);
       // The completed triage alone closes the loop: no adjudicate position follows it.

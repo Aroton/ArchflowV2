@@ -1,3 +1,4 @@
+import { reviewFindings } from "./review.js";
 import { z } from "zod";
 
 import type { SafeInteger, Sha256Digest, TaskSlug } from "./evidence.js";
@@ -115,7 +116,18 @@ export type ReviewRoundHistoryEntryV1 = {
   readonly attempt: SafeInteger;
   readonly review_evidence_digest: Sha256Digest;
 };
+export type ReviewResponse =
+  | { readonly decision: "finish"; readonly rationale: string }
+  | { readonly decision: "escalate"; readonly rationale: string }
+  | { readonly decision: "revise"; readonly rationale: string; readonly reviewers: readonly { readonly reviewer_id: string; readonly request: string }[] };
+export const reviewResponseSchema = z.discriminatedUnion("decision", [
+  z.object({ decision: z.literal("finish"), rationale: z.string().trim().min(1) }).strict(),
+  z.object({ decision: z.literal("escalate"), rationale: z.string().trim().min(1) }).strict(),
+  z.object({ decision: z.literal("revise"), rationale: z.string().trim().min(1), reviewers: z.array(z.object({ reviewer_id: z.string().min(1), request: z.string().trim().min(1) }).strict()).min(1) }).strict(),
+]) as z.ZodType<ReviewResponse>;
+
 export type TriageCandidate = {
+  readonly response?: ReviewResponse;
   readonly schema_version: "1";
   readonly task_id: TaskSlug;
   readonly phase_instance: string;
@@ -237,6 +249,7 @@ export const reviewRoundHistoryV1Schema = z.array(reviewRoundHistoryEntryV1Schem
     });
   });
 export const triageCandidateSchema = z.object({
+  response: reviewResponseSchema.optional(),
   schema_version: z.literal("1"), task_id: taskSlugV1Schema,
   phase_instance: z.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
   step: z.literal("triage"), subject_digest: digest, input_fingerprint: digest,
@@ -291,10 +304,12 @@ export function parseTriageCandidate(value: unknown): TriageCandidate {
     deferred_count,
     disposition_ledger,
     review_round_history,
+    response,
     ...rest
   } = parsed;
   return {
     ...rest,
+    ...(response === undefined ? {} : { response }),
     dispositions,
     ...(accepted_editorial_count === undefined ? {} : { accepted_editorial_count }),
     ...(escalated_human_count === undefined ? {} : { escalated_human_count }),
@@ -333,11 +348,21 @@ export function validateTriage(
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
+  const reports = current.reviews.filter(review => review.evidence.schema_version === "4");
+  if (reports.length > 0) {
+    if (reports.length !== current.reviews.length || parsed.response === undefined) throw new TypeError("review reports require a working-AI response");
+    if (parsed.dispositions.length !== 0) throw new TypeError("report responses do not carry finding dispositions");
+    if (parsed.response.decision === "revise") {
+      const ids = new Set(reports.flatMap(review => review.evidence.schema_version === "4" ? [...review.evidence.reports, ...(review.evidence.previous_reports ?? [])].map(report => report.reviewer_id) : []));
+      const selected = parsed.response.reviewers.map(reviewer => reviewer.reviewer_id);
+      if (new Set(selected).size !== selected.length || selected.some(id => !ids.has(id))) throw new TypeError("follow-up reviewers must identify distinct previous reviewers");
+    }
+  } else if (parsed.response !== undefined) throw new TypeError("archived findings require their original triage contract");
   const expected = new Set<string>();
-  const findingsByKey = new Map<string, ReviewEvidence["findings"][number]>();
+  const findingsByKey = new Map<string, ReturnType<typeof reviewFindings>[number]>();
   for (const review of current.reviews) {
     const localIds = new Set<string>();
-    for (const finding of review.evidence.findings) {
+    for (const finding of reviewFindings(review.evidence)) {
       if (localIds.has(finding.finding_id)) throw new TypeError(`review ${review.evidence_digest} has duplicate finding_id ${finding.finding_id}`);
       localIds.add(finding.finding_id);
       const key = refKey({ review_evidence_digest: review.evidence_digest, finding_id: finding.finding_id });

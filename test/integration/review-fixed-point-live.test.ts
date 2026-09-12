@@ -662,7 +662,7 @@ else {
         load_retained_manifest: afterCounter.value.dependencies.load_retained_manifest! }, afterCounter.value.authority, phase);
       if (!directReviews.ok) throw new Error(`direct reviews: ${JSON.stringify(directReviews)}`);
       const mergedReview = directReviews.value.reviews[0]?.evidence;
-      expect(mergedReview).toMatchObject({ schema_version: "3", assurance: "server-attested" });
+      expect(mergedReview).toMatchObject({ schema_version: "4", assurance: "server-attested" });
       if (mergedReview?.assurance !== "server-attested") throw new Error("server-attested review unavailable");
       expect(mergedReview.reviewer_runs).toMatchObject([
         { reviewer_id: "general", focus: "general", routing_role: "counter-reviewer", model: "gpt-fixture" },
@@ -676,7 +676,7 @@ else {
         artifact: { schema_version: "1", artifact_kind: "triage", evidence: { schema_version: "1", task_id: task,
           phase_instance: phase, step: "triage", subject_digest: produceDigest, input_fingerprint: nonProduceFingerprint,
           current_evidence_set_digest: current.set_digest, source_evidence_digests: current.slots.map((slot) => slot.evidence_digest),
-          dispositions: [], accepted_count: 0, rejected_count: 0, accepted_editorial_count: 0, escalated_human_count: 0, deferred_count: 0 } } }, "triage-succeeded");
+          dispositions: [], response: { decision: "finish", rationale: "The reports confirm the compound document changes." }, accepted_count: 0, rejected_count: 0, accepted_editorial_count: 0, escalated_human_count: 0, deferred_count: 0 } } }, "triage-succeeded");
       const finalServices = await createProductionServices({ working_directory: h.root, task_id: task, operation: parseSafeCode("pipeline-final") });
       if (!finalServices.ok) throw new Error(finalServices.error.code);
       const retained = await loadRetainedEvidence({ load_retained_manifest: finalServices.value.dependencies.load_retained_manifest! },

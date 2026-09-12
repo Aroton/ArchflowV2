@@ -305,11 +305,11 @@ function reviewSubsteps(snapshot: SemanticStatusSnapshotV1): readonly SemanticSu
     authenticatedSemanticReviewContinuation(state, "review-enter");
     return Object.freeze(["review-run"]);
   }
-  if (state.step === "counter_review" && state.status === "succeeded" && snapshot.full_findings.length === 0) {
+  if (state.step === "counter_review" && state.status === "succeeded" && snapshot.review_reports === undefined && snapshot.full_findings.length === 0) {
     authenticatedSemanticReviewContinuation(state, "review-run");
     return Object.freeze(["review-empty-triage"]);
   }
-  if (state.step === "triage" && state.status === "running" && snapshot.full_findings.length === 0) {
+  if (state.step === "triage" && state.status === "running" && snapshot.review_reports === undefined && snapshot.full_findings.length === 0) {
     authenticatedSemanticTriageContinuation(state);
     return Object.freeze(["review-empty-triage"]);
   }
@@ -402,7 +402,7 @@ function requestFacts(
       return { execution: "compose-request", facts: { kind: "triage", intent_id: intentId, dispositions: [] } };
     case "triage":
       if (submission?.kind !== "triage") throw new TypeError("validated triage is unavailable");
-      return { execution: "compose-request", facts: { kind: "triage", intent_id: intentId, dispositions: submission.dispositions } };
+      return { execution: "compose-request", facts: { kind: "triage", intent_id: intentId, ...("response" in submission ? { response: submission.response } : { dispositions: submission.dispositions }) } };
     case "reopen":
       return { execution: "compose-request" };
     case "decide":
@@ -778,7 +778,7 @@ async function executeReviewAction(
     ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
     assertCompletedReviewSubstep(snapshot, initial.operation_digest, "review-run");
     const postReview = projectSemanticStatus(snapshot, initial.invocation).view;
-    if (snapshot.full_findings.length > 0) {
+    if (snapshot.review_reports !== undefined || snapshot.full_findings.length > 0) {
       if (postReview.next_action.kind !== "triage") throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "review findings did not land at the triage actor boundary");
       return postReview;
     }

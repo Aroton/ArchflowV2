@@ -285,7 +285,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
-    const h = semanticJourneyHarness(workspace);
+    const h = semanticJourneyHarness(workspace, false);
     const invocation = {
       skill: "archflow-prd",
       intent: "resume",
@@ -319,7 +319,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
-    const h = semanticJourneyHarness(workspace);
+    const h = semanticJourneyHarness(workspace, false);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     const atReview = await reachReviewOffer(workspace, h);
 
@@ -327,7 +327,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
     expect(reviewed.value.findings ?? []).toEqual([]);
-    expect(reviewed.value.next_action, JSON.stringify(reviewed.value)).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(reviewed.value.next_action, JSON.stringify(reviewed.value)).toMatchObject({ kind: "triage", expected_submission: "triage" });
 
     // The retained evidence records the substitute that actually reviewed and the pin it
     // displaced, with the human's reason for the substitution.
@@ -373,7 +373,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     });
     workspaces.push(workspace);
     restorers.push(installCrashingReviewStub(workspace.root, 1));
-    const h = semanticJourneyHarness(workspace);
+    const h = semanticJourneyHarness(workspace, false);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     const atReview = await reachReviewOffer(workspace, h);
 
@@ -413,7 +413,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     // The recovery stayed on the operation the crashed apply authenticated.
     expect(parseSemanticSubstepIntentId(state.last_transition!.intent_id)).toMatchObject({
       operation_digest: boundaryIdentity.operation_digest,
-      substep: "review-empty-triage",
+      substep: "review-run",
     });
   });
 
@@ -423,7 +423,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     });
     workspaces.push(workspace);
     restorers.push(installCrashingReviewStub(workspace.root, 1));
-    const h = semanticJourneyHarness(workspace);
+    const h = semanticJourneyHarness(workspace, false);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     const atReview = await reachReviewOffer(workspace, h);
 
@@ -441,7 +441,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     expect(resent.ok, JSON.stringify(resent)).toBe(true);
     if (!resent.ok) return;
     expect(resent.value.findings ?? []).toEqual([]);
-    expect(resent.value.next_action, JSON.stringify(resent.value)).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    expect(resent.value.next_action, JSON.stringify(resent.value)).toMatchObject({ kind: "triage", expected_submission: "triage" });
 
     expect(launchedModels(workspace)).toEqual([
       SUBSTITUTION["counter-reviewer"].model,
@@ -463,7 +463,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     // identity the crashed apply had already authenticated.
     expect(parseSemanticSubstepIntentId(state.last_transition!.intent_id)).toMatchObject({
       operation_digest: boundaryIdentity.operation_digest,
-      substep: "review-empty-triage",
+      substep: "review-run",
     });
   });
   it("retries only the child that failed when its siblings' outputs were valid", async () => {
@@ -472,7 +472,7 @@ describe("reviewer route substitution through the public apply path", { timeout:
     });
     workspaces.push(workspace);
     restorers.push(installCrashingReviewStub(workspace.root, 1, { failing_role: "adjudication", log_all_roles: true }));
-    const h = semanticJourneyHarness(workspace);
+    const h = semanticJourneyHarness(workspace, false);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     const atReview = await reachReviewOffer(workspace, h);
 

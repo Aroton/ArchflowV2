@@ -1,3 +1,5 @@
+import type { ReviewResponse } from "../contracts/triage.js";
+import { reviewFindings } from "../contracts/review.js";
 import { readFile } from "node:fs/promises";
 import type { SafeInteger } from "../contracts/evidence.js";
 import { join, posix } from "node:path";
@@ -651,6 +653,7 @@ export type PriorTriageDisposition = Readonly<Record<string, unknown> & {
  * audit and review-strength accounting.
  */
 export type PriorTriageRecord = Readonly<{
+  response?: ReviewResponse;
   phase_instance: PhaseInstanceId;
   current_attempt: SafeInteger;
   dispositions: readonly PriorTriageDisposition[];
@@ -701,7 +704,7 @@ export async function loadPriorTriageRecord(
         evidence_digest: manifest.artifact_digest,
         evidence: manifest.source_artifact.evidence,
       });
-      for (const finding of manifest.source_artifact.evidence.findings) {
+      for (const finding of reviewFindings(manifest.source_artifact.evidence)) {
         const display = reviewFindingDisplayDetail(finding);
         findingsByRef.set(`${manifest.artifact_digest}:${finding.finding_id}`, {
           ...(manifest.source_artifact.evidence.schema_version !== "1" && "claim_type" in finding
@@ -737,6 +740,7 @@ export async function loadPriorTriageRecord(
   return ok(Object.freeze({
     phase_instance: state.phase_instance,
     current_attempt: state.attempt,
+    ...(triageSource.evidence.response === undefined ? {} : { response: triageSource.evidence.response }),
     dispositions: Object.freeze(accepted),
     current: Object.freeze(accepted.map((disposition) => Object.freeze({
       ...(typeof disposition.review_evidence_digest === "string"
@@ -755,7 +759,14 @@ export async function loadPriorTriageRecord(
 export function priorTriageContextEntry(
   record: PriorTriageRecord,
   owns?: (findingId: string) => boolean,
+  reviewerId?: string,
 ): PinnedContextEntry {
+  if (record.response !== undefined) {
+    const source = record.source_review?.evidence;
+    const reports = source?.schema_version === "4" ? [...(source.previous_reports ?? []), ...source.reports].filter(report => reviewerId === undefined || report.reviewer_id === reviewerId) : [];
+    const requests = record.response.decision === "revise" ? record.response.reviewers.filter(reviewer => reviewerId === undefined || reviewer.reviewer_id === reviewerId) : [];
+    return pinnedContextEntry("prior-triage", "prior-round-response", new TextEncoder().encode(JSON.stringify({ previous_reports: reports, revision_summary: record.response.rationale, verification_requests: requests })));
+  }
   const accepted = record.dispositions.filter((disposition) => disposition.disposition === "accepted");
   const dispositions = owns === undefined
     ? accepted
@@ -785,7 +796,7 @@ export async function priorTriageEvidence(
     : await loadPriorTriageRecord(dependencies, state);
   if (!record.ok) return record;
   return ok(Object.freeze(
-    record.value === undefined || record.value.dispositions.length === 0
+    record.value === undefined || (record.value.response === undefined && record.value.dispositions.length === 0)
       ? []
       : [priorTriageContextEntry(record.value)],
   ));

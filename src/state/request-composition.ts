@@ -1,3 +1,5 @@
+import { reviewResponseSchema } from "../contracts/triage.js";
+import { reviewFindings } from "../contracts/review.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -110,6 +112,7 @@ const PAYLOAD_SHAPE =
   '"document"?:{...},"implementation"?:{...},' +
   '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
+  '"response"?:{"decision":"finish"|"revise"|"escalate","rationale":<text>,"reviewers"?:[{"reviewer_id":<id>,"request":<verification request>}]},' +
   '"summary"?:<gate summary text>,' +
   '"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},' +
   '"route_override"?:{"reason":<why the selected reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"test-reviewer"?:{...},"adjudicator"?:{...}},' +
@@ -509,7 +512,7 @@ async function composeTriage(
   if (legalRunStepStatus(state, "triage") !== "succeeded") {
     return transitionInvalid(state, "triage-succeeded");
   }
-  if (!Array.isArray(snapshot.dispositions)) {
+  if (!Array.isArray(snapshot.dispositions) && snapshot.response === undefined) {
     throw new TypeError('build-request triage facts require "dispositions": one entry per current finding');
   }
   const loadRetainedManifest = services.dependencies.load_retained_manifest;
@@ -551,11 +554,26 @@ async function composeTriage(
     }
   }
 
+  if (snapshot.response !== undefined) {
+    const response = reviewResponseSchema.parse(snapshot.response);
+    const candidate = parseTriageCandidate({
+      schema_version: "1", task_id: services.authority.task_id, phase_instance: state.phase_instance,
+      step: "triage", subject_digest: derived.subject_digest, input_fingerprint: derived.input_fingerprint,
+      current_evidence_set_digest: derived.current_evidence_set.set_digest,
+      source_evidence_digests: derived.current_evidence_set.slots.map(slot => slot.evidence_digest),
+      response, dispositions: [], accepted_count: 0, rejected_count: 0,
+      accepted_editorial_count: 0, escalated_human_count: 0, deferred_count: 0,
+    });
+    return computeCallEnvelope(services, { tool: "archflow_state", input: {
+      ...mechanicalInput(services, state, intentId), phase_instance: state.phase_instance, step: "triage", status: "succeeded",
+      artifact: { schema_version: "1", artifact_kind: "triage", evidence: candidate as unknown as PlainJsonValue },
+    } });
+  }
   const digestsByFindingId = new Map<string, string[]>();
   const expected = new Set<string>();
   const substantive = new Set<string>();
   for (const reviewRef of derived.reviews) {
-    for (const finding of reviewRef.evidence.findings) {
+    for (const finding of reviewFindings(reviewRef.evidence)) {
       const key = `${reviewRef.evidence_digest}:${finding.finding_id}`;
       expected.add(key);
       if (isSubstantiveClaim(finding)) substantive.add(key);
@@ -565,7 +583,7 @@ async function composeTriage(
     }
   }
 
-  const dispositions: TriageDisposition[] = snapshot.dispositions.map((entry, index) => {
+  const dispositions: TriageDisposition[] = (snapshot.dispositions as unknown[]).map((entry, index) => {
     const item = record(entry, `triage disposition ${index}`);
     const findingId = String(item.finding_id ?? "");
     const candidates = digestsByFindingId.get(findingId);

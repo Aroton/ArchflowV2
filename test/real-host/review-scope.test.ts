@@ -20,8 +20,7 @@ import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import {
-  parseGeneralReviewOutputV3,
-  parseTestReviewOutputV3,
+  readableReviewReport,
 } from "../../src/contracts/review.js";
 import { CliAdapterError, preflightAdapter, serializeDispatch } from "../../src/dispatch/cli.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
@@ -205,29 +204,10 @@ describe.skipIf(!enabled)("real-host reviewer-owned evidence scope", () => {
         });
         const generalResult = await dispatchOrSkip(context, () => serializeDispatch(() =>
           dispatch(generalRoute, generalEnvelope, reviewOutputSchema as PlainJsonValue)));
-        const expectedUpstreamDigests = generalAssignment.expected_upstream_digests;
-        if (expectedUpstreamDigests === undefined) {
-          throw new TypeError("primary general scope probe must own upstream alignment");
-        }
-        const general = parseGeneralReviewOutputV3(
-          JSON.parse(decoder.decode(generalResult.extracted_output_bytes)),
-          {
-            criterion_ids: generalAssignment.criterion_ids,
-            expected_upstream_digests: expectedUpstreamDigests,
-          },
-        );
-        expect(general.schema_version).toBe("3");
-        expect(general.upstream_alignment).toEqual([]);
-        expect(general.findings.every((finding) => generalAssignment.criterion_ids.includes(finding.criterion_id))).toBe(true);
-        const findings = general.findings.map((finding) =>
-          `${finding.finding_id} ${finding.summary} ${finding.evidence} ${finding.suggested_resolution}`.toLowerCase());
-
-        expect(findings.some((finding) =>
-          finding.includes("format-count") &&
-          ["summary", "touppercase", "call site", "consumer", "string operation", "interface"]
-            .some((term) => finding.includes(term))), JSON.stringify(general.findings)).toBe(true);
-        expect(findings.some((finding) =>
-          finding.includes("legacy-auth") || finding.includes("always grants access")), JSON.stringify(general.findings)).toBe(false);
+        const generalReport = readableReviewReport(JSON.parse(decoder.decode(generalResult.extracted_output_bytes))).toLowerCase();
+        expect(generalReport).toContain("format-count");
+        expect(["summary", "touppercase", "call site", "consumer", "string operation", "interface"].some(term => generalReport.includes(term)), generalReport).toBe(true);
+        expect(generalReport.includes("legacy-auth") || generalReport.includes("always grants access"), generalReport).toBe(false);
 
         const testAssignment = reviewAssignment("test", "tests", "phase-impl", selectedRubric.rubric);
         const testEnvelope = buildReviewEnvelope({
@@ -244,19 +224,9 @@ describe.skipIf(!enabled)("real-host reviewer-owned evidence scope", () => {
         });
         const testResult = await dispatchOrSkip(context, () => serializeDispatch(() =>
           dispatch(testRoute, testEnvelope, reviewOutputSchema as PlainJsonValue)));
-        const testReview = parseTestReviewOutputV3(
-          JSON.parse(decoder.decode(testResult.extracted_output_bytes)),
-          { criterion_ids: testAssignment.criterion_ids },
-        );
-        expect(testReview.schema_version).toBe("3");
-        expect(testReview.findings.length).toBeGreaterThan(0);
-        expect(testReview.findings.every((finding) =>
-          testAssignment.criterion_ids.includes(finding.criterion_id))).toBe(true);
-        expect(testReview.findings.every((finding) =>
-          finding.required_behavior_or_risk_boundary.trim().length > 0 &&
-          finding.coverage_or_oracle_problem.trim().length > 0 &&
-          finding.consequence.trim().length > 0 &&
-          finding.proposed_verification_change.trim().length > 0)).toBe(true);
+        const testReport = readableReviewReport(JSON.parse(decoder.decode(testResult.extracted_output_bytes)));
+        expect(testReport.trim().length).toBeGreaterThan(0);
+        expect(testReport.toLowerCase()).toMatch(/test|assert|coverage|regression/u);
 
         const ruleSlots: readonly AdjudicationRuleSlotV1[] = Object.freeze([
           Object.freeze({ slot: "scope-b", rule_id: "consumer-compatibility", rule_version: 1 }),

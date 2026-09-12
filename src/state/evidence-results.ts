@@ -1,3 +1,4 @@
+import { reviewFindings } from "../contracts/review.js";
 import {
   canonicalDocument,
   canonicalJsonDigest,
@@ -264,13 +265,13 @@ export async function computeDispositionLedger(
       }
     }
   }
-  const findingDetails = new Map<string, ReviewEvidence["findings"][number]>();
+  const findingDetails = new Map<string, ReturnType<typeof reviewFindings>[number]>();
   if (sources.review_ref !== undefined) {
     const review = await loadRetainedResult(sources.review_ref);
     if (review.ok) {
       const manifest = review.value.prepared.manifest.value;
       if (manifest.source_artifact.artifact_kind === "review-evidence") {
-        for (const finding of manifest.source_artifact.evidence.findings) {
+        for (const finding of reviewFindings(manifest.source_artifact.evidence)) {
           findingDetails.set(`${manifest.artifact_digest}:${finding.finding_id}`, finding);
         }
       }
@@ -366,7 +367,7 @@ export async function computeDispositionLedger(
 async function triageLedgerFrom(
   input: PrepareEvidenceResultInput,
 ): Promise<readonly TriageDispositionLedgerEntry[] | undefined> {
-  if (input.value.kind !== "triage" || input.disposition_ledger === undefined) return undefined;
+  if (input.value.kind !== "triage" || input.disposition_ledger === undefined || input.value.evidence.response !== undefined) return undefined;
   if (input.load_retained_result === undefined) {
     throw new TypeError("disposition ledger sources require a retained-result loader");
   }

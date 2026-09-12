@@ -1981,6 +1981,219 @@
           ],
           "additionalProperties": false
         },
+        "review_reports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "report": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "previous_review_reports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "report": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "partial_review_reports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "report": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "review_response": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string",
+                  "const": "finish"
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "decision",
+                "rationale"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string",
+                  "const": "escalate"
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "decision",
+                "rationale"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string",
+                  "const": "revise"
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reviewers": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "reviewer_id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "request": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "reviewer_id",
+                      "request"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "decision",
+                "rationale",
+                "reviewers"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
         "implementation_recommendation": {
           "$ref": "#/$defs/implementationRecommendation"
         },
@@ -2834,11 +3047,91 @@
                   }
                 ]
               }
+            },
+            "response": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string",
+                      "const": "finish"
+                    },
+                    "rationale": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "rationale"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string",
+                      "const": "escalate"
+                    },
+                    "rationale": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "rationale"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string",
+                      "const": "revise"
+                    },
+                    "rationale": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "reviewers": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "reviewer_id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "request": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "reviewer_id",
+                          "request"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "rationale",
+                    "reviewers"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             }
           },
           "required": [
-            "kind",
-            "dispositions"
+            "kind"
           ],
           "additionalProperties": false
         },
@@ -3567,6 +3860,219 @@
         "rounds"
       ],
       "additionalProperties": false
+    },
+    "review_reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subject_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effort": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reviewer_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "focus": {
+            "type": "string",
+            "enum": [
+              "general",
+              "tests"
+            ]
+          },
+          "report": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "subject_digest",
+          "model",
+          "effort",
+          "reviewer_id",
+          "focus",
+          "report"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "previous_review_reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subject_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effort": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reviewer_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "focus": {
+            "type": "string",
+            "enum": [
+              "general",
+              "tests"
+            ]
+          },
+          "report": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "subject_digest",
+          "model",
+          "effort",
+          "reviewer_id",
+          "focus",
+          "report"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "partial_review_reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subject_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effort": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reviewer_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "focus": {
+            "type": "string",
+            "enum": [
+              "general",
+              "tests"
+            ]
+          },
+          "report": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "subject_digest",
+          "model",
+          "effort",
+          "reviewer_id",
+          "focus",
+          "report"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "review_response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "finish"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "decision",
+            "rationale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "escalate"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "decision",
+            "rationale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "revise"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reviewers": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "reviewer_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "request": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "reviewer_id",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "decision",
+            "rationale",
+            "reviewers"
+          ],
+          "additionalProperties": false
+        }
+      ]
     },
     "implementation_recommendation": {
       "$ref": "#/$defs/implementationRecommendation"

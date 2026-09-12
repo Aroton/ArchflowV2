@@ -182,13 +182,13 @@ export type ReviewEnvelopeSeed = Readonly<
  * Both are server-owned so caller prose cannot enter the instruction channel.
  */
 export const REVIEW_INSTRUCTION =
-  "You are the independent counter-reviewer for the artifact in this envelope. Read the whole artifact and every pinned context entry before judging anything; the pinned approved upstream documents state what the artifact must satisfy. Be contentious: actively seek counterexamples across stated assumptions, edge conditions, lifecycle transitions, ordering, recovery, resource and latency bounds, and cross-section arithmetic. Trace each stated constant, budget, invariant, interface claim, and policy into every other section that depends on it and check that they jointly hold; recompute derived figures rather than accepting them; verify repository and interface claims against the pinned evidence and the read-only repository view when one is provided; follow each stated property through the inputs and lifecycle events the system will actually meet. Frame your evaluation around the finite question: 'What would break in production or fail execution?' A suspicion is welcome only when it names a plausible material consequence and a concrete settling observation; 'cost-free' means it is not suppressed for low confidence, not that speculative noise bypasses materiality. A true observation or discrepancy that does not change downstream implementation, break an approved boundary, or alter verification is not a defect and must not be reported. Only after that pass apply the rubric's materiality bar to decide what to report. Every finding cites the exact evidence and names its concrete consequence. Return the structured result the output schema describes and nothing else.";
+  "Review the submitted work using the artifact, relevant context, and repository view. Explain consequential concerns and supporting evidence in readable prose. Concentrate on what could break or prevent the intended outcome; exercise judgment about which investigations are worth the effort. Prefer a JSON object with one report string. No particular finding fields, taxonomy, identifiers, or ordering are required. If there are no consequential concerns, say so.";
 
 export const GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION =
-  "This is the general review assignment. Assess only the criteria present in rubric.criteria and return only general findings for those criteria. Do not report test-review, constitution, effort, or server-attribution findings. When assignment.expected_upstream_digests is present, return the exact approved-upstream alignment census it names, including an empty census for an empty list. When assignment.legacy_confirmations is present, confirm exactly those archived findings through the separate legacy confirmation channel.";
+  "Focus on the changed work and its intended behavior. Treat rubric criteria as guidance. Discuss consequential departures from the governing plan as ordinary feedback.";
 
 export const TEST_REVIEW_ASSIGNMENT_INSTRUCTION =
-  "This is the test review assignment. Assess only the criteria present in rubric.criteria and return only test-coverage findings for those criteria. Do not prescribe production-code, architecture, constitution, drift, effort, authority, or server-attribution changes. When assignment.legacy_confirmations is present, confirm exactly those archived test findings through the separate legacy confirmation channel.";
+  "Focus on whether tests and verification provide useful confidence in the changed behavior. Explain important coverage or oracle problems and practical improvements.";
 
 export const RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION =
   "This is a responsibility-only remediation assignment. rubric.criteria is empty, so ordinary findings are forbidden and findings must be empty. When assignment.expected_upstream_digests is present, return its exact complete alignment census; that census is the entire alignment deliverable. When assignment.legacy_confirmations is present, return exactly those confirmation results through the legacy confirmation channel; an unresolved confirmation stays in that channel under its assigned criterion. Do not return an unverifiable, escalate, or other ordinary finding. Read the artifact and pinned context only to complete these exact responsibilities, never as a new full review.";
@@ -202,7 +202,7 @@ export const REVIEW_TAXONOMY_INSTRUCTION =
 
 /** Review framing used only for implementation outputs. */
 export const IMPLEMENTATION_REVIEW_INSTRUCTION =
-  "Review only the implementation output declared by this phase: its added, modified, deleted, and renamed paths; its co-produced documents; and the current post-change behavior of those outputs. Use unchanged files, repository snapshots, pinned context, and dependencies only to verify how a declared output behaves or connects to an existing interface. They are evidence, not additional review subjects. Be contentious: actively seek counterexamples, boundary failures, latency or resource cliffs, and invalid assumptions introduced by the declared outputs. Do not report a pre-existing or unrelated defect. Every finding must name the declared output that introduced, exposed, or materially worsened the defect and explain the current concrete consequence. This is a phase-change review, not a general code review. Apply the rubric's materiality bar and return only the structured result the output schema describes.";
+  "Review the implementation output declared by this phase and its current behavior. Use unchanged files only as supporting evidence. Focus on consequential problems introduced, exposed, or materially worsened by the changes; this is not a general code review. Explain your feedback in readable prose, preferably as a JSON object with one report string. If there are no consequential concerns, say so.";
 
 /**
  * The fixed remediation instruction the envelope adds as `instructions.prior_triage` when a
@@ -210,7 +210,7 @@ export const IMPLEMENTATION_REVIEW_INSTRUCTION =
  * between initial and later rounds.
  */
 export const PRIOR_TRIAGE_INSTRUCTION =
-  "This is a remediation review, not a new full review. The pinned prior-triage record contains only the latest accepted findings assigned to you. Verify each revision intent against the current artifact. Report an accepted finding only when its intent was not carried out. Report a new finding only when the remediation change itself introduced, exposed, or materially worsened a substantive defect, risk, or gap in the changed content or a directly dependent section. Do not revisit completed findings, inspect unrelated unchanged content, or apply the full rubric as a new sweep. If evidence needed for this confirmation is missing, one scoped unverifiable- or escalate- finding is allowed. Otherwise, when every intent is satisfied and no remediation regression exists, return no findings.";
+  "Verify the revisions using your earlier feedback and the working AI's verification request. Explain what is resolved and any consequential remaining concerns or regressions from the changes. Do not repeat a full review or reopen unrelated issues.";
 
 /** Additional constitution-review scope when the artifact is an implementation output. */
 export const CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION =
@@ -702,7 +702,6 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
   } as const;
 
   const context = validateContext(snapshot.context);
-  const responsibilityOnly = assignment !== undefined && assignment.criterion_ids.length === 0;
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
@@ -713,22 +712,9 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
     instructions: {
-      review: responsibilityOnly
-        ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION
-        : parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
-      taxonomy: REVIEW_TAXONOMY_INSTRUCTION,
-      ...(assignment === undefined
-        ? {}
-        : { assignment: responsibilityOnly
-          ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION
-          : assignment.focus === "general"
-            ? GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION
-            : TEST_REVIEW_ASSIGNMENT_INSTRUCTION }),
-      ...(context.some((entry) => entry.kind === "prior-triage")
-        ? { prior_triage: responsibilityOnly
-          ? RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION
-          : PRIOR_TRIAGE_INSTRUCTION }
-        : {}),
+      review: parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
+      ...(assignment === undefined ? {} : { assignment: assignment.focus === "tests" ? TEST_REVIEW_ASSIGNMENT_INSTRUCTION : GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION }),
+      ...(context.some(entry => entry.kind === "prior-triage") ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION } : {}),
     },
     ...(workspace === undefined ? {} : { workspace }),
     subject: validateSubject(snapshot.subject),

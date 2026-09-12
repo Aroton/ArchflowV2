@@ -267,6 +267,7 @@ describe("deterministic fake-CLI review corpus", () => {
           expected_upstream_digests: [],
         },
       });
+    if (result.evidence.schema_version === "4") throw new Error("this fixture exercises archived review output");
       expect(result.evidence.verdict).toBe(scenario.expected_verdict);
       expect(result.evidence.model_family).toBe(reviewer);
       expect(result.evidence.producer_family).toBe(scenario.producer_family);

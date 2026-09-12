@@ -1,3 +1,4 @@
+import { reviewReportOutputSchema } from "../contracts/review.js";
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { canonicalJsonBytes } from "../contracts/canonical.js";
@@ -6,8 +7,6 @@ import type { HostIdentity } from "../contracts/hosts.js";
 import { safeIdV1Schema } from "../contracts/evidence.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import {
-  createGeneralReviewOutputV3Schema,
-  createTestReviewOutputV3Schema,
   type AdapterId,
   type ModelFamily,
   type ReviewedRepositoryV1,
@@ -249,30 +248,10 @@ export function projectCliOutputSchema(
   subject?: Readonly<Record<string, PlainJsonValue>>,
   assignment?: ReviewAssignmentV1,
 ): PlainJsonValue {
-  const roleSpecificSchema = resultKind === "review" && assignment !== undefined
-    ? assignment.focus === "general"
-      ? createGeneralReviewOutputV3Schema({
-          criterion_ids: assignment.criterion_ids,
-          ...(assignment.expected_upstream_digests === undefined
-            ? {}
-            : { expected_upstream_digests: assignment.expected_upstream_digests }),
-          ...(assignment.legacy_confirmations === undefined
-            ? {}
-            : { legacy_confirmations: assignment.legacy_confirmations }),
-        })
-      : createTestReviewOutputV3Schema({
-          criterion_ids: assignment.criterion_ids,
-          ...(assignment.legacy_confirmations === undefined
-            ? {}
-            : { legacy_confirmations: assignment.legacy_confirmations }),
-        })
-    : undefined;
-  // Zod attaches a non-enumerable `~standard` implementation marker to schemas emitted from a
-  // refined runtime factory. Round-trip the internally generated document through its JSON form
-  // before applying the plain-JSON boundary; only the enumerable JSON Schema is transport data.
-  const roleSpecific = roleSpecificSchema === undefined
-    ? outputSchema
-    : JSON.parse(JSON.stringify(roleSpecificSchema.toJSONSchema({ target: "draft-2020-12" }))) as unknown;
+  if (resultKind === "review" && assignment !== undefined) {
+    return JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" })));
+  }
+  const roleSpecific = outputSchema;
   assertPlainJson(roleSpecific, "CLI output schema");
   const snapshot = structuredClone(roleSpecific);
   const projected = projectSchemaNode(snapshot, adapter);

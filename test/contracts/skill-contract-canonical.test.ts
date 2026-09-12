@@ -152,51 +152,19 @@ describe("canonical skill contracts", () => {
     }
   });
 
-  it("rejects envelope gaps and keeps non-material findings out of human approval", () => {
+
+
+
+  it("passes reports to the working AI and requests only useful verification", () => {
     for (const name of producerSkills) {
       const source = skill(name);
-      expect(source).toContain("`unverifiable-`");
-      expect(source).toContain("`envelope-gap: `");
-      expect(source).toContain("not a backlog-triage meeting");
-      expect(source).toContain("rejected non-material");
-    }
-  });
-
-  it("triages review findings as falsifiable claims with consequential stopping", () => {
-    for (const name of producerSkills) {
-      const source = skill(name);
-      expect(source).toContain("finding as a claim");
-      expect(source).toContain("`claim_type`");
-      expect(source).toContain("`confidence`");
-      expect(source).toContain("`falsifier`");
-      expect(source).toContain("run every feasible falsifier");
-      expect(source).toContain("Suspicion does not lower the evidence bar");
-      for (const disposition of ["`accepted`", "`accepted-editorial`", "`rejected`", "`escalated-human`", "`deferred`"]) {
-        expect(source, `${name} omits disposition ${disposition}`).toContain(disposition);
-      }
-      for (const rejection of ["invalid", "falsified", "speculative", "inconsequential", "unrelated", "unaffected pre-existing", "optional cleanup", "preferred alternatives"]) {
-        expect(source, `${name} omits rejection class ${rejection}`).toContain(rejection);
-      }
-      expect(source).toContain("Consequential Stopping Rule");
-      expect(source).toMatch(/`escalated-human` only for a material judgment.*unresolved/su);
-      expect(source).toMatch(/`deferred` only for a real, non-defect, non-material concern owned by a named later boundary/su);
-      expect(source).toContain("never defer a V2 defect or anything that blocks legacy behavior");
-      expect(source).toContain("taxonomy and falsifier, not an ID prefix alone");
-      expect(source).toContain("Never edit an upstream, parent, or governing document, or create cosmetic churn, solely to pacify reviewer opinion");
-    }
-  });
-
-  it("separates editorial handling at document approval from phase review", () => {
-    for (const name of ["archflow-prd", "archflow-design"] as const) {
-      const source = skill(name);
-      expect(source).toMatch(/`accepted-editorial` change is meaning-preserving/su);
-      expect(source).toContain("may reuse the prior review for one hop");
-      expect(source).toContain("requires human approval of the final bytes");
-    }
-    for (const name of ["archflow-phase-design", "archflow-phase-impl"] as const) {
-      const source = skill(name);
-      expect(source).toMatch(/server refuses `accepted-editorial`/u);
-      expect(source).toContain("any accepted byte change uses `accepted` and the full production-and-review cycle");
+      expect(source).toContain("`review_reports`");
+      expect(source).toContain('"decision":"finish"');
+      expect(source).toContain('decision:"revise"');
+      expect(source).toContain('decision:"escalate"');
+      expect(source).toContain("Do not add another AI call");
+      expect(source).toContain("agreement on every suggestion is unnecessary");
+      expect(source).toContain("separate no-submission `revise`");
     }
   });
 
@@ -250,19 +218,6 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("silently applies its rubric");
   });
 
-  it("keeps review triage on the submitted subject instead of the whole repository", () => {
-    for (const name of producerSkills) {
-      const source = skill(name);
-      expect(source).toContain("review subject");
-      expect(source).toMatch(/repository snapshots.*evidence/u);
-      expect(source).toMatch(/pre-existing defects?/u);
-      expect(source).toContain("introduced, exposed, or materially worsened");
-    }
-    const implementation = skill("archflow-phase-impl");
-    expect(implementation).toContain("declared add, modify, delete, and rename outputs");
-    expect(implementation).toContain("current post-change behavior");
-    expect(implementation).toContain("this is not a general code review");
-  });
 
   it("persists PRD clarification dialogue in the pinned ask record", () => {
     const source = skill("archflow-prd");

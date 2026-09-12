@@ -378,7 +378,7 @@ describe("counter-review pinned context integration", () => {
     const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("ask-pinned"));
     expect(result).toMatchObject({
       schema_version: "1", ok: true, value: {
-        verdict: "pass",
+        reports: expect.any(Array),
         // With zero active rules the server itself decides the constitution review is not run,
         // and the merged success says so explicitly instead of omitting the field.
         constitution: { status: "not-run", reason: "no-active-constitution-rules" },
@@ -422,7 +422,7 @@ Future tasks should use this revised policy.
     );
     expect(result).toMatchObject({
       schema_version: "1", ok: true, value: {
-        verdict: "pass",
+        reports: expect.any(Array),
         constitution: { status: "not-run", reason: "no-active-constitution-rules" },
       },
     });
@@ -458,25 +458,23 @@ Future tasks should use this revised policy.
     activateFixtureCli(h);
 
     const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("ask-undeclared"));
-    expect(result, JSON.stringify(result)).toMatchObject({ schema_version: "1", ok: true, value: { verdict: "pass" } });
+    expect(result, JSON.stringify(result)).toMatchObject({ schema_version: "1", ok: true, value: { reports: expect.any(Array) } });
     const context = capturedEnvelope(h.envelopePath).context;
     expect(context).toHaveLength(1);
     expect(context[0]).toMatchObject({ kind: "user-ask", label: "ask.md", status: "unavailable" });
   });
 
-  it("pins one approved upstream and attests its exact nonzero alignment census with no active rules", async () => {
+  it("pins approved upstream context without requiring an alignment census", async () => {
     const h = await fixture({ phase: "design", approveUpstream: true });
     activateFixtureCli(h);
 
     const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("upstream-pinned"));
-    expect(result, JSON.stringify(result)).toMatchObject({ schema_version: "1", ok: true, value: { verdict: "pass" } });
+    expect(result, JSON.stringify(result)).toMatchObject({ schema_version: "1", ok: true, value: { reports: expect.any(Array) } });
     if (!result.ok) return;
     const evidence = retainedReviewEvidence(h.repository.path);
-    if (evidence.schema_version !== "3") throw new Error("fresh Review V3 evidence unavailable");
-    const primary = evidence.reviewer_runs.find((run) => run.reviewer_id === "general");
-    expect(evidence.upstream_alignment).toHaveLength(1);
-    expect(evidence.upstream_alignment?.map((entry) => entry.upstream_digest))
-      .toEqual(primary?.expected_upstream_digests);
+    if (evidence.schema_version !== "4") throw new Error("fresh report evidence unavailable");
+    expect(evidence.reports).toHaveLength(1);
+    expect(evidence).not.toHaveProperty("upstream_alignment");
     const envelope = capturedEnvelope(h.envelopePath);
     expect(envelope.workspace).toMatchObject({
       kind: "read-only-repository-checkout",
@@ -555,7 +553,7 @@ Future tasks should use this revised policy.
     expect(() => readFileSync(h.envelopePath)).toThrow();
   });
 
-  it("reviews an imported migration upstream with a nonzero census and no active rules", async () => {
+  it("reviews an imported migration upstream as pinned context without a census", async () => {
     const h = await fixture({ phase: "design" });
     activateFixtureCli(h);
     const statePath = join(h.repository.path, `.archflow/tasks/${TASK}/state.json`);
@@ -610,16 +608,15 @@ Future tasks should use this revised policy.
     expect(result, JSON.stringify(result)).toMatchObject({
       ok: true,
       value: {
-        verdict: "pass",
+        reports: expect.any(Array),
         constitution: { status: "not-run", reason: "no-active-constitution-rules" },
-        alignment: { status: "evaluated", drift: "aligned", upstream_count: 1 },
       },
     });
     if (!result.ok) return;
     const evidence = retainedReviewEvidence(h.repository.path);
     expect(evidence).toMatchObject({
-      schema_version: "3",
-      upstream_alignment: [expect.objectContaining({ drift: "aligned" })],
+      schema_version: "4",
+      reports: [expect.objectContaining({ reviewer_id: "general" })],
     });
   });
 

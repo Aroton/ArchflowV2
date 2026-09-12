@@ -1,3 +1,5 @@
+import type { ReviewResponse } from "../contracts/triage.js";
+import { reviewFindings } from "../contracts/review.js";
 import { readDispatchRecovery } from "../dispatch/recovery.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -142,6 +144,7 @@ type StatusEvidence = Readonly<{
   assessment?: EvidenceAssessment;
 }> | Readonly<{
   available: true;
+  response?: ReviewResponse;
   subject_digest: Sha256Digest;
   current_evidence: CurrentEvidenceSetRef;
   /**
@@ -152,7 +155,7 @@ type StatusEvidence = Readonly<{
    * mislabelling a current finding. Gate presentation reads this to show the human which
    * substantive findings were rejected as immaterial rather than fixed.
    */
-  findings: readonly Readonly<ReviewEvidence["findings"][number] & {
+  findings: readonly Readonly<ReturnType<typeof reviewFindings>[number] & {
     review_evidence_digest: Sha256Digest;
     disposition?: string;
     rationale?: string;
@@ -2074,7 +2077,7 @@ async function computeTaskStatusDetailedInternal(
         }));
       }
     }
-    const findings = derived.reviews.flatMap((review) => review.evidence.findings.map((finding) => {
+    const findings = derived.reviews.flatMap((review) => reviewFindings(review.evidence).map((finding) => {
       const recorded = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
       return Object.freeze({
         ...finding,
@@ -2088,6 +2091,7 @@ async function computeTaskStatusDetailedInternal(
       subject_digest: derived.subject_digest,
       current_evidence: derived.current_evidence_set,
       findings: Object.freeze(findings),
+      ...(recordedTriage?.artifact_kind === "triage" && recordedTriage.evidence.current_evidence_set_digest === derived.current_evidence_set.set_digest && recordedTriage.evidence.response !== undefined ? { response: recordedTriage.evidence.response } : {}),
       counter_review_provenance: Object.freeze({
         assurance: counter.assurance,
         producer_family: counter.producer_family,
@@ -2216,6 +2220,7 @@ async function computeTaskStatusDetailedInternal(
               reviewedRepositories,
               repositories,
             );
+            if (evidence.response?.decision === "escalate") escalatedFindingDetails = [evidence.response.rationale];
             const escalated = evidence.findings.filter((f) => f.disposition === "escalated-human");
             if (escalated.length > 0) {
               escalatedFindingDetails = escalated.map((f) => {

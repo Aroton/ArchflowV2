@@ -3,6 +3,87 @@
   "$id": "urn:archflow:schema:v1:triage",
   "type": "object",
   "properties": {
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "finish"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "decision",
+            "rationale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "escalate"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "decision",
+            "rationale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "const": "revise"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reviewers": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "reviewer_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "request": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "reviewer_id",
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "decision",
+            "rationale",
+            "reviewers"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "schema_version": {
       "type": "string",
       "const": "1"

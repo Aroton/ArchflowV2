@@ -1,3 +1,7 @@
+import { readReceivedFeedback } from "../dispatch/review-feedback.js";
+import type { ReviewReportV1 } from "../contracts/review.js";
+import type { ReviewResponse } from "../contracts/triage.js";
+import { reviewFindings } from "../contracts/review.js";
 import { isDeepStrictEqual } from "node:util";
 
 import { canonicalJsonDigest, type CanonicalDocument } from "../contracts/canonical.js";
@@ -54,6 +58,10 @@ export type SemanticStatusEnrichmentsV1 = Readonly<{
   state_document_digest?: Sha256Digest;
   live_config_digest?: Sha256Digest;
   legacy_import_initialization?: true;
+  review_reports?: readonly ReviewReportV1[];
+  previous_review_reports?: readonly ReviewReportV1[];
+  partial_review_reports?: readonly ReviewReportV1[];
+  review_response?: ReviewResponse;
   full_findings: readonly PublicFindingV1[];
   finding_history?: readonly PublicFindingV1[];
   review_rounds?: readonly PublicReviewRoundV1[];
@@ -307,7 +315,7 @@ function reviewRounds(details: DetailedTaskStatusV1): readonly PublicReviewRound
     const round = roundAt(currentAttempt);
     setVersion(round, current.reviews[0]!.evidence.schema_version === "1" ? "1" : "2", `active review attempt ${currentAttempt}`);
     for (const review of current.reviews) {
-      for (const finding of review.evidence.findings) {
+      for (const finding of reviewFindings(review.evidence)) {
         const disposition = dispositions.get(`${review.evidence_digest}:${finding.finding_id}`);
         round.findings += 1;
         if (disposition !== undefined && isAccepted(disposition)) round.accepted += 1;
@@ -347,7 +355,7 @@ function fullFindings(details: DetailedTaskStatusV1): readonly PublicFindingV1[]
               : Object.freeze({ disposition: disposition.disposition, rationale: disposition.rationale }));
     }
   }
-  return Object.freeze(current.reviews.flatMap((review) => review.evidence.findings.map((finding) =>
+  return Object.freeze(current.reviews.flatMap((review) => reviewFindings(review.evidence).map((finding) =>
     Object.freeze(publicFindingV1Schema.parse({
       ...finding,
       ...(dispositions.get(`${review.evidence_digest}:${finding.finding_id}`) === undefined ? {} : {
@@ -664,6 +672,15 @@ export async function computeAuthoritativeSemanticStatus(
     ...(detailed.value.legacy_import_initialization !== true ? {} : {
       legacy_import_initialization: true,
     }),
+    ...(() => {
+      const source = detailed.value.retained.get("counter_review")?.manifest.source_artifact;
+      if (source?.artifact_kind !== "review-evidence" || source.evidence.schema_version !== "4") return {};
+      const current = status.evidence?.available === true && status.evidence.assessment.current.includes("counter_review");
+      return current ? { review_reports: source.evidence.reports, ...(source.evidence.previous_reports === undefined ? {} : { previous_review_reports: source.evidence.previous_reports }) }
+        : { previous_review_reports: [...(source.evidence.previous_reports ?? []), ...source.evidence.reports] };
+    })(),
+    ...(triageArtifact?.artifact_kind === "triage" && triageArtifact.evidence.response !== undefined ? { review_response: triageArtifact.evidence.response } : {}),
+    ...await (async () => { const reports = state === undefined ? undefined : await readReceivedFeedback(authority, dependencies, state); return reports === undefined ? {} : { partial_review_reports: reports }; })(),
     full_findings: fullFindings(detailed.value),
     finding_history: findingHistory(detailed.value),
     review_rounds: reviewRounds(detailed.value),
@@ -733,6 +750,10 @@ export function computeSemanticStatusSnapshot(
       legacy_import_initialization: true,
     }),
     status: statusJson,
+    ...(enrichments.previous_review_reports === undefined ? {} : { previous_review_reports: enrichments.previous_review_reports }),
+    ...(enrichments.partial_review_reports === undefined ? {} : { partial_review_reports: enrichments.partial_review_reports }),
+    ...(enrichments.review_reports === undefined ? {} : { review_reports: enrichments.review_reports }),
+    ...(enrichments.review_response === undefined ? {} : { review_response: enrichments.review_response }),
     full_findings: Object.freeze(findings),
     finding_history: Object.freeze(history),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) =>

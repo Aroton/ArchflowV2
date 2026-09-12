@@ -305,7 +305,7 @@ describe("CLI invocation construction", () => {
   });
 
   it.each(["claude-cli", "codex-cli", "antigravity-cli"] as const)(
-    "projects a plain strict test-review root with exact assigned criteria for %s",
+    "projects a simple readable report root for %s",
     (adapter) => {
       const projected = projectCliOutputSchema(
         reviewSchema as PlainJsonValue,
@@ -318,19 +318,8 @@ describe("CLI invocation construction", () => {
       expect(projected).not.toHaveProperty("oneOf");
       expect(projected).not.toHaveProperty("anyOf");
       const properties = projected.properties as Record<string, Record<string, unknown>>;
-      expect(Object.keys(properties)).toEqual([
-        "schema_version", "task_id", "phase_instance", "step", "role", "subject_digest",
-        "input_fingerprint", "rubric_digest", "producer_family", "findings",
-      ]);
-      const finding = properties.findings!.items as Record<string, unknown>;
-      expect(Object.keys(finding.properties as Record<string, unknown>)).toEqual([
-        "finding_id", "criterion_id", "claim_type", "confidence", "falsifier",
-        "required_behavior_or_risk_boundary", "coverage_or_oracle_problem", "consequence",
-        "proposed_verification_change",
-      ]);
-      expect((finding.properties as Record<string, unknown>).criterion_id).toMatchObject({
-        enum: ["verification-evidence", "test-quality"],
-      });
+      expect(Object.keys(properties)).toEqual(["report"]);
+      expect(properties.report).toEqual({ type: "string" });
     },
   );
 
@@ -343,8 +332,7 @@ describe("CLI invocation construction", () => {
       { reviewer_id: "general", focus: "general", criterion_ids: [], expected_upstream_digests: [] },
     ) as Record<string, unknown>;
     const alignmentProperties = alignment.properties as Record<string, Record<string, unknown>>;
-    expect(alignmentProperties).toHaveProperty("upstream_alignment");
-    expect(alignmentProperties.findings).toMatchObject({ maxItems: 0 });
+    expect(alignmentProperties).toEqual({ report: { type: "string" } });
 
     const confirmation = projectCliOutputSchema(
       reviewSchema as PlainJsonValue,
@@ -359,8 +347,8 @@ describe("CLI invocation construction", () => {
       },
     ) as Record<string, unknown>;
     const confirmationProperties = confirmation.properties as Record<string, Record<string, unknown>>;
-    expect(confirmationProperties.findings).toMatchObject({ maxItems: 0 });
-    expect(confirmationProperties).toHaveProperty("legacy_confirmations");
+    expect(confirmationProperties.report).toEqual({ type: "string" });
+    expect(confirmationProperties).not.toHaveProperty("legacy_confirmations");
     expect(confirmationProperties).not.toHaveProperty("upstream_alignment");
   });
 
@@ -539,7 +527,7 @@ describe("CLI invocation construction", () => {
       reviewSchema as PlainJsonValue, "review", "claude-cli", undefined, assignment,
     );
     const validateProjectedClaudeReview = createJsonSchemaValidator<Record<string, unknown>>(projectedClaudeReview as Record<string, unknown>);
-    expect(() => validateProjectedClaudeReview.assert(invalidReview, "projected review")).not.toThrow();
+    expect(() => validateProjectedClaudeReview.assert({ report: JSON.stringify(invalidReview) }, "projected review")).not.toThrow();
     expect(() => parseGeneralReviewOutputV3(invalidReview, {
       criterion_ids: assignment.criterion_ids,
     })).toThrow();

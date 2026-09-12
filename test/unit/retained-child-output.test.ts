@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
+import { readReceivedFeedback, writeReceivedFeedback } from "../../src/dispatch/review-feedback.js";
+import type { TaskStateV1 } from "../../src/contracts/durable-state.js";
 
 import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
 import { parseSafeCode, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
@@ -91,6 +94,34 @@ const binding = (overrides: Partial<RetainedChildOutputBinding> = {}): RetainedC
 });
 
 describe("retained child outputs", () => {
+  it("exposes partial feedback only during the matching unfinished review", async () => {
+    const f = await fixture();
+    const state = { task_id: f.authority.task_id, phase_instance: phase, attempt: parseSafeInteger(1),
+      step: "counter_review", status: "running", input_fingerprint: envelopeDigest } as TaskStateV1;
+    const reports = [{ reviewer_id: "general", focus: "general" as const, report: "Check cancellation.",
+      subject_digest: otherEnvelopeDigest, model: "fixture-model", effort: "high" }];
+    await writeReceivedFeedback(f.authority, f.dependencies, state, otherEnvelopeDigest, reports);
+    expect(await readReceivedFeedback(f.authority, f.dependencies, state)).toEqual(reports);
+    expect(await readReceivedFeedback(f.authority, f.dependencies, { ...state, input_fingerprint: otherEnvelopeDigest })).toBeUndefined();
+    expect(await readReceivedFeedback(f.authority, f.dependencies, { ...state, status: "succeeded" })).toBeUndefined();
+    const path = join(f.attemptsDirectory, "received-feedback-1.json");
+    writeFileSync(path, "{broken");
+    expect(await readReceivedFeedback(f.authority, f.dependencies, state)).toBeUndefined();
+  });
+
+  it("records bounded server validation issues without losing received bytes or copying exception content", async () => {
+    const f = await fixture();
+    await f.store.write(binding(), { cli_version: "fixture", extracted_output_bytes: output });
+    const error = new z.ZodError([{ code: "custom", path: ["reports", 0, "model"], message: "secret-content-must-not-leak" }]);
+    await f.store.diagnose!(binding(), error);
+    const name = readdirSync(f.attemptsDirectory).find(name => name.endsWith("-validation.json"));
+    expect(name).toBeDefined();
+    const text = readFileSync(join(f.attemptsDirectory, name!), "utf8");
+    expect(JSON.parse(text)).toMatchObject({ stage: "server-evidence-validation", issues: [{ code: "custom", path: ["reports", 0, "model"] }] });
+    expect(text).not.toContain("secret-content-must-not-leak");
+    expect((await f.store.read(binding()))?.extracted_output_bytes).toEqual(output);
+  });
+
   it("round-trips a validated output and reads it back only for the exact binding", async () => {
     const f = await fixture();
     await f.store.write(binding(), { cli_version: "codex-cli 0.1", extracted_output_bytes: output });

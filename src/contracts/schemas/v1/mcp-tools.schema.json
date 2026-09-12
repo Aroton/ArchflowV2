@@ -710,6 +710,127 @@
               "path": {
                 "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
               },
+              "reports": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "subject_digest": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "effort": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "reviewer_id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                    },
+                    "focus": {
+                      "type": "string",
+                      "enum": [
+                        "general",
+                        "tests"
+                      ]
+                    },
+                    "report": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "subject_digest",
+                    "model",
+                    "effort",
+                    "reviewer_id",
+                    "focus",
+                    "report"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "constitution": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "not-run"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "const": "no-active-constitution-rules"
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "type": "string",
+                        "const": "evaluated"
+                      },
+                      "path": {
+                        "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+                      },
+                      "constitution": {
+                        "type": "string",
+                        "enum": [
+                          "pass",
+                          "fail",
+                          "uncertain"
+                        ]
+                      },
+                      "triggers": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/rule"
+                        }
+                      }
+                    },
+                    "required": [
+                      "status",
+                      "path",
+                      "constitution",
+                      "triggers"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "revision": {
+                "$ref": "#/$defs/integer"
+              },
+              "request_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "required": [
+              "path",
+              "reports",
+              "constitution",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/repositoryPathClaim"
+              },
               "verdict": {
                 "type": "string",
                 "enum": [

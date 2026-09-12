@@ -248,18 +248,7 @@ describe("counter-review handler replay integration", () => {
         schema_version: "1",
         ok: true,
         value: {
-          verdict: "pass",
-          total_findings: 0,
-          partition_counts: {
-            "defect:certain": 0, "defect:likely": 0, "defect:suspicion": 0,
-            "risk:certain": 0, "risk:likely": 0, "risk:suspicion": 0,
-            "gap:certain": 0, "gap:likely": 0, "gap:suspicion": 0,
-            "preference:certain": 0, "preference:likely": 0, "preference:suspicion": 0
-          },
-          alignment: {
-            status: "not-run",
-            reason: "prd-has-no-approved-upstream-plan",
-          },
+          reports: expect.any(Array),
           constitution: {
             status: "evaluated",
             constitution: "pass",

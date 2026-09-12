@@ -251,7 +251,9 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
         expected_submission: "review-dispatch",
       });
     case "triage":
-      return snapshot.full_findings.length === 0
+      return snapshot.review_reports !== undefined
+        ? Object.freeze({ condition: "awaiting-client", headline: "Review feedback is ready", detail: "Read the reviewer reports and decide whether to revise, finish, or ask the human.", action_kind: "triage", instruction: "Submit a response with decision and rationale; for revise include selected reviewer IDs and verification requests.", expected_submission: "triage" })
+        : snapshot.full_findings.length === 0
         ? Object.freeze({
             condition: "awaiting-client", headline: "Review settlement is ready",
             detail: "The authenticated review has no findings; record its deterministic empty triage.",
@@ -574,8 +576,11 @@ export function projectSemanticStatus(
       ? {}
       : { finding_history: snapshot.finding_history }),
     ...(context === undefined ? {} : { review_context: context }),
-    ...(strength === undefined ? {} : { review_strength: strength }),
-    taxonomy_denial_rates: snapshot.taxonomy_denial_rates,
+    ...(strength === undefined || snapshot.review_reports !== undefined ? {} : { review_strength: strength }),
+    ...(snapshot.review_reports === undefined ? { taxonomy_denial_rates: snapshot.taxonomy_denial_rates } : { review_reports: snapshot.review_reports }),
+    ...(snapshot.previous_review_reports === undefined ? {} : { previous_review_reports: snapshot.previous_review_reports }),
+    ...(snapshot.partial_review_reports === undefined ? {} : { partial_review_reports: snapshot.partial_review_reports }),
+    ...(snapshot.review_response === undefined ? {} : { review_response: snapshot.review_response }),
     implementation_recommendation: snapshot.implementation_recommendation,
     ...(snapshot.validation_overrides === undefined ? {} : {
       validation_overrides: snapshot.validation_overrides,

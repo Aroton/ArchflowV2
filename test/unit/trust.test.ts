@@ -73,6 +73,7 @@ describe("invocation-scoped observation trust", () => {
     const capability = createTestObservationCapability<"review">(binding);
     (binding as { model: string }).model = "changed-after-mint";
     const result = observationSource.observeReview(capability, bytes);
+    if (result.evidence.schema_version === "4") throw new Error("this fixture exercises archived review output");
     bytes.fill(0);
     const exposed = result.observation.raw_output_bytes;
     exposed.fill(0);

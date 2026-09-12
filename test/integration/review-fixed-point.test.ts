@@ -1,3 +1,4 @@
+import { reviewFindings } from "../../src/contracts/review.js";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -507,7 +508,7 @@ function triageCandidate(
   mode: TriageMode,
 ): TriageCandidate {
   const dispositions = current.reviews.flatMap((review) =>
-    review.evidence.findings.map((finding, index) => {
+    reviewFindings(review.evidence).map((finding, index) => {
       if (mode === "mixed-accepted-escalated") {
         if (index === 0) {
           return {
@@ -569,6 +570,9 @@ function triageCandidate(
       };
     }));
   return {
+    ...(current.reviews.some(review => review.evidence.schema_version === "4") ? { response: mode === "accepted" || mode === "editorial"
+      ? { decision: "revise" as const, rationale: "Revise the work based on the reports.", reviewers: current.reviews.flatMap(review => review.evidence.schema_version === "4" ? review.evidence.reports.map(report => ({ reviewer_id: report.reviewer_id, request: "Verify the revisions." })) : []) }
+      : { decision: mode === "escalated" || mode === "mixed-accepted-escalated" ? "escalate" as const : "finish" as const, rationale: "The working AI has assessed the feedback." } } : {}),
     schema_version: "1",
     task_id: task,
     phase_instance: phase,
@@ -1323,7 +1327,6 @@ describe("durable review fixed point", () => {
     ));
 
     expect(result.transaction.outcome).toMatchObject({
-      verdict: "pass",
       constitution: { status: "evaluated", constitution: "pass" },
     });
     expect((await durableState(h.authority)).authoritative_results
@@ -1346,13 +1349,11 @@ describe("durable review fixed point", () => {
     // One call, one transaction, two evidence results: the merged success reports the
     // evaluated constitution and durable state holds both references immediately.
     expect(merged.transaction.outcome).toMatchObject({
-      verdict: "advisory",
       constitution: {
         status: "evaluated",
         constitution: "pass",
         triggers: [],
       },
-      alignment: { status: "evaluated", drift: "aligned", upstream_count: 0 },
     });
     expect(merged.constitution_evidence?.constitution).toBe("pass");
     expect((await durableState(h.authority)).authoritative_results
@@ -1425,193 +1426,6 @@ describe("durable review fixed point", () => {
   });
 });
 
-describe("editorial revision fixed point", () => {
-  it("keeps evidence current for exactly the declared one-hop predecessor", async () => {
-    const h = await fixture();
-    const dependencies = h.dependencies;
-    const predecessorSubject = canonicalJsonDigest({ artifact: "editorial-0" });
-    const predecessorFingerprint = computeInputFingerprint(fingerprintSubject(0));
-    const revisedSubject = canonicalJsonDigest({ artifact: "editorial-1" });
-    const revisedFingerprint = computeInputFingerprint(fingerprintSubject(1));
-
-    // A non-blocking finding, triaged as editorial only: not a re-entry, and the durable
-    // attempt is untouched. The next act is the produce revision.
-    await commitCounter(h, dependencies, 0,
-      predecessorSubject, predecessorFingerprint, "accepted");
-    await commitTriage(h, dependencies, 0, "editorial");
-    expect((await durableState(h.authority)).attempt).toBe(1);
-    expect(await assessment(h, dependencies, predecessorSubject, predecessorFingerprint))
-      .toMatchObject({
-        current: ["counter_review", "triage", "adjudicate"],
-        editorial_revision_required: true,
-        reentry_required: false,
-        exhausted: false,
-        next: "produce",
-      });
-    expect((await durableState(h.authority)).attempt).toBe(1);
-
-    // The revised subject inherits currency only through the declared predecessor pair, and it
-    // inherits ALL of it — reviews, triage, and the constitution evidence dispatched with the
-    // review. Nothing is re-run after an editorial revision; the loop closes at "advance".
-    expect(await assessment(h, dependencies, revisedSubject, revisedFingerprint, {
-      subject_digest: predecessorSubject,
-      input_fingerprint: predecessorFingerprint,
-    })).toMatchObject({
-      current: ["counter_review", "triage", "adjudicate"],
-      stale: [],
-      editorial_revision_required: false,
-      reentry_required: false,
-      next: "advance",
-    });
-    // Without the declaration nothing is current.
-    expect(await assessment(h, dependencies, revisedSubject, revisedFingerprint))
-      .toMatchObject({ current: [], next: "counter_review" });
-    // A second editorial revision on top of the first does NOT inherit currency: the evidence
-    // is bound to the original bytes, two hops from this subject. One hop, no chaining.
-    const secondRevision = canonicalJsonDigest({ artifact: "editorial-2" });
-    expect(await assessment(
-      h, dependencies,
-      secondRevision, computeInputFingerprint(fingerprintSubject(2)),
-      { subject_digest: revisedSubject, input_fingerprint: revisedFingerprint },
-    )).toMatchObject({ current: [], next: "counter_review" });
-
-    // Constitution-evidence currency follows the same one-hop rule as the reviews it was
-    // dispatched with: predecessor-bound counts, revised-bound counts, anything else is stale —
-    // and a stale constitution slot beside current reviews demands the produce re-entry
-    // recovery path rather than any direct re-adjudication (the step no longer exists).
-    const state = await durableState(h.authority);
-    const loaded = await loadRetainedEvidence({
-      load_retained_manifest: dependencies.load_retained_manifest!,
-    }, structuredClone(state), phase);
-    if (!loaded.ok) throw new Error(loaded.error.code);
-    const envelopeDigest = retainedReviewEnvelopeDigest(loaded.value);
-    if (envelopeDigest === undefined) throw new Error("fixture counter evidence is not server-attested");
-    const adjudicationFor = (
-      subject: Sha256Digest,
-      fingerprint: Sha256Digest,
-    ): AdjudicationEvidence => {
-      const source = loaded.value.get("adjudicate")?.manifest.source_artifact;
-      if (source?.artifact_kind !== "adjudication-evidence" || source.evidence.schema_version !== "2") {
-        throw new Error("fixture requires fresh V2 adjudication");
-      }
-      return Object.freeze({ ...source.evidence, subject_digest: subject, input_fingerprint: fingerprint });
-    };
-    const withAdjudication = async (
-      resultId: string,
-      evidence: AdjudicationEvidence,
-    ) => {
-      const prepared = await prepareEvidence(h, resultId, {
-        kind: "adjudication",
-        evidence: Object.freeze({ ...evidence, result_id: resultId }) as AdjudicationEvidence,
-      });
-      const retained = new Map(loaded.value);
-      retained.set("adjudicate", Object.freeze({
-        reference: prepared.reference,
-        manifest: prepared.prepared.manifest.value,
-      }));
-      return assessCurrentEvidence(state, retained, {
-        subject_digest: revisedSubject,
-        input_fingerprint: revisedFingerprint,
-        constitution,
-        approved_upstream_digests: [],
-        editorial_predecessor: {
-          subject_digest: predecessorSubject,
-          input_fingerprint: predecessorFingerprint,
-        },
-      });
-    };
-    expect(await withAdjudication(
-      "adjudication-predecessor-bound",
-      adjudicationFor(predecessorSubject, predecessorFingerprint),
-    )).toMatchObject({
-      current: ["counter_review", "triage", "adjudicate"],
-      reentry_required: false,
-      next: "advance",
-    });
-    expect(await withAdjudication(
-      "adjudication-revised-bound",
-      adjudicationFor(revisedSubject, revisedFingerprint),
-    )).toMatchObject({
-      current: ["counter_review", "triage", "adjudicate"],
-      blocker_remains: false,
-      reentry_required: false,
-      editorial_revision_required: false,
-      next: "advance",
-    });
-    // Two hops back is stale. With active rules and current reviews, the stale constitution
-    // slot is reachable only through repair or upstream re-approval, and the answer is the
-    // backward-to-produce recovery door — never a bigger evidence window.
-    expect(await withAdjudication(
-      "adjudication-unrelated-bound",
-      adjudicationFor(secondRevision, computeInputFingerprint(fingerprintSubject(2))),
-    )).toMatchObject({
-      current: ["counter_review", "triage"],
-      stale: ["adjudicate"],
-      reentry_required: true,
-      next: "produce",
-    });
-  });
-
-  it("dispatches multiple reviewers in parallel for antigravity producer and merges findings and blockers", async () => {
-    const h = await fixture();
-    const subject = canonicalJsonDigest({ artifact: 0 });
-    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
-    const routes: DispatchRoute[] = [];
-
-    const multiReviewConfig: ConfigV1 = {
-      schema_version: "1",
-      roles: {
-        "counter-reviewer": { model: "gpt-5.6-sol", effort: "high" },
-        "test-reviewer": { model: "gpt-5.6-luna", effort: "max" },
-        adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
-      },
-      producers: {
-        antigravity: {
-          "counter-reviewers": [
-            { model: "gpt-5.6-sol", effort: "high" },
-            { model: "claude-fable-5", effort: "medium" },
-          ],
-          adjudicator: { model: "gemini-3.7-flash-high", effort: "high" },
-        },
-      },
-    };
-
-    const merged = await commitCounter(
-      h,
-      h.dependencies,
-      0,
-      subject,
-      fingerprint,
-      "blocker",
-      { declaration: undefined, routes, config: multiReviewConfig },
-      false,
-      "antigravity",
-    );
-
-    // Both general reviewers, the test specialist, and the constitution adjudicator ran.
-    expect(routes).toEqual([
-      { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "high" },
-      { adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "medium" },
-      { adapter: "codex-cli", family: "codex", model: "gpt-5.6-luna", effort: "max" },
-      { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
-    ]);
-
-    expect(merged.evidence.schema_version).toBe("3");
-    if (merged.evidence.schema_version !== "3") return;
-    expect(merged.evidence.verdict).toBe("review-raised");
-    expect(merged.evidence.total_findings).toBe(3);
-    expect(merged.evidence.findings).toHaveLength(3);
-    expect(merged.evidence.assurance).toBe("server-attested");
-    if (merged.evidence.assurance !== "server-attested") return;
-    expect(merged.evidence.reviewer_runs).toMatchObject([
-      { reviewer_id: "general-1", focus: "general", routing_role: "counter-reviewer", criterion_ids: ["correctness"] },
-      { reviewer_id: "general-2", focus: "general", routing_role: "counter-reviewer", criterion_ids: ["correctness"] },
-      { reviewer_id: "test", focus: "tests", routing_role: "test-reviewer", criterion_ids: ["verification-evidence", "test-quality"] },
-    ]);
-    expect(merged.evidence.reviewer_runs?.flatMap((run) => run.finding_ids))
-      .toEqual(merged.evidence.findings.map((finding) => finding.finding_id));
-  });
-});
 
 /**
  * A review round whose children can fail one at a time, backed by an in-memory retained-output
@@ -1879,7 +1693,7 @@ describe("partial review round retry", () => {
         await settle(route.model);
         if (behaviour.fail_reviewer === route.model) throw outage(route);
         if (behaviour.invalid_reviewer === route.model) {
-          return { cli_version: "fixture-1", extracted_output_bytes: new TextEncoder().encode('{"schema_version":"1"}') };
+          return { cli_version: "fixture-1", extracted_output_bytes: new TextEncoder().encode('{broken') };
         }
         const child = JSON.parse(new TextDecoder().decode(envelope.bytes)) as { assignment?: Parameters<typeof reviewOutput>[5] };
         const requestedFinding = child.assignment?.focus === "tests" && (options.config ?? multiReviewConfig) !== specialistReviewConfig
@@ -1967,196 +1781,37 @@ describe("partial review round retry", () => {
     return { result, models: routes.map((route) => route.model).sort(), envelopes, digests };
   }
 
-  /** Triages the current review set with one disposition per finding, chosen by finding id. */
-  async function commitTriageDecisions(
-    h: Harness,
-    dependencies: TransactionDependencies,
-    version: number,
-    decide: (findingId: string) => TriageMode,
-  ) {
+  async function respond(h: Harness, dependencies: TransactionDependencies, version: number, response: NonNullable<TriageCandidate["response"]>) {
     const fingerprint = (await durableState(h.authority)).input_fingerprint;
     await enterStep(h, dependencies, `triage-running-v${version}`, "triage", fingerprint);
     const current = await reconstruct(h, dependencies);
-    const dispositions = current.reviews.flatMap((review) => review.evidence.findings.map((finding) => {
-      const base = { review_evidence_digest: review.evidence_digest, finding_id: finding.finding_id };
-      const mode = decide(finding.finding_id);
-      return mode === "accepted"
-        ? { ...base, disposition: "accepted" as const, rationale: "rewrite required", revision_intent: "rewrite" }
-        : mode === "editorial"
-          ? { ...base, disposition: "accepted-editorial" as const, rationale: "wording only", revision_intent: "polish" }
-          : { ...base, disposition: "rejected" as const, rationale: "not applicable", evidence: "fixture rejection evidence" };
-    }));
-    const candidate: TriageCandidate = {
-      schema_version: "1",
-      task_id: task,
-      phase_instance: phase,
-      step: "triage",
-      subject_digest: current.subject_digest,
-      input_fingerprint: current.input_fingerprint,
-      current_evidence_set_digest: current.current_evidence_set.set_digest,
-      source_evidence_digests: current.reviews.map((review) => review.evidence_digest),
-      dispositions,
-      accepted_count: dispositions.filter((d) => d.disposition === "accepted").length,
-      rejected_count: dispositions.filter((d) => d.disposition === "rejected").length,
-      accepted_editorial_count: dispositions.filter((d) => d.disposition === "accepted-editorial").length,
-      escalated_human_count: 0,
-      deferred_count: 0,
-    };
+    const candidate = { ...triageCandidate(current, "rejected"), response };
     validateTriage(current, candidate);
     const prepared = await prepareEvidence(h, `triage-v${version}`, { kind: "triage", current_reviews: current, evidence: candidate });
-    await commitStateEvidence(h, dependencies, `triage-intent-v${version}`, prepared, {
-      schema_version: "1", artifact_kind: "triage", evidence: candidate,
-    });
+    await commitStateEvidence(h, dependencies, `triage-intent-v${version}`, prepared, { schema_version: "1", artifact_kind: "triage", evidence: candidate });
   }
 
-  it("dispatches only the reviewer that raised findings in a remediation round, with its own prior-triage record", async () => {
+  it("delivers every report, verifies only selected reviewers, and permits explained disagreement", async () => {
     const h = await fixture();
     const { store } = memoryStore();
-    const subjects = [canonicalJsonDigest({ artifact: 0 }), canonicalJsonDigest({ artifact: 1 }), canonicalJsonDigest({ artifact: 2 })] as const;
-    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1)), computeInputFingerprint(fingerprintSubject(2))] as const;
-
-    // Round 1: a full review; sol passes cleanly, fable raises a blocker carrying its tag.
-    const first = await round(h, store, subjects[0], fingerprints[0], { clean_reviewer: SOL }, true);
+    const subjects = [0, 1].map(version => canonicalJsonDigest({ artifact: version }));
+    const fingerprints = [0, 1].map(version => computeInputFingerprint(fingerprintSubject(version)));
+    const first = await round(h, store, subjects[0]!, fingerprints[0]!, {}, true);
     expect(first.models).toEqual([SOL, FABLE, LUNA, ADJUDICATOR].sort());
-    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
-    if (!first.result.ok) return;
-    expect(first.result.value.evidence.findings.map((finding) => finding.finding_id))
-      .toEqual(["general-2-counter-review-blocker"]);
-
-    // The producer accepts fable's finding, then revises.
-    await commitTriageDecisions(h, h.dependencies, 0, () => "accepted");
+    expect(first.result.ok).toBe(true);
+    if (!first.result.ok) throw new Error("review failed");
+    expect(first.result.value.evidence).toMatchObject({ schema_version: "4", reports: [ { reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" } ] });
+    await respond(h, h.dependencies, 0, { decision: "revise", rationale: "Fix the retry behavior.", reviewers: [{ reviewer_id: "general-2", request: "Verify retries stop after cancellation." }] });
     const dependencies = await rewrite(h, h.dependencies, 1);
-
-    // Round 2: only fable is asked to confirm its fix; sol, which raised nothing, is not
-    // re-dispatched. The constitution child still runs against the revised bytes.
-    const second = await round(h, store, subjects[1], fingerprints[1], {}, true, { dependencies, version: 1, remediation: true });
-    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
-    expect(second.result.ok, JSON.stringify(second.result)).toBe(true);
-    if (!second.result.ok) return;
-
-    const fableEnvelope = second.envelopes.get(FABLE) as {
-      instructions: { prior_triage?: string };
-      context: { kind: string; status: string; content?: string }[];
-    };
-    expect(fableEnvelope.instructions.prior_triage).toMatch(/remediation review, not a new full review/u);
-    const priorEntry = fableEnvelope.context.find((entry) => entry.kind === "prior-triage");
-    expect(priorEntry?.status).toBe("pinned");
-    const rendered = JSON.parse(priorEntry!.content!) as { dispositions: { finding_id: string; disposition: string }[] };
-    expect(rendered.dispositions).toEqual([
-      expect.objectContaining({ finding_id: "general-2-counter-review-blocker", disposition: "accepted" }),
-    ]);
-
-    // Fable's tag is stable even though it ran alone, so round 3 can still attribute its findings.
-    expect(second.result.value.evidence.findings.map((finding) => finding.finding_id)).toEqual(["general-2-counter-review-blocker"]);
-    const review = second.result.value.evidence;
-    expect(review.assurance).toBe("server-attested");
-    if (review.assurance !== "server-attested") return;
-    expect(second.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
-
-    // Round 3 receives only round 2's latest accepted disposition. The cumulative ledger remains
-    // durable, but it is not fanned into the child prompt.
-    await commitTriageDecisions(h, dependencies, 1, () => "accepted");
-    const dependenciesV2 = await rewrite(h, dependencies, 2);
-    const third = await round(h, store, subjects[2], fingerprints[2], {}, true, {
-      dependencies: dependenciesV2, version: 2, remediation: true,
-    });
-    expect(third.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
-    const latest = priorRecord(third.envelopes.get(FABLE));
-    expect(latest.dispositions).toHaveLength(1);
-    expect(latest.dispositions).toEqual([
-      expect.objectContaining({ finding_id: "general-2-counter-review-blocker", disposition: "accepted", attempt: 3 }),
-    ]);
-  });
-
-  it("does not reopen an ownerless primary rubric during PRD remediation", async () => {
-    const h = await fixture();
-    const { store } = memoryStore();
-    const subjects = [canonicalJsonDigest({ prd: 0 }), canonicalJsonDigest({ prd: 1 })] as const;
-    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1))] as const;
-
-    const first = await round(h, store, subjects[0], fingerprints[0], { clean_reviewer: SOL }, true, {
-      phase_kind: "prd",
-    });
-    expect(first.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
-    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
-    if (!first.result.ok) return;
-    expect(first.result.value.evidence.findings.map((finding) => finding.finding_id))
-      .toEqual(["general-2-counter-review-blocker"]);
-
-    await commitTriageDecisions(h, h.dependencies, 0, () => "accepted");
-    const dependencies = await rewrite(h, h.dependencies, 1);
-    const second = await round(h, store, subjects[1], fingerprints[1], {}, true, {
-      dependencies, version: 1, remediation: true, phase_kind: "prd",
-    });
-
-    expect(second.result.ok, JSON.stringify(second.result)).toBe(true);
+    const second = await round(h, store, subjects[1]!, fingerprints[1]!, {}, true, { dependencies, version: 1, remediation: true });
     expect(second.models).toEqual([FABLE, ADJUDICATOR].sort());
-    expect(second.envelopes.has(SOL)).toBe(false);
-    expect(second.envelopes.get(FABLE)).toMatchObject({
-      assignment: { reviewer_id: "general-2", focus: "general", criterion_ids: ["correctness"] },
-    });
-  });
-
-  it("dispatches only the test specialist to confirm its finding in remediation", async () => {
-    const h = await fixture();
-    const { store } = memoryStore();
-    const subjects = [canonicalJsonDigest({ specialist: 0 }), canonicalJsonDigest({ specialist: 1 })] as const;
-    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1))] as const;
-
-    const first = await round(h, store, subjects[0], fingerprints[0], { clean_reviewer: SOL }, true, {
-      config: specialistReviewConfig,
-    });
-    expect(first.models).toEqual([SOL, LUNA, ADJUDICATOR].sort());
-    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
-    if (!first.result.ok) return;
-    expect(first.result.value.evidence.findings.map((finding) => finding.finding_id))
-      .toEqual(["test-counter-review-blocker"]);
-
-    await commitTriageDecisions(h, h.dependencies, 0, () => "accepted");
-    const dependencies = await rewrite(h, h.dependencies, 1);
-    const second = await round(h, store, subjects[1], fingerprints[1], {}, true, {
-      dependencies, version: 1, remediation: true, config: specialistReviewConfig,
-    });
-    expect(second.models).toEqual([SOL, LUNA, ADJUDICATOR].sort());
-    const specialistEnvelope = second.envelopes.get(LUNA) as {
-      assignment: { reviewer_id: string; focus: string; criterion_ids: string[] };
-      context: { kind: string; content?: string }[];
-    };
-    expect(specialistEnvelope.assignment).toEqual({
-      reviewer_id: "test", focus: "tests", criterion_ids: ["verification-evidence"],
-    });
-    const prior = specialistEnvelope.context.find((entry) => entry.kind === "prior-triage");
-    expect(prior?.content).toContain("test-counter-review-blocker");
-  });
-
-  it("keeps a stable test owner across route reconfiguration and still dispatches primary alignment", async () => {
-    const h = await fixture();
-    const { store } = memoryStore();
-    const subjects = [canonicalJsonDigest({ reconfigured: 0 }), canonicalJsonDigest({ reconfigured: 1 })] as const;
-    const fingerprints = [computeInputFingerprint(fingerprintSubject(0)), computeInputFingerprint(fingerprintSubject(1))] as const;
-    const first = await round(h, store, subjects[0], fingerprints[0], { clean_reviewer: SOL }, true, {
-      config: specialistReviewConfig,
-    });
-    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
-    if (!first.result.ok) return;
-    await commitTriageDecisions(h, h.dependencies, 0, () => "accepted");
-    const dependencies = await rewrite(h, h.dependencies, 1);
-
-    const second = await round(h, store, subjects[1], fingerprints[1], {}, true, {
-      dependencies, version: 1, remediation: true, config: multiReviewConfig,
-    });
-    expect(second.models).toEqual([SOL, LUNA, ADJUDICATOR].sort());
-    expect(second.envelopes.has(FABLE)).toBe(false);
-    const envelope = second.envelopes.get(SOL) as {
-      assignment: { focus: string; criterion_ids: string[]; expected_upstream_digests: string[] };
-      context: { kind: string; content?: string }[];
-    };
-    expect(envelope.assignment.focus).toBe("general");
-    expect(envelope.assignment.criterion_ids).toEqual([]);
-    expect(envelope.assignment.expected_upstream_digests).toEqual([]);
-    const testEnvelope = second.envelopes.get(LUNA) as { context: { kind: string; content?: string }[] };
-    expect(testEnvelope.context.find((entry) => entry.kind === "prior-triage")?.content)
-      .toContain("test-counter-review-blocker");
+    expect(JSON.stringify(second.envelopes.get(FABLE))).toContain("Verify retries stop after cancellation.");
+    expect(second.result.ok).toBe(true);
+    if (!second.result.ok || second.result.value.evidence.schema_version !== "4") throw new Error("expected reports");
+    expect(second.result.value.evidence.previous_reports?.map(report => report.reviewer_id)).toEqual(["general-1", "test"]);
+    expect(second.result.value.evidence.previous_reports?.every(report => report.subject_digest === subjects[0])).toBe(true);
+    await respond(h, dependencies, 1, { decision: "finish", rationale: "The remaining suggestion is disproportionate; the requested behavior works." });
+    expect(await assessment(h, dependencies, subjects[1]!, fingerprints[1]!)).toMatchObject({ next: "advance", blocker_remains: false });
   });
 
   it("records invocation and one-dispatch override provenance independently for the test reviewer", async () => {
@@ -2264,7 +1919,7 @@ describe("partial review round retry", () => {
     if (first.result.ok) return;
     expect(first.result.error).toMatchObject({
       code: "MODEL_OUTPUT_INVALID",
-      diagnostic: { parameters: { issue_code: "review-schema-invalid" } },
+      diagnostic: { parameters: { issue_code: "review-output-unreadable" } },
     });
     expect(failures).toEqual(["test-reviewer"]);
     expect(first.envelopes.get(LUNA)).toMatchObject({
@@ -2277,7 +1932,7 @@ describe("partial review round retry", () => {
       assignment: { reviewer_id: "general", focus: "general", criterion_ids: ["correctness"] },
     });
     expect([...records.values()].map((record) => record.binding.role).sort())
-      .toEqual(["adjudicator", "counter-reviewer"]);
+      .toEqual(["adjudicator", "counter-reviewer", "test-reviewer"]);
 
     const retried = await round(h, store, subject, fingerprint, {}, false, {
       config: specialistReviewConfig,
@@ -2340,66 +1995,6 @@ describe("partial review round retry", () => {
   });
 
   /** Runs a full two-reviewer round, triages it as decided, revises, and returns the remediation round. */
-  async function remediationAfter(
-    h: Harness,
-    decide: (findingId: string) => TriageMode,
-    firstRound: RoundBehaviour = {},
-  ) {
-    const { store } = memoryStore();
-    const first = await round(h, store, canonicalJsonDigest({ artifact: 0 }), computeInputFingerprint(fingerprintSubject(0)), firstRound, true);
-    expect(first.result.ok, JSON.stringify(first.result)).toBe(true);
-    await commitTriageDecisions(h, h.dependencies, 0, decide);
-    const dependencies = await rewrite(h, h.dependencies, 1);
-    const second = await round(
-      h, store, canonicalJsonDigest({ artifact: 1 }), computeInputFingerprint(fingerprintSubject(1)), {}, true,
-      { dependencies, version: 1, remediation: true },
-    );
-    expect(second.result.ok, JSON.stringify(second.result)).toBe(true);
-    return second;
-  }
-
-  const priorRecord = (envelope: unknown) => {
-    const entry = (envelope as { context: { kind: string; status: string; content?: string }[] }).context
-      .find((candidate) => candidate.kind === "prior-triage");
-    expect(entry?.status).toBe("pinned");
-    return JSON.parse(entry!.content!) as { coverage: string; dispositions: { finding_id: string; disposition: string }[] };
-  };
-
-  it("dispatches only owners of accepted findings; rejected findings are closed", async () => {
-    const h = await fixture();
-    const second = await remediationAfter(h, (findingId) => findingId.startsWith("general-2-") ? "accepted" : "rejected");
-    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
-    expect(priorRecord(second.envelopes.get(FABLE)).dispositions)
-      .toEqual([expect.objectContaining({ finding_id: "general-2-counter-review-blocker", disposition: "accepted" })]);
-    if (!second.result.ok) return;
-    const review = second.result.value.evidence;
-    if (review.assurance !== "server-attested") throw new Error("expected server-attested review");
-    expect(review.envelope_input_digest).toBe(second.digests.get(SOL));
-    expect(second.result.value.constitution_evidence?.source_review_envelope_digest).toBe(second.digests.get(SOL));
-  });
-
-  it("leaves out a reviewer whose only findings were accepted editorially", async () => {
-    const h = await fixture();
-    // Only a non-blocking finding may be accepted editorially, so sol raises an advisory one.
-    const second = await remediationAfter(h, (findingId) =>
-      findingId.startsWith("general-2-") ? "accepted" : findingId.startsWith("general-1-") ? "editorial" : "rejected",
-    { advisory_reviewer: SOL });
-    expect(second.models).toEqual([SOL, FABLE, ADJUDICATOR].sort());
-  });
-
-  it("keeps exact V3 stable owners instead of transferring them by finding prose", async () => {
-    const h = await fixture();
-    // Round 1 ran under a one-reviewer override, so its finding id carries no reviewer tag.
-    const second = await remediationAfter(h, () => "accepted", {
-      declaration: { reason: "fable CLI outage; reviewing on sol alone for this dispatch", "counter-reviewer": { model: SOL, effort: "high" } },
-    });
-    expect(second.models).toEqual([SOL, ADJUDICATOR].sort());
-    const record = priorRecord(second.envelopes.get(SOL));
-    expect(record.coverage).toMatch(/latest accepted findings/u);
-    expect(record.dispositions).toEqual([expect.objectContaining({ finding_id: "general-counter-review-blocker", disposition: "accepted" })]);
-    expect(second.envelopes.has(FABLE)).toBe(false);
-  });
-
   it("keeps both reviewer outputs when the constitution child fails and retries only that child", async () => {
     const h = await fixture();
     const subject = canonicalJsonDigest({ artifact: 0 });
@@ -2414,14 +2009,11 @@ describe("partial review round retry", () => {
     expect(retried.models).toEqual([ADJUDICATOR]);
     expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
     if (!retried.result.ok) return;
-    expect(retried.result.value.evidence.findings.map((finding) => finding.finding_id)).toEqual([
-      "general-1-counter-review-blocker",
-      "general-2-counter-review-blocker",
-    ]);
+    expect(retried.result.value.evidence).toMatchObject({ schema_version: "4", reports: [{ reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" }] });
     const review = retried.result.value.evidence;
-    expect(review.schema_version).toBe("3");
-    if (review.schema_version !== "3") return;
-    expect(review.total_findings).toBe(2);
+    expect(review.schema_version).toBe("4");
+    if (review.schema_version !== "4") throw new Error("expected reports");
+    expect(review.reports).toHaveLength(3);
     expect(review.assurance).toBe("server-attested");
     if (review.assurance !== "server-attested") return;
     expect(retried.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
@@ -2445,8 +2037,7 @@ describe("partial review round retry", () => {
     if (!retried.result.ok) return;
     // Reused sol plus fresh fable merge in config order, and the reused constitution result still
     // binds to the round the reused review answered.
-    expect(retried.result.value.evidence.findings.map((finding) => finding.finding_id))
-      .toEqual(["general-1-counter-review-blocker", "general-2-counter-review-blocker"]);
+    expect(retried.result.value.evidence).toMatchObject({ schema_version: "4", reports: [{ reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" }] });
     const review = retried.result.value.evidence;
     if (review.assurance !== "server-attested") throw new Error("expected server-attested review");
     expect(retried.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);
@@ -2499,7 +2090,7 @@ describe("partial review round retry", () => {
     expect(first.result.ok).toBe(false);
     if (first.result.ok) return;
     expect(first.result.error.code).toBe("MODEL_OUTPUT_INVALID");
-    expect([...records.values()].map((record) => record.binding.role).sort()).toEqual(["adjudicator", "test-reviewer"]);
+    expect([...records.values()].map((record) => record.binding.role).sort()).toEqual(["adjudicator", "counter-reviewer", "test-reviewer"]);
   });
 
   it("re-dispatches a child whose retained output no longer validates", async () => {
@@ -2513,7 +2104,7 @@ describe("partial review round retry", () => {
     // re-minting under this round's binding rejects it, so sol is dispatched again.
     for (const record of records.values()) {
       if (record.binding.selection.route.model === SOL) {
-        record.extracted_output_bytes = canonicalJsonBytes(reviewOutput("counter-review", canonicalJsonDigest({ artifact: 99 }), fingerprint, "clean"));
+        record.extracted_output_bytes = new TextEncoder().encode("{broken");
       }
     }
     const retried = await round(h, store, subject, fingerprint, {}, false);
@@ -2531,14 +2122,14 @@ describe("partial review round retry", () => {
     expect(first.result.ok).toBe(false);
     if (first.result.ok) return;
     expect(first.result.error.code).toBe("MODEL_OUTPUT_INVALID");
-    expect(first.result.error.diagnostic.parameters).toMatchObject({ adapter: "codex-cli", issue_code: "review-schema-invalid" });
-    expect([...records.values()].map((record) => record.binding.role).sort()).toEqual(["adjudicator", "counter-reviewer", "test-reviewer"]);
+    expect(first.result.error.diagnostic.parameters).toMatchObject({ adapter: "codex-cli", issue_code: "review-output-unreadable" });
+    expect([...records.values()].map((record) => record.binding.role).sort()).toEqual(["adjudicator", "counter-reviewer", "counter-reviewer", "test-reviewer"]);
 
     const retried = await round(h, store, subject, fingerprint, {}, false);
     expect(retried.models).toEqual([FABLE]);
     expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
     if (!retried.result.ok) return;
-    expect(retried.result.value.evidence.findings).toHaveLength(2);
+    expect(retried.result.value.evidence).toHaveProperty("reports");
     expect(records.size).toBe(0);
   });
 
@@ -2563,7 +2154,7 @@ describe("partial review round retry", () => {
     if (constitutionEvidence?.assurance !== "server-attested") return;
     expect(constitutionEvidence.model).toBe(substituted);
     expect(constitutionEvidence.route_override).toMatchObject({ pinned_model: ADJUDICATOR });
-    expect(overridden.result.value.evidence.findings).toHaveLength(2);
+    expect(overridden.result.value.evidence).toHaveProperty("reports");
   });
 
   it("does not reuse a reviewer output whose route was selected under different provenance", async () => {
@@ -2583,7 +2174,7 @@ describe("partial review round retry", () => {
     expect(overridden.result.ok, JSON.stringify(overridden.result)).toBe(true);
     if (!overridden.result.ok) return;
     const review = overridden.result.value.evidence;
-    expect(review.findings).toHaveLength(1);
+    expect(review).toHaveProperty("reports");
     expect(review.assurance).toBe("server-attested");
     if (review.assurance !== "server-attested") return;
     expect(review.route_override).toMatchObject({ pinned_model: SOL });
@@ -2786,34 +2377,6 @@ async function recordAuthenticatedApproval(
 }
 
 describe("review fixed-point lifecycles", () => {
-  it("mixed accepted-plus-escalated lifecycle: presents human gate first, then advances through attempt-N+1 produce into counter-review upon approval", async () => {
-    const h = await fixture();
-    const dependencies = h.dependencies;
-    const { subject, fingerprint } = await commitDesignProduce(h, 0);
-
-    await commitCounter(h, dependencies, 0, subject, fingerprint, "multiple");
-    await commitTriage(h, dependencies, 0, "mixed-accepted-escalated");
-
-    const triageAssessment = await assessment(h, dependencies, subject, fingerprint);
-    expect(triageAssessment.escalated_human_findings).toBe(true);
-    expect(triageAssessment.every_finding_dispositioned).toBe(true);
-    expect(triageAssessment.next).toBe("advance");
-
-    const state = await durableState(h.authority);
-    const loaded = await loadRetainedEvidence({
-      load_retained_manifest: dependencies.load_retained_manifest!,
-    }, structuredClone(state), phase);
-    if (!loaded.ok) throw new Error(loaded.error.code);
-    const currentEvidence = deriveCurrentEvidenceSet(loaded.value).current_evidence_set;
-
-    const approval = await recordAuthenticatedApproval(
-      h, "approval-1", "design-approval", subject, currentEvidence,
-    );
-
-    const afterApproval = await assessment(h, dependencies, subject, fingerprint, undefined, [approval]);
-    expect(afterApproval.reentry_required).toBe(true);
-    expect(afterApproval.next).toBe("produce");
-  });
 
   it("byte-identical re-production lifecycle: proceeds to counter-review rather than re-triggering produce", async () => {
     const h = await fixture();
@@ -2984,66 +2547,5 @@ describe("review fixed-point lifecycles", () => {
     }
   });
 
-  it("post-settlement full produce re-entry: approving an escalation when accepted findings coexist routes to produce re-entry", async () => {
-    const h = await fixture();
-    const dependencies = h.dependencies;
-    const { subject, fingerprint } = await commitDesignProduce(h, 0);
 
-    await commitCounter(h, dependencies, 0, subject, fingerprint, "multiple");
-    await commitTriage(h, dependencies, 0, "mixed-accepted-escalated");
-
-    const state = await durableState(h.authority);
-    const loaded = await loadRetainedEvidence({
-      load_retained_manifest: dependencies.load_retained_manifest!,
-    }, structuredClone(state), phase);
-    if (!loaded.ok) throw new Error(loaded.error.code);
-    const currentEvidence = deriveCurrentEvidenceSet(loaded.value).current_evidence_set;
-
-    const approval = await recordAuthenticatedApproval(
-      h, "approval-post-settle", "design-approval", subject, currentEvidence,
-    );
-
-    const assessed = await assessment(h, dependencies, subject, fingerprint, undefined, [approval]);
-    expect(assessed.reentry_required).toBe(true);
-    expect(assessed.next).toBe("produce");
-  });
-
-  it("multi-attempt settlement persistence: settled escalations remain historical and do not reopen the gate in attempt N+1", async () => {
-    const h = await fixture();
-    const dependencies = h.dependencies;
-    const { subject, fingerprint } = await commitDesignProduce(h, 0);
-
-    await commitCounter(h, dependencies, 0, subject, fingerprint, "accepted");
-    await commitTriage(h, dependencies, 0, "escalated");
-
-    const state1 = await durableState(h.authority);
-    const loaded1 = await loadRetainedEvidence({
-      load_retained_manifest: dependencies.load_retained_manifest!,
-    }, structuredClone(state1), phase);
-    if (!loaded1.ok) throw new Error(loaded1.error.code);
-    const currentEvidence1 = deriveCurrentEvidenceSet(loaded1.value).current_evidence_set;
-
-    const approval = await recordAuthenticatedApproval(
-      h, "approval-persist", "design-approval", subject, currentEvidence1,
-    );
-
-    // Attempt 2 enters produce, clears prior-attempt review results, and runs clean
-    const currentState = await durableState(h.authority);
-    const stateAttempt2: TaskStateV1 = {
-      ...currentState,
-      attempt: parseSafeInteger(2),
-      step: "produce",
-      status: "succeeded",
-      authoritative_results: currentState.authoritative_results.filter((r) => r.step === "produce"),
-    };
-    await writeFile(h.authority.state.absolute, canonicalDocument(stateAttempt2).bytes);
-
-    await commitCounter(h, dependencies, 1, subject, fingerprint, "clean");
-    await commitTriage(h, dependencies, 1, "rejected");
-
-    const assessed2 = await assessment(h, dependencies, subject, fingerprint, undefined, [approval]);
-    expect(assessed2.escalated_human_findings).toBeUndefined();
-    expect(assessed2.reentry_required).toBe(false);
-    expect(assessed2.next).toBe("advance");
-  });
 });

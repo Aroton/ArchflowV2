@@ -1,5 +1,6 @@
+import { reviewReportOutputSchema, readableReviewReport, type ReviewReportV1, type ServerAttestedReviewV4 } from "../contracts/review.js";
 import effortReviewOutputSchema from "../contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
-import reviewOutputSchema from "../contracts/schemas/v1/review.schema.json" with { type: "json" };
+const reviewOutputSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue;
 
 import { canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import {
@@ -40,10 +41,7 @@ import type {
   ReviewFindingV3,
   ReviewFindingV2,
   LegacyReviewFinding,
-  ReviewerRunV2,
   RouteOverrideRecord,
-  LegacyConfirmationAssignmentV1,
-  ServerAttestedReviewV3,
 } from "../contracts/review.js";
 import { expectedReviewSummaryV2 } from "../contracts/review.js";
 import {
@@ -58,7 +56,6 @@ import {
   configuredRoute,
   configuredRoutes,
   selectDispatchRouteCandidates,
-  selectDispatchRoutes,
   validateSelectedDispatchRoute,
   type DispatchRoute,
   type RoutingRole,
@@ -99,9 +96,7 @@ import {
 } from "./envelopes.js";
 import { buildReviewEnvelopeWithCap, priorTriageContextEntry, type PriorTriageRecord } from "./pinned-context.js";
 import {
-  resolveReviewFindingOwner,
   taggedFindingId,
-  type ReviewerRosterEntry,
 } from "./reviewer-tags.js";
 import { reviewAssignment, type CounterReviewPhaseKind } from "./rubrics.js";
 
@@ -214,6 +209,7 @@ export type RunCounterReviewDependencies = Readonly<{
    * child dispatches fresh.
    */
   retained_outputs?: RetainedChildOutputStore;
+  observe_reports?: (reports: readonly ReviewReportV1[]) => Promise<void>;
   /** Best-effort runtime observation seam. It must never replace the original routing/dispatch error. */
   observe_failure?: (
     role: DispatchFailureRoleV1,
@@ -349,7 +345,9 @@ async function planCounterReviewCommit(
     revision,
     request_digest: inputs.request_digest,
   } as const;
-  const success = inputs.review_evidence.schema_version === "3"
+  const success = inputs.review_evidence.schema_version === "4"
+    ? Object.freeze({ ...commonSuccess, reports: inputs.review_evidence.reports, constitution: constitutionOutcome })
+    : inputs.review_evidence.schema_version === "3"
     ? Object.freeze({
       ...commonSuccess,
       constitution: constitutionOutcome,
@@ -604,145 +602,21 @@ export async function runCounterReview(
     assignment: reviewAssignment("test", "tests", phaseKind, input.envelope.rubric, specialistActive),
   }));
   const taggedRoutes = Object.freeze([...generalRoutes, ...testRoutes]);
-  const totalReviewers = taggedRoutes.length;
   const sharedPriorTriage = input.envelope.context.find((entry) => entry.kind === "prior-triage");
   const priorTriage = sharedPriorTriage === undefined ? undefined : input.prior_triage;
-  const roster: readonly ReviewerRosterEntry[] = Object.freeze(taggedRoutes.map((routeEntry) => Object.freeze({
-    reviewer_id: routeEntry.assignment.reviewer_id,
-    focus: routeEntry.assignment.focus,
-    routing_role: routeEntry.role,
-    model: routeEntry.selection.route.model,
-    ...(routeEntry.selection.route.provider === undefined
-      ? {}
-      : { provider: routeEntry.selection.route.provider }),
-  })));
-  type RemediationScope = {
-    criterion_ids: Set<string>;
-    finding_ids: Set<string>;
-    legacy_confirmations: LegacyConfirmationAssignmentV1[];
-  };
-  const remediationByReviewer = new Map<string, RemediationScope>();
-  const scopeFor = (reviewerId: string): RemediationScope => {
-    const existing = remediationByReviewer.get(reviewerId);
-    if (existing !== undefined) return existing;
-    const created = { criterion_ids: new Set<string>(), finding_ids: new Set<string>(), legacy_confirmations: [] };
-    remediationByReviewer.set(reviewerId, created);
-    return created;
-  };
-  if (priorTriage !== undefined) {
-    const source = priorTriage.source_review;
-    if (source === undefined) {
-      return fail(createProjectError("STATE_INVALID", {
-        phase_instance: input.authority.context.phase_instance,
-        issue_code: "reviewer-ownership-source-unavailable",
-      }));
-    }
-    for (const occurrence of priorTriage.current) {
-      if (occurrence.review_evidence_digest !== source.evidence_digest) {
-        return fail(createProjectError("STATE_INVALID", {
-          phase_instance: input.authority.context.phase_instance,
-          issue_code: "reviewer-ownership-occurrence-unavailable",
-        }));
-      }
-      const finding = source.evidence.findings.find((candidate) =>
-        candidate.finding_id === occurrence.finding_id);
-      if (finding === undefined) {
-        return fail(createProjectError("STATE_INVALID", {
-          phase_instance: input.authority.context.phase_instance,
-          issue_code: "reviewer-ownership-finding-absent",
-        }));
-      }
-      const resolved = resolveReviewFindingOwner({
-        schema_version: source.evidence.schema_version,
-        finding,
-        ...(source.evidence.assurance === "server-attested" && source.evidence.reviewer_runs !== undefined
-          ? { reviewer_runs: source.evidence.reviewer_runs }
-          : {}),
-        roster,
-      });
-      if (!resolved.ok) {
-        const issue = resolved.failure.reason === "legacy-ordinal-unavailable"
-          ? `reviewer-ownership-r${String(resolved.failure.historical_position)}-unavailable`
-          : `reviewer-ownership-${resolved.failure.reason}`;
-        return fail(createProjectError("STATE_INVALID", {
-          phase_instance: input.authority.context.phase_instance,
-          issue_code: issue,
-        }));
-      }
-      const scope = scopeFor(resolved.owner.reviewer_id);
-      scope.finding_ids.add(finding.finding_id);
-      if (source.evidence.schema_version === "3" && "criterion_id" in finding) {
-        scope.criterion_ids.add(finding.criterion_id);
-      } else {
-        const routeEntry = taggedRoutes.find((candidate) =>
-          candidate.assignment.reviewer_id === resolved.owner.reviewer_id)!;
-        if (resolved.owner.focus === "general" &&
-            !routeEntry.assignment.criterion_ids.includes("substantive-correctness")) {
-          return fail(createProjectError("STATE_INVALID", {
-            phase_instance: input.authority.context.phase_instance,
-            issue_code: "legacy-confirmation-criterion-unavailable",
-          }));
-        }
-        const permitted = resolved.owner.focus === "tests"
-          ? routeEntry.assignment.criterion_ids
-          : ["substantive-correctness"];
-        scope.legacy_confirmations.push(Object.freeze({
-          finding_id: finding.finding_id,
-          criterion_ids: Object.freeze([...permitted]),
-        }));
-      }
-    }
+  const response = priorTriage?.response;
+  const selected = response?.decision === "revise" ? response.reviewers : undefined;
+  if (selected !== undefined && selected.some(reviewer => !taggedRoutes.some(route => route.assignment.reviewer_id === reviewer.reviewer_id))) {
+    return fail(createProjectError("STATE_INVALID", { phase_instance: input.authority.context.phase_instance, issue_code: "follow-up-reviewer-unavailable" }));
   }
-  const primary = generalRoutes[0];
-  if (primary === undefined) {
-    throw new TypeError("counter-review requires a primary general reviewer");
-  }
-  // Initial rounds dispatch the complete roster. Non-PRD remediation dispatches the primary
-  // regardless of ordinary ownership because it owns the exact alignment census, plus each
-  // accepted finding owner. PRD has no alignment responsibility, so its remediation dispatches
-  // only authenticated accepted-finding owners and never reopens an ownerless primary's rubric.
-  const reviewRoutes = priorTriage === undefined
-    ? taggedRoutes
-    : taggedRoutes.filter((routeEntry) =>
-      remediationByReviewer.has(routeEntry.assignment.reviewer_id) ||
-      (routeEntry === primary && input.approved_upstream_digests !== undefined));
-  const assignmentFor = (routeEntry: (typeof taggedRoutes)[number]): ReviewAssignmentV1 => {
-    const base = routeEntry.assignment;
-    const remediation = priorTriage === undefined
-      ? undefined
-      : remediationByReviewer.get(base.reviewer_id);
-    let criterionIds = remediation === undefined
-      ? priorTriage === undefined ? base.criterion_ids : Object.freeze([])
-      : Object.freeze(base.criterion_ids.filter((criterion) => remediation.criterion_ids.has(criterion)));
-    const expectedUpstreams = routeEntry === primary ? input.approved_upstream_digests : undefined;
-    const legacyConfirmations = remediation?.legacy_confirmations;
-    return Object.freeze({
-      reviewer_id: base.reviewer_id,
-      focus: base.focus,
-      criterion_ids: criterionIds,
-      ...(expectedUpstreams === undefined ? {} : { expected_upstream_digests: expectedUpstreams }),
-      ...(legacyConfirmations === undefined || legacyConfirmations.length === 0
-        ? {}
-        : { legacy_confirmations: Object.freeze(legacyConfirmations) }),
-    });
-  };
+  const reviewRoutes = selected === undefined ? taggedRoutes
+    : taggedRoutes.filter(route => selected.some(reviewer => reviewer.reviewer_id === route.assignment.reviewer_id));
+  const assignmentFor = (routeEntry: (typeof taggedRoutes)[number]): ReviewAssignmentV1 => routeEntry.assignment;
   const envelopeFor = (routeEntry: (typeof taggedRoutes)[number]): DispatchEnvelope => {
     const assignment = assignmentFor(routeEntry);
-    if (priorTriage === undefined) {
-      return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject });
-    }
-    const acceptedIds = new Set([
-      ...(remediationByReviewer.get(routeEntry.assignment.reviewer_id)?.legacy_confirmations ?? [])
-        .map((confirmation) => confirmation.finding_id),
-      ...(remediationByReviewer.get(routeEntry.assignment.reviewer_id)?.finding_ids ?? []),
-    ]);
-    const scoped = priorTriageContextEntry(priorTriage, (findingId) => acceptedIds.has(findingId));
-    return buildReviewEnvelopeWithCap({
-      ...input.envelope,
-      assignment,
-      subject,
-      context: input.envelope.context.map((entry) => entry.kind === "prior-triage" ? scoped : entry),
-    });
+    const context = input.envelope.context.map(entry => entry.kind === "prior-triage" && priorTriage !== undefined
+      ? priorTriageContextEntry(priorTriage, undefined, assignment.reviewer_id) : entry);
+    return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject, context });
   };
   const activeAssignments = reviewRoutes.map(assignmentFor);
   const reviewEnvelopes = reviewRoutes.map(envelopeFor);
@@ -789,6 +663,7 @@ export async function runCounterReview(
     | Readonly<{ ok: true; value: ChildValue }>
     | Readonly<{ ok: false; error: unknown; project_error?: ProjectError }>;
   const retained = dependencies.retained_outputs;
+  const receivedReports = new Map<string, ReviewReportV1>();
   // Failures in the order they FINISHED, so the surfaced error names the same child the
   // failure-observation slot recorded first.
   const failures: Extract<ChildOutcome, { ok: false }>[] = [];
@@ -813,25 +688,24 @@ export async function runCounterReview(
       envelope_input_digest: reviewEnvelope.digest,
       extracted_output_bytes: dispatched.extracted_output_bytes,
       repositories: input.repositories,
-      assignment: Object.freeze({ ...assignment, routing_role: routeEntry.role }),
+      assignment: Object.freeze({ ...assignment, routing_role: routeEntry.role, report_format: true }),
       ...(routeOverride === undefined ? {} : { route_override: routeOverride }),
     });
     const binding = { envelope_digest: reviewEnvelope.digest, role: routeEntry.role, selection: routeEntry.selection };
-    const kept = await retained?.read(binding);
-    if (kept !== undefined) {
-      try {
-        return { ok: true, value: { kind: "review", observation: mint(kept) } };
-      } catch {
-        // Retained bytes that no longer validate are a miss, not a failure: dispatch fresh.
-      }
+    const receive = (result: CounterReviewDispatchResult): void => {
+      const report = readableReviewReport(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.extracted_output_bytes)));
+      receivedReports.set(assignment.reviewer_id, { subject_digest: subject.subject_digest, model: route.model, effort: route.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, report });
+    };
+    let dispatched = await retained?.read(binding);
+    if (dispatched !== undefined) {
+      try { receive(dispatched); } catch { dispatched = undefined; }
     }
-    let dispatched: CounterReviewDispatchResult;
     try {
-      dispatched = await dispatchObserved(routeEntry.role, routeEntry, async (selectedRoute) => {
+      dispatched ??= await dispatchObserved(routeEntry.role, routeEntry, async (selectedRoute) => {
         const result = await dependencies.dispatch(selectedRoute, reviewEnvelope, reviewOutputSchema as PlainJsonValue);
-        try { mint(result); } catch (error) {
-          throw new CliAdapterError(createProjectError("MODEL_OUTPUT_INVALID", { adapter: selectedRoute.adapter, attempt: 1, issue_code: reviewOutputIssueCode(error) }));
-        }
+        // Keep received feedback even if server-owned evidence construction fails afterwards.
+        await retained?.write(binding, result);
+        try { receive(result); } catch { throw new CliAdapterError(createProjectError("MODEL_OUTPUT_INVALID", { adapter: selectedRoute.adapter, attempt: input.authority.context.attempt, issue_code: "review-output-unreadable" })); }
         return result;
       }, reviewEnvelope.digest);
     } catch (error) {
@@ -841,18 +715,16 @@ export async function runCounterReview(
     try {
       observation = mint(dispatched);
     } catch (error) {
-      // Invalid output is not a classified dispatch failure, so no observation slot is written.
+      await retained?.diagnose?.(binding, error);
       return {
         ok: false,
         error,
-        project_error: createProjectError("MODEL_OUTPUT_INVALID", {
-          adapter: route.adapter,
-          attempt: 1,
-          issue_code: reviewOutputIssueCode(error),
+        project_error: createProjectError("STATE_INVALID", {
+          phase_instance: input.authority.context.phase_instance,
+          issue_code: "review-evidence-invalid",
         }),
       };
     }
-    await retained?.write(binding, dispatched);
     return { ok: true, value: { kind: "review", observation } };
   };
 
@@ -978,6 +850,7 @@ export async function runCounterReview(
   // Surface the first failure that finished. Dispatch and routing errors are rethrown so the
   // handler maps them exactly as before; invalid model output is a project error naming the
   // adapter and a content-free issue code.
+  await dependencies.observe_reports?.([...receivedReports.values()]).catch(() => undefined);
   const failed = failures[0];
   if (failed !== undefined) {
     if (failed.project_error !== undefined) {
@@ -999,63 +872,26 @@ export async function runCounterReview(
   if (singleObservations.length !== reviewRoutes.length) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
   }
-  if (singleObservations.some((observation) => observation.evidence.schema_version !== "3")) {
-    throw new TypeError("fresh counter-review observations must all use review schema version 3");
+  if (singleObservations.some((observation) => observation.evidence.schema_version !== "4")) {
+    throw new TypeError("fresh counter-review observations must all use review schema version 4");
   }
   if (effortPlan !== undefined && effortAssessment === undefined) {
     throw new TypeError("phase-design counter-review settled without an effort assessment");
   }
 
-  const aggregated = aggregateActiveReviewerFindings(singleObservations.map((observation, index) => ({
-    tag: reviewRoutes[index]!.tag,
-    schema_version: observation.evidence.schema_version,
-    findings: observation.evidence.findings,
-  })), totalReviewers);
-  const allFindings = aggregated.findings as readonly ReviewFindingV3[];
-  const ownedFindingIds = aggregated.finding_ids_by_reviewer;
-
-  const mergedSummary = aggregated.summary;
-
-  const primaryObs = singleObservations[0]!.evidence as ServerAttestedReviewV3;
-  const reviewerRuns: ReviewerRunV2[] = singleObservations.map((obs, index) => {
-    const evidence = obs.evidence as ServerAttestedReviewV3;
-    const routeEntry = reviewRoutes[index]!;
-    const assignment = activeAssignments[index]!;
-    if (evidence.route_source === undefined) {
-      throw new TypeError("fresh reviewer evidence must carry route provenance");
-    }
-    return Object.freeze({
-      reviewer_id: assignment.reviewer_id,
-      focus: assignment.focus,
-      routing_role: routeEntry.role,
-      criterion_ids: Object.freeze([...assignment.criterion_ids]),
-      rubric_digest: evidence.rubric_digest,
-      model_family: evidence.model_family,
-      model: evidence.model,
-      effort: evidence.effort,
-      adapter: evidence.adapter,
-      cli_version: evidence.cli_version,
-      invocation_id: evidence.invocation_id,
-      envelope_input_digest: evidence.envelope_input_digest,
-      observed_output_digest: evidence.observed_output_digest,
-      finding_ids: Object.freeze([...ownedFindingIds[index]!]),
-      ...(assignment.expected_upstream_digests === undefined
-        ? {}
-        : { expected_upstream_digests: Object.freeze([...assignment.expected_upstream_digests]) }),
-      ...(assignment.legacy_confirmations === undefined
-        ? {}
-        : { legacy_confirmations: Object.freeze([...assignment.legacy_confirmations]) }),
-      ...(evidence.provider === undefined ? {} : { provider: evidence.provider }),
-      route_source: evidence.route_source,
-      ...(evidence.route_override === undefined ? {} : { route_override: evidence.route_override }),
-    });
-  });
-  const mergedReviewEvidence: ReviewEvidence = Object.freeze({
+  const observations = singleObservations.map(observation => observation.evidence as ServerAttestedReviewV4);
+  const primaryObs = observations[0]!;
+  const mergedReviewEvidence: ServerAttestedReviewV4 = Object.freeze({
     ...primaryObs,
-    schema_version: "3",
-    findings: Object.freeze(allFindings),
-    ...mergedSummary,
-    reviewer_runs: Object.freeze(reviewerRuns),
+    reports: Object.freeze(observations.flatMap(evidence => evidence.reports)),
+    ...(() => {
+      const previous = priorTriage?.source_review?.evidence;
+      if (previous?.schema_version !== "4") return {};
+      const latest = new Map([...(previous.previous_reports ?? []), ...previous.reports].map(report => [report.reviewer_id, report]));
+      for (const observation of observations) for (const report of observation.reports) latest.delete(report.reviewer_id);
+      return latest.size === 0 ? {} : { previous_reports: [...latest.values()] };
+    })(),
+    reviewer_runs: Object.freeze(observations.flatMap(evidence => evidence.reviewer_runs)),
     ...(effortAssessment === undefined ? {} : { effort_review: effortAssessment }),
   });
 

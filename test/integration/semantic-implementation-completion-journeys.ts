@@ -117,6 +117,7 @@ function generateOutput(envelope, countPath, findingsByReview, script) {
     }));
     const resolved = (script.resolveAtReview ?? null) !== null && (count + 1) >= (script.resolveAtReview ?? 0);
     const implementation = subject.phase_instance.indexOf("phase-impl-") === 0 && !resolved;
+    if (isGeneral && script.materialDrift === true && implementation) return { report: "The approved upstream plan no longer matches the implemented reality. Update the phase design to describe the verified behavior." };
     const upstreamAlignment = assignment !== undefined && Object.prototype.hasOwnProperty.call(assignment, "expected_upstream_digests")
       ? assignment.expected_upstream_digests.map((digest, index) =>
           script.materialDrift === true && implementation && index === 0
@@ -345,7 +346,7 @@ async function reachAuthorizedImplementationCommit(
   view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
   expect(view.next_action.kind).toBe("review");
   view = await applied(h, invocation, view);
-  expect(view.findings).toEqual([]);
+  expect(view.findings ?? []).toEqual([]);
   view = await applied(h, invocation, view, {
     kind: "gate-summary",
     summary: "The implementation, its notes, and the verification transcript are ready for commit authorization.",
@@ -725,7 +726,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     let work = writeClientImplementation(workspace, view, "request-changes-round-1");
     view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
     view = await applied(h, invocation, view);
-    expect(view.findings).toEqual([]);
+    expect(view.findings ?? []).toEqual([]);
     view = await applied(h, invocation, view, { kind: "gate-summary", summary: "The first implementation round is ready for commit authorization." });
     const tokens = view.presentation?.options.map((option) => option.token) ?? [];
     expect(tokens).toContain("authorize-commit");
@@ -755,7 +756,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     });
     expect(view.next_action.kind).toBe("review");
     view = await applied(h, invocation, view);
-    expect(view.findings).toEqual([]);
+    expect(view.findings ?? []).toEqual([]);
     view = await applied(h, invocation, view, { kind: "gate-summary", summary: "The revised implementation is ready for commit authorization." });
     expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "decision" });
     expect(view.presentation?.options.map((option) => option.token)).toContain("authorize-commit");
@@ -837,12 +838,8 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       expect(view.next_action.kind).toBe("review");
       view = await applied(h, invocation, view);
       expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-      expect(view.findings?.map((finding) => finding.finding_id)).toEqual(["general-impl-blocking-gap"]);
-      view = await applied(h, invocation, view, { kind: "triage", dispositions: [{
-        finding_id: "general-impl-blocking-gap", disposition: "accepted",
-        rationale: "The reviewer identified a material verification gap.",
-        revision_intent: "Export an observable constant.",
-      }] });
+      expect(view.review_reports?.[0]?.report).toContain("findings");
+      view = await applied(h, invocation, view, { kind: "triage", response: { decision: "revise", rationale: "Address the consequential behavior described in the report.", reviewers: [{ reviewer_id: "general", request: "Verify the changed behavior and regression protection." }] } });
       if (view.next_action.kind === "revise") {
         view = await applied(h, invocation, view);
         expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
@@ -935,8 +932,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
       view = await applied(h, invocation, view);
       if (round === 5) break;
-      view = await applied(h, invocation, view, { kind: "triage", dispositions: [{ finding_id: "general-material-gap",
-        disposition: "accepted", rationale: "A material defect remains.", revision_intent: "Complete the changed behavior." }] });
+      view = await applied(h, invocation, view, { kind: "triage", response: { decision: "revise", rationale: "Address the consequential behavior described in the report.", reviewers: [{ reviewer_id: "general", request: "Verify the changed behavior and regression protection." }] } });
       expect(view.next_action.kind).toBe("revise");
       view = await applied(h, invocation, view);
     }
@@ -950,153 +946,35 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(view.condition).toBe("complete");
   });
 
-  scenario("pushes through the exact exhausted review and preserves configured commit authorization", async () => {
-    const repeated = [{
-      finding_id: "repeated-verification-gap", severity: "blocker", blocking: true,
-      summary: "The verification remains disputed.", evidence: "The reviewer repeats the same exact evidence.",
-      suggested_resolution: "Rewrite the observable verification again.",
-    }];
-    const workspace = await createTaskWorkspace({
-      taskId: "semantic-impl-review-push-through",
-      label: "semantic-impl-review-push-through",
-    });
+  scenario("finishes disputed fifth-round feedback while preserving configured commit approval", async () => {
+    const repeated = [{ finding_id: "disputed-gap", severity: "blocker", blocking: true, summary: "The verification remains disputed.", evidence: "Repeated feedback.", suggested_resolution: "Rewrite verification." }];
+    const workspace = await createTaskWorkspace({ taskId: "report-finish-with-approval" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
-    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], repeated, repeated, repeated, repeated, repeated, []]));
+    restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], repeated]));
     const h = semanticJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
-
     let view = await applied(h, invocation, handoff);
     writeApprovalRulesConfig(workspace, ["**/*.ts"]);
-    for (let round = 1; round <= 5; round += 1) {
-      const work = writeClientImplementation(workspace, view, `push-through-round-${round}`);
+    for (let round = 1; round <= 5; round++) {
+      const work = writeClientImplementation(workspace, view, `disputed-${round}`);
       view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
       view = await applied(h, invocation, view);
-      expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-      view = await applied(h, invocation, view, { kind: "triage", dispositions: [{
-        finding_id: "general-repeated-verification-gap",
-        disposition: "accepted",
-        rationale: "The reviewer identified a material gap.",
-        revision_intent: "Rework the verification.",
-      }] });
-      if (round < 5) {
-        expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
-        view = await applied(h, invocation, view);
-        expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
-      }
+      expect(view.next_action.kind).toBe("triage");
+      view = await applied(h, invocation, view, { kind: "triage", response: round === 5
+        ? { decision: "finish", rationale: "The remaining suggestion is disproportionate to the verified requirement." }
+        : { decision: "revise", rationale: "Improve the verification.", reviewers: [{ reviewer_id: "general", request: "Verify the updated checks." }] } });
+      if (round < 5) view = await applied(h, invocation, view);
     }
-
+    expect(view.progress).toMatchObject({ review_rounds_completed: 5 });
     expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-    const reviewsAtExhaustion = reviewCountAt(workspace);
-    view = await applied(h, invocation, view, {
-      kind: "gate-summary",
-      summary: "Five completed review rounds retained the same exact accepted finding.",
-    });
-    expect(view.presentation).toMatchObject({ class: "exception" });
-    expect(view.presentation?.options.map((option) => option.token)).toContain("continue-despite-review");
-    expect(view.presentation?.details).toEqual(expect.arrayContaining([
-      expect.stringMatching(/Accepted finding general-repeated-verification-gap \(defect\/certain\)/u),
-      expect.stringMatching(/Falsifier:/u),
-    ]));
-
-    const prePushStateBytes = readFileSync(workspace.services.authority.state.absolute);
-    const pushDecision = {
-      kind: "decision",
-      choice: "continue-despite-review",
-      reason: "The exact repeated finding has had sufficient human review; retain all policy and commit checks.",
-    } as const;
-    view = await applied(h, invocation, view, pushDecision);
-    expect(reviewCountAt(workspace)).toBe(reviewsAtExhaustion);
-    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-    expect(view.review_push_throughs).toEqual([expect.objectContaining({
-      phase_instance: "phase-impl-1",
-      attempt: 5,
-      status: "current",
-      reason: "The exact repeated finding has had sufficient human review; retain all policy and commit checks.",
-      accepted_occurrences: [expect.objectContaining({ finding_id: "general-repeated-verification-gap" })],
-    })]);
-
-    const durable = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
-    expect(durable.review_push_throughs).toHaveLength(1);
-    expect(durable.approvals.filter((approval: { gate_kind: string }) =>
-      approval.gate_kind === "attempts-exhausted")).toHaveLength(1);
-    expect(durable.waivers).toEqual([]);
-
-    // Simulate the receipt-before-state crash cut: the immutable archive and receipt survive, but
-    // durable state still names the open gate and therefore carries no push-through authority.
-    writeFileSync(workspace.services.authority.state.absolute, prePushStateBytes);
-    const partial = await h.status(invocation);
-    expect(partial.review_push_throughs).toBeUndefined();
-    expect(partial.next_action).toMatchObject({ kind: "decide", expected_submission: "none" });
-    view = await applied(h, invocation, partial);
-    const replayedDurable = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
-    expect(replayedDurable.review_push_throughs).toHaveLength(1);
-    expect(replayedDurable.approvals.filter((approval: { gate_kind: string }) =>
-      approval.gate_kind === "attempts-exhausted")).toHaveLength(1);
-
-    view = await applied(h, invocation, view, {
-      kind: "gate-summary",
-      summary: "The push-through settled only the repeated rubric finding; configured commit authorization remains.",
-    });
-    expect(view.presentation).toMatchObject({ class: "configured-approval" });
-    expect(view.presentation?.options.map((option) => option.token)).toContain("authorize-commit");
-    view = await applied(h, invocation, view, {
-      kind: "decision",
-      choice: "request-changes",
-      reason: "Exercise a later review generation before final commit authorization.",
-    });
-    expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
-    view = await applied(h, invocation, view);
-    const laterWork = writeClientImplementation(workspace, view, "post-push-through-generation");
-    view = await applied(h, invocation, view, {
-      ...implementationSubmission(workspace, laterWork.outputs),
-      human_revision: {
-        classification: "significant",
-        rationale: "The human-requested implementation change requires fresh review.",
-      },
-    });
-    expect(view.next_action).toMatchObject({ kind: "review" });
-    view = await applied(h, invocation, view);
-    expect(view.review_push_throughs).toEqual([
-      expect.objectContaining({ status: "historical" }),
-    ]);
-    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-    view = await applied(h, invocation, view, {
-      kind: "gate-summary",
-      summary: "The later generation passed fresh review and still requires configured commit authorization.",
-    });
-    view = await applied(h, invocation, view, {
-      kind: "decision",
-      choice: "authorize-commit",
-      reason: "Authorize the exact freshly reviewed implementation.",
-    });
-    expect(view.next_action).toMatchObject({ kind: "commit" });
-    expect(reviewCountAt(workspace)).toBe(reviewsAtExhaustion + 1);
-
-    const pushGateId = replayedDurable.review_push_throughs[0].gate_id as string;
-    const pushDecisionPath = join(
-      workspace.services.authority.task_root,
-      "authority", "decisions", pushGateId, "decision.json",
-    );
-    const authenticDecisionBytes = readFileSync(pushDecisionPath);
-    const tamperedDecision = JSON.parse(authenticDecisionBytes.toString("utf8"));
-    tamperedDecision.subject_digest = "f".repeat(64);
-    writeFileSync(pushDecisionPath, canonicalJsonBytes(tamperedDecision));
-    const invalidAudit = await h.status(invocation);
-    expect(invalidAudit.review_push_throughs).toEqual([
-      expect.objectContaining({ gate_id: pushGateId, status: "invalid" }),
-    ]);
-    // The invalid historical exception is not treated as a grant; the independent later review
-    // and its exact commit authorization remain sufficient on their own.
-    expect(invalidAudit.next_action.kind).toBe("commit");
-
-    writeFileSync(pushDecisionPath, authenticDecisionBytes);
-    rmSync(pushDecisionPath);
-    const unavailableAudit = await h.status(invocation);
-    expect(unavailableAudit.review_push_throughs).toEqual([
-      expect.objectContaining({ gate_id: pushGateId, status: "unavailable" }),
-    ]);
-    expect(unavailableAudit.next_action.kind).toBe("commit");
+    const count = reviewCountAt(workspace);
+    view = await applied(h, invocation, view, { kind: "gate-summary", summary: "Reviewed and verified; one disproportionate recommendation remains." });
+    expect(view.presentation?.options.map(option => option.token)).toContain("authorize-commit");
+    expect(view.review_push_throughs).toBeUndefined();
+    view = await applied(h, invocation, view, { kind: "decision", choice: "authorize-commit", reason: "Approve the reviewed implementation with the explained residual concern." });
+    expect(view.next_action.kind).toBe("commit");
+    expect(reviewCountAt(workspace)).toBe(count);
   });
 
   scenario("re-enters production without a human gate on material upstream drift and commits autonomously once the phase design is co-produced", async () => {
@@ -1114,13 +992,11 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
     view = await applied(h, invocation, view);
 
-    // Material drift is producer work: no presentation, no human, a revise offer that names the
-    // drifted document and why.
     expect(view.presentation).toBeUndefined();
-    expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
-    expect(view.detail).toMatch(/departs materially from .*design\.md/u);
-    expect(view.detail).toContain("claim-verified-behavior");
-    expect(view.detail).toContain("no longer matches the implemented reality");
+    expect(view.next_action.kind).toBe("triage");
+    expect(view.review_reports?.[0]?.report).toContain("no longer matches");
+    view = await applied(h, invocation, view, { kind: "triage", response: { decision: "revise", rationale: "Update the governing phase design to reflect the implementation.", reviewers: [{ reviewer_id: "general", request: "Verify the phase design reflects the implementation." }] } });
+    expect(view.next_action.kind).toBe("revise");
     const reviewsAfterDrift = reviewCountAt(workspace);
     const headBefore = headAt(workspace);
 
@@ -1145,57 +1021,23 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(headAt(workspace)).toBe(headBefore);
   });
 
-  scenario("opens the material-drift gate when drift is never resolved within the attempt budget", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "semantic-impl-drift-exhausted", label: "semantic-impl-drift-exhausted" });
+  scenario("passes plan-alignment feedback to the working AI without a separate drift blocker", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "report-plan-feedback" });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []], { materialDrift: true }));
     const h = semanticJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
-
     let view = await applied(h, invocation, handoff);
-    let rounds = 0;
-    let boundary: WorkflowViewV1 | undefined;
-    for (rounds = 1; rounds <= 6 && boundary === undefined; rounds += 1) {
-      const work = writeClientImplementation(workspace, view, `drift-exhausted-round-${rounds}`);
-      view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
-      view = await applied(h, invocation, view);
-      if (view.next_action.kind === "revise") {
-        expect(view.presentation).toBeUndefined();
-        expect(view.detail).toMatch(/departs materially/u);
-        view = await applied(h, invocation, view);
-        expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
-      } else {
-        expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-        expect(view.detail).toMatch(/material-drift/u);
-        boundary = view;
-      }
-    }
-    rounds -= 1;
-    expect(boundary).toBeDefined();
-    // The default budget: the first produce plus two drift re-entries, then the human decides.
-    expect(rounds).toBe(5);
-    view = boundary!;
-    const reviewsAtGate = reviewCountAt(workspace);
-
-    view = await applied(h, invocation, view, {
-      kind: "gate-summary", summary: "The implementation still drifts materially from its approved plan after every automated round.",
-    });
-    const tokens = view.presentation?.options.map((option) => option.token) ?? [];
-    expect(tokens).toContain("update-earlier-work");
-    expect(tokens).toContain("change-current-work");
-
-    // change-current-work is the same close-only checkpoint as request-changes.
-    view = await applied(h, invocation, view, {
-      kind: "decision", choice: "change-current-work", reason: "The current implementation must match the approved plan.",
-    });
-    expect(view.position).toEqual({ kind: "phase-impl", phase: 1 });
-    expect(view.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
-    expect(view.resources).toEqual([]);
-    expect(reviewCountAt(workspace)).toBe(reviewsAtGate);
+    writeApprovalRulesConfig(workspace, ["**/*.sql"]);
+    const work = writeClientImplementation(workspace, view, "plan-feedback");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
     view = await applied(h, invocation, view);
-    expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
-    expect(view.resources.length).toBeGreaterThan(0);
+    expect(view.next_action.kind).toBe("triage");
+    expect(view.review_reports?.[0]?.report).toContain("no longer matches");
+    view = await applied(h, invocation, view, { kind: "triage", response: { decision: "finish", rationale: "The implementation meets the approved behavior; the suggested wording change adds no value." } });
+    expect(view.next_action.kind).toBe("commit");
+    expect(view.presentation).toBeUndefined();
   });
 
   scenario("re-enters production with the unmet rule named when the constitution review fails and commits autonomously once it passes", async () => {
@@ -1323,7 +1165,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     const headBeforeGate = headAt(workspace);
     view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
     view = await applied(h, invocation, view);
-    expect(view.findings).toEqual([]);
+    expect(view.findings ?? []).toEqual([]);
 
     // The failed constitution rule is folded into the ordinary commit-authorization boundary.
     view = await applied(h, invocation, view, {

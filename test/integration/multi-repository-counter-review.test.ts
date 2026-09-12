@@ -227,7 +227,7 @@ describe("multi-repository counter-review handler", () => {
   it("binds plural document snapshots and the same ordered pins into durable evidence", async () => {
     const h = await fixture({ plural: true }); activate(h);
     const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invoke("plural-review"));
-    expect(result).toMatchObject({ ok: true, value: { verdict: "pass" } });
+    expect(result).toMatchObject({ ok: true, value: { reports: expect.any(Array) } });
     const observed = capture(h);
     expect(observed.entries).toEqual(["api", "primary"]);
     expect(observed.api).toBe(true);
@@ -251,7 +251,7 @@ describe("multi-repository counter-review handler", () => {
   it("preserves the legacy single-repository checkout binding and child cwd", async () => {
     const h = await fixture({ plural: false }); activate(h);
     const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invoke("single-review"));
-    expect(result).toMatchObject({ ok: true, value: { verdict: "pass" } });
+    expect(result).toMatchObject({ ok: true, value: { reports: expect.any(Array) } });
     const observed = capture(h);
     expect(observed.entries).toContain("primary.ts");
     expect(observed.primary).toBe(true);

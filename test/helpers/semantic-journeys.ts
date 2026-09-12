@@ -47,7 +47,7 @@ export type SemanticJourneyHarness = Readonly<{
   context: () => ReturnType<typeof createInvocationContext>;
 }>;
 
-export function semanticJourneyHarness(workspace: TaskWorkspace): SemanticJourneyHarness {
+export function semanticJourneyHarness(workspace: TaskWorkspace, finishEmptyReports = true): SemanticJourneyHarness {
   const connection = connectionContextFactory.captureStartup({
     connection_id: `semantic-journey-${workspace.taskId}`,
     startup_repository_candidate: { working_directory: workspace.root },
@@ -77,10 +77,19 @@ export function semanticJourneyHarness(workspace: TaskWorkspace): SemanticJourne
     submission?: ApplySubmissionV1,
   ): Promise<SemanticResultV1> {
     if (view.next_action.offer === undefined) throw new Error("the current view has no semantic offer");
-    return handleSemanticApply({
+    let result = await handleSemanticApply({
       schema_version: "1", task_id: workspace.taskId, invocation,
       action: { offer: view.next_action.offer, ...(submission === undefined ? {} : { submission }) },
     }, context());
+    if (finishEmptyReports && result.ok && view.next_action.kind === "review" && result.value.next_action.kind === "triage" &&
+        result.value.review_reports?.every(report => {
+          try { const parsed = JSON.parse(report.report); return Array.isArray(parsed.findings) && parsed.findings.length === 0; } catch { return false; }
+        })) {
+      result = await handleSemanticApply({ schema_version: "1", task_id: workspace.taskId, invocation,
+        action: { offer: result.value.next_action.offer!, submission: { kind: "triage", response: { decision: "finish", rationale: "The scripted reports identify no concerns." } } },
+      }, context());
+    }
+    return result;
   }
 
   async function applyAndAssertFreshStatus(

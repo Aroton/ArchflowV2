@@ -180,7 +180,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     const reviewed = await h.apply(invocation, submitted.value);
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
-    expect(reviewed.value.findings).toEqual([]);
+    expect(reviewed.value.findings ?? []).toEqual([]);
     expect(reviewed.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     expect(readFileSync(work.sourceAbsolute, "utf8")).toBe(SOURCE_BYTES);
     expect(readFileSync(work.notesAbsolute, "utf8")).toBe(IMPLEMENTATION_NOTES);
@@ -281,16 +281,11 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
     expect(reviewed.value.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-    expect(reviewed.value.findings?.map((finding) => finding.finding_id)).toEqual([FRESH_FINDING_ID]);
+    expect(reviewed.value.review_reports?.[0]?.report).toContain("findings");
     expect(readFileSync(work.sourceAbsolute, "utf8")).toBe(SOURCE_BYTES);
     expect(gitHead(workspace)).toBe(baseline);
 
-    const triaged = await h.apply(invocation, reviewed.value, { kind: "triage", dispositions: [{
-      finding_id: FRESH_FINDING_ID,
-      disposition: "accepted",
-      rationale: "The reviewer identified a real behavioral gap in the implemented function.",
-      revision_intent: "Reject non-finite input explicitly and re-verify with a fresh transcript.",
-    }] });
+    const triaged = await h.apply(invocation, reviewed.value, { kind: "triage", response: { decision: "revise", rationale: "Address the consequential behavior described in the report.", reviewers: [{ reviewer_id: "general", request: "Verify the changed behavior and regression protection." }] } });
     expect(triaged.ok, JSON.stringify(triaged)).toBe(true);
     if (!triaged.ok) return;
     expect(triaged.value.next_action).toMatchObject({ kind: "revise", expected_submission: "none" });
@@ -314,7 +309,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     const reReviewed = await h.apply(invocation, resubmitted.value);
     expect(reReviewed.ok, JSON.stringify(reReviewed)).toBe(true);
     if (!reReviewed.ok) return;
-    expect(reReviewed.value.findings).toEqual([]);
+    expect(reReviewed.value.findings ?? []).toEqual([]);
     expect(reReviewed.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     expect(readFileSync(work.sourceAbsolute, "utf8")).toBe(SOURCE_BYTES_REVISED);
     expect(readFileSync(work.notesAbsolute, "utf8")).toBe(IMPLEMENTATION_NOTES);
@@ -460,7 +455,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     const reviewed = await h.apply(invocation, fresh.value);
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
-    expect(reviewed.value.findings).toEqual([]);
+    expect(reviewed.value.findings ?? []).toEqual([]);
     expect(reviewed.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     expect(Number(reviewCount(workspace))).toBe(dispatchesBefore + 1);
   });

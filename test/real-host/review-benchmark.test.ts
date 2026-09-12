@@ -274,11 +274,12 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
                 repository_identity_digest: workspace.initialization.repository_identity_digest,
                 commit: workspace.initialization.code_baseline_commit,
               }],
-              assignment: { ...assignment, routing_role: "counter-reviewer" },
+              assignment: { ...assignment, routing_role: "counter-reviewer", report_format: true },
               envelope_input_digest: envelope.digest,
               extracted_output_bytes: dispatched.extracted_output_bytes,
             });
             const evidence = observed.evidence;
+            if (evidence.schema_version !== "4") throw new Error("expected report evidence");
             expect(evidence.assurance).toBe("server-attested");
             expect(evidence.model_family).toBe(direction.reviewer_family);
 
@@ -300,11 +301,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
                 effort: evidence.effort,
                 cli_version: evidence.cli_version,
               },
-              verdict: evidence.verdict,
-              ...(evidence.schema_version !== "1"
-                ? { total_findings: evidence.total_findings, partition_counts: evidence.partition_counts }
-                : { blocking_count: evidence.blocking_count }),
-              findings: evidence.findings,
+              reports: evidence.reports,
             });
             runIds.push(runId);
           }
@@ -319,33 +316,6 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
       typeof entry === "object" && entry !== null && !Array.isArray(entry)
         ? entry as Readonly<Record<string, PlainJsonValue>>
         : undefined;
-    const failedRuns = observations.filter((entry) => {
-      const verdict = observationRecord(entry)?.verdict;
-      return verdict === "fail" || verdict === "review-raised";
-    }).length;
-    const substantiveRuns = observations.filter((entry) => {
-      const observation = observationRecord(entry);
-      const partitions = observationRecord(observation?.partition_counts as PlainJsonValue);
-      if (partitions === undefined) {
-        const verdict = observation?.verdict;
-        return verdict === "fail" || verdict === "review-raised";
-      }
-      return Object.entries(partitions).some(([key, value]) =>
-        !key.startsWith("preference:") && typeof value === "number" && value > 0,
-      );
-    }).length;
-    const advisoryRuns = observations.filter((entry) => {
-      const observation = observationRecord(entry);
-      const partitions = observationRecord(observation?.partition_counts as PlainJsonValue);
-      if (partitions === undefined) return false;
-      const hasSubstantive = Object.entries(partitions).some(([key, value]) =>
-        !key.startsWith("preference:") && typeof value === "number" && value > 0,
-      );
-      if (hasSubstantive) return false;
-      return Object.entries(partitions).some(([key, value]) =>
-        key.startsWith("preference:") && typeof value === "number" && value > 0,
-      );
-    }).length;
     const observationPayload = {
       schema_version: "1",
       benchmark_input_digest: benchmarkInputDigest,
@@ -357,14 +327,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
         sample_size_note: "Thirteen corpus cases, two producer directions, one real model turn per case and direction; all twenty-six turns were serialized by the production dispatch FIFO.",
       },
       runs: observations,
-      secondary_raw_telemetry: {
-        fail_verdict_count: failedRuns,
-        fail_verdict_rate: failedRuns / plannedTurns,
-        substantive_run_count: substantiveRuns,
-        substantive_run_rate: substantiveRuns / plannedTurns,
-        advisory_run_count: advisoryRuns,
-        advisory_run_rate: advisoryRuns / plannedTurns,
-      },
+      secondary_raw_telemetry: { received_report_count: observations.length },
     } as const satisfies PlainJsonValue;
     const document = buildBenchmarkDocument(observationPayload, runIds);
 

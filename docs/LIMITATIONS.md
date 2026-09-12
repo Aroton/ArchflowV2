@@ -1,6 +1,8 @@
 # LIMITATIONS
 
-**Explored:** 2026-09-11 · **Commit:** `fe0e4ce` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+
+Review V4 deliberately does not prove that every reported concern was addressed. The working AI interprets reports and may finish with explained disagreement. Server-attested provenance identifies who reviewed which subject; it does not attest correctness. Partial and previous-version reports are not current completed review authority.
 
 ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
 
@@ -156,7 +158,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Existing mitigation:** A record is reused only for the exact envelope digest the server just recomputed from durable authority, the same role, route, and route provenance, and only when its bytes still hash to the recorded digest and pass the same output validation and binding checks a fresh dispatch must pass. Reuse then goes through the ordinary currency re-check and atomic commit. Records are deleted when the round commits and swept with the phase otherwise.
 
-**Contributor record:** Fresh Review V3 evidence records every rubric contributor's stable reviewer ID, focus, routing role, ordered criterion IDs, alignment/legacy-confirmation responsibility, rubric and envelope digests, model/effort/adapter/CLI provenance, route source or override, and exact owned finding IDs. Every finding also carries server-stamped reviewer/focus/routing/criterion attribution, and the top-level findings must partition exactly across the runs. Archived evidence remains readable, but missing contributor facts cannot be reconstructed retroactively.
+**Contributor record:** Fresh Review V4 records each report with its reviewer identity, focus, model/effort, and reviewed subject. Dispatch provenance and snapshot bindings remain server-owned. The server does not attest that the report is correct or that every concern was addressed. Previous-version reports are labeled separately from current verification, and partial reports never authorize completion. Archived V1–V3 retain their native attribution records.
 
 **Why accepted:** The cache lives under the same same-user filesystem assumption as every other runtime file (see "Task filesystem races are not adversarially hardened" above): a process that can rewrite it can equally replace the reviewer CLI on `PATH`. Making retained outputs authoritative would add durable-state machinery to save one re-dispatch, and the records never change state, consume an attempt, or authorize anything on their own.
 

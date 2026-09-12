@@ -185,12 +185,7 @@ async function reachMigrationAuditPresentation(options: {
     expect(view.next_action.kind).toBe("triage");
     view = await applyOk(h, design, view, {
       kind: "triage",
-      dispositions: firstFindings.map((finding) => ({
-        finding_id: `general-${String(finding.finding_id)}`,
-        disposition: "rejected",
-        rationale: "The finding does not apply to the imported bytes.",
-        evidence: "The staged legacy document is the reviewed source of truth.",
-      })),
+      response: { decision: "finish", rationale: "The staged legacy document addresses the reviewer’s concern." },
     });
   }
   expect(view.next_action.kind).toBe("decide");

@@ -54,6 +54,7 @@ export type RetainedChildOutputStore = Readonly<{
   write: (binding: RetainedChildOutputBinding, result: DispatchCoordinatorResult) => Promise<void>;
   /** Best-effort removal of every record the round with this envelope digest retained. */
   discard: (envelopeDigest: Sha256Digest) => Promise<void>;
+  diagnose?: (binding: RetainedChildOutputBinding, error: unknown) => Promise<void>;
 }>;
 
 export type RetainedChildOutputContext = Readonly<{
@@ -229,6 +230,22 @@ export function createRetainedChildOutputStore(
       } catch {
         // Retention is a convenience for the retry; it must never fail the round that produced the output.
       }
+    },
+    async diagnose(binding, error) {
+      try {
+        await ensureAttemptDirectory(context.authority, context.phase_instance);
+        const claim = parseWorkspacePathClaim(`${recordClaim(context.phase_instance, binding).replace(/\.json$/u, "")}-validation.json`);
+        const target = await resolveRecord(context, claim);
+        if (!target.ok) return;
+        const issues = error instanceof z.ZodError ? error.issues.slice(0, 20).map(issue => ({
+          code: issue.code,
+          path: issue.path.slice(0, 12).map(part => typeof part === "number" ? part : String(part).replace(/[^a-zA-Z0-9_-]/gu, "?").slice(0, 80)),
+        })) : [];
+        await writer.replaceRegular(target.value, canonicalJsonBytes({
+          stage: "server-evidence-validation", message: "Received feedback could not be assembled into a server review record.",
+          issues, envelope_digest: binding.envelope_digest,
+        }), false);
+      } catch { /* Diagnostics must preserve the original failure. */ }
     },
     async discard(envelopeDigest) {
       try {

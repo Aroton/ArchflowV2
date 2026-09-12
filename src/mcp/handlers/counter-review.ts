@@ -1,3 +1,4 @@
+import { writeReceivedFeedback } from "../../dispatch/review-feedback.js";
 import { governingDocumentComparisons } from "../../state/governing-document-comparison.js";
 import { createDispatchRecovery } from "../../dispatch/recovery.js";
 import { readFile } from "node:fs/promises";
@@ -679,6 +680,7 @@ export async function handleCounterReview(
         await diagnosticObserver(role, selected, error);
       },
       ...(retainedOutputs === undefined ? {} : { retained_outputs: retainedOutputs }),
+      observe_reports: reports => writeReceivedFeedback(services.authority, services.dependencies, state.value, produce.value.artifact_digest, reports),
       ...(dispatchAlreadySerialized ? {
         serialize_dispatch: async <T>(operation: () => Promise<T>) => operation(),
         serialize_dispatch_all: async <T>(ops: readonly (() => Promise<T>)[]) =>

@@ -1,6 +1,8 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-09-11 · **Commit:** `5a75d0e` · **Covers:** `src/contracts/automation-status.ts`, `src/contracts/workflow-progress.ts`, `src/local/automation-status*.ts`, `src/local/commands.ts`, `src/state/semantic-*.ts`, `src/dispatch/recovery.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `src/contracts/automation-status.ts`, `src/contracts/workflow-progress.ts`, `src/local/automation-status*.ts`, `src/local/commands.ts`, `src/state/semantic-*.ts`, `src/dispatch/recovery.ts`, `test/integration/automation-status-*.test.ts`
+
+For Review V4, `awaiting-client` at triage means the working AI must interpret reports and submit finish, revise, or escalate. It is not itself a human boundary. Partial feedback remains visible during retry, and successful siblings are reused. Completed-round progress remains independent of dispatch retries.
 
 `archflow-local automation-status --task <task>` is the read-only controller contract. It identifies the current condition, responsible actor, and exact next skill or repair action. It never reads stdin, acquires the task lock, dispatches reviewers, edits files, answers gates, stages files, or commits.
 

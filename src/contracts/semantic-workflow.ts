@@ -1,3 +1,5 @@
+import { reviewResponseSchema, type ReviewResponse } from "./triage.js";
+import { reviewReportV1Schema, type ReviewReportV1 } from "./review.js";
 import { workflowProgressV1Schema, type WorkflowProgressV1 } from "./workflow-progress.js";
 import { z } from "zod";
 
@@ -356,6 +358,10 @@ export type WorkflowViewV1 = {
   readonly position?: WorkflowPositionV1;
   readonly resources: readonly WorkflowResourceV1[];
   readonly next_action: SemanticNextActionV1;
+  readonly review_reports?: readonly ReviewReportV1[];
+  readonly previous_review_reports?: readonly ReviewReportV1[];
+  readonly partial_review_reports?: readonly ReviewReportV1[];
+  readonly review_response?: ReviewResponse;
   readonly findings?: readonly PublicFindingV1[];
   /** Superseded dispositioned occurrences reconstructed from the durable cumulative ledger. */
   readonly finding_history?: readonly PublicFindingV1[];
@@ -455,6 +461,7 @@ export type ApplySubmissionV1 =
     }
   | { readonly kind: "work-result"; readonly outcome: "failed"; readonly reason: string; readonly validation_override_request?: ValidationOverrideRequestV1 }
   | { readonly kind: "triage"; readonly dispositions: readonly PublicTriageDispositionV1[] }
+  | { readonly kind: "triage"; readonly response: ReviewResponse }
   | { readonly kind: "gate-summary"; readonly summary: string }
   | { readonly kind: "decision"; readonly choice: string; readonly reason: string; readonly option_rationale?: string }
   | { readonly kind: "review-dispatch"; readonly route_override: RouteOverrideDeclaration };
@@ -484,6 +491,10 @@ export type SemanticStatusSnapshotV1 = {
   /** Authenticated initialization binding; used only to retain legacy migration-audit ownership. */
   readonly legacy_import_initialization?: true;
   readonly status: PlainJsonValue;
+  readonly review_reports?: readonly ReviewReportV1[];
+  readonly previous_review_reports?: readonly ReviewReportV1[];
+  readonly partial_review_reports?: readonly ReviewReportV1[];
+  readonly review_response?: ReviewResponse;
   readonly full_findings: readonly PublicFindingV1[];
   readonly finding_history?: readonly PublicFindingV1[];
   /** Per-attempt finding and acceptance counts for the current phase instance, from retained review and triage. */
@@ -806,6 +817,10 @@ export const workflowViewV1Schema = z.object({
   taxonomy_denial_rates: taxonomyDenialRatesV1Schema.optional(),
   review_context: publicReviewContextV1Schema.optional(),
   review_strength: publicReviewStrengthV1Schema.optional(),
+  review_reports: z.array(reviewReportV1Schema).optional(),
+  previous_review_reports: z.array(reviewReportV1Schema).optional(),
+  partial_review_reports: z.array(reviewReportV1Schema).optional(),
+  review_response: reviewResponseSchema.optional(),
   implementation_recommendation: implementationRecommendationV1Schema,
   presentation: humanPresentationV1Schema.optional(),
   dispatch_failure: publicDispatchFailureV1Schema.optional(),
@@ -865,7 +880,7 @@ export const applySubmissionV1Schema = z.union([
   z.object({ kind: z.literal("reopening-request"), request: boundedText }).strict(),
   z.object({ kind: z.literal("work-result"), outcome: z.literal("succeeded"), implementation: implementationFactsV1Schema.optional(), human_revision: humanRevisionDeclarationV1Schema.optional() }).strict(),
   z.object({ kind: z.literal("work-result"), outcome: z.literal("failed"), reason: boundedText, validation_override_request: semanticValidationOverrideRequestV1Schema.optional() }).strict(),
-  z.object({ kind: z.literal("triage"), dispositions: z.array(triageDispositionV1Schema) }).strict(),
+  z.object({ kind: z.literal("triage"), dispositions: z.array(triageDispositionV1Schema).optional(), response: reviewResponseSchema.optional() }).strict().refine(value => (value.dispositions === undefined) !== (value.response === undefined), "supply either response or archived dispositions"),
   z.object({ kind: z.literal("gate-summary"), summary: boundedText }).strict(),
   z.object({ kind: z.literal("decision"), choice: nonBlank, reason: boundedText, option_rationale: boundedText.optional() }).strict(),
   z.object({ kind: z.literal("review-dispatch"), route_override: routeOverrideDeclarationV1Schema }).strict(),

@@ -26,11 +26,10 @@ describe("advertised MCP tool catalogue", () => {
         expect(descriptor.inputSchema, `${descriptor.name} input root ${combinator}`).not.toHaveProperty(combinator);
       }
     }
-    // Measured at 65,607 bytes after adding native Review V3 general/test findings, reviewer
-    // attribution, responsibility projection, and superseded-finding history.
+    // Measured at 73,924 bytes with current, prior, and partial reports plus producer responses.
     // The ceiling retains about 3% headroom so accidental recursive growth still fails while
-    // accounting for the expanded user-visible review contract.
+    // accounting for current, previous, and partial reports plus the producer response.
     // Input roots and their host-compatibility constraints remain unchanged.
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(69_000);
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(76_000);
   });
 });

@@ -2,6 +2,8 @@
 
 **Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** the whole repository
 
+Fresh reviews return readable reports to the working AI, which chooses finish, revision with selected verification reviewers, or human escalation. Constitution and commit approval remain separate.
+
 ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, either family by explicit config). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
 
 > **Nothing an agent says is trusted until the server has re-derived it.** The only authority is durable state on disk, written and verified by the server.
@@ -41,7 +43,7 @@ flowchart TB
     MCP -->|"writes & verifies"| State
     MCP -->|"owns ignored runtime cache"| Work
     MCP -->|"dispatches counter-review<br/>and constitution review"| Child
-    Child -->|"bound findings"| MCP
+    Child -->|"reports and policy judgments"| MCP
 ```
 
 One client loop serves every workflow. PRD, task design, phase design, phase implementation, status reporting, and legacy adoption all use `archflow_status` for one reconciled, read-only view and `archflow_apply` for exactly one server-offered action. The offer hides revisions, digests, gate bindings, and request composition while keeping the client responsible for authored production and triage submissions. The one purpose-specific local adapter is the legacy upgrade: preview, stage, and atomic adoption run through `archflow-local upgrade` because the task does not exist yet at adoption time; everything after adoption is ordinary semantic surface. Git also remains client-owned: the semantic view returns exact authorized commit facts — plural path set, message, target ref, and baseline. Those facts already derive from either matching human approval or authenticated no-wait rule authority. The client verifies and stages exactly them, inspects the staged diff and message, creates the commit without another approval question, and asks read-only status to observe proof. The server never stages or commits repository bytes.
@@ -73,7 +75,7 @@ flowchart LR
 
 The counter_review step is one semantic action that runs the configured rubric reviewers and, when active rules exist, the constitution reviewer. The children share sealed repository views and their results commit atomically. For implementation, declared outputs, co-produced documents, and their current behavior are the subject; unchanged files and context-only repositories are supporting evidence, not a general review target. Every finding must tie a material defect to behavior introduced, exposed, or worsened by the current change.
 
-Design subjects may be compound so planning can correct their parents: task design binds `design.md` with current `prd.md`, and phase design binds its phase document with current `design.md` and `prd.md`. Triage is producer-owned and falsifier-first: the producer checks whether a claim concerns the submitted subject and has a concrete material consequence, runs every feasible returned falsifier, and records the observed evidence before choosing a disposition. Taxonomy describes the claim; it does not choose the outcome. Invalid, disproved, speculative, inconsequential, unrelated, unaffected pre-existing, optional-cleanup, and merely preferred-alternative claims are rejected rather than placated with artifact churn.
+Design subjects may be compound so planning can correct their parents: task design binds `design.md` with current `prd.md`, and phase design binds its phase document with current `design.md` and `prd.md`. The working AI interprets reports, checks consequential concerns proportionally, and chooses whether to revise, finish, or ask the human. The server binds that response to the current reviewed work; it does not enforce a finding taxonomy or unanimous agreement.
 
 Once triage reaches a fixed point, the rule settlement decides whether the server opens a human gate or returns direct authority. `accepted` sends a material change back through production and full review. `accepted-editorial` is a distinct, meaning-preserving one-hop route available only for PRD and task design, and still ends at human approval of the final bytes; phase design and implementation refuse it, so every accepted byte change there uses `accepted`. `rejected` requires a rationale and closes the finding; `escalated-human` requests human judgment over a genuinely material unresolved claim but supplies no authority; `deferred` postpones only a non-defect claim that is demonstrably non-material now and belongs to a real later boundary. Remediation sends only latest accepted intents to their owning reviewers, with the first configured reviewer handling an unattributed accepted finding. The cumulative ledger remains durable for audit and `review_strength`, not reviewer context. Constitution verdicts are never triaged.
 
@@ -110,7 +112,7 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **Constitution** — versioned repository policy rules (`.archflow/constitution/`) that the constitution review — dispatched inside the offered review action when active rules exist — judges every artifact against, pinned per task at an approved commit.
 - **Waiver** — a human-granted exemption from one rule version, for one subject digest, for one task. Evaporates if the artifact or the rule changes.
 - **Validation override** — a human decision that exact named phase-implementation checks may remain not run. It is never a pass, approval, or waiver.
-- **Review push-through** — an attempts-exhausted decision over exact accepted finding occurrences after at least two completed review rounds. It settles review repetition, not policy or commit authority.
+- **Archived review push-through** — an attempts-exhausted decision over exact accepted finding occurrences after at least two completed review rounds. It settles review repetition, not policy or commit authority.
 - **Degraded mode** — the read-only stance when the MCP server is unavailable: `manual-status` reports where the task stands and the answer is to wait; no offline recording exists, and it is never a shortcut around gates.
 - **Automation observation** — the versioned, side-effect-free controller projection returned by `automation-status`; it names one responsible actor and is never mutation or approval authority.
 
@@ -120,7 +122,7 @@ Git sees only the durable side of `.archflow/`: task documents, `state.json`, ad
 
 Repeated review rounds replace the current authority for a `(phase, step)` instead of accumulating tracked files. Automatic cleanup runs after successful writes and phase boundaries; `archflow-local clean --task <id>` retries it manually. Cleanup failure is non-blocking and appears as `workspace.cleanup_pending` in full status (and in brief status only while pending).
 
-Fresh review has structural responsibility boundaries. General reviewers receive only non-test criteria; a dedicated test reviewer receives only the phase's test criteria and falls back to Luna/xhigh when older config omits a route. The primary general reviewer returns the complete approved-upstream alignment census on every applicable round. Constitution adjudication receives only active-rule slots. The server stamps source attribution on every Review V3 finding and combines its alignment facts with Adjudication V2 rule facts through one policy projection, while archived review and adjudication versions keep their recorded meaning.
+Fresh review keeps general and test focus as guidance and retains server-owned provenance for readable reports. The working AI selects previous reviewers for verification. Constitution review still independently evaluates active rules, and archived evidence remains readable.
 
 Phase-design review has one additional best-effort child: the configurable effort selector. It silently decomposes the authenticated phase plan, applies the existing A–E rubric with `.archflow/hazards.yaml` as optional context, and returns one allowed implementation profile. Its strict output contains only bound identity plus that profile ID. It cannot emit plan findings, questions, or blockers; any selector setup, route, process, or output failure becomes the fixed `gpt-5.6-sol`/`medium` default without retrying or disturbing ordinary review.
 

@@ -2,6 +2,8 @@
 
 **Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** the whole repository
 
+The fresh review loop uses reports and a working-AI response instead of finding taxonomy, exact alignment census, and disposition-ledger enforcement. Legacy readers remain only for archived evidence; no interpretation-model pass is added.
+
 A per-subsystem audit of where the machinery is heaviest, what it buys, and what could be simplified. Written to support iterating on the workflow — each item states the concrete problem the complexity solves so a simplification can be judged against it, per the engineering priorities in CLAUDE.md.
 
 ## How to read this

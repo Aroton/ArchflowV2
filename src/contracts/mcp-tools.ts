@@ -1,3 +1,4 @@
+import { reviewReportV1Schema, type ReviewReportV1 } from "./review.js";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { CONSTITUTION_RESULTS, DRIFT_RESULTS, type ConstitutionResult, type DriftResult } from "./adjudication.js";
@@ -200,7 +201,8 @@ export type LegacyCounterReviewV1Success = {
   readonly revision: number;
   readonly request_digest?: Sha256Digest;
 };
-export type CounterReviewSuccess = CounterReviewV3Success | CounterReviewV2Success | LegacyCounterReviewV1Success;
+export type CounterReviewV4Success = { readonly path: RepositoryPathClaim; readonly reports: readonly ReviewReportV1[]; readonly constitution: CounterReviewConstitutionOutcomeV2; readonly revision: number; readonly request_digest?: Sha256Digest };
+export type CounterReviewSuccess = CounterReviewV4Success | CounterReviewV3Success | CounterReviewV2Success | LegacyCounterReviewV1Success;
 export type HumanGateChoice = { readonly choice: string; readonly reason: string };
 /**
  * The bounded-decision pair is optional and all-or-nothing: supply `preview_digest` + `decision`
@@ -454,7 +456,7 @@ export function bindParsedToolCallRequest<K extends ToolName>(call: Extract<Pars
 
 export const toolSuccessSchemas = {
   archflow_state: z.object({ path: taskPathClaimV1Schema, revision: safeInteger, status: z.enum(["running", "succeeded", "failed"]), request_digest: digest.optional() }).strict(),
-  archflow_counter_review: z.union([z.object({
+  archflow_counter_review: z.union([z.object({ path: repositoryPathClaimV1Schema, reports: z.array(reviewReportV1Schema).min(1), constitution: z.union([z.object({ status: z.literal("not-run"), reason: z.literal("no-active-constitution-rules") }).strict(), z.object({ status: z.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: z.enum(["pass", "fail", "uncertain"]), triggers: z.array(rule) }).strict()]), revision: safeInteger, request_digest: digest.optional() }).strict(), z.object({
     path: repositoryPathClaimV1Schema,
     verdict: z.enum(["pass", "advisory", "review-raised"]),
     total_findings: safeInteger,

@@ -1,3 +1,4 @@
+import { readableReviewReport, serverAttestedReviewV4Schema, type ServerAttestedReviewV4 } from "./review.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
@@ -36,6 +37,7 @@ export type EvidenceRoleByKind = { readonly review: ReviewRole; readonly adjudic
 export type ObservationRoleByKind = { readonly review: "counter-review"; readonly adjudication: "adjudication" };
 
 export type ReviewObservationAssignmentV3 = {
+  readonly report_format?: true;
   readonly reviewer_id: string;
   readonly focus: "general" | "tests";
   readonly routing_role: "counter-reviewer" | "test-reviewer";
@@ -216,6 +218,26 @@ function observeReviewV3(
   return copyFreezeJson(serverAttestedReviewV3Schema.parse(candidate) as ServerAttestedReviewV3);
 }
 
+function observeReviewReport(binding: ObservationBindingByKind["review"], assignment: ReviewObservationAssignmentV3, bytes: Uint8Array, outputDigest: Sha256Digest): ServerAttestedReviewV4 {
+  const { kind: _kind, assignment: _assignment, family, ...provenance } = binding;
+  const candidate = {
+    ...provenance, schema_version: "4", step: "counter_review", assurance: "server-attested",
+    model_family: family, observed_output_digest: outputDigest,
+    reports: [{ subject_digest: binding.subject_digest, model: binding.model, effort: binding.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, report: readableReviewReport(decodeJson(bytes)) }],
+    reviewer_runs: [{
+      reviewer_id: assignment.reviewer_id, focus: assignment.focus, routing_role: assignment.routing_role,
+      criterion_ids: [...assignment.criterion_ids], finding_ids: [], rubric_digest: binding.rubric_digest,
+      model_family: family, model: binding.model, effort: binding.effort, adapter: binding.adapter,
+      cli_version: binding.cli_version, invocation_id: binding.invocation_id,
+      envelope_input_digest: binding.envelope_input_digest, observed_output_digest: outputDigest,
+      route_source: binding.route_source,
+      ...(binding.provider === undefined ? {} : { provider: binding.provider }),
+      ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }),
+    }],
+  };
+  return copyFreezeJson(serverAttestedReviewV4Schema.parse(candidate) as ServerAttestedReviewV4);
+}
+
 export const observationSource: ObservationSource = Object.freeze({
   observeReview(capability: ObservationCapability<"review">, observedOutputBytes: Uint8Array) {
     const binding = observationCapabilityBinding(capability, "review");
@@ -225,7 +247,9 @@ export const observationSource: ObservationSource = Object.freeze({
     const raw_output_digest = digestBytes(bytes);
     const observation = createObservation<"review">(binding, bytes, raw_output_digest);
     if (binding.assignment !== undefined) {
-      const evidence = observeReviewV3(binding, binding.assignment, bytes, raw_output_digest);
+      const evidence = binding.assignment.report_format === true
+        ? observeReviewReport(binding, binding.assignment, bytes, raw_output_digest)
+        : observeReviewV3(binding, binding.assignment, bytes, raw_output_digest);
       return Object.freeze({ observation, evidence });
     }
     const childOutput = childReviewOutputV2Schema.parse(decodeJson(bytes));

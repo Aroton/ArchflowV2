@@ -144,7 +144,7 @@ export function policyReviewFacts(
       adjudication.source_review_envelope_digest !== review.envelope_input_digest) {
     throw new TypeError("policy review evidence round bindings disagree");
   }
-  if (review.schema_version === "3") {
+  if (review.schema_version === "3" || review.schema_version === "4") {
     if (review.assurance !== "server-attested") {
       throw new TypeError("Review V3 policy facts require server-attested evidence");
     }
@@ -152,7 +152,7 @@ export function policyReviewFacts(
         (adjudication !== undefined && adjudication.schema_version !== "2")) {
       throw new TypeError("fresh policy evidence cohort is incomplete or mixed");
     }
-    const alignment = review.upstream_alignment ?? [];
+    const alignment = review.schema_version === "4" ? [] : review.upstream_alignment ?? [];
     return Object.freeze({
       subject_digest: review.subject_digest,
       input_fingerprint: review.input_fingerprint,
@@ -166,7 +166,7 @@ export function policyReviewFacts(
           uncertain_rule_versions: adjudication.uncertain_rule_versions,
         }),
       alignment: Object.freeze({
-        source: review.upstream_alignment === undefined ? "not-reviewed" : "review-v3",
+        source: review.schema_version === "4" || review.upstream_alignment === undefined ? "not-reviewed" : "review-v3",
         result: alignmentResult(alignment),
         findings: alignment,
       }),
