@@ -68,6 +68,7 @@ Human-readable system documentation lives in `docs/` using a caps-naming convent
 ```
 docs/
   OVERVIEW.md              # whole-system map, glossary
+  INTEGRATION.md           # external controller and host integration guide
   COMPLEXITY.md            # per-subsystem simplification audit
   PATTERNS.md              # code conventions and idioms
   DEPENDENCIES.md          # dependency surface and toolchain

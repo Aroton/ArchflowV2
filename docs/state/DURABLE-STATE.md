@@ -1,6 +1,6 @@
 # state/DURABLE-STATE
 
-**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`, `src/dispatch/recovery.ts`
+**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`, `src/dispatch/recovery.ts`
 
 Durable state is ArchFlow's memory and authority, but not every file the workflow uses deserves that status. The repository now separates tracked, reviewable authority from an ignored workspace containing bytes that are transient, reconstructible, or useful only for diagnosis.
 
@@ -197,9 +197,9 @@ Installation and restore validate every repository group before writing, apply p
 
 Status does not add a durable recommendation pointer or duplicate assessment bytes. It follows the existing authoritative result reference for the governing `phase-design-N`, authenticates only the retained review slice it consumes, and derives the current public recommendation during one consistent read. Phase implementation N and terminal completion use that same phase design's retained review; unrelated tasks, phases, predecessor subjects, Markdown, and reviewer-authored routing prose are never candidates.
 
-Fresh phase-design review evidence nests one authenticated effort assessment beside ordinary reviewer provenance. It binds the exact task, phase instance, attempt, subject/input identities, component-manifest and hazard digests, policy, repository pins, child input/output digests, and any one-dispatch override. The recommendation is server-derived data inside evidence, not a state transition or approval field.
+Fresh phase-design review evidence nests an authenticated effort selection beside ordinary reviewer provenance. It binds the task, phase instance, attempt, subject/input identities, and selector policy. Reviewer-produced selections also retain child provenance; failed selectors record the fixed Sol-medium default. Policy v4 can carry a free-form rationale about the reasoning remaining after design. No component manifest or scoring worksheet is required.
 
-Fixed-point readers require an exact-current, ready assessment for newly reviewed phase designs. An effort blocker remains active even when all ordinary findings are rejected; remaining attempts return to production with the recorded questions, and the maximum reaches the existing exhausted-attempt boundary. Read paths accept absent effort data only for explicitly classified, byte-identical pre-feature authority. Retained-graph accounting continues reading the narrow authenticated manifest slice it consumes, so an old record cannot strand a task merely because its nested review schema predates effort evidence.
+Status authenticates currency before projecting model, effort, and optional rationale. Advice never creates a blocker, retry, gate, routing change, or phase authority. Archived V1 assessments and v2/v3-policy selections remain readable in their original shapes; an old blocked assessment projects the fixed default rather than restoring a retired effort gate. Retained-graph accounting continues reading the narrow authenticated manifest slice it consumes, so an old record cannot strand a task merely because its nested review schema predates current effort evidence.
 
 
 ## Governing document comparisons

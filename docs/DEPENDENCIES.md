@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-08-27 · **Commit:** `1b2602e` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, `src/contracts/config.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/read.ts`, `src/dispatch/`, release tooling
+**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, `src/contracts/config.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/read.ts`, `src/dispatch/`, release tooling
 
 ## Runtime and package baseline
 
@@ -13,7 +13,7 @@
 | Package | Pin | Concrete use |
 | --- | --- | --- |
 | `@modelcontextprotocol/server` | `2.0.0` | The public-root SDK boundary in `src/mcp/sdk-adapter.ts`: `Server`, `ProtocolError`, `specTypeSchemas`, and MCP types. It resolves `@modelcontextprotocol/core@2.0.0` transitively. |
-| `zod` | `4.4.3` | The single runtime shape authority: strict parsing for agent-facing, durable, and in-memory contracts throughout `src/contracts/`, and the source for 32 generated JSON Schemas (`npm run generate:schemas`). Together with the hand-written release-manifest schema, the committed directory contains 33 schemas. |
+| `zod` | `4.4.3` | The single runtime shape authority: strict parsing for agent-facing, durable, and in-memory contracts throughout `src/contracts/`, and the source for 42 generated JSON Schemas (`npm run generate:schemas`). Together with the hand-written release-manifest schema, the committed directory contains 43 schemas. |
 | `yaml` | `2.9.0` | `src/contracts/yaml.ts` implements strict, single-document YAML parsing used by `config.yaml` and `workflow.yaml`. |
 | `@secretlint/core` | `13.0.4` | `src/state/secret-scan.ts` calls `lintSource` before retaining implementation output. |
 | `@secretlint/secretlint-rule-preset-recommend` | `13.0.4` | Supplies the production detector set; the filter-comments rule is removed before scanning. |
@@ -68,7 +68,7 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 
 `src/dispatch/` launches authenticated first-party `claude` or `codex` CLIs to perform the independent rubric and constitution reviews. It does not call provider HTTP APIs directly.
 
-`src/dispatch/routing.ts` consumes the strictly parsed live task-local YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`; a route naming a cc-switch `provider` forces the claude CLI). Config describes four dispatched roles: one or more general `counter-reviewer` routes, the phase-design/implementation `test-reviewer`, the phase-design `effort-reviewer`, and the constitution `adjudicator`; the producer is the connected host and is never dispatched. Both specialist roles fall back to the shipped `gpt-5.6-luna`/`xhigh` route when applicable and unconfigured. The active template keeps producer-specific general routes and uses Gemini adjudication. `.archflow/config.yaml` is the repository seed copied into each task. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
+`src/dispatch/routing.ts` consumes the strictly parsed live task-local YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`, and `gemini-*` to `antigravity-cli`; a cc-switch provider uses the Claude adapter, but cannot accompany GPT or Gemini routes). Config describes four dispatched roles: one or more general `counter-reviewer` routes, the phase-design/implementation `test-reviewer`, the phase-design `effort-reviewer`, and the constitution `adjudicator`; the producer is the connected host and is never dispatched. Astra at `max` is explicitly rejected; supported effort values also depend on the adapter. Both specialist roles fall back to the shipped `gpt-5.6-luna`/`xhigh` route when applicable and unconfigured. The active template keeps producer-specific general routes and uses Gemini adjudication. `.archflow/config.yaml` is the repository seed copied into each task. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
 
 `src/dispatch/cli.ts` defines the concrete adapters:
 
@@ -76,12 +76,13 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 - Authentication preflight runs `claude auth status` or `codex login status`. Authentication comes from the user's first-party CLI credential store, not API keys.
 - Claude runs in print/safe mode with tools and slash commands disabled, an empty strict MCP config, no session persistence or setting sources, and a projected JSON output schema.
 - Codex runs `exec --ephemeral` with user config/rules ignored, read-only sandboxing, strict config, a generated output schema/file, and shell, browser, computer, image, apps, plugins, hooks, skill search, and multi-agent features disabled.
+- Antigravity checks authentication with `agy models`, sends one streamed user message on stdin, and loads the schema from a workspace file. Its invocation disables slash commands and uses `--dangerously-skip-permissions`; it does not share Claude or Codex’s full lockdown flags.
 - `src/dispatch/process.ts` uses `spawn` without a shell, caps total output at 8 MiB, times out after 15 minutes by default (a real review of the pinned checkout is legitimately multi-minute), and terminates the process group on non-Windows.
 - A process-wide FIFO in `src/dispatch/cli.ts` limits one MCP server process to one resource-intensive reviewer at a time. Semantic review holds that FIFO around its entire replay/dispatch/commit operation and calls a direct counter-review inner seam, so it cannot deadlock by entering the same queue twice. Credential concurrency remains the first-party CLI's responsibility; the FIFO does not coordinate separate MCP server or interactive processes.
 
 `src/dispatch/workspace.ts` creates a disposable working directory outside the repository but deliberately does not create a disposable authentication home:
 
-- Both adapters receive the caller's canonical `HOME`.
+- All adapters receive the caller's canonical `HOME`.
 - Claude also receives `CLAUDE_CONFIG_DIR` when the caller configured it.
 - Codex receives the caller's `CODEX_HOME`, or the canonical `$HOME/.codex` default.
 - `TMPDIR`, repository views, schemas, and outputs remain under the disposable workspace.
@@ -109,9 +110,10 @@ Runtime workflow configuration is file-backed:
 - `assets/config.template.yaml` is copied to `.archflow/config.yaml`, then copied again to `.archflow/tasks/<task>/config.yaml` when a task is created. That task-local copy remains live and editable: every config-observing transaction or dispatch strictly parses its current bytes, and invalid or unsupported YAML fails closed rather than falling back to an older snapshot.
 - Successful config-observing transactions record the normalized parsed shape as `TaskStateV1.last_seen_config`. Read-only status compares that snapshot with the current parsed file and reports informational leaf-level `config_change` entries; a valid edit does not by itself stale an open gate or retained evidence.
 - `assets/archflow.gitignore` is copied exactly to `.archflow/.gitignore`; its sole `/runtime/` rule owns only ArchFlow's nested workspace ignore boundary.
+- Initialization also scaffolds `.archflow/hazards.yaml` as optional effort-selection context and the expanded repository constitution. Existing divergent scaffold bytes are refused unless the caller explicitly uses `init --force`; force replaces those bytes with shipped templates. Rubrics remain bundle assets, not repository scaffold files.
 - `assets/workflow.yaml` defines the workflow graph and remains digest-pinned by task state; `assets/constitution/` supplies repository-owned policy documents whose selected Git identities remain pinned to the task policy base. Live config editability does not relax either pin.
-- `assets/rubrics/` holds the three server-owned counter-review rubrics, one per phase kind (`prd.yaml`, `design.yaml`, `implementation.yaml`). They are install-bundle assets, never scaffolded into repositories: the MCP server reads and strictly parses the selected file fresh on every review and status call, a missing or invalid file fails closed with `CONFIG_INVALID`, and the parsed rubric's digest folds into review input fingerprints and evidence. Editing one takes effect on the next review after a bundle install.
-- `src/contracts/config.ts` validates `schema_version: "1"`, role routes, optional phase-kind overrides, optional positive `max_attempts` (default behavior is three attempts), and optional `approval_rules` with subject triggers plus phase-implementation changed-path triggers. The retired `producer` route is a narrow read-compatibility field; it is ignored when config-change snapshots are normalized.
+- `assets/rubrics/` holds the three server-owned counter-review rubrics, one per phase kind (`prd.yaml`, `design.yaml`, `implementation.yaml`). They are install-bundle assets, never scaffolded into repositories: the MCP server reads and strictly parses the selected file fresh on every review and status call, a missing or invalid file fails closed with `CONFIG_INVALID`, and the parsed rubric's digest folds into review input fingerprints and evidence. A running bundle reads its own rubric assets; updating a checkout does not change an installed bundle. Machine-global installation requires a separate explicit user request.
+- `src/contracts/config.ts` validates `schema_version: "1"`, role routes, optional phase-kind overrides, optional positive `max_attempts` (default behavior is five completed review rounds), and optional `approval_rules` with subject triggers plus phase-implementation changed-path triggers. The retired `producer` route is a narrow read-compatibility field; it is ignored when config-change snapshots are normalized.
 - The task state's `config_digest` remains the creation-time provenance for the copied config, and a rule settlement separately records the live config digest it evaluated. Config is not part of the current input-fingerprint subject, so valid edits do not invalidate gates or evidence through fingerprint churn.
 - `src/state/fingerprint.ts` has one bounded read-compatibility retry for pre-cutover evidence: only an exact expected old fingerprint can be matched using that task state's creation `config_digest`. It never uses live config for the retry, rewrites evidence, or migrates arbitrary old state.
 
@@ -119,7 +121,7 @@ Environment inputs are narrow and purpose-specific:
 
 | Variable | Consumer | Meaning |
 | --- | --- | --- |
-| `HOME` | `src/dispatch/workspace.ts`, `install.sh` | Locates first-party credentials and default install destinations. Dispatch replaces it for child processes. |
+| `HOME` | `src/dispatch/workspace.ts`, `install.sh` | Locates first-party credentials and default install destinations. Dispatch preserves its canonical location for child authentication. |
 | `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS` | `src/dispatch/workspace.ts` | Explicit dispatch-child allowlist. |
 | `ARCHFLOW_HOME` | `install.sh` | Overrides the installed bundle root; default is `$HOME/.archflow`. |
 | `ARCHFLOW_BIN` | `install.sh` | Overrides launcher destination; default is `$HOME/.local/bin`. |
@@ -152,7 +154,7 @@ Important `package.json` scripts:
 - `check:notices` and `test:notices-policy`: lockfile-to-notice reconciliation and mutation tests.
 - `check:mcp-sdk-boundary` and `test:mcp-sdk-boundary-policy`: production SDK import isolation and mutation tests.
 - `release:stage`, `release:check`, `release:reproduce`, `release:write`, `release:smoke`, and `release:mutations`: deterministic release construction, validation, promotion, smoke tests, and hostile mutations.
-- `check`: the under-ten-second local/CI pipeline; `check:deep` explicitly composes every local deep tier and release validation.
+- `check`: the ordinary local/CI pipeline; `check:deep` explicitly composes every local deep tier and release validation. After the ordinary check, schema, policy, extended-test, and release branches run concurrently; crash and integration projects then run sequentially.
 
 No formatter or source linter is configured. Formatting/import style is convention-backed; correctness gates are strict TypeScript, tests, contract agreement checks, notice consistency, SDK boundary checks, and release integrity checks.
 
@@ -179,3 +181,5 @@ The repository has no hosted CI/CD workflow. Maintainers run `npm run check` for
 - Keep all production `@modelcontextprotocol/*` imports isolated to `src/mcp/sdk-adapter.ts` and public package roots.
 - The executable authorities for the dependency surface are `package.json`, `package-lock.json`, and the release provenance derived from the build — not narrative documents.
 - Real-host tests are capability probes that can spend provider quota and depend on installed CLI login state; they are not part of ordinary `npm test` or `npm run check`.
+
+Review envelopes travel on stdin or through workspace files, never as a single unbounded argv element. The process layer rejects oversized individual arguments before spawning; this protects all three adapters from Linux’s per-argument limit. See [Dispatch](mcp/DISPATCH.md) for each transport.

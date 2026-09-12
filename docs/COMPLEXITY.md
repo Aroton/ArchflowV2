@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-08-21 · **Commit:** `869c189` · **Covers:** the whole repository
+**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** the whole repository
 
 The fresh review loop uses reports and a working-AI response instead of finding taxonomy, exact alignment census, and disposition-ledger enforcement. Legacy readers remain only for archived evidence; no interpretation-model pass is added.
 
@@ -16,9 +16,9 @@ Three categories recur:
 
 ## Current top target: concentrated workflow authority
 
-The client cutover is complete. The public catalogue is exactly `archflow_status` and `archflow_apply`, and every workflow — document production, phase implementation, status reporting, and legacy adoption after its local staging and adoption steps — runs through the one read-only-view-plus-bounded-action loop. The retired legacy client loop is gone rather than maintained in parallel. The simplification never moved authorship into the server: Claude Code or Codex still produces documents and code, runs verification, supplies triage and human decisions, and owns Git.
+The client cutover is complete. The public catalogue is exactly `archflow_status` and `archflow_apply`, and every workflow — document production, phase implementation, status reporting, and legacy adoption after its local staging and adoption steps — runs through the one read-only-view-plus-bounded-action loop. The retired legacy client loop is gone rather than maintained in parallel. The simplification never moved authorship into the server: Claude Code, Codex, or Antigravity still produces documents and code, runs verification, supplies triage and human decisions, and owns Git.
 
-The present hotspot is server-side authority assembly. `src/state/gates.ts` is 2,010 lines, `src/state/status.ts` is 1,648, `src/state/implementation-manifest.ts` is 1,129, and `src/mcp/handlers/state.ts` is 900. Together they authenticate gate history, join current evidence, reconstruct presentations and implementation facts, enforce transition ordering, and project the one client action. That machinery protects real trust boundaries, but changes to approval rules, exact commit authorization, or implementation evidence commonly touch several of these files and their mirrored guards. The maintainability need is to keep shared derivations named and single-sourced as concrete duplication appears, not to introduce a speculative workflow framework.
+The present hotspot is server-side authority assembly. `src/state/gates.ts` is 2,839 lines, `src/state/status.ts` is 2,739, `src/state/implementation-manifest.ts` is 1,737, and `src/mcp/handlers/state.ts` is 1,401. Together they authenticate gate history, join current evidence, reconstruct presentations and implementation facts, enforce transition ordering, and project the one client action. That machinery protects real trust boundaries, but changes to approval rules, exact commit authorization, or implementation evidence commonly touch several of these files and their mirrored guards. The maintainability need is to keep shared derivations named and single-sourced as concrete duplication appears, not to introduce a speculative workflow framework.
 
 ## Ranked simplification targets
 
@@ -28,7 +28,7 @@ The audit asked directly: how often is the MCP server actually down, and could d
 
 ### 2. Gate lifecycle concentration — improved, now a renewed hotspot
 
-The 2026-08-11 split remains useful: decision templates, approval trust brands, legacy-import resume logic, and planned-final-phase parsing still live in focused modules. But `gates.ts` has grown back to 2,010 lines as triggered-versus-autonomous rule settlement, exception precedence, exact commit facts, content-trigger presentation, waiver handling, and legacy archive compatibility accumulated in the lifecycle join. Calling this resolved or approximately 900 lines is no longer honest.
+The 2026-08-11 split remains useful: decision templates, approval trust brands, legacy-import resume logic, and planned-final-phase parsing still live in focused modules. But `gates.ts` has grown back to 2,839 lines as triggered-versus-autonomous rule settlement, exception precedence, exact commit facts, content-trigger presentation, waiver handling, and legacy archive compatibility accumulated in the lifecycle join. Calling this resolved or approximately 900 lines is no longer honest.
 
 The adjacent hotspots matter as much as raw size. `status.ts` assembles authenticated state, reviews, settlements, config-change notices, content detail, and successor/commit projections; `implementation-manifest.ts` derives and authenticates client-declared work against Git and retained payloads; the state handler coordinates transaction and replay boundaries. A future simplification should start only when a repeated derivation or guard can move behind one named function without hiding the ordering and human-authority checks. The current requirement does not justify a registry, plugin layer, or generalized gate engine.
 
@@ -38,7 +38,7 @@ The audit asked for an explicit decision about how much SDK distrust the prototy
 
 ### 4. Dual shape authorities in `contracts/` — resolved 2026-08-11
 
-Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 32 of the 33 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the release manifest stays hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
+Agent-facing shapes existed as JSON Schema *and* a Zod mirror, with `assertZodAgreement` proving they matched — three artifacts per shape, with some rules living in a *third* place (custom Ajv keywords). Zod is now the single runtime authority: 42 of the 43 committed schemas are generated from it (`generate:schemas` / `check:schemas`), the release manifest stays hand-written, keyword logic became Zod refines, and Ajv left production entirely — it is a dev dependency compiled only by `test/helpers/json-schema.ts` and the release scripts.
 
 ### 5. Four CLI commands overlap `build-request` — resolved 2026-08-11
 
@@ -93,3 +93,9 @@ For balance — machinery that directly implements the trust boundaries and shou
 3. ~~Pick one shape authority (#4)~~ — done: Zod generates the schemas; Ajv is dev-only.
 4. ~~Sweep the small items (#7, #9)~~ — done except one deliberate keep: the `unified-diff` tier (documented limitation; behavior-changing to remove). The advertised-schema pruner left with the two-tool cutover.
 5. ~~Revisit SDK distrust (#3)~~ — decided and done: the pinned, probed SDK is the JSON-RPC authority; the session layer is retired.
+
+## Reports simplify fresh review, archives still cost maintenance
+
+Fresh review evidence is version 4: readable reports with server-bound reviewer provenance. The working AI submits a rationale and chooses finish, revision with named verification reviewers, or human escalation. Finding taxonomies, exact alignment censuses, and disposition ledgers remain in strict readers for archived evidence; they are no longer requirements on new reviewer output. This removes fresh-path coordination work without discarding historical authority. Keep archive compatibility isolated when modifying review behavior, so a new report does not accidentally re-enter legacy finding enforcement.
+
+The effort selector is another deliberate narrow boundary: it returns one allowed implementation profile with an optional rationale, and failures fall back to Sol medium. It does not need a second architecture-review subsystem. The selector guidance favors the least costly adequate profile, treating phase size separately from reasoning difficulty.

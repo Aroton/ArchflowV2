@@ -1,10 +1,10 @@
 # OVERVIEW
 
-**Explored:** 2026-09-11 · **Commit:** `1d71fee` · **Covers:** the whole repository
+**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** the whole repository
 
 Fresh reviews return readable reports to the working AI, which chooses finish, revision with selected verification reviewers, or human escalation. Constitution and commit approval remain separate.
 
-ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, either family by explicit config). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
+ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, with Claude, Codex, and Antigravity routes available by configuration). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
 
 > **Nothing an agent says is trusted until the server has re-derived it.** The only authority is durable state on disk, written and verified by the server.
 
@@ -20,19 +20,19 @@ The system is one codebase with three faces. Understanding which face does what 
 | **`archflow-local` CLI** (`src/local/`) | Narrow local adapters: repository bootstrap, legacy-upgrade staging and atomic adoption, diagnostics, degraded human status, and a versioned read-only controller observation | Deriving mechanical fields correctly. Its writes are bounded recovery and diagnostics; automation status is strictly observational. |
 | **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server advertising two purpose-described semantic workflow tools | Everything. It is the sole writer of durable state and the sole judge of validity. |
 
-A subtlety worth naming immediately: the `archflow-mcp` binary has **no CLI mode** — it is always a stdio MCP server. The word "CLI" appears in two other senses: `archflow-local` (the helper above), and `src/dispatch/cli.ts`, which spawns the *external* `claude` and `codex` command-line tools as child processes to run counter-reviews.
+A subtlety worth naming immediately: the `archflow-mcp` binary has **no CLI mode** — it is always a stdio MCP server. The word "CLI" appears in two other senses: `archflow-local` (the helper above), and `src/dispatch/cli.ts`, which spawns the *external* `claude`, `codex`, and `agy` command-line tools as child processes to run counter-reviews.
 
 ## How the pieces connect
 
 ```mermaid
 flowchart TB
     Human([Human])
-    Agent["Agent session<br/>(Claude Code or Codex)<br/>following a skill"]
+    Agent["Agent session<br/>(Claude Code, Codex, or Antigravity)<br/>following a skill"]
     Local["archflow-local CLI<br/>bootstrap, upgrade adapter,<br/>degraded + automation status"]
     MCP["archflow-mcp server<br/>2 advertised tools"]
     State[("tracked .archflow authority<br/>state, decisions, manifests,<br/>canonical documents")]
     Work[("ignored .archflow/runtime<br/>cache, diagnostics, import staging")]
-    Child["Reviewer child process<br/>claude or codex CLI (opposite family<br/>by default), sealed envelope +<br/>read-only checkout"]
+    Child["Reviewer child process<br/>configured CLI (opposite family<br/>by default), sealed envelope +<br/>read-only checkout"]
 
     Human <-->|"triggered and safety gates:<br/>approve, revise, waive"| Agent
     Agent -->|"upgrade staging / adopt,<br/>degraded status"| Local
@@ -58,26 +58,26 @@ When history no longer proves the milestone, the server either retains the narro
 
 ## The evidence pipeline
 
-Every gated stage runs the same three-step pipeline until it reaches a fixed point — all evidence current, all findings dispositioned, no blockers:
+Every gated stage runs the same three-step pipeline until it reaches a fixed point — current review evidence, an explicit producer response, and no unresolved blocking boundary:
 
 ```mermaid
 flowchart LR
-    P[produce] --> CR["counter_review<br/>(server-dispatched rubric review,<br/>opposite family by default;<br/>+ constitution review when<br/>active rules exist)"]
-    CR --> T["triage<br/>(disposition every rubric finding)"]
-    T -->|"accepted: material change"| P
-    T -->|"accepted-editorial:<br/>PRD/design only, one hop"| PE["meaning-preserving edit<br/>then final-byte approval"]
-    PE --> G
-    T -->|"clean + no approval rule"| Adv[advance]
-    T -->|"clean + approval rule"| G
-    T -->|"constitution rule failure /<br/>drift / trigger"| G{{"Human gate<br/>(derived after triage)"}}
-    G -->|approved or waived| Adv
+    P[produce] --> CR["counter-review reports<br/>and active constitution rules"]
+    CR --> T["working AI interprets feedback"]
+    T -->|revise with selected verification| P
+    T -->|finish| R["evaluate policy and approval rules"]
+    T -->|escalate| G{{Human gate}}
+    R -->|human decision required| G
+    R -->|authenticated autonomous authority| A[advance]
+    G -->|approved or waived| A
+    G -->|revision requested| P
 ```
 
 The counter_review step is one semantic action that runs the configured rubric reviewers and, when active rules exist, the constitution reviewer. The children share sealed repository views and their results commit atomically. For implementation, declared outputs, co-produced documents, and their current behavior are the subject; unchanged files and context-only repositories are supporting evidence, not a general review target. Every finding must tie a material defect to behavior introduced, exposed, or worsened by the current change.
 
 Design subjects may be compound so planning can correct their parents: task design binds `design.md` with current `prd.md`, and phase design binds its phase document with current `design.md` and `prd.md`. The working AI interprets reports, checks consequential concerns proportionally, and chooses whether to revise, finish, or ask the human. The server binds that response to the current reviewed work; it does not enforce a finding taxonomy or unanimous agreement.
 
-Once triage reaches a fixed point, the rule settlement decides whether the server opens a human gate or returns direct authority. `accepted` sends a material change back through production and full review. `accepted-editorial` is a distinct, meaning-preserving one-hop route available only for PRD and task design, and still ends at human approval of the final bytes; phase design and implementation refuse it, so every accepted byte change there uses `accepted`. `rejected` requires a rationale and closes the finding; `escalated-human` requests human judgment over a genuinely material unresolved claim but supplies no authority; `deferred` postpones only a non-defect claim that is demonstrably non-material now and belongs to a real later boundary. Remediation sends only latest accepted intents to their owning reviewers, with the first configured reviewer handling an unattributed accepted finding. The cumulative ledger remains durable for audit and `review_strength`, not reviewer context. Constitution verdicts are never triaged.
+The working AI’s response chooses `finish`, `revise`, or `escalate` and gives its rationale. Revision names previous reviewers and concrete verification requests; subsequent review can retain complete prior reports while asking those reviewers to check the revised work. Finish is not approval: the server still evaluates constitution findings, configured triggers, drift, and commit authority. Fresh review does not require finding dispositions or reviewer unanimity. Strict taxonomy, editorial-disposition, and ledger readers remain for historical evidence, not as instructions for new reports. Constitution verdicts remain a separate authenticated boundary.
 
 Human gates are deliberately not protocol consoles. The server derives a title, plain-language summary, direct question, structured reason envelope, material evidence, and labeled choices; skills present that conversationally and keep IDs, hashes, JSON, paths, and error codes in the diagnostic layer. Each reason is classified `configured-approval` or `exception`, and one exceptional reason makes the whole boundary exceptional. The archived gate request—not the skill-authored summary or mutable live config—is the source for configured trigger provenance, policy findings, and legacy fallback. A skill-authored `gate-summary` opens the nonblocking presentation, and the human's selected choice and reason return through the offered semantic action, which archives the decision immutably and settles it in a separate substep — a retried call after an interruption converges without recording the decision twice. The server-dispatched review has already run automatically before the gate. If the human changes the work, the producer classifies the resulting diff: a simple wording or formatting change may reuse review evidence for one hop but still needs approval of the final bytes; a significant change resets the attempt counter and automatically starts a fresh counter-review and constitution-review cycle. The human can override either classification, with the override recorded.
 
@@ -97,6 +97,7 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **Dispatch** — runs the configured reviewer (opposite family by default, optionally through a cc-switch provider) as a locked-down child process so review evidence is something the producer *cannot author*. See `mcp/DISPATCH.md`.
 - **Local CLI** — the retained adapters: repository bootstrap, legacy-upgrade staging and atomic adoption, diagnostics, the degraded human classifier, and the strict read-only automation observation. Every workflow action itself is composed server-side from one semantic offer, so the CLI never derives a durable request by hand. See `cli/COMMANDS.md` and `contracts/AUTOMATION.md`.
 - **Review & constitution checks** — sealed 1 MiB envelopes, pinned context, the constitution review, waivers. See `review/COUNTER-REVIEW.md`.
+- **Integration** — the current host/client contract, semantic loop, and controller responsibilities. See `INTEGRATION.md`.
 - **Contracts** — canonical JSON, digests, plain-JSON validation, trust brands: the vocabulary everything else is written in. See `contracts/CONTRACTS.md`.
 - **Durable state** — the `.archflow/` layout, the state machine, transactions, and recovery. See `state/DURABLE-STATE.md`.
 - **Complexity audit** — where the heaviest machinery lives and what could be simplified, per subsystem. See `COMPLEXITY.md`.
@@ -124,9 +125,9 @@ Repeated review rounds replace the current authority for a `(phase, step)` inste
 
 Fresh review keeps general and test focus as guidance and retains server-owned provenance for readable reports. The working AI selects previous reviewers for verification. Constitution review still independently evaluates active rules, and archived evidence remains readable.
 
-Phase-design review has one additional best-effort child: the configurable effort selector. It silently decomposes the authenticated phase plan, applies the existing A–E rubric with `.archflow/hazards.yaml` as optional context, and returns one allowed implementation profile. Its strict output contains only bound identity plus that profile ID. It cannot emit plan findings, questions, or blockers; any selector setup, route, process, or output failure becomes the fixed `gpt-5.6-sol`/`medium` default without retrying or disturbing ordinary review.
+Phase-design review has one additional best-effort child: the configurable effort selector. It recommends an economical implementation profile for the phase as written, based on the reasoning still needed after design. Settled patterns favor Sol medium; narrow, short work with reliable checks can use Gemini Flash; Astra is reserved for concrete remaining reasoning difficulty. File count, security labels, and expensive tests alone do not raise the recommendation. Optional repository hazards are context, not automatic model floors.
 
-That evidence now has one authenticated public projection. Phase-design completion, generic status, phase-implementation entry, and automation status v2 receive the same `ready`, `blocked`, or `unavailable` recommendation while the server-derived action remains unchanged. Reviewer provenance—including a conspicuous one-dispatch substitute—stays separate from the recommended implementation profile, and the actual producer route is explicitly not recorded. Live hazard-registry drift may add an informational caveat but cannot rewrite sealed evidence or workflow authority.
+The current selector returns bound identity, one allowed profile, and an optional free-form rationale. That rationale can identify a design question or separable hard component that drives cost, but remains advice, never a finding, gate, or plan amendment. Selector failures fall back to Sol medium without retrying or disturbing ordinary review. Public status, phase completion, implementation entry, and automation share the authenticated model, effort, and optional explanation; unavailable evidence is explicit, while historical blocked assessments project the safe default. None of these recommendations changes the server-derived action or records the actual producer route.
 
 This split defines recovery honestly. A fresh clone reconstructs status, current result validation, and gate UI from tracked authority, verified projections, and recorded Git blobs. It recovers the last checked-in durable boundary, not uncommitted implementation or cache bytes. Durable `.archflow` files exist only on the working branch for resumability and are removed before the final product PR.
 

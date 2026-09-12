@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-08-26 · **Commit:** `16193ec` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
@@ -68,15 +68,15 @@ Digests, safe integers, task slugs, Git OIDs, path claims, and resolved paths ar
 
 ### Semantic views hide mechanics, offers bind them
 
-`projectSemanticStatus` receives the full authenticated status join, not brief status. The public `WorkflowViewV1` carries only what the client or human needs: position, condition, resources, full finding prose, review policy text, presentation, commit instruction when exact facts exist, and one ordinary-language action. The internal `SemanticActionOfferV1` carries the revision, fingerprint, repository identity, invocation, current action, and applicable evidence identities. Its public `af1_` token is the canonical digest of that object; no authority fields are encoded for the caller to reconstruct.
+`projectSemanticStatus` receives the full authenticated status join, not brief status. The public `WorkflowViewV1` carries only what the client or human needs: position, condition, resources, readable reviewer reports, review policy text, presentation, commit instruction when exact facts exist, and one ordinary-language action. The internal `SemanticActionOfferV1` carries the revision, fingerprint, repository identity, invocation, current action, and applicable evidence identities. Its public `af1_` token is the canonical digest of that object; no authority fields are encoded for the caller to reconstruct.
 
 Invocation is part of authority. Generic status omits it and can never mint a mutation offer. Resume owns its exact current phase; an exact successor invocation may own only the authenticated `advance-phase` handoff target. Reopen is a distinct intent and can target only a server-derived strictly earlier PRD, design, or numbered phase design impact. A semantic-looking `afop-...` intent is not replay proof by itself: the last transition must also authenticate its operation, fingerprint, request, legal successor, and closed named substep.
 
-Semantic execution keeps compound work explicit. Review owns the outer dispatch FIFO and uses the handler's direct inner seam. Triage enters its ordinary running boundary before terminal disposition recording. Human decisions archive and settle separately; a revision settlement is close-only, and `revise-enter` alone restores writable resources. Refreshing services between these substeps prevents a stale authority object from crossing a committed boundary.
+Semantic execution keeps compound work explicit. Review owns the outer dispatch FIFO and uses the handler's direct inner seam. Triage enters its ordinary running boundary before the working AI’s terminal response recording. Human decisions archive and settle separately; a revision settlement is close-only, and `revise-enter` alone restores writable resources. Refreshing services between these substeps prevents a stale authority object from crossing a committed boundary.
 
 ## Validation and caller-owned objects
 
-The package follows an assert-don't-filter model. Invalid input is rejected rather than coerced, stripped, defaulted, or normalized. Zod objects are strict, and Ajv is configured without type coercion, default insertion, or additional-property removal in `src/contracts/validators.ts`.
+The package follows an assert-don't-filter model. Invalid input is rejected rather than coerced, stripped, defaulted, or normalized. Zod objects are strict. The dev-only Ajv compiler in `test/helpers/json-schema.ts` likewise avoids coercion, default insertion, and additional-property removal.
 
 ### Plain JSON preflight
 
@@ -184,17 +184,15 @@ Keep these layers separate when extending policy behavior. Snapshotting live con
 
 Vitest runs in Node with explicit imports (`describe`, `it`, `expect`, hooks); globals and setup files are not configured (`vitest.config.ts`). Current test organization:
 
-| Directory | Files | Role |
-|---|---:|---|
-| `test/unit/` | 99 | Fast module-level behavior and boundary tests; dependencies are usually injected rather than module-mocked |
-| `test/contracts/` | 27 | Fast representative public-shape, package-boundary, and durable-contract checks |
-| `test/extended/` | 2 | Exhaustive schema compilation and advertised-schema corpus traversal |
-| `test/integration/` | 49 | Real Git repositories, durable filesystem workflows, process wiring, local CLI, MCP handlers/stdio, initialization, replay, and state lifecycle |
-| `test/crash/` | 3 | Child-process fault injection and recovery/idempotence |
-| `test/real-host/` | 7 | Live host/preflight/terminal journeys, provider dispatch, host selection, and benchmark coverage |
-| `test/helpers/` | 5 | Reusable repository, workspace, constitution, and host harnesses |
-| `test/fixtures/` | 81 | JSON/YAML corpora, fake CLIs, legacy layouts, and crash helpers |
-| `test/types/` | 1 | Compile-only MCP SDK public-surface probe included by `tsc` |
+| Directory | Role |
+|---|---|
+| `test/unit/`, `test/contracts/` | Fast in-process behavior and representative public contracts |
+| `test/extended/` | Exhaustive schema and corpus traversal |
+| `test/integration/` | Real Git, filesystem workflows, process wiring, and semantic journeys |
+| `test/crash/` | Child-process interruption and recovery |
+| `test/real-host/` | Opt-in authenticated host and provider probes |
+| `test/helpers/`, `test/fixtures/` | Shared harnesses and test data |
+| `test/types/` | Compile-only public-surface checks |
 
 Representative practices:
 
@@ -235,3 +233,12 @@ npm run check:deep
 9. Keep protocol errors, project results, typed internal exceptions, and diagnostic logs in their intended channels.
 10. Parse an input-free CLI command before considering stdin, and never read stdin for that command.
 11. Name code and tests for enduring behavior, never the workflow phase that produced them.
+
+## Boundaries reinforced by recent failures
+
+- Match the array consumer’s comparator: gate-context paths use `localeCompare`, while durable records use code-unit ordinal ordering. A producer’s default sort is not interchangeable with either schema.
+- Revalidate a Git proof’s symbolic target as well as commit OIDs, ancestry, and candidate selection after inspection. Switching branches at the same commit must not preserve authority accidentally.
+- Authenticate retained bytes before reading a narrow accounting slice, but do not require unrelated historical artifact fields to satisfy today’s full schema merely to total retained bytes.
+- Keep unbounded prompts, envelopes, and schemas out of argv. Use stdin or workspace files; `src/dispatch/process.ts` guards individual argument size.
+- Advertise MCP tools with plain object roots. Keep unions below the root so hosts do not collapse an unresolved root union into a zero-field tool.
+- Fresh reviewer text is feedback, not identity or verdict authority. Bind provenance from the authenticated dispatch; the producer supplies an explicit finish/revise/escalate response. Historical finding parsers exist for archived evidence and must not impose their taxonomy on fresh reports.

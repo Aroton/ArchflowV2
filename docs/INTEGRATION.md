@@ -1,19 +1,19 @@
 # ArchFlow integration guide for orchestration applications
 
-**Explored:** 2026-09-11 · **Commit:** `e390e57` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/contracts/schemas/v1/automation-status-v2.schema.json`, `src/contracts/semantic-workflow.ts`, `src/contracts/evidence.ts`, `src/state/semantic-*.ts`, `src/mcp/`, `src/repository/git.ts`, `src/init/`, `skills/`, `test/integration/automation-status-*.test.ts`, `package.json`
+**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/contracts/schemas/v1/automation-status-v3.schema.json`, `src/contracts/semantic-workflow.ts`, `src/contracts/evidence.ts`, `src/contracts/workflow-progress.ts`, `src/contracts/dispatch-failure.ts`, `src/contracts/effort-review.ts`, `src/dispatch/recovery.ts`, `src/state/semantic-*.ts`, `src/mcp/`, `src/repository/git.ts`, `src/init/`, `skills/`, `test/integration/automation-status-*.test.ts`, `package.json`
 
 This is a self-contained integration brief for an application that orchestrates ArchFlow tasks. It describes the implemented interface, the controller behavior to build around it, and the boundaries that preserve human decisions. You can pass this file to an agent building that application. Source paths at the end are optional verification references; the architecture and operating rules are explained here.
 
 ## 1. Integration architecture
 
-Use `archflow-local automation-status --task <task>` to observe a task, then launch or resume the exact skill it returns in a supported coding-agent host. ArchFlow already decides which workflow action is next. Your application supplies process supervision, session persistence, scheduling, and a human conversation interface.
+Use `archflow-local automation-status --task <task>` to observe a task, then handle its returned condition and exact skill descriptor in a supported coding-agent host. Current-skill work can resume automatically; a completed skill hands off to the human to launch its successor. ArchFlow already decides which workflow action is next. Your application supplies process supervision, session persistence, scheduling, and a human conversation interface.
 
 | Component | Responsibility |
 |---|---|
-| External controller (your app) | Poll status; supervise one producer per task; launch the returned skill; connect humans to its session; report blocked or complete tasks. |
+| External controller (your app) | Poll status; supervise one producer per task; resume current work and launch successors when the user requests them; connect humans to its session; report blocked or complete tasks. |
 | Producer (interactive coding-agent session) | Follow the installed skill; author documents/code; run verification; use semantic tools; present human decisions; execute authenticated Git commit instructions. |
 | ArchFlow MCP server | Authenticate durable workflow authority; offer the current action; validate submissions; dispatch independent reviewers; derive gates and commit facts. |
-| Human | Supply the original task request and clarifications; decide every returned human gate or exception. |
+| Human | Supply the original task request and clarifications; decide every returned human gate or exception; launch each successor skill. |
 
 ```mermaid
 sequenceDiagram
@@ -38,7 +38,13 @@ sequenceDiagram
     end
     Agent-->>App: Session stops or yields
     App->>CLI: Fresh automation-status
-    CLI-->>App: Continue, human, successor, blocked, or complete
+    CLI-->>App: Continue, human, transition, blocked, or complete
+    opt Awaiting transition
+        App-->>Human: Show exact successor
+        Human->>App: Launch that successor
+        App->>CLI: Refetch and verify current successor
+        App->>Agent: Start user-requested successor
+    end
 ```
 
 A normal task proceeds through PRD, architecture design, then each phase's design and implementation. This is explanatory context, not a scheduler algorithm. Review, revision, recovery, and commit work can keep a task at the same position for many calls. Always use the returned action; never increment a phase number yourself.
@@ -76,7 +82,7 @@ Each invocation emits one canonical JSON document on stdout. Read the complete s
 
 `automation-status` requires `--task`, accepts no payload, rejects `--input`, and never reads stdin even if the parent keeps it open. It does not acquire a task lock, mutate workflow state, launch reviewers, open or answer gates, stage files, or commit.
 
-The command currently emits **schema version `"2"`**. Its JSON Schema is `src/contracts/schemas/v1/automation-status-v2.schema.json`, with ID `urn:archflow:schema:v2:automation-status`; the enclosing directory name does not determine the protocol version. Validate with that schema and its referenced schemas from the same checkout, or use `parseAutomationStatusV2` from the source contract in a source-based integration. The older `parseAutomationStatus` alias parses v1, not v2. These are repository source exports, not a published client SDK.
+The command currently emits **schema version `"3"`**. Its JSON Schema is `src/contracts/schemas/v1/automation-status-v3.schema.json`, with ID `urn:archflow:schema:v3:automation-status`; the enclosing directory name does not determine the protocol version. Validate with that schema and its referenced schemas from the same checkout, or use `parseAutomationStatusV3` from the source contract in a source-based integration. The older `parseAutomationStatus` alias parses v1; `parseAutomationStatusV2` retains v2. These are repository source exports, not a published client SDK.
 
 Reject unsupported versions and unknown fields according to the versioned schema. Pin schema assets with your adapter and upgrade them deliberately. This guide's examples explain the contract; they do not replace its full runtime validator.
 
@@ -86,7 +92,7 @@ Every successful document contains:
 
 | Field | Shape and meaning |
 |---|---|
-| `schema_version` | Literal string `"2"`. |
+| `schema_version` | Literal string `"3"`. |
 | `task_id` | Requested task ID; check that it matches your request. |
 | `observation_id` | 64 lowercase hexadecimal characters identifying the SHA-256 observation; use for deduplication/change detection only. |
 | `state_revision` | Nonnegative safe integer, or `null` when readable canonical state is absent. |
@@ -94,6 +100,7 @@ Every successful document contains:
 | `condition` | One of the five conditions in the table below. |
 | `next_action` | Exactly one condition-specific action. |
 | `implementation_recommendation` | Advisory model/effort result described below. |
+| `progress` | Pipeline progress and responsibility, or `null` when no readable pipeline position exists. |
 
 The condition fixes the actor and action kind:
 
@@ -101,7 +108,7 @@ The condition fixes the actor and action kind:
 |---|---|---|---|
 | `awaiting-client` | `skill` | `continue-skill` | Keep the live producer; if absent, start/resume the returned owning skill. |
 | `awaiting-human` | `human` | `respond-in-session` | Attach the human to the owning session, reconstructing it if needed. |
-| `ready` | `orchestrator` | `launch-skill` | Refetch and launch the exact returned successor when the previous producer has stopped. |
+| `awaiting-transition` | `human` | `launch-skill` | Show the exact successor and wait for the user to launch it; refetch before that launch. |
 | `blocked` | `operator` | `repair` | Suspend producer automation and surface the repair instruction. |
 | `complete` | `none` | `none` | Stop the task loop. |
 
@@ -111,10 +118,11 @@ An illustrative new-task observation (the repeated-zero digest is a placeholder)
 
 ```json
 {
-  "schema_version": "2",
+  "schema_version": "3",
   "task_id": "invoice-export",
   "observation_id": "0000000000000000000000000000000000000000000000000000000000000000",
   "state_revision": null,
+  "progress": null,
   "position": { "kind": "prd" },
   "condition": "awaiting-client",
   "next_action": {
@@ -133,15 +141,23 @@ An illustrative new-task observation (the repeated-zero digest is a placeholder)
 }
 ```
 
+### Progress and skill transitions
+
+`progress` contains `step` (`produce`, `counter_review`, `triage`, or `adjudicate`), `step_status` (`running`, `succeeded`, or `failed`), `review_rounds_completed`, `review_round_limit`, `boundary`, and a human-readable `reason`. Completed rounds are nonnegative safe integers; the limit is a positive safe integer, five by default. Boundary is `none`, `configured-approval`, `exception`, `step-transition`, `complete`, or `abandoned`. These fields explain activity; they do not authorize a launch, approval, or mutation. A pipeline step succeeding does not mean the skill finished.
+
+Optional `progress.dispatch_recovery` has `status` (`retrying`, `exhausted`, or `repair-required`), `dispatches` (0–3), `maximum_dispatches:3`, and optionally `next_retry_at` (an ISO datetime). A transient retry remains `awaiting-client`; keep observing the current producer. Recovery is managed by the server, including after producer restart. Dispatch retries do not spend completed review rounds or reset the review budget.
+
+`awaiting-transition` replaces v2's `ready` condition and changes the launch actor to `human`. There is no `human_boundary` on this condition: the user's launch of the named successor is the transition decision, not another content approval. The completed invocation stops. Show a launch action for that exact descriptor, and require a new user choice if fresh status names a different successor. Do not migrate a v2 controller by merely accepting the new version number.
+
 ### Human boundaries
 
 `human_boundary` contains `source`, `class`, `headline`, `summary`, `question`, and `reasons`, where each reason is `{ "class": "configured-approval" | "exception", "text": "..." }`.
 
-`source:"presentation"` describes a durable gate. Its class is `configured-approval` only when all reasons are ordinary configured approvals; otherwise it is `exception`. `source:"dispatch-failure"` is always exceptional and also contains `failed_role` and `failure_code`. V2 accepts roles `counter-reviewer`, `test-reviewer`, `effort-reviewer`, and `adjudicator`; fresh effort-selector failures currently fall back internally instead of producing a human boundary.
+`source:"presentation"` describes a durable gate. Its class is `configured-approval` only when all reasons are ordinary configured approvals; otherwise it is `exception`. `source:"dispatch-failure"` is always exceptional and also contains `failed_role` and `failure_code`. The boundary accepts roles `counter-reviewer`, `test-reviewer`, `effort-reviewer`, and `adjudicator`; fresh effort-selector failures currently fall back internally instead of producing a human boundary.
 
 Display the headline, summary, question, and explanatory reasons. The observation contains no decision token or selectable gate option. Route the actual human response to the owning interactive session, whose semantic view contains the authenticated choices. Do not turn a generic dashboard “approve” button into an automatic approval of whichever gate exists later. The session must bind the human's answer to its current presentation and ask again if the reviewed result or relevant choice changed.
 
-A failed reviewer diagnostic is a current observation, not permanent proof that the reviewer is unavailable. The owning skill handles retry on the same declared route or an explicit human-authorized substitute. The controller cannot silently substitute a reviewer.
+The server retries positively classified transient reviewer failures twice on the same route, for three dispatches including the initial call. Rate limits, timeouts, recognized temporary transport failures, and unavailable repository views qualify. Missing credentials, invalid routes, invalid model output, cancellation, and generic process failures require intervention instead. Exhausted or repair-required failures produce the exceptional boundary; partial successful feedback remains available to the producer and successful siblings can be reused. The owning skill handles an explicitly authorized one-dispatch retry or substitute, with the human’s reason. The controller cannot silently substitute a reviewer or reset retry accounting.
 
 ### Blocked states
 
@@ -159,7 +175,18 @@ Use `next_action.instruction` for operator guidance. Do not convert category nam
 
 ### Advice and optional audit data
 
-A ready implementation recommendation has exactly `status:"ready"`, `model`, and `effort`. Current allowed pairs are `gemini-3.7-flash/max`, `glm-5.3-flash/max`, and `gpt-5.6-sol/medium` or `/xhigh`. An unavailable recommendation has `status:"unavailable"`, `reason`, `explanation`, and an optional positive integer `phase`. Reasons are `not-applicable`, `not-produced`, `subject-stale`, and `legacy-evidence`.
+A ready implementation recommendation has `status:"ready"`, `model`, and `effort`, with an optional free-form `rationale` on the current profiles. The current selector recommends these exact model/effort pairs:
+
+| `model` | `effort` | Intended remaining implementation work |
+|---|---|---|
+| `gemini-3.7-flash-high` | `high` | Narrow, well-understood work with a cheap reliable check. |
+| `gpt-5.6-sol` | `medium` | Default for settled patterns and ordinary integration. |
+| `gpt-6-astra` | `low` | Substantive reasoning within a settled approach. |
+| `gpt-6-astra` | `high` | Identifiable difficult derivation or interacting correctness mechanisms. |
+
+These are ArchFlow contract values, not a guarantee of a host's available model catalog. Preserve the exact value, including the `-high` suffix in the Gemini model, when applying an explicit host mapping. The strict contract also accepts historical advice for `gemini-3.7-flash/max`, `glm-5.3-flash/max`, and `gpt-5.6-sol/xhigh`; the two historical Flash shapes do not accept `rationale`. Do not reject valid retained advice solely because the current selector no longer produces it.
+
+An unavailable recommendation has `status:"unavailable"`, `reason`, `explanation`, and an optional positive integer `phase`. Reasons are `not-applicable`, `not-produced`, `subject-stale`, and `legacy-evidence`.
 
 The application may display advice or map it to a supported host launch profile. Advice never determines whether a launch is authorized or which skill is next. If the host cannot supply the suggested profile, use an explicitly configured application policy; do not invent model identifiers or interpret missing advice as workflow failure.
 
@@ -170,28 +197,38 @@ Optional `validation_overrides` and `review_push_throughs` arrays expose authent
 The following is application pseudocode. `host.*`, the supervisor, and the schema validator are components your application implements, not ArchFlow APIs.
 
 ```text
-on task registration, producer exit, human response, or relevant repository/config change:
+on task registration, producer exit, human response, user launch request, or repository/config change:
     acquire application scheduler guard for (primary worktree, task ID)
+    register guard release on every exit, including early returns and failures
     recover/reconcile saved host session identity and actual producer liveness
-    status = run command; check exit, parse JSON, validate v2 and requested task ID
+    status = run command; check exit, parse JSON, validate v3 and requested task ID
 
     if status.condition == blocked:
         suspend automatic producer work; show repair instruction; return
     if status.condition == complete:
-        mark task complete; return
+        record terminal outcome using progress.boundary (complete or abandoned); return
     if status.condition == awaiting-human:
         attach to owning session, or reconstruct it using returned skill descriptor
         present boundary and wait for actual human input; return
+    if status.condition == awaiting-transition:
+        show exact successor and check for an explicit user launch request
+        if no matching user request exists: return
     if a producer is still alive:
         keep observing; do not launch a second producer; return
 
     fresh = run and validate automation-status again immediately before launch
-    if fresh.condition is not awaiting-client or ready:
+    if fresh.condition == awaiting-transition:
+        require the user's launch request to match the fresh skill/task/arguments
+        if absent or changed: show fresh successor and wait; return
+    else if fresh.condition != awaiting-client:
         process fresh status through this handler; return
     reserve the producer slot atomically in the application supervisor
     host.start_or_resume(fresh.next_action descriptor, saved task context)
-    persist host session identity and launch outcome; release scheduler guard
+    persist host session identity and launch outcome; consume any matched launch request
+    return
 ```
+
+Human waits return control to the application; do not hold the scheduler guard while waiting for input. A successor launch starts a new invocation rather than resuming the completed skill’s session.
 
 In the human branch, verify the attached session owns the returned skill/task/arguments. If a different producer is still alive, reconcile it before creating another session. A human wait is a live session state, not proof that the producer exited.
 
@@ -199,7 +236,7 @@ Maintain at most one live producer per task across controller workers and restar
 
 The read-only command supplies no launch lease. A scheduler guard coordinates your own workers; the producer still rechecks server authority on entry. On controller restart, reconcile actual host processes/sessions before replacing one. A producer exit code or its prose saying “done” is not task completion: always poll again. Add application backoff and an operator-visible retry limit for repeated crashes or no progress; a retry limit grants no workflow authority.
 
-Fresh sessions are appropriate at successor boundaries, particularly phase implementation. Resume the owning session for ongoing work and human responses when possible. If it was lost, a fresh invocation reconstructs workflow context from the server's returned resources. Preserve the user's request and conversation needed to interpret pending input; do not preserve/replay opaque offers in controller storage.
+A user-requested successor starts its own skill invocation; phase implementation uses a fresh session. Do not continue the completed producing invocation into the successor. Resume the owning session for ongoing work and human responses when possible. If it was lost, a fresh invocation reconstructs workflow context from the server's returned resources. Preserve the user's request and conversation needed to interpret pending input; do not preserve/replay opaque offers in controller storage.
 
 Polling can invoke Git and hash worktree files. Prefer events plus a modest periodic fallback (roughly one or two seconds for a small active repository, adjusted to observed cost), with backoff while idle or blocked. A process timeout indicates uncertainty, not a workflow decision. Reviewer actions may run much longer than a status poll; host MCP registrations use a one-hour tool timeout.
 
@@ -238,7 +275,7 @@ The controller integrates at the skill boundary. Each skill may perform many sem
 - `archflow_status`: read the reconciled view; a supported producing invocation may receive an opaque offer for its current action. Generic status receives no mutation offer.
 - `archflow_apply`: apply exactly one issued offer with the expected submission and return a fresh view.
 
-The MCP server is the `archflow-mcp` stdio process, not an HTTP service or command-oriented CLI. Automation status uses version `"2"`; semantic tool inputs use version `"1"`. Do not substitute one schema for the other.
+The MCP server is the `archflow-mcp` stdio process, not an HTTP service or command-oriented CLI. Automation status uses version `"3"`; semantic tool inputs use version `"1"`. Do not substitute one schema for the other.
 
 Example producer status input:
 
@@ -271,7 +308,7 @@ For an offered no-submission action, the producer's apply input is:
 
 The placeholder is not a valid offer. When requested, `submission` belongs inside `action`; its kind must match `next_action.expected_submission`. The supported submission kinds are `task-ask`, `work-result`, `triage`, `gate-summary`, `reopening-request`, `decision`, and `review-dispatch`; `none` means omit the submission entirely. Use the installed skill and advertised tool contract for the complete payload, not hand-built durable state envelopes. Repeat the invocation, including declared routes, unchanged. A lost, stale, or refused offer requires fresh status.
 
-The producer applies the offered production/handoff action before writing, reads task artifacts only through returned `{role,path,access}` resources, and writes implementation code only after the server reports durable phase-design authority. It runs verification and lets the server dispatch independent review. It stops for every returned human presentation and submits only an explicitly chosen authenticated option. No presentation means follow the returned action without inventing an approval gate.
+The producer applies the offered production/handoff action before writing, reads task artifacts only through returned `{role,path,access}` resources, and writes implementation code only after the server reports durable phase-design authority. It runs verification and lets the server dispatch independent review. Current reviews return `review_reports`; the producer evaluates their evidence and submits a triage response to finish, revise, or escalate. A revision requires the separate offered revision action before editing. Archived structured findings retain their older disposition submission. Reports and partial feedback are available in the semantic view, not promised as fields of automation status; triage itself remains current-skill work unless an actual human boundary is returned. It stops for every returned human presentation and submits only an explicitly chosen authenticated option. No presentation means follow the returned action without inventing an approval gate.
 
 Git remains producer-owned: only the semantic `commit` action supplies authorized paths, message, target ref, and baseline. The producer checks and executes those exact facts, preserves unrelated changes, then calls status to prove the commit. Neither an automation observation nor a clean review alone authorizes a commit. For multiple writable repositories, commits are proved primary first, then ordered secondaries; this is not an atomic cross-repository commit. A failure later in the sequence does not authorize undoing or repeating earlier proved commits. Context-only repositories remain read-only.
 
@@ -283,12 +320,14 @@ A custom app acting directly as the producer must implement all these skill obli
 |---|---|
 | Config or worktree changes between polls | Refetch; let the owning skill reconcile fresh authority. |
 | Human session disconnected | Preserve pending conversation; resume/reconstruct the returned owner and refresh its presentation before submitting any answer. |
-| Reviewer unavailable | Surface the exceptional boundary; let the skill retry or obtain a human-authorized substitute. |
+| Reviewer retry in progress | Keep observing the existing producer; the server owns retry scheduling and accounting. |
+| Reviewer failure exhausted or repair-required | Surface the exceptional boundary; let the skill obtain a reason-bearing human-authorized retry or substitute. |
+| `awaiting-transition` | Stop the completed invocation and wait for the user to launch the exact successor. |
 | MCP tools unavailable | Owning skill uses read-only `archflow-local manual-status --task <task>` and stops. Do not advance, edit workflow artifacts, stage, or commit offline. |
 | Legacy task needs adoption | Use `archflow-upgrade` with explicit legacy source and destination context; staging/adoption are a separate workflow, not polling repairs. |
 | Human explicitly wants earlier planning reopened | Route that request to the relevant planning skill; do not rewind state or infer reopen from ordinary feedback. |
 | Final implementation committed but status still awaits client | Resume the owning skill so it can apply the offered task-finish action. |
-| `complete` | Final planned implementation phase is committed and task completion recorded. QA, release, deployment, PR publication, and merging are separate actions. |
+| `complete` | Inspect `progress.boundary`: `complete` means final planned implementation committed and task completion recorded; `abandoned` means the task ended without successful completion. QA, release, deployment, PR publication, and merging are separate actions. |
 
 Raw `.archflow` state, archives, manifests, offers, and decision tokens are not controller APIs. Do not scrape Markdown status, infer authority from Git history, synthesize approval, or edit state to make progress. Observation IDs are not approvals, preconditions, locks, or mutation tokens. Human gate explanations should use ordinary language; mechanical bindings stay inside the producer/server interaction unless diagnostics are requested.
 
@@ -298,13 +337,13 @@ Before using a controller unattended, exercise these representative cases agains
 
 1. A new task returns PRD ownership, and its session receives the exact original ask.
 2. A running producer is never duplicated by repeated polls, concurrent scheduler workers, or controller restart.
-3. A clean workflow follows returned successors through terminal `complete` without calculating phase order.
+3. A completed skill returns `awaiting-transition` with actor `human`; no successor launches until the user requests the exact fresh descriptor. Repeat through terminal completion without calculating phase order.
 4. A configured approval stops for a real human response; a lost session reconstructs the current boundary without replaying an old decision.
-5. Reviewer failure and blocked authority stop automatic progression and expose actionable instructions.
+5. Transient reviewer failure remains `awaiting-client` with retry progress and no duplicate producer; exhausted or repair-required failure requests human intervention. Blocked authority exposes operator instructions.
 6. Producer crash, stale status, changed configuration, invalid JSON, unsupported version, and command failure trigger fresh observation or operator handling without fabricated progress.
-7. Task completion comes from fresh status, not agent prose or process exit; advice and audit fields never change dispatch authority.
+7. Terminal outcome comes from fresh status, distinguishing completed from abandoned tasks. Current and historical model advice validate, with optional rationale only where allowed; advice and audit fields never change dispatch authority.
 
-The repository already covers CLI behavior, controller completion loops, configured document/content approvals, constitution decisions, and reviewer failure in `test/integration/automation-status-*.test.ts`. Your app still needs tests for its own host adapter, supervision, crash recovery, and human-response routing.
+The repository covers CLI behavior and workflow outcomes in `test/integration/automation-status-*.test.ts`, versioned contracts in `test/contracts/automation-status-contract.test.ts`, projections in `test/unit/automation-status-projection.test.ts`, and retry accounting in `test/unit/dispatch-recovery.test.ts`. Some controller fixtures exercise retained v1/v2 contracts; use the v3 contract and CLI cases for current handoff expectations. Your app still needs tests for its own host adapter, supervision, crash recovery, and human-response routing.
 
 ## 10. Source references and maintenance
 
@@ -312,8 +351,10 @@ This file describes the source at the stamped commit, not a promise that an arbi
 
 | Source | What to verify |
 |---|---|
-| `src/contracts/automation-status.ts` and `src/contracts/schemas/v1/automation-status-v2.schema.json` | Strict status union, parser, schema, identity, and categories. |
+| `src/contracts/automation-status.ts` and `src/contracts/schemas/v1/automation-status-v3.schema.json` | Strict status union, parser, schema, identity, and categories. |
 | `src/local/main.ts`, `src/local/commands.ts`, `src/local/automation-status.ts`, `src/local/automation-status-edges.ts` | Process behavior, read-only projection, and absent/damaged-state handling. |
+| `src/contracts/workflow-progress.ts`, `src/contracts/dispatch-failure.ts`, `src/dispatch/recovery.ts` | Progress shape, retry classification, and durable retry budget. |
+| `src/contracts/effort-review.ts` | Current selector profiles and retained recommendation compatibility. |
 | `src/contracts/semantic-workflow.ts`, `src/state/semantic-*.ts`, `src/mcp/tools.ts` | Producer inputs, server-owned actions, and advertised tools. |
 | `skills/archflow-*/SKILL.md` | Exact host skill responsibilities and route flag support. |
 | `test/integration/automation-status-*.test.ts` | Executable examples of polling and workflow outcomes. |
