@@ -11,11 +11,26 @@ before use.
 | `design.yaml` | `design`, `phase-design` | `design-v3` |
 | `implementation.yaml` | `phase-impl` | `implementation-v1` |
 
+## Review intent
+
+These criteria are focus guidance for consequential, evidence-backed review. Use
+plans as context for intent and constraints, not as a checklist or a whitelist
+of possible defects. Inspect existing code and tests before claiming behavior
+or verification is missing. Extra coverage needs an identified undetected
+failure; equivalent behavioral evidence is sufficient. Free-form reports need
+no finding taxonomy, special IDs, or agreement on every suggestion. The producer
+resolves supported material concerns and finishes when none remain.
+
+The shared reviewer prompt carries this standard to every assigned role. The
+criterion IDs and `blocking` fields remain part of the existing rubric format;
+Review V4 does not turn them into finding-level verdicts or completion authority.
+
 ## Editing rules
 
-- **Edits take effect on install.** Run the installer to refresh the bundle and
-  the next review uses the new bytes — no rebuild needed; the server never
-  caches the files.
+- **Edits take effect on an explicitly requested install.** Refresh the tracked
+  release payload and its asset manifest before installing; rubric text itself
+  is read at runtime and is not cached. Never update shared installations
+  without the user’s per-action request.
 - `rubric_id` must match the table above (the server refuses a file whose id
   does not match its phase kind) and is excluded from the rubric digest.
 - Criterion order is significant. The rubric digest and the review contract

@@ -182,27 +182,17 @@ export type ReviewEnvelopeSeed = Readonly<
  * Both are server-owned so caller prose cannot enter the instruction channel.
  */
 export const REVIEW_INSTRUCTION =
-  "Review the submitted work using the artifact, relevant context, and repository view. Explain consequential concerns and supporting evidence in readable prose. Concentrate on what could break or prevent the intended outcome; exercise judgment about which investigations are worth the effort. Prefer a JSON object with one report string. No particular finding fields, taxonomy, identifiers, or ordering are required. If there are no consequential concerns, say so.";
+  "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. If no supported material issue remains, say so. Prefer a JSON object with one report string; no finding taxonomy, IDs, or ordering are required.";
 
 export const GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION =
-  "Focus on the changed work and its intended behavior. Treat rubric criteria as guidance. Discuss consequential departures from the governing plan as ordinary feedback.";
+  "Use the assigned criteria to focus on the changed work, design soundness, interfaces, unsafe behavior, and verification where assigned. Treat them as investigation guidance, not a checklist.";
 
 export const TEST_REVIEW_ASSIGNMENT_INSTRUCTION =
-  "Focus on whether tests and verification provide useful confidence in the changed behavior. Explain important coverage or oracle problems and practical improvements.";
-
-export const RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION =
-  "This is a responsibility-only remediation assignment. rubric.criteria is empty, so ordinary findings are forbidden and findings must be empty. When assignment.expected_upstream_digests is present, return its exact complete alignment census; that census is the entire alignment deliverable. When assignment.legacy_confirmations is present, return exactly those confirmation results through the legacy confirmation channel; an unresolved confirmation stays in that channel under its assigned criterion. Do not return an unverifiable, escalate, or other ordinary finding. Read the artifact and pinned context only to complete these exact responsibilities, never as a new full review.";
-
-/** @deprecated The assigned envelope now selects one role-specific fixed instruction. */
-export const REVIEW_ASSIGNMENT_INSTRUCTION = GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION;
-
-/** The active finding vocabulary shared by document and implementation reviews. */
-export const REVIEW_TAXONOMY_INSTRUCTION =
-  "For every finding, set claim_type to exactly one of defect, risk, gap, or preference; set confidence to exactly one of certain, likely, or suspicion; and supply a concrete falsifier of at most 4096 UTF-16 code units. A falsifier names the test command, code inspection, or other observation that would disprove the claim. If the condition is not observable from available evidence, the falsifier names the missing evidence and the outcome it would settle. Suspicion is cost-free and encouraged when that is the honest confidence. Preference is descriptive and advisory; do not force a quota or ceremonial preference when the artifact is sound. An empty findings array is the normal successful response when no reportable claim survives. Do not emit severity, critical, major, minor, blocker, or a finding-level blocking field.";
+  "Focus on meaningful verification gaps. Inspect the implementation, existing tests and assertions, and supplied verification evidence before claiming a check is missing or ineffective. Name the concrete failure that could escape detection and suggest the cheapest credible way to catch it; equivalent coverage at another layer is sufficient.";
 
 /** Review framing used only for implementation outputs. */
 export const IMPLEMENTATION_REVIEW_INSTRUCTION =
-  "Review the implementation output declared by this phase and its current behavior. Use unchanged files only as supporting evidence. Focus on consequential problems introduced, exposed, or materially worsened by the changes; this is not a general code review. Explain your feedback in readable prose, preferably as a JSON object with one report string. If there are no consequential concerns, say so.";
+  `${REVIEW_INSTRUCTION} Review the implementation output declared by this phase and its current behavior. Use unchanged files as supporting evidence for problems introduced, exposed, or materially worsened by the changes; this is not a general code review.`;
 
 /**
  * The fixed remediation instruction the envelope adds as `instructions.prior_triage` when a
@@ -210,7 +200,7 @@ export const IMPLEMENTATION_REVIEW_INSTRUCTION =
  * between initial and later rounds.
  */
 export const PRIOR_TRIAGE_INSTRUCTION =
-  "Verify the revisions using your earlier feedback and the working AI's verification request. Explain what is resolved and any consequential remaining concerns or regressions from the changes. Do not repeat a full review or reopen unrelated issues.";
+  "Verify the revisions against the earlier feedback and the working AI's request. Check whether the concrete problems are resolved and whether the changes introduce consequential regressions. Do not demand the earlier suggested solution when a different solution works. Keep follow-up scoped to these changes, and say so when no supported material issue remains; agreement on every suggestion is unnecessary.";
 
 /** Additional constitution-review scope when the artifact is an implementation output. */
 export const CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION =

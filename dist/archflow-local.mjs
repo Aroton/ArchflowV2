@@ -47576,6 +47576,8 @@ init_phase_instance();
 init_plain_json();
 init_review();
 init_effort_review();
+var REVIEW_INSTRUCTION = "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. If no supported material issue remains, say so. Prefer a JSON object with one report string; no finding taxonomy, IDs, or ordering are required.";
+var IMPLEMENTATION_REVIEW_INSTRUCTION = `${REVIEW_INSTRUCTION} Review the implementation output declared by this phase and its current behavior. Use unchanged files as supporting evidence for problems introduced, exposed, or materially worsened by the changes; this is not a general code review.`;
 var ReviewEnvelopeError = class extends Error {
   project_error;
   /** The serialized size that failed the byte cap, when that is what failed. */

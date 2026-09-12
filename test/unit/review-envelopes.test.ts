@@ -6,11 +6,9 @@ import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/co
 import {
   PRIOR_TRIAGE_INSTRUCTION,
   IMPLEMENTATION_REVIEW_INSTRUCTION,
-  REVIEW_TAXONOMY_INSTRUCTION,
   CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION,
   REVIEW_INSTRUCTION,
   GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION,
-  RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION,
   TEST_REVIEW_ASSIGNMENT_INSTRUCTION,
   MULTI_REPOSITORY_VIEW_NOTE,
   PRODUCED_REPOSITORY_VIEW_NOTE,
@@ -214,9 +212,6 @@ describe("review dispatch envelopes", () => {
       assignment: GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION,
       prior_triage: PRIOR_TRIAGE_INSTRUCTION,
     });
-    expect(RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION).toContain("ordinary findings are forbidden");
-    expect(RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION).toContain("findings must be empty");
-    expect(RESPONSIBILITY_ONLY_REVIEW_INSTRUCTION).not.toContain("one scoped unverifiable");
 
     const confirmationOnly = json(buildReviewEnvelope({
       ...twoCriteria,
@@ -371,20 +366,11 @@ describe("review dispatch envelopes", () => {
     expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("introduced, exposed, or materially worsened");
     expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("not a general code review");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Verify the revisions");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Do not repeat a full review");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Keep follow-up scoped to these changes");
     // Remediation rounds are scoped to the revision: no fresh sweep of unchanged sections, and
     // an empty finding list is the intended terminal state.
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("reopen unrelated issues");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("no supported material issue remains");
     expect(PRIOR_TRIAGE_INSTRUCTION).not.toContain("anywhere in the artifact");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("claim_type");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("confidence");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("falsifier");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("4096 UTF-16 code units");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("Suspicion is cost-free and encouraged");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("Preference is descriptive and advisory");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("do not force a quota or ceremonial preference");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("An empty findings array is the normal successful response");
-    expect(REVIEW_TAXONOMY_INSTRUCTION).toContain("Do not emit severity");
     // Initial envelope does not carry remediation instructions
     expect(json(bare.bytes).instructions).not.toHaveProperty("prior_triage");
     // The instruction literal and the entry participate in the recorded envelope digest.

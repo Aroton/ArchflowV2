@@ -1,8 +1,8 @@
 # workflow/SKILLS
 
-**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `skills/`, `src/init/`, `src/contracts/config.ts`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/mcp/handlers/semantic.ts`, `src/state/semantic-*.ts`, `assets/`
+**Explored:** 2026-09-12 · **Commit:** `60176a2` · **Covers:** `skills/`, `src/init/`, `src/contracts/config.ts`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/mcp/handlers/semantic.ts`, `src/state/semantic-*.ts`, `assets/`
 
-Producing skills interpret `review_reports` directly and submit a `triage.response`. They select relevant previous reviewers for verification, explain residual concerns when finishing, and follow separate constitution and human approval actions. No extra AI parsing call or per-finding census is required.
+Producing skills interpret `review_reports` directly and submit a `triage.response`. They check concerns against existing code and tests, use plans as context, and finish when no supported material issue remains. They select relevant previous reviewers for verification, explain residual concerns when finishing, and follow separate constitution and human approval actions. No extra AI parsing call or per-finding census is required.
 
 The nine skills are the human-facing entry points. They are thin judgment and trust-boundary playbooks: the MCP owns durable state, legal transitions, canonical task resource paths, and immutable review policy. Every workflow runs through the semantic status/apply pair; the one purpose-specific local adapter is the legacy upgrade's preview/stage/adopt, which exists only because the destination task does not exist yet at adoption time. In Codex the same skills are invoked with `$` instead of `/`.
 

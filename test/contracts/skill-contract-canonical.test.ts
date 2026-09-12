@@ -201,7 +201,7 @@ describe("canonical skill contracts", () => {
     for (const name of producerSkills) {
       const source = skill(name);
       expect(source.toLowerCase()).toContain("perform one bounded author check");
-      expect(source).toContain("`review_context.rubric` verbatim");
+      expect(source).toContain("`review_context.rubric` as guidance");
       expect(source).toContain("returned active rules");
       expect(source).toContain("server-dispatched review is the only independent review");
       expect(source).not.toContain("spawn a fresh review sub-agent");

@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-09-12 · **Commit:** `c72e902` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-09-12 · **Commit:** `60176a2` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review supplies independent feedback to the working AI. The initial review runs the configured general and test reviewers, alongside separate constitution review when rules are active. Reviewers return readable reports; the working AI interprets them, makes worthwhile revisions, and selects previous reviewers to verify the changes. Useful feedback and economical follow-up matter more than agreement on every suggestion.
 
@@ -32,9 +32,9 @@ The shape is closed: validation rejects unknown keys, so producer-authored histo
 
 ## Feedback and verification
 
-Reviewer prompts state the scope and purpose, with rubric criteria as guidance. General review examines the changed work; test review examines useful regression protection. Reports need no finding IDs, exact criterion selections, falsifiers, or coverage census. On follow-up, each selected reviewer receives its earlier report, the working AI’s revision summary, and its verification request. It checks resolution and consequential regressions without reopening unrelated work.
+Every general and test reviewer receives the same consequential-review standard, with rubric criteria as focus guidance. PRD and design documents explain intent and constraints rather than define a mechanical checklist; a plan discrepancy needs a concrete consequence, and a real defect need not have been anticipated by the plan. Reviewers inspect available code and tests before claiming something is missing. Extra verification needs an identified failure that current checks could miss, and equivalent behavioral evidence is sufficient. General review examines the changed work; test review examines useful regression protection. Reports need no finding IDs, exact criterion selections, falsifiers, or coverage census. On follow-up, each selected reviewer receives its earlier report, the working AI’s revision summary, and its verification request. It checks resolution and consequential regressions without reopening unrelated work or demanding the original suggested solution when another solution works.
 
-The working AI decides when another round is worthwhile. The default limit remains five completed rounds. Retries do not consume rounds, and a finish response at the limit can continue through the remaining policy checks. Another review beyond the limit uses the existing human intervention.
+The working AI assesses each concern on its evidence, resolves supported material problems, dismisses unsupported or non-material suggestions, and finishes when no supported material issue remains. It does not chase reviewer agreement. The default limit remains five completed rounds. Retries do not consume rounds, and a finish response at the limit can continue through the remaining policy checks. Another review beyond the limit uses the existing human intervention.
 
 Archived Review V1–V3 and pending gates remain readable without rewriting. Their original structured triage and alignment semantics apply until a fresh dispatch produces V4. V4 responses do not build a disposition ledger; the small completed-round history remains for the budget.
 
