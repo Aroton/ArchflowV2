@@ -60,5 +60,7 @@ describe("readable reviewer reports", () => {
     const projected = projectCliOutputSchema({}, "review", adapter, {}, { reviewer_id: "test", focus: "tests", criterion_ids: ["test-quality"] });
     expect(projected).toMatchObject({ type: "object", properties: { report: { type: "string" } }, required: ["report"] });
     expect(projected).not.toHaveProperty("oneOf");
+    expect(projected).not.toHaveProperty("$schema");
+    expect(projected).not.toHaveProperty("$id");
   });
 });

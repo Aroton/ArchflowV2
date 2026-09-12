@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-09-12 · **Commit:** `c72e902` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review supplies independent feedback to the working AI. The initial review runs the configured general and test reviewers, alongside separate constitution review when rules are active. Reviewers return readable reports; the working AI interprets them, makes worthwhile revisions, and selects previous reviewers to verify the changes. Useful feedback and economical follow-up matter more than agreement on every suggestion.
 
@@ -67,7 +67,7 @@ The policy split is the key idea: absence that **contradicts durable authority**
 
 When the cap is hit, droppable context is replaced lowest-priority-first (`repo-map`, then `conventions`, then `interface-excerpt`). The user ask, approved upstreams, verification transcript, and latest accepted remediation intents are never droppable; if they do not fit, review fails closed.
 
-For implementation subjects, the raw transcript lives only at ignored `.archflow/runtime/tasks/<task>/cache/phases/<n>/verification.txt`. `ImplementationOutputV1.verification_evidence` binds its SHA-256 digest and byte count into durable authority. Envelope assembly verifies those bytes before review; after phase advancement the raw transcript may be removed without weakening already-approved authority. If it disappears during an uncommitted active step, status asks for a rerun rather than invalidating an earlier phase.
+For implementation subjects, the raw transcript lives only at ignored `.archflow/runtime/tasks/<task>/cache/phases/<n>/verification.txt`. `ImplementationOutputV1.verification_evidence` binds its SHA-256 digest and byte count into durable authority. Envelope assembly verifies those bytes and includes the complete transcript inline, including setup output and final results. Verification transcripts do not use the 24 KiB excerpt budget for optional mechanical evidence; if required content exceeds the overall envelope cap, review fails explicitly instead of truncating it. After phase advancement the raw transcript may be removed without weakening already-approved authority. If it disappears during an uncommitted active step, status asks for a rerun rather than invalidating an earlier phase.
 
 ## The sealed implementation snapshot
 

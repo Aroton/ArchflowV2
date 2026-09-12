@@ -552,7 +552,9 @@ export async function verificationTranscriptEvidence(
     return [unavailableContextEntry("verification-transcript", displayPath,
       "verification transcript cache does not match the durable implementation authority")];
   }
-  return [excerptContextEntry(
+  // Verification results often follow lengthy setup output. Required evidence must reach
+  // the reviewer whole; the envelope cap may reject it, but must not silently cut its tail.
+  return [pinnedContextEntry(
     "verification-transcript",
     displayPath,
     bytes,

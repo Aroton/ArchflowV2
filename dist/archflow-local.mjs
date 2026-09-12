@@ -46954,10 +46954,7 @@ function hostTaskSlugSchema(value) {
   };
 }
 function projectCliOutputSchema(outputSchema, resultKind, adapter2, subject, assignment) {
-  if (resultKind === "review" && assignment !== void 0) {
-    return JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" })));
-  }
-  const roleSpecific = outputSchema;
+  const roleSpecific = resultKind === "review" && assignment !== void 0 ? JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) : outputSchema;
   assertPlainJson(roleSpecific, "CLI output schema");
   const snapshot2 = structuredClone(roleSpecific);
   const projected = projectSchemaNode(snapshot2, adapter2);

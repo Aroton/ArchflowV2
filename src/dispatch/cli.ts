@@ -248,10 +248,9 @@ export function projectCliOutputSchema(
   subject?: Readonly<Record<string, PlainJsonValue>>,
   assignment?: ReviewAssignmentV1,
 ): PlainJsonValue {
-  if (resultKind === "review" && assignment !== undefined) {
-    return JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" })));
-  }
-  const roleSpecific = outputSchema;
+  const roleSpecific = resultKind === "review" && assignment !== undefined
+    ? JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) as unknown
+    : outputSchema;
   assertPlainJson(roleSpecific, "CLI output schema");
   const snapshot = structuredClone(roleSpecific);
   const projected = projectSchemaNode(snapshot, adapter);

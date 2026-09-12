@@ -5070,7 +5070,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 45703,
+      "bytes": 45701,
       "format": "esm",
       "imports": [
         {
@@ -7594,7 +7594,7 @@
       ]
     },
     "src/review/pinned-context.ts": {
-      "bytes": 37357,
+      "bytes": 37539,
       "format": "esm",
       "imports": [
         {
@@ -10369,7 +10369,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2402103,
+      "bytes": 2402082,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11539,7 +11539,7 @@
           "bytesInOutput": 1687
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 29353
+          "bytesInOutput": 29332
         },
         "src/dispatch/failure-observation.ts": {
           "bytesInOutput": 2420
@@ -11772,7 +11772,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3657650,
+      "bytes": 3657628,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13074,7 +13074,7 @@
           "bytesInOutput": 1586
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 33065
+          "bytesInOutput": 33044
         },
         "src/dispatch/coordinator.ts": {
           "bytesInOutput": 6939
@@ -13191,7 +13191,7 @@
           "bytesInOutput": 27427
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 24372
+          "bytesInOutput": 24371
         },
         "src/review/reviewer-tags.ts": {
           "bytesInOutput": 118

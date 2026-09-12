@@ -192,6 +192,44 @@ describe("verificationTranscriptEvidence", () => {
     }]);
   });
 
+  it.each([84_632, REVIEW_ENVELOPE_BYTE_CAP + 1])("pins all %i transcript bytes, including final results", async (size) => {
+    const h = await transcriptWorkspace("complete-transcript");
+    const tail = "\n$ npm test\n305 tests passed\nexit code: 0\n";
+    const text = `${"dependency setup output\n".repeat(Math.ceil(size / 24)).slice(0, size - tail.length)}${tail}`;
+    const bytes = new TextEncoder().encode(text);
+    const directory = join(h.services.authority.workspace_root, "cache", "phases", "3");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "verification.txt"), bytes);
+
+    const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState,
+      implSubject({ transcript_digest: sha256Bytes(bytes), byte_count: bytes.byteLength }));
+    expect(entries).toEqual([{
+      kind: "verification-transcript", label: "cache/phases/3/verification.txt", status: "pinned",
+      content_digest: sha256Bytes(bytes), encoding: "utf8", content: text,
+    }]);
+    expect(bytes.byteLength).toBe(size);
+    if (size > REVIEW_ENVELOPE_BYTE_CAP) {
+      expect(() => buildReviewEnvelopeWithCap(input(entries))).toThrow(ReviewEnvelopeError);
+    } else {
+      const envelope = JSON.parse(new TextDecoder().decode(buildReviewEnvelopeWithCap(input(entries)).bytes));
+      expect(envelope.context[0].content).toBe(text);
+      expect(envelope.context[0].content.endsWith(tail)).toBe(true);
+    }
+  });
+
+  it.each(["digest", "length"])("keeps rejecting a transcript with a mismatched %s", async (mismatch) => {
+    const h = await transcriptWorkspace("mismatched-transcript");
+    const directory = join(h.services.authority.workspace_root, "cache", "phases", "3");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "verification.txt"), TRANSCRIPT);
+    const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState,
+      implSubject({
+        transcript_digest: mismatch === "digest" ? digest("f") : sha256Bytes(TRANSCRIPT),
+        byte_count: TRANSCRIPT.byteLength + (mismatch === "length" ? 1 : 0),
+      }));
+    expect(entries).toMatchObject([{ status: "unavailable", note: expect.stringContaining("does not match") }]);
+  });
+
   it("emits nothing outside implementation phases", async () => {
     const h = await transcriptWorkspace("document-transcript");
     const documentSubject = {

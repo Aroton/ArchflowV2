@@ -1,6 +1,6 @@
 # mcp/DISPATCH
 
-**Explored:** 2026-09-12 · **Commit:** `edae9c7` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
+**Explored:** 2026-09-12 · **Commit:** `c72e902` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
 
 Review delivery continues to use the existing CLI adapters. Fresh child output prefers one report string, and locally extracted JSON with other shapes is preserved as feedback. Successful extracted bytes are retained before server evidence construction; failures there retain bounded validation diagnostics rather than triggering another model call.
 
@@ -56,7 +56,7 @@ A third part is coupled to the *providers* behind those CLIs: output-schema proj
 
 Adjudication V2 uses a plain object root whose `judgments` property has one opaque server-created slot per active rule. Each slot accepts only compliance, rationale, trigger, and trigger evidence. The server checks exact slot-set equality, maps slots to rules, and derives identity, order, constitution status, and matched/uncertain trigger rollups. Approved-upstream drift and generic findings are absent. Normative validation materializes one inert clone before repeated inspection, so accessors or non-enumerable properties cannot split validation from hashing.
 
-Fresh review requests a simple report object. Successfully extracted JSON with other shapes is retained as readable feedback. The server stamps reviewer, route, and subject provenance without deriving a verdict or finding census. Archived V1–V3 evidence keeps its original readers. Each child remains isolated in the existing read-only review workspace.
+Fresh review requests a simple report object. Its generated schema passes through the same host projection as other outputs: `$schema`, `$id`, and unsupported metadata are removed before the CLI receives it. Successfully extracted JSON with other shapes is retained as readable feedback. The server stamps reviewer, route, and subject provenance without deriving a verdict or finding census. Archived V1–V3 evidence keeps its original readers. Each child remains isolated in the existing read-only review workspace.
 
 For implementation review, a changed writable secondary now receives its authenticated retained proposed tree rather than HEAD context. The repository-view plan remains the single source for filesystem materialization, child bindings, and evidence pins. Unchanged writable and context-only members stay commit-pinned at HEAD. All views still remove secondary `.archflow/`, and the child remains a first-party process under best-effort context hygiene rather than OS-enforced confinement.
 
