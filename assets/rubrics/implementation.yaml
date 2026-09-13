@@ -20,7 +20,7 @@ criteria:
     text: "Trace changed interfaces through their existing callers and dependencies. Report an evidenced mismatch that can break behavior, data, or compatibility."
     blocking: true
   - id: verification-evidence
-    text: "Check the complete verification transcript and relevant code and tests. Report missing, failed, or misleading verification when it leaves an important behavior or safety boundary unsupported, whether or not the phase design requested that check; explain the concrete failure that remains undetected."
+    text: "Check the verification record in implementation notes, any supplied verification log or excerpt, and relevant code and tests. Raw logs are optional supporting evidence; a digest identifies bytes, not execution. Do not infer success from omitted output or demand a complete raw log when available evidence supports the behavior. Report missing, failed, or misleading verification when it leaves an important behavior or safety boundary unsupported, whether or not the phase design requested that check; explain the concrete failure that remains undetected."
     blocking: true
   - id: test-quality
     text: "Assess distinct regression protection using existing tests and their actual assertions. Identify a concrete failure that could escape detection before requesting coverage, and accept an equivalent oracle at another layer. Prefer the cheapest credible check; flag duplicated or expensive fixtures only when their concrete cost materially harms delivery. Avoid raw coverage targets, exhaustive matrices, and test-structure preferences."

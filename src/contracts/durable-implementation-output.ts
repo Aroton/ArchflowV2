@@ -54,7 +54,7 @@ export type UndeclaredChangeReport = {
   readonly unrepresentable_count: SafeInteger;
 };
 
-/** Digest binding for the ignored raw verification transcript. */
+/** Historical transcript metadata, accepted when reading older implementation results. */
 export type VerificationEvidence = {
   readonly transcript_digest: Sha256Digest;
   readonly byte_count: SafeInteger;
@@ -136,8 +136,8 @@ export type ImplementationOutputV1 = {
   readonly accounting: SnapshotAccountingV1;
   readonly secret_scan: SecretScanResult;
   readonly undeclared_changes: UndeclaredChangeReport;
-  /** Binds this durable output to the exact verification bytes reviewed for it. */
-  readonly verification_evidence: VerificationEvidence;
+  /** Legacy metadata only; fresh reviews pin evidence independently of the implementation. */
+  readonly verification_evidence?: VerificationEvidence;
   /** SET — sorted by `input_id`, duplicates rejected. */
   readonly declared_inputs: readonly DeclaredInputRef[];
   readonly input_fingerprint: Sha256Digest;
@@ -226,7 +226,7 @@ export const implementationOutputV1Schema = z.object({
   accounting: snapshotAccountingV1Schema,
   secret_scan: secretScanResultV1Schema,
   undeclared_changes: undeclaredChangeReportV1Schema,
-  verification_evidence: verificationEvidenceV1Schema,
+  verification_evidence: verificationEvidenceV1Schema.optional(),
   declared_inputs: z.array(declaredInputRefV1Schema)
     .refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
   input_fingerprint: sha256Digest,

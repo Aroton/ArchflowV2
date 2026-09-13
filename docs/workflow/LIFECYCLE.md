@@ -37,7 +37,7 @@ The workflow file's bytes are digest-pinned into each task at creation, so chang
 | prd | `archflow-prd` | `ask.md` (verbatim request plus clarification Q&A), `prd.md` | `artifact-approval` only when a rule or safety condition requires it; otherwise direct successor authority |
 | design | `archflow-design` | `design.md` with a machine-readable `### Phase N:` plan, plus the current `prd.md` projection | conditional `design-approval`; otherwise an exact autonomous milestone commit and successor |
 | phase-design | `archflow-phase-design` | `phases/<n>/design.md`, plus the current `design.md` and `prd.md` projections | conditional `design-approval`; otherwise an exact autonomous milestone commit and implementation hand-off |
-| phase-impl | `archflow-phase-impl` | code, tracked `phases/<n>/impl-notes.md`, digest-bound ignored verification transcript | conditional `commit-authorization`; every returned exact commit is executed directly after the same Git checks |
+| phase-impl | `archflow-phase-impl` | code, tracked `phases/<n>/impl-notes.md`, optional ignored verification log pinned at review time | conditional `commit-authorization`; every returned exact commit is executed directly after the same Git checks |
 | status | `archflow-status` | nothing — read-only | surfaces gates, resolves none |
 
 Tracked task documents and authority live under `.archflow/tasks/<task>/`; transient, cache, and diagnostic bytes live under ignored `.archflow/runtime/tasks/<task>/`. Both resolvers enforce the same containment, symlink, and task boundary. The only shared material is repository policy and the maintained `docs/` set. **Tasks never read each other's files** — this isolation is real and test-enforced.

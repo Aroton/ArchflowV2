@@ -74,9 +74,9 @@ describe("durable authority contracts", () => {
     });
   });
 
-  it("requires the transcript digest and byte count on implementation output", () => {
+  it("accepts historical transcript metadata and fresh outputs without it", () => {
     expect(implementationOutputV1Schema.safeParse(implementationFixture).success).toBe(true);
     const { verification_evidence: _verification, ...withoutVerification } = implementationFixture;
-    expect(implementationOutputV1Schema.safeParse(withoutVerification).success).toBe(false);
+    expect(implementationOutputV1Schema.safeParse(withoutVerification).success).toBe(true);
   });
 });

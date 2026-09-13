@@ -165,7 +165,7 @@ describe("verificationTranscriptEvidence", () => {
     retained: {} as never,
   });
 
-  it("lifts the digest-bound workspace transcript into a typed pinned entry", async () => {
+  it("pins the current workspace transcript independently of implementation metadata", async () => {
     const h = await transcriptWorkspace("pinned-transcript");
     const directory = join(h.services.authority.workspace_root, "cache", "phases", "3");
     mkdirSync(directory, { recursive: true });
@@ -188,11 +188,11 @@ describe("verificationTranscriptEvidence", () => {
       kind: "verification-transcript",
       label: "cache/phases/3/verification.txt",
       status: "unavailable",
-      note: "verification transcript cache is absent; rerun verification before requesting review",
+      note: "verification log is absent; assess the verification record in implementation notes and relevant code and tests",
     }]);
   });
 
-  it.each([84_632, REVIEW_ENVELOPE_BYTE_CAP + 1])("pins all %i transcript bytes, including final results", async (size) => {
+  it.each([84_632, REVIEW_ENVELOPE_BYTE_CAP + 1])("bounds %i transcript bytes while retaining final results and full-log metadata", async (size) => {
     const h = await transcriptWorkspace("complete-transcript");
     const tail = "\n$ npm test\n305 tests passed\nexit code: 0\n";
     const text = `${"dependency setup output\n".repeat(Math.ceil(size / 24)).slice(0, size - tail.length)}${tail}`;
@@ -200,34 +200,50 @@ describe("verificationTranscriptEvidence", () => {
     const directory = join(h.services.authority.workspace_root, "cache", "phases", "3");
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, "verification.txt"), bytes);
-
-    const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState,
-      implSubject({ transcript_digest: sha256Bytes(bytes), byte_count: bytes.byteLength }));
-    expect(entries).toEqual([{
-      kind: "verification-transcript", label: "cache/phases/3/verification.txt", status: "pinned",
-      content_digest: sha256Bytes(bytes), encoding: "utf8", content: text,
+    const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, implSubject());
+    expect(entries).toMatchObject([{
+      kind: "verification-transcript", status: "truncated", content_digest: sha256Bytes(bytes),
+      encoding: "utf8", total_byte_count: bytes.byteLength,
     }]);
-    expect(bytes.byteLength).toBe(size);
-    if (size > REVIEW_ENVELOPE_BYTE_CAP) {
-      expect(() => buildReviewEnvelopeWithCap(input(entries))).toThrow(ReviewEnvelopeError);
-    } else {
-      const envelope = JSON.parse(new TextDecoder().decode(buildReviewEnvelopeWithCap(input(entries)).bytes));
-      expect(envelope.context[0].content).toBe(text);
-      expect(envelope.context[0].content.endsWith(tail)).toBe(true);
-    }
+    const envelope = JSON.parse(new TextDecoder().decode(buildReviewEnvelopeWithCap(input(entries)).bytes));
+    expect(envelope.context[0].content.startsWith("dependency setup output\n")).toBe(true);
+    expect(envelope.context[0].content.endsWith(tail)).toBe(true);
+    expect(envelope.context[0].content).toContain("does not establish that omitted commands passed");
+    expect(envelope.context[0].content.length).toBeLessThan(25_000);
   });
 
-  it.each(["digest", "length"])("keeps rejecting a transcript with a mismatched %s", async (mismatch) => {
-    const h = await transcriptWorkspace("mismatched-transcript");
+  it("preserves UTF-8 boundaries at both ends of a large transcript", async () => {
+    const h = await transcriptWorkspace("unicode-transcript");
     const directory = join(h.services.authority.workspace_root, "cache", "phases", "3");
     mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, "verification.txt"), TRANSCRIPT);
-    const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState,
-      implSubject({
-        transcript_digest: mismatch === "digest" ? digest("f") : sha256Bytes(TRANSCRIPT),
-        byte_count: TRANSCRIPT.byteLength + (mismatch === "length" ? 1 : 0),
-      }));
-    expect(entries).toMatchObject([{ status: "unavailable", note: expect.stringContaining("does not match") }]);
+    const text = `a${"🙂".repeat(10_000)}z`;
+    writeFileSync(join(directory, "verification.txt"), text);
+    const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, implSubject());
+    expect(entries[0]).toMatchObject({ status: "truncated", encoding: "utf8" });
+    const entry = entries[0]!;
+    if (entry.status !== "truncated") throw new Error("expected excerpt");
+    expect(entry.content).not.toContain("�");
+    expect(entry.content.startsWith("a🙂")).toBe(true);
+    expect(entry.content.endsWith("🙂z")).toBe(true);
+  });
+
+  it("repins a replacement without changing the subject or a previous evidence entry", async () => {
+    const h = await transcriptWorkspace("replacement-transcript");
+    const directory = join(h.services.authority.workspace_root, "cache", "phases", "3");
+    mkdirSync(directory, { recursive: true });
+    const path = join(directory, "verification.txt");
+    writeFileSync(path, TRANSCRIPT);
+    const subject = implSubject();
+    const before = structuredClone(subject);
+    const original = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, subject);
+    const replacement = "$ npm test\n12 passed; exit 0\n[repetitive output omitted]\n";
+    writeFileSync(path, replacement);
+    const refreshed = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, subject);
+    expect(refreshed[0]).toMatchObject({ status: "pinned", content: replacement,
+      content_digest: sha256Bytes(new TextEncoder().encode(replacement)) });
+    expect(original[0]).toMatchObject({ content: new TextDecoder().decode(TRANSCRIPT), content_digest: sha256Bytes(TRANSCRIPT) });
+    expect(subject).toEqual(before);
+    expect(buildReviewEnvelopeWithCap(input(refreshed)).digest).not.toEqual(buildReviewEnvelopeWithCap(input(original)).digest);
   });
 
   it("emits nothing outside implementation phases", async () => {
@@ -458,6 +474,16 @@ describe("buildReviewEnvelopeWithCap", () => {
     ]);
     expect(visible.context[2]!.content_digest).toBe(repoMap.status === "pinned" ? repoMap.content_digest : undefined);
   });
+  it("reduces an optional verification excerpt to metadata when required context needs the space", () => {
+    const upstream = pinnedContextEntry("approved-upstream", "prd.md", new TextEncoder().encode("p".repeat(1_030_000)));
+    const transcript = excerptContextEntry("verification-transcript", "verification.txt", new TextEncoder().encode("t".repeat(50_000)));
+    const envelope = buildReviewEnvelopeWithCap(input([upstream, transcript]));
+    const visible = JSON.parse(new TextDecoder().decode(envelope.bytes));
+    expect(visible.context[0].status).toBe("pinned");
+    expect(visible.context[1]).toMatchObject({ status: "omitted-cap", content_digest: sha256Bytes(new TextEncoder().encode("t".repeat(50_000))),
+      note: expect.stringContaining("original byte count: 50000") });
+  });
+
   it("never drops the prior-triage record for the cap: an envelope that cannot hold it fails closed", () => {
     const upstream = pinnedContextEntry("approved-upstream", "prd.md", new TextEncoder().encode("# PRD\n"));
     const priorTriage = pinnedContextEntry(

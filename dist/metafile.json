@@ -3751,7 +3751,7 @@
       ]
     },
     "src/contracts/durable-implementation-output.ts": {
-      "bytes": 13063,
+      "bytes": 13110,
       "format": "esm",
       "imports": [
         {
@@ -4685,7 +4685,7 @@
       }
     },
     "src/contracts/schemas/v1/implementation-output.schema.json": {
-      "bytes": 7198,
+      "bytes": 7169,
       "format": "esm",
       "imports": [],
       "with": {
@@ -6314,7 +6314,7 @@
       "imports": []
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 37309,
+      "bytes": 37395,
       "format": "esm",
       "imports": [
         {
@@ -7487,7 +7487,7 @@
       "imports": []
     },
     "src/review/envelopes.ts": {
-      "bytes": 38825,
+      "bytes": 38842,
       "format": "esm",
       "imports": [
         {
@@ -7594,7 +7594,7 @@
       ]
     },
     "src/review/pinned-context.ts": {
-      "bytes": 37539,
+      "bytes": 38058,
       "format": "esm",
       "imports": [
         {
@@ -8515,7 +8515,7 @@
       ]
     },
     "src/state/implementation-manifest.ts": {
-      "bytes": 85297,
+      "bytes": 84048,
       "format": "esm",
       "imports": [
         {
@@ -9759,7 +9759,7 @@
       ]
     },
     "src/state/semantic-view.ts": {
-      "bytes": 31524,
+      "bytes": 31805,
       "format": "esm",
       "imports": [
         {
@@ -10369,7 +10369,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2404780,
+      "bytes": 2404180,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11437,7 +11437,7 @@
           "bytesInOutput": 19652
         },
         "src/contracts/durable-implementation-output.ts": {
-          "bytesInOutput": 3931
+          "bytesInOutput": 3942
         },
         "src/contracts/durable-intent.ts": {
           "bytesInOutput": 1111
@@ -11623,7 +11623,7 @@
           "bytesInOutput": 2813
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 19307
+          "bytesInOutput": 19058
         },
         "src/repository/repository-set.ts": {
           "bytesInOutput": 5175
@@ -11680,7 +11680,7 @@
           "bytesInOutput": 6109
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 49687
+          "bytesInOutput": 49044
         },
         "src/state/initialization.ts": {
           "bytesInOutput": 22165
@@ -11746,7 +11746,7 @@
           "bytesInOutput": 32865
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 27433
+          "bytesInOutput": 27714
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 31878
@@ -11772,7 +11772,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3660232,
+      "bytes": 3660093,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12915,7 +12915,7 @@
           "bytesInOutput": 19596
         },
         "src/contracts/durable-implementation-output.ts": {
-          "bytesInOutput": 3673
+          "bytesInOutput": 3684
         },
         "src/contracts/durable-intent.ts": {
           "bytesInOutput": 1045
@@ -13005,7 +13005,7 @@
           "bytesInOutput": 17954
         },
         "src/contracts/schemas/v1/implementation-output.schema.json": {
-          "bytesInOutput": 6960
+          "bytesInOutput": 6931
         },
         "src/contracts/schemas/v1/legacy-import-initialization.schema.json": {
           "bytesInOutput": 3748
@@ -13191,7 +13191,7 @@
           "bytesInOutput": 27427
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 24371
+          "bytesInOutput": 25188
         },
         "src/review/reviewer-tags.ts": {
           "bytesInOutput": 118
@@ -13242,7 +13242,7 @@
           "bytesInOutput": 4363
         },
         "src/state/implementation-manifest.ts": {
-          "bytesInOutput": 65320
+          "bytesInOutput": 64101
         },
         "src/state/initialization.ts": {
           "bytesInOutput": 22037
@@ -13317,7 +13317,7 @@
           "bytesInOutput": 32766
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 27343
+          "bytesInOutput": 27624
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 31961

@@ -15,7 +15,7 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
   "prd-v1": "2c9729a74f9544749c6bde4c693d2c19f533de46e080f520e46142a55af42aae",
   "design-v3": "324c57bb6eeca3a763b95dfed9fb9814bbb1bebf362aedccbc12e4addb1b807c",
-  "implementation-v1": "710e92fb4eb3719a52bd76afca0ac86135b8f86bb6d980b272b3e0bcc73a932f",
+  "implementation-v1": "a27454fdb2970db71adf49dd0a891a486deb55cbc9c0c73937fbfa35f6f8b118",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];

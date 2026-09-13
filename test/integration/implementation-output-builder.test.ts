@@ -409,10 +409,18 @@ describe("implementation-output builder", () => {
     expect(first.value.declared_inputs[0]?.digest)
       .toBe(sha256Bytes(new TextEncoder().encode("declared input\n")));
     expect(first.value.secret_scan.outcome).toBe("clean");
-    expect(first.value.verification_evidence).toEqual({
+    expect(first.value).not.toHaveProperty("verification_evidence");
+    // Optional logs cannot invalidate the captured code, even for a historical manifest.
+    const historical = { ...first.value, verification_evidence: {
       transcript_digest: sha256Bytes(new TextEncoder().encode("npm test\nall passed\n")),
-      byte_count: 20,
-    });
+      byte_count: parseSafeInteger(20),
+    } };
+    writeFileSync(join(transcriptPath, "verification.txt"), "compacted verification output\n");
+    await expect(verifyImplementationManifest(discovered.value, historical, context)).resolves.toBeDefined();
+    rmSync(join(transcriptPath, "verification.txt"));
+    await expect(verifyImplementationManifest(discovered.value, historical, context)).resolves.toBeDefined();
+    const withoutLog = await buildImplementationOutput(dependencies, authority.value, makeState(1), input);
+    expect(withoutLog).toEqual(first);
     const approvalContext: GateContext<"commit-authorization"> = {
       ...ordinaryApprovalFacts("phase-impl", parseSha256Digest("6".repeat(64))),
       target_ref: "refs/heads/main",

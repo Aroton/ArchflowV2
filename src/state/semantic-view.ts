@@ -247,7 +247,7 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
       return Object.freeze({
         condition: "awaiting-client", headline: "Independent review is ready", detail: action.detail,
         action_kind: "review",
-        instruction: "Run or resume the server-owned independent review action, carrying a review-dispatch submission with route_override only when requesting a human-authorized reviewer substitution with a reason.",
+        instruction: "Run or resume the server-owned independent review action, carrying a review-dispatch submission with route_override only when requesting a human-authorized reviewer substitution with a reason. For implementation review, you may compact or replace the optional verification-transcript resource before retrying; this action pins its current bytes without replacing the implementation result. Keep verification claims unchanged; changed claims or code require normal revision.",
         expected_submission: "review-dispatch",
       });
     case "triage":

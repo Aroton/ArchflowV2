@@ -96,7 +96,7 @@ Repository-aware recovery keeps the existing primary spelling and adds `--reposi
 
 ## Recovering an adopted implementation snapshot
 
-After installing a recovery fix, restart the host's ArchFlow MCP server so it loads the new bundle. In the affected repository, resume the current implementation skill. Status derives recovery from durable records, including adoptions made before the fix; no state migration or hand-edited archive is needed. If review is pending over an older snapshot, follow `begin-work`, then submit a fresh `work-result` over the preserved current files and verification transcript. The next review uses the newly captured subject and runs the normal secret scanner and independent reviewer. A credential that remains in the new subject still blocks review.
+After installing a recovery fix, restart the host's ArchFlow MCP server so it loads the new bundle. In the affected repository, resume the current implementation skill. Status derives recovery from durable records, including adoptions made before the fix; no state migration or hand-edited archive is needed. If review is pending over an older snapshot, follow `begin-work`, then submit a fresh `work-result` over the preserved current files and verification notes. The next review uses the newly captured subject and runs the normal secret scanner and independent reviewer. A credential that remains in the new subject still blocks review.
 
 For the reported `management-dashboard` task in `/home/aroton/MealDeals-Website.feature/management-dashboard`, the observed position is `phase-impl-4`, `counter_review/running`, with no completed implementation review. The decision at revision 117 adopted corrections in `discovery.test.ts`, `preflight.test.ts`, and `scanProcessor.test.ts` after production at revision 113. Recover as follows:
 
@@ -106,3 +106,7 @@ For the reported `management-dashboard` task in `/home/aroton/MealDeals-Website.
 4. Apply the fresh review offer. Only the normal review/triage and any returned human gate can establish subsequent commit authority. If review detects another secret, correct it and repeat the supported adoption/revision path.
 
 The implementation remains uncommitted throughout recovery. Do not restore the old snapshot, remove the task, edit retained evidence, or reuse a stale review offer. Read-only polling is available with `archflow-local automation-status --task management-dashboard`; workflow mutations use MCP, not a CLI resume command.
+
+### Compacting verification logs before retrying review
+
+When an implementation review is pending, compact or replace the optional `verification-transcript` resource and apply the offered `review` again. The server pins the current log into a new review envelope; it does not replace the implementation result. Large logs are bounded excerpts with full-log digest and size metadata. Preserve meaningful verification details and label omissions. Code or verification-claim changes belong in the normal revision path. This works for previously produced results carrying historical transcript metadata too; no hand-edited hashes or task reset is required. Finished reviews and approvals remain bound to their original evidence.

@@ -62,7 +62,6 @@ import {
   resolveRepositoryPath,
   resolveTaskPath,
   resolveTaskWorkspacePath,
-  verificationTranscriptClaim,
   openResolved,
   type ResolvedPath,
   type ResolvedWorkspacePath,
@@ -1491,15 +1490,6 @@ export async function buildImplementationOutput(
   const secretScan = await createSecretlintScanner().scan(scanCandidates);
   const decodedPhase = decodePhaseInstance(input.phase_instance);
   if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
-  const transcript = await resolveTaskWorkspacePath({
-    runner: dependencies.runner,
-    taskId: authority.task_id,
-    claim: verificationTranscriptClaim(decodedPhase.phase),
-    expectedClass: "workspace-verification-transcript",
-    context: authority.context,
-  });
-  if (!transcript.ok) return transcript;
-  const transcriptBytes = await readRegularBytes(transcript.value, "verification transcript");
   const countedEntries: SnapshotAccountingEntry[] = outputs.map((output) => Object.freeze(output.storage === "raw-payload"
     ? { path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes }
     : { path: output.path, storage: "git-object", stored_bytes: 0 }));
@@ -1537,10 +1527,6 @@ export async function buildImplementationOutput(
     }),
     secret_scan: secretScan,
     undeclared_changes: undeclaredChanges,
-    verification_evidence: Object.freeze({
-      transcript_digest: sha256Bytes(transcriptBytes),
-      byte_count: parseSafeInteger(transcriptBytes.byteLength),
-    }),
     declared_inputs: Object.freeze(declaredInputs),
     ...(builtSecondaries.length === 0 ? {} : {
       secondary_repositories: Object.freeze(builtSecondaries.map((entry) => entry.section)),
@@ -1568,19 +1554,6 @@ export async function verifyImplementationManifest(
   const output = structuredClone(supplied);
   const decodedPhase = decodePhaseInstance(output.phase_instance);
   if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
-  const transcript = await resolveTaskWorkspacePath({
-    runner,
-    taskId: output.task_id,
-    claim: verificationTranscriptClaim(decodedPhase.phase),
-    expectedClass: "workspace-verification-transcript",
-    context,
-  });
-  if (!transcript.ok) throw transcript.error;
-  const transcriptBytes = await readRegularBytes(transcript.value, "verification transcript");
-  if (sha256Bytes(transcriptBytes) !== output.verification_evidence.transcript_digest ||
-      transcriptBytes.byteLength !== output.verification_evidence.byte_count) {
-    throw new TypeError("verification transcript disagrees with durable verification evidence");
-  }
   const currentSources = new Map<RepositoryPathClaim, CurrentAuthoritativeOutputSource>();
   for (const suppliedSource of suppliedCurrentSources) {
     if (suppliedSource === null || typeof suppliedSource !== "object") {

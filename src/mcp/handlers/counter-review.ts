@@ -648,8 +648,9 @@ export async function handleCounterReview(
     if (!context_entries.ok) return context_entries;
 
     // Every id the children see — review invocation and result, adjudication invocation and
-    // result — derives from the round's intent rather than the MCP call, so a retry of the same
-    // round re-seals byte-identical envelopes and its retained child outputs stay bound to them.
+    // result — derives from the round's intent rather than the MCP call. Unchanged evidence
+    // re-seals byte-identical envelopes; replacing optional verification context changes the
+    // envelope digest, so retained child outputs from the earlier evidence cannot be reused.
     const resultId = dispatchId("result", call.input.intent_id);
     const coordinator = createDispatchCoordinator({
       authority: services.authority,

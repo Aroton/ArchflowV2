@@ -60,7 +60,7 @@ const CAP_PRIORITY: readonly PinnedContextKind[] = [
 // which is the endless-findings failure the record exists to prevent. An envelope that cannot
 // hold it fails closed like one that cannot hold the user ask.
 const CAP_DROPPABLE_KINDS: ReadonlySet<PinnedContextKind> = new Set([
-  "interface-excerpt", "conventions", "repo-map",
+  "verification-transcript", "interface-excerpt", "conventions", "repo-map",
 ]);
 
 /** Per-entry head budget for mechanical evidence; the full-file digest stays recorded. */
@@ -128,7 +128,8 @@ function omittedForCap(entry: PinnedContextEntry, digest: Sha256Digest): PinnedC
     label: entry.label,
     status: "omitted-cap",
     content_digest: digest,
-    note: "omitted to fit the review envelope byte cap; the digest still names the exact evidence bytes",
+    note: "omitted to fit the review envelope byte cap; the digest still names the exact evidence bytes" +
+      (entry.status === "truncated" ? `; original byte count: ${entry.total_byte_count}` : ""),
   });
 }
 
@@ -508,13 +509,9 @@ async function documentMechanicalEvidence(
 }
 
 /**
- * Lifts the phase's verification transcript out of the change set into a typed entry the rubric's
- * `verification-evidence` criterion can address, and names its absence when the change carries
- * none. The transcript is agent-written: nothing at prototype tier prevents a determined agent
- * from fabricating it. The rubric judges the transcript's *content* against the phase design
- * (command shown, output consistent, failures absent), which catches sloppy fabrication only; a
- * server-attested runner that executes the verification command itself is the named upgrade path
- * if that limitation proves live.
+ * Pins optional agent-written verification context at review time. The implementation notes
+ * carry the verification record; a raw log is supporting evidence, not implementation authority.
+ * Hashing identifies the supplied bytes and does not attest that commands actually ran.
  */
 export async function verificationTranscriptEvidence(
   runner: RootBoundGitRunner,
@@ -537,7 +534,7 @@ export async function verificationTranscriptEvidence(
     return [unavailableContextEntry(
       "verification-transcript",
       displayPath,
-      "no verification transcript in the change set; claimed-but-untranscribed verification is an unverifiable claim, not a pass",
+      "verification log is unavailable; assess the verification record in implementation notes and relevant code and tests",
     )];
   }
   let bytes: Uint8Array;
@@ -545,20 +542,37 @@ export async function verificationTranscriptEvidence(
     bytes = new Uint8Array(await readFile(resolved.value.absolute));
   } catch {
     return [unavailableContextEntry("verification-transcript", displayPath,
-      "verification transcript cache is absent; rerun verification before requesting review")];
+      "verification log is absent; assess the verification record in implementation notes and relevant code and tests")];
   }
-  const evidence = subject.artifact.verification_evidence;
-  if (sha256Bytes(bytes) !== evidence.transcript_digest || bytes.byteLength !== evidence.byte_count) {
-    return [unavailableContextEntry("verification-transcript", displayPath,
-      "verification transcript cache does not match the durable implementation authority")];
+  if (bytes.byteLength <= EXCERPT_BYTE_BUDGET) {
+    return [pinnedContextEntry("verification-transcript", displayPath, bytes)];
   }
-  // Verification results often follow lengthy setup output. Required evidence must reach
-  // the reviewer whole; the envelope cap may reject it, but must not silently cut its tail.
-  return [pinnedContextEntry(
-    "verification-transcript",
-    displayPath,
-    bytes,
-  )];
+  // Keep setup/commands and final results visible without letting raw log volume strand review.
+  // The marker and status explicitly prohibit treating omitted output as evidence of success.
+  const half = EXCERPT_BYTE_BUDGET / 2;
+  const head = utf8SafeHead(bytes, half);
+  let tailStart = bytes.byteLength - half;
+  for (let offset = 0; offset < 4; offset += 1) {
+    if (decodeUtf8Strict(bytes.subarray(tailStart + offset)) !== undefined) {
+      tailStart += offset;
+      break;
+    }
+  }
+  const marker = new TextEncoder().encode(
+    `\n[${tailStart - head.byteLength} bytes omitted; this excerpt does not establish that omitted commands passed. See the verification record in implementation notes.]\n`,
+  );
+  const excerpt = new Uint8Array(head.byteLength + marker.byteLength + bytes.byteLength - tailStart);
+  excerpt.set(head);
+  excerpt.set(marker, head.byteLength);
+  excerpt.set(bytes.subarray(tailStart), head.byteLength + marker.byteLength);
+  return [Object.freeze({
+    kind: "verification-transcript",
+    label: displayPath,
+    status: "truncated",
+    content_digest: sha256Bytes(bytes),
+    ...visibleContent(excerpt),
+    total_byte_count: bytes.byteLength,
+  })];
 }
 
 /**

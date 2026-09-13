@@ -46,7 +46,7 @@ export type DispatchSubject = {
 
 /**
  * The closed vocabulary of evidence the server can pin alongside the artifact. Entries are always
- * assembled mechanically from durable authority — never author-curated — and each phase of the
+ * assembled by the server from durable authority or explicitly identified supporting evidence; each phase of the
  * context contract grows this enum rather than the envelope shape. `prior-triage` is the
  * mechanical triage record of the previous review round of this same phase instance, assembled by
  * the server from retained result manifests; it is admissible where producer prose is not because
@@ -60,7 +60,7 @@ export type PinnedContextKind = (typeof PINNED_CONTEXT_KINDS)[number];
 
 /**
  * One pinned evidence entry. The `status` vocabulary makes every gap visible bytes the reviewer
- * can name: `pinned` carries the evidence, `truncated` carries a bounded head plus the full-file
+ * can name: `pinned` carries the evidence, `truncated` carries a bounded excerpt plus the full-file
  * digest, `unavailable` names evidence that could not be assembled, and `omitted-cap` names
  * evidence dropped to fit the envelope byte cap while retaining its digest. A reviewer records
  * gaps under the rubric's `unverifiable-claims` criterion instead of guessing.

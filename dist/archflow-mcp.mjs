@@ -45354,7 +45354,6 @@ var implementation_output_schema_default = {
     "accounting",
     "secret_scan",
     "undeclared_changes",
-    "verification_evidence",
     "declared_inputs",
     "input_fingerprint"
   ],
@@ -57619,7 +57618,7 @@ var implementationOutputV1Schema = external_exports.object({
   accounting: snapshotAccountingV1Schema,
   secret_scan: secretScanResultV1Schema,
   undeclared_changes: undeclaredChangeReportV1Schema,
-  verification_evidence: verificationEvidenceV1Schema,
+  verification_evidence: verificationEvidenceV1Schema.optional(),
   declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
   input_fingerprint: sha256Digest2,
   constitution_edit_gate_id: pathSafeIdV1Schema.optional(),
@@ -67241,15 +67240,6 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
   const secretScan = await createSecretlintScanner().scan(scanCandidates);
   const decodedPhase = decodePhaseInstance(input.phase_instance);
   if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
-  const transcript = await resolveTaskWorkspacePath({
-    runner: dependencies.runner,
-    taskId: authority.task_id,
-    claim: verificationTranscriptClaim(decodedPhase.phase),
-    expectedClass: "workspace-verification-transcript",
-    context: authority.context
-  });
-  if (!transcript.ok) return transcript;
-  const transcriptBytes = await readRegularBytes(transcript.value, "verification transcript");
   const countedEntries = outputs.map((output) => Object.freeze(output.storage === "raw-payload" ? { path: output.path, storage: "raw-payload", stored_bytes: output.payload_bytes } : { path: output.path, storage: "git-object", stored_bytes: 0 }));
   const resultBytes = parseSafeInteger(countedEntries.reduce((total, entry) => total + entry.stored_bytes, 0));
   const aggregateResultBytes = parseSafeInteger(resultBytes + builtSecondaries.reduce(
@@ -67288,10 +67278,6 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
     }),
     secret_scan: secretScan,
     undeclared_changes: undeclaredChanges,
-    verification_evidence: Object.freeze({
-      transcript_digest: sha256Bytes(transcriptBytes),
-      byte_count: parseSafeInteger(transcriptBytes.byteLength)
-    }),
     declared_inputs: Object.freeze(declaredInputs),
     ...builtSecondaries.length === 0 ? {} : {
       secondary_repositories: Object.freeze(builtSecondaries.map((entry) => entry.section))
@@ -67309,18 +67295,6 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
   const output = structuredClone(supplied);
   const decodedPhase = decodePhaseInstance(output.phase_instance);
   if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
-  const transcript = await resolveTaskWorkspacePath({
-    runner,
-    taskId: output.task_id,
-    claim: verificationTranscriptClaim(decodedPhase.phase),
-    expectedClass: "workspace-verification-transcript",
-    context: context2
-  });
-  if (!transcript.ok) throw transcript.error;
-  const transcriptBytes = await readRegularBytes(transcript.value, "verification transcript");
-  if (sha256Bytes(transcriptBytes) !== output.verification_evidence.transcript_digest || transcriptBytes.byteLength !== output.verification_evidence.byte_count) {
-    throw new TypeError("verification transcript disagrees with durable verification evidence");
-  }
   const currentSources = /* @__PURE__ */ new Map();
   for (const suppliedSource of suppliedCurrentSources) {
     if (suppliedSource === null || typeof suppliedSource !== "object") {
@@ -81165,7 +81139,7 @@ function mapRunStep(status, action2, snapshot) {
         headline: "Independent review is ready",
         detail: action2.detail,
         action_kind: "review",
-        instruction: "Run or resume the server-owned independent review action, carrying a review-dispatch submission with route_override only when requesting a human-authorized reviewer substitution with a reason.",
+        instruction: "Run or resume the server-owned independent review action, carrying a review-dispatch submission with route_override only when requesting a human-authorized reviewer substitution with a reason. For implementation review, you may compact or replace the optional verification-transcript resource before retrying; this action pins its current bytes without replacing the implementation result. Keep verification claims unchanged; changed claims or code require normal revision.",
         expected_submission: "review-dispatch"
       });
     case "triage":
@@ -86041,6 +86015,7 @@ var CAP_PRIORITY = [
   "repo-map"
 ];
 var CAP_DROPPABLE_KINDS = /* @__PURE__ */ new Set([
+  "verification-transcript",
   "interface-excerpt",
   "conventions",
   "repo-map"
@@ -86085,7 +86060,7 @@ function omittedForCap(entry, digest11) {
     label: entry.label,
     status: "omitted-cap",
     content_digest: digest11,
-    note: "omitted to fit the review envelope byte cap; the digest still names the exact evidence bytes"
+    note: "omitted to fit the review envelope byte cap; the digest still names the exact evidence bytes" + (entry.status === "truncated" ? `; original byte count: ${entry.total_byte_count}` : "")
   });
 }
 function isByteCapError(error51) {
@@ -86388,7 +86363,7 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
     return [unavailableContextEntry(
       "verification-transcript",
       displayPath,
-      "no verification transcript in the change set; claimed-but-untranscribed verification is an unverifiable claim, not a pass"
+      "verification log is unavailable; assess the verification record in implementation notes and relevant code and tests"
     )];
   }
   let bytes;
@@ -86398,22 +86373,38 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
     return [unavailableContextEntry(
       "verification-transcript",
       displayPath,
-      "verification transcript cache is absent; rerun verification before requesting review"
+      "verification log is absent; assess the verification record in implementation notes and relevant code and tests"
     )];
   }
-  const evidence = subject.artifact.verification_evidence;
-  if (sha256Bytes(bytes) !== evidence.transcript_digest || bytes.byteLength !== evidence.byte_count) {
-    return [unavailableContextEntry(
-      "verification-transcript",
-      displayPath,
-      "verification transcript cache does not match the durable implementation authority"
-    )];
+  if (bytes.byteLength <= EXCERPT_BYTE_BUDGET) {
+    return [pinnedContextEntry("verification-transcript", displayPath, bytes)];
   }
-  return [pinnedContextEntry(
-    "verification-transcript",
-    displayPath,
-    bytes
-  )];
+  const half = EXCERPT_BYTE_BUDGET / 2;
+  const head = utf8SafeHead(bytes, half);
+  let tailStart = bytes.byteLength - half;
+  for (let offset = 0; offset < 4; offset += 1) {
+    if (decodeUtf8Strict(bytes.subarray(tailStart + offset)) !== void 0) {
+      tailStart += offset;
+      break;
+    }
+  }
+  const marker = new TextEncoder().encode(
+    `
+[${tailStart - head.byteLength} bytes omitted; this excerpt does not establish that omitted commands passed. See the verification record in implementation notes.]
+`
+  );
+  const excerpt = new Uint8Array(head.byteLength + marker.byteLength + bytes.byteLength - tailStart);
+  excerpt.set(head);
+  excerpt.set(marker, head.byteLength);
+  excerpt.set(bytes.subarray(tailStart), head.byteLength + marker.byteLength);
+  return [Object.freeze({
+    kind: "verification-transcript",
+    label: displayPath,
+    status: "truncated",
+    content_digest: sha256Bytes(bytes),
+    ...visibleContent(excerpt),
+    total_byte_count: bytes.byteLength
+  })];
 }
 async function implementationMechanicalEvidence(runner, subject, projectionPlan) {
   if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);

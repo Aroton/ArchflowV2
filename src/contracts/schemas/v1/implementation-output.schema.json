@@ -257,7 +257,6 @@
     "accounting",
     "secret_scan",
     "undeclared_changes",
-    "verification_evidence",
     "declared_inputs",
     "input_fingerprint"
   ],

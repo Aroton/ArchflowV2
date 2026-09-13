@@ -271,7 +271,8 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("`declared_inputs`");
     expect(source).toContain("never author those values");
     expect(source).toContain("`verification-transcript`");
-    expect(source).toContain("digest-checked transcript");
+    expect(source).toContain("independently of the implementation result");
+    expect(source).toContain("apply the offered `review` again to repin it");
     expect(source).toContain('`{"kind":"gate-summary","summary":<summary>}`');
     expect(source).toContain("selected presentation option token");
     expect(source).toContain("separate no-submission `open-waiver`");

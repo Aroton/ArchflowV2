@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
+import { canonicalJsonBytes, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
+import * as rubricLoader from "../../src/review/rubrics.js";
 import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
 import { cleanTaskWorkspace } from "../../src/state/workspace-cleanup.js";
 import { readRetainedResult } from "../../src/state/production.js";
@@ -187,6 +189,85 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(readFileSync(work.transcriptAbsolute, "utf8")).toBe(TRANSCRIPT_BYTES);
     expect(gitHead(workspace)).toBe(baseline);
     expect(reviewCount(workspace)).toBe("4");
+  });
+
+  register("repins verification evidence on review retry without replacing implementation or completed authority", async () => {
+    const workspace = await createTaskWorkspace({
+      taskId: "semantic-verification-refresh", label: "semantic-verification-refresh",
+      constitutionBytes: legacyHumanAuthorityConstitutionV1Bytes(),
+    });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, view } = await consumeImplementationHandoff(workspace, h);
+    const work = writeClientImplementationWork(workspace, view, {
+      source: SOURCE_BYTES, notes: IMPLEMENTATION_NOTES,
+      transcript: `setup\n${"verbose output\n".repeat(100_000)}${TRANSCRIPT_BYTES}`,
+    });
+    const submitted = await h.apply(invocation, view, implementationSubmission(workspace, work.outputs));
+    expect(submitted.ok, JSON.stringify(submitted)).toBe(true);
+    if (!submitted.ok) return;
+    const production = taskStateV1Schema.parse(readTaskState(workspace)).authoritative_results
+      .find((result) => result.phase_instance === "phase-impl-1" && result.step === "produce")!;
+    const manifestPath = join(workspace.services.authority.task_root, "authority", "results", `${production.result_digest}.json`);
+    const originalManifest = readFileSync(manifestPath);
+    const head = gitHead(workspace);
+    const stub = join(workspace.root, "semantic-stub-bin", "codex");
+    const originalStub = readFileSync(stub, "utf8");
+    const captureRoot = mkdtempSync(join(tmpdir(), "archflow-verification-capture-"));
+    restorers.push(() => rmSync(captureRoot, { recursive: true, force: true }));
+    const capture = join(captureRoot, "envelope.json");
+    const hook = '  const output = generateOutput(envelope,';
+    expect(originalStub).toContain(hook);
+    const captureHook = `  if (envelope.subject?.phase_instance === "phase-impl-1" && envelope.subject?.role === "counter-review") { writeFileSync(${JSON.stringify(capture)}, JSON.stringify(envelope)); FAIL_REVIEW }\n`;
+    // Simulate a review started by the prior bundle, whose policy required a complete log.
+    const loadRubric = rubricLoader.loadCanonicalRubricForPhaseKind;
+    const oldPolicy = vi.spyOn(rubricLoader, "loadCanonicalRubricForPhaseKind").mockImplementation(async kind => {
+      const result = await loadRubric(kind);
+      if (!result.ok || kind !== "phase-impl") return result;
+      const rubric = { ...result.value.rubric, criteria: result.value.rubric.criteria.map(criterion =>
+        criterion.id !== "verification-evidence" ? { ...criterion } : { ...criterion,
+          text: "Check the complete verification transcript and relevant code and tests. Report missing, failed, or misleading verification when it leaves an important behavior or safety boundary unsupported, whether or not the phase design requested that check; explain the concrete failure that remains undetected." }) };
+      return { ...result, value: { ...result.value, rubric, rubric_digest: canonicalJsonDigest(rubric) } };
+    });
+    restorers.push(() => oldPolicy.mockRestore());
+    writeFileSync(stub, originalStub.replace(hook, captureHook.replace("FAIL_REVIEW", "process.exit(1);") + hook));
+    const failed = await h.apply(invocation, submitted.value);
+    expect(failed.ok).toBe(false);
+    const firstEnvelope = JSON.parse(readFileSync(capture, "utf8"));
+    expect(firstEnvelope.context.find((entry: { kind: string }) => entry.kind === "verification-transcript"))
+      .toMatchObject({ status: "truncated", total_byte_count: expect.any(Number) });
+    expect(readTaskState(workspace)).toMatchObject({ step: "counter_review", status: "running" });
+
+    // Repair the stub and compact only the optional log. The same review offer can repin it.
+    oldPolicy.mockRestore();
+    writeFileSync(stub, originalStub.replace(hook, captureHook.replace("FAIL_REVIEW", "") + hook));
+    const cleaned = `${TRANSCRIPT_BYTES}[repetitive setup output omitted; verification unchanged]\n`;
+    writeFileSync(work.transcriptAbsolute, cleaned);
+    const pending = await h.status(invocation);
+    expect(pending.next_action.kind).toBe("review");
+    const reviewed = await h.apply(invocation, pending);
+    expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
+    if (!reviewed.ok) return;
+    const freshEnvelope = JSON.parse(readFileSync(capture, "utf8"));
+    expect(freshEnvelope.subject.subject_digest).toBe(firstEnvelope.subject.subject_digest);
+    expect(freshEnvelope.context.find((entry: { kind: string }) => entry.kind === "verification-transcript"))
+      .toMatchObject({ status: "pinned", content: cleaned,
+        content_digest: sha256Bytes(new TextEncoder().encode(cleaned)) });
+    expect(readFileSync(manifestPath)).toEqual(originalManifest);
+    expect(taskStateV1Schema.parse(readTaskState(workspace)).authoritative_results).toContainEqual(production);
+    expect(readFileSync(work.sourceAbsolute, "utf8")).toBe(SOURCE_BYTES);
+    expect(readFileSync(work.notesAbsolute, "utf8")).toBe(IMPLEMENTATION_NOTES);
+    expect(gitHead(workspace)).toBe(head);
+
+    const completedState = readFileSync(workspace.services.authority.state.absolute);
+    const count = reviewCount(workspace);
+    rmSync(work.transcriptAbsolute);
+    const afterRemoval = await h.status(invocation);
+    expect(afterRemoval.next_action).toEqual(reviewed.value.next_action);
+    expect(readFileSync(workspace.services.authority.state.absolute)).toEqual(completedState);
+    expect(reviewCount(workspace)).toBe(count);
+    expect(readFileSync(manifestPath)).toEqual(originalManifest);
   });
 
   register("refuses a facts-free implementation submission and implementation facts at a document position without mutation", async () => {
@@ -595,7 +676,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     }
     expect(freshManifest.artifact_digest).not.toBe(originalManifest.artifact_digest);
     expect(freshManifest.source_artifact.snapshot_digest).not.toBe(originalManifest.source_artifact.snapshot_digest);
-    expect(freshManifest.source_artifact.verification_evidence).not.toEqual(originalManifest.source_artifact.verification_evidence);
+    expect(freshManifest.source_artifact).not.toHaveProperty("verification_evidence");
     expect((readTaskState(workspace).baseline_adoptions as unknown[]).length).toBe(2);
     expect(submitted.ok).toBe(true);
     if (!submitted.ok) return;

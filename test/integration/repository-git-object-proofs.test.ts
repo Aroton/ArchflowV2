@@ -44,7 +44,7 @@ const gitEnv: NodeJS.ProcessEnv = {
 const roots: string[] = [];
 afterAll(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
 
-function verificationEvidence(root: string, taskId: string): ImplementationOutputV1["verification_evidence"] {
+function verificationEvidence(root: string, taskId: string): NonNullable<ImplementationOutputV1["verification_evidence"]> {
   const bytes = new TextEncoder().encode("$ npm test\nall tests passed\n");
   const directory = join(root, ".archflow", "runtime", "tasks", taskId, "cache", "phases", "11");
   mkdirSync(directory, { recursive: true });

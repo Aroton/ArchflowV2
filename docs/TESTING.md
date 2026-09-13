@@ -136,3 +136,5 @@ There is no coverage percentage gate. Confidence comes from the fast representat
 ## Automation responsibility
 
 Automation regressions cover bounded transient retries, persistence across producer restarts and deleted diagnostics, corrupted recovery state, intentional policy-trigger classification, five-round remediation accounting, and v3 manual handoffs. Integration controller fixtures simulate an explicit human launch at each successor boundary rather than inferring permission to run the next skill.
+
+Verification evidence regressions cover optional logs during implementation capture, historical manifests with changed or missing caches, bounded UTF-8 log excerpts, and review retry after replacing a log without changing the implementation result. The retry journey also checks that subsequent cache changes do not mutate completed review authority.

@@ -27006,7 +27006,7 @@ var implementationOutputV1Schema = external_exports.object({
   accounting: snapshotAccountingV1Schema,
   secret_scan: secretScanResultV1Schema,
   undeclared_changes: undeclaredChangeReportV1Schema,
-  verification_evidence: verificationEvidenceV1Schema,
+  verification_evidence: verificationEvidenceV1Schema.optional(),
   declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
   input_fingerprint: sha256Digest2,
   constitution_edit_gate_id: pathSafeIdV1Schema.optional(),
@@ -27463,12 +27463,6 @@ function resultAuthorityClaim(resultDigest) {
 }
 function intentReceiptClaim(intentId) {
   return parseWorkspacePathClaim(`transient/intents/${intentId}.json`);
-}
-function verificationTranscriptClaim(phase3) {
-  if (!Number.isSafeInteger(phase3) || phase3 < 1) {
-    throw new TypeError("phase must be a positive safe integer");
-  }
-  return parseWorkspacePathClaim(`cache/phases/${phase3}/verification.txt`);
 }
 function counterReviewClaim(phaseInstance5) {
   return parseWorkspacePathClaim(`cache/reviews/${phaseInstance5}.counter.md`);
@@ -37665,18 +37659,6 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
   const output = structuredClone(supplied);
   const decodedPhase = decodePhaseInstance(output.phase_instance);
   if (decodedPhase.kind !== "phase-impl") throw new TypeError("implementation output phase must be phase-impl");
-  const transcript = await resolveTaskWorkspacePath({
-    runner,
-    taskId: output.task_id,
-    claim: verificationTranscriptClaim(decodedPhase.phase),
-    expectedClass: "workspace-verification-transcript",
-    context: context2
-  });
-  if (!transcript.ok) throw transcript.error;
-  const transcriptBytes = await readRegularBytes(transcript.value, "verification transcript");
-  if (sha256Bytes(transcriptBytes) !== output.verification_evidence.transcript_digest || transcriptBytes.byteLength !== output.verification_evidence.byte_count) {
-    throw new TypeError("verification transcript disagrees with durable verification evidence");
-  }
   const currentSources = /* @__PURE__ */ new Map();
   for (const suppliedSource of suppliedCurrentSources) {
     if (suppliedSource === null || typeof suppliedSource !== "object") {
@@ -46246,7 +46228,7 @@ function mapRunStep(status, action3, snapshot2) {
         headline: "Independent review is ready",
         detail: action3.detail,
         action_kind: "review",
-        instruction: "Run or resume the server-owned independent review action, carrying a review-dispatch submission with route_override only when requesting a human-authorized reviewer substitution with a reason.",
+        instruction: "Run or resume the server-owned independent review action, carrying a review-dispatch submission with route_override only when requesting a human-authorized reviewer substitution with a reason. For implementation review, you may compact or replace the optional verification-transcript resource before retrying; this action pins its current bytes without replacing the implementation result. Keep verification claims unchanged; changed claims or code require normal revision.",
         expected_submission: "review-dispatch"
       });
     case "triage":
