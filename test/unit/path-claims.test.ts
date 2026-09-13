@@ -38,11 +38,9 @@ const UNSAFE_CLAIMS = [
   // Colons: drive-relative paths and NTFS alternate data streams in one rule.
   "file.txt:stream",
   "dir/a:b",
-  // Git pathspec metacharacters: one claim must never select more than one file.
+  // Windows-illegal wildcard characters.
   "a*b",
   "a?b",
-  "a[b]",
-  "dir/[abc]/x",
   // Remaining Windows-illegal characters.
   "a<b",
   "a>b",
@@ -88,6 +86,19 @@ describe("task path claims", () => {
 });
 
 describe("repository path claims", () => {
+  it.each([
+    "src/app/api/management/jobs/[id]/confirm-empty/route.ts",
+    "src/app/api/management/jobs/[id]/retry/route.ts",
+    "src/app/[...slug]/page.tsx",
+    "src/app/[[...slug]]/page.tsx",
+    "a[b]",
+    "dir/[abc]/x",
+  ])("preserves literal brackets in %s in both frames and Git promotion", (value) => {
+    expect(parseRepositoryPathClaim(value)).toBe(value);
+    expect(parseTaskPathClaim(value)).toBe(value);
+    expect(tryRepositoryPathClaim(rawGitPath(value))).toBe(value);
+  });
+
   it("shares one lexical authority with task claims", () => {
     expect(parseRepositoryPathClaim(".archflow/workflow.yaml")).toBe(".archflow/workflow.yaml");
     for (const value of UNSAFE_CLAIMS) expect(() => parseRepositoryPathClaim(value)).toThrow();

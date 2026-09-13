@@ -18,8 +18,12 @@ const utf8Length = (value: string): number => Buffer.byteLength(value, "utf8");
 const containsControl = (value: string): boolean => /[\u0000-\u001f\u007f-\u009f]/u.test(value);
 const hasDriveOrUncPrefix = (value: string): boolean => /^[A-Za-z]:/u.test(value) || value.startsWith("//");
 const hasInvalidComponent = (value: string): boolean => value.split("/").some((component) => component === "" || component === "." || component === "..");
-/** `:` also covers Windows drive-relative paths and NTFS alternate data streams; `*?[]` are Git pathspec metacharacters. */
-const forbiddenCharacter = /[:*?[\]<>|]/u;
+/**
+ * `:` also covers Windows drive-relative paths and NTFS alternate data streams; the other
+ * forbidden characters are Windows-illegal. Brackets are literal filename characters;
+ * Git callers use literal pathspecs.
+ */
+const forbiddenCharacter = /[:*?<>|]/u;
 /** Both component rules are the shared ones from `evidence.ts`, applied to every segment. */
 const hasReservedComponent = (value: string): boolean => value.split("/").some(isReservedDeviceName);
 const hasTrailingDotOrSpace = (value: string): boolean => value.split("/").some(endsWithDotOrSpace);
@@ -30,7 +34,7 @@ const hasTrailingDotOrSpace = (value: string): boolean => value.split("/").some(
  * schema and the named refines cannot drift apart.
  */
 const PATH_CLAIM_PATTERN = new RegExp(
-  String.raw`^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\)(?!.*[\u0000-\u001F\u007F-\u009F])(?!\.\.?(?:/|$))(?!.*\/\.\.?(?:/|$))(?!.*//)(?!.*[:*?\[\]<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?(?:/|$)).+$`,
+  String.raw`^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\)(?!.*[\u0000-\u001F\u007F-\u009F])(?!\.\.?(?:/|$))(?!.*\/\.\.?(?:/|$))(?!.*//)(?!.*[:*?<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?(?:/|$)).+$`,
   "u"
 );
 
@@ -48,7 +52,7 @@ const pathClaimLexical = () => z.string()
   .refine((value) => !hasDriveOrUncPrefix(value), "path claim must not use a drive or UNC prefix")
   .refine((value) => !value.includes("\\"), "path claim must use forward slashes")
   .refine((value) => !containsControl(value), "path claim must not contain control characters")
-  .refine((value) => !forbiddenCharacter.test(value), "path claim must not contain : * ? [ ] < > or |")
+  .refine((value) => !forbiddenCharacter.test(value), "path claim must not contain : * ? < > or |")
   .refine((value) => !hasInvalidComponent(value), "path claim components must be non-empty and may not be . or ..")
   .refine((value) => !hasReservedComponent(value), "path claim components must not be reserved device names")
   .refine((value) => !hasTrailingDotOrSpace(value), "path claim components must not end with a dot or a space")

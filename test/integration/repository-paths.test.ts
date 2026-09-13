@@ -30,6 +30,7 @@ import {
   type TaskPathClass,
 } from "../../src/contracts/path-claims.js";
 import { createGitRunner, type RepositoryOperationContext } from "../../src/repository/git.js";
+import { readIndexEntries } from "../../src/repository/index-entries.js";
 import { discoverWorktree, type RootBoundGitRunner } from "../../src/repository/identity.js";
 import {
   adjudicationReviewClaim,
@@ -400,7 +401,6 @@ const LEXICAL_MATRIX: ReadonlyArray<readonly [label: string, value: string]> = [
   ["an NFD segment", "cafe\u0301/notes.md"],
   ["a*b", "a*b"],
   ["a?b", "a?b"],
-  ["a[b]", "a[b]"],
   ["a<b", "a<b"],
   ["a|b", "a|b"],
 ];
@@ -408,6 +408,23 @@ const LEXICAL_MATRIX: ReadonlyArray<readonly [label: string, value: string]> = [
 const FULL_MATRIX = [...ESCAPING_MATRIX, ...LEXICAL_MATRIX];
 
 describe.skipIf(!hasGit)("verification step 10 — the path matrix", () => {
+  it("selects bracketed route filenames literally without matching sibling routes", async () => {
+    const { root, runner } = await freshWorktree();
+    const paths = [
+      "src/app/api/management/jobs/[id]/confirm-empty/route.ts",
+      "src/app/api/management/jobs/[id]/retry/route.ts",
+    ];
+    for (const path of [...paths, ...paths.map((path) => path.replace("[id]", "i"))]) {
+      mkdirSync(join(root, path, ".."), { recursive: true });
+      writeFileSync(join(root, path), path);
+    }
+    execFileSync("git", ["add", "."], { cwd: root, env: GIT_ENV });
+    const result = await readIndexEntries(runner, paths.map(parseRepositoryPathClaim), context);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.map((entry) => entry.path)).toEqual(paths);
+  });
+
   it.each(FULL_MATRIX)("the lexical gate rejects %s in both frames", (_label, value) => {
     expect(() => parseTaskPathClaim(value)).toThrow();
     expect(() => parseRepositoryPathClaim(value)).toThrow();

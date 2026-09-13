@@ -70,6 +70,9 @@ describe("gate and error JSON Schema authority", () => {
     const error = (offending_paths: string[]) => ({ schema_version: "1", code: "ENVELOPE_OVERFLOW", owner: "contracts", retryable: false, diagnostic: { template_id: "ENVELOPE_OVERFLOW", parameters: { offending_paths, current_bytes: 2_000_000, byte_cap: 1_048_576 } }, next_action: "reduce-review-subject" });
     expect(projectValidator.validate(error(["dist/archflow-mcp.mjs", "package-lock.json"]))).toBe(true);
     expect(parseProjectError(error(["dist/archflow-mcp.mjs"])).code).toBe("ENVELOPE_OVERFLOW");
+    const routeError = error(["src/app/api/management/jobs/[id]/retry/route.ts"]);
+    expect(projectValidator.validate(routeError)).toBe(true);
+    expect(parseProjectError(routeError).code).toBe("ENVELOPE_OVERFLOW");
     for (const paths of [["z/file", "a/file"], ["a/file", "a/file"], ["../escape"], []]) {
       const value = error(paths);
       expect(projectValidator.validate(value), JSON.stringify(projectValidator.validate.errors)).toBe(false);

@@ -4527,7 +4527,7 @@
       ]
     },
     "src/contracts/path-claims.ts": {
-      "bytes": 7693,
+      "bytes": 7781,
       "format": "esm",
       "imports": [
         {
@@ -4709,7 +4709,7 @@
       }
     },
     "src/contracts/schemas/v1/path-claim.schema.json": {
-      "bytes": 470,
+      "bytes": 464,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4725,7 +4725,7 @@
       }
     },
     "src/contracts/schemas/v1/project-error.schema.json": {
-      "bytes": 86046,
+      "bytes": 86040,
       "format": "esm",
       "imports": [],
       "with": {
@@ -10369,7 +10369,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2404791,
+      "bytes": 2404780,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11491,7 +11491,7 @@
           "bytesInOutput": 29542
         },
         "src/contracts/path-claims.ts": {
-          "bytesInOutput": 3743
+          "bytesInOutput": 3732
         },
         "src/contracts/phase-instance.ts": {
           "bytesInOutput": 3722
@@ -11772,7 +11772,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3660255,
+      "bytes": 3660232,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12969,7 +12969,7 @@
           "bytesInOutput": 29403
         },
         "src/contracts/path-claims.ts": {
-          "bytesInOutput": 3121
+          "bytesInOutput": 3110
         },
         "src/contracts/phase-instance.ts": {
           "bytesInOutput": 3452
@@ -13014,13 +13014,13 @@
           "bytesInOutput": 54815
         },
         "src/contracts/schemas/v1/path-claim.schema.json": {
-          "bytesInOutput": 493
+          "bytesInOutput": 487
         },
         "src/contracts/schemas/v1/primitives.schema.json": {
           "bytesInOutput": 1499
         },
         "src/contracts/schemas/v1/project-error.schema.json": {
-          "bytesInOutput": 82004
+          "bytesInOutput": 81998
         },
         "src/contracts/schemas/v1/rubric.schema.json": {
           "bytesInOutput": 1092

@@ -36286,14 +36286,14 @@ var utf8Length = (value) => Buffer.byteLength(value, "utf8");
 var containsControl = (value) => /[\u0000-\u001f\u007f-\u009f]/u.test(value);
 var hasDriveOrUncPrefix = (value) => /^[A-Za-z]:/u.test(value) || value.startsWith("//");
 var hasInvalidComponent = (value) => value.split("/").some((component) => component === "" || component === "." || component === "..");
-var forbiddenCharacter = /[:*?[\]<>|]/u;
+var forbiddenCharacter = /[:*?<>|]/u;
 var hasReservedComponent = (value) => value.split("/").some(isReservedDeviceName);
 var hasTrailingDotOrSpace = (value) => value.split("/").some(endsWithDotOrSpace);
 var PATH_CLAIM_PATTERN = new RegExp(
-  String.raw`^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\)(?!.*[\u0000-\u001F\u007F-\u009F])(?!\.\.?(?:/|$))(?!.*\/\.\.?(?:/|$))(?!.*//)(?!.*[:*?\[\]<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?(?:/|$)).+$`,
+  String.raw`^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\)(?!.*[\u0000-\u001F\u007F-\u009F])(?!\.\.?(?:/|$))(?!.*\/\.\.?(?:/|$))(?!.*//)(?!.*[:*?<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\.[^/]*)?(?:/|$)).+$`,
   "u"
 );
-var pathClaimLexical = () => external_exports.string().min(1).regex(PATH_CLAIM_PATTERN, "path claim violates the lexical path pattern").refine((value) => utf8Length(value) <= 1024, "path claim must be at most 1024 UTF-8 bytes").refine((value) => !value.startsWith("/"), "path claim must be relative").refine((value) => !hasDriveOrUncPrefix(value), "path claim must not use a drive or UNC prefix").refine((value) => !value.includes("\\"), "path claim must use forward slashes").refine((value) => !containsControl(value), "path claim must not contain control characters").refine((value) => !forbiddenCharacter.test(value), "path claim must not contain : * ? [ ] < > or |").refine((value) => !hasInvalidComponent(value), "path claim components must be non-empty and may not be . or ..").refine((value) => !hasReservedComponent(value), "path claim components must not be reserved device names").refine((value) => !hasTrailingDotOrSpace(value), "path claim components must not end with a dot or a space").refine((value) => value.normalize("NFC") === value, "path claim components must already be NFC");
+var pathClaimLexical = () => external_exports.string().min(1).regex(PATH_CLAIM_PATTERN, "path claim violates the lexical path pattern").refine((value) => utf8Length(value) <= 1024, "path claim must be at most 1024 UTF-8 bytes").refine((value) => !value.startsWith("/"), "path claim must be relative").refine((value) => !hasDriveOrUncPrefix(value), "path claim must not use a drive or UNC prefix").refine((value) => !value.includes("\\"), "path claim must use forward slashes").refine((value) => !containsControl(value), "path claim must not contain control characters").refine((value) => !forbiddenCharacter.test(value), "path claim must not contain : * ? < > or |").refine((value) => !hasInvalidComponent(value), "path claim components must be non-empty and may not be . or ..").refine((value) => !hasReservedComponent(value), "path claim components must not be reserved device names").refine((value) => !hasTrailingDotOrSpace(value), "path claim components must not end with a dot or a space").refine((value) => value.normalize("NFC") === value, "path claim components must already be NFC");
 var pathClaimLexicalV1Schema = pathClaimLexical();
 var taskPathClaimV1Schema = pathClaimLexical();
 var repositoryPathClaimV1Schema = pathClaimLexical();
@@ -45513,7 +45513,7 @@ var path_claim_schema_default = {
   $id: "urn:archflow:schema:v1:path-claim",
   type: "string",
   minLength: 1,
-  pattern: "^(?!\\/)(?![A-Za-z]:)(?!\\/\\/)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:\\/|$))(?!.*\\/\\.\\.?(?:\\/|$))(?!.*\\/\\/)(?!.*[:*?\\[\\]<>|])(?!.*[. ](?:\\/|$))(?!(?:.*\\/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:\\/|$)).+$"
+  pattern: "^(?!\\/)(?![A-Za-z]:)(?!\\/\\/)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:\\/|$))(?!.*\\/\\.\\.?(?:\\/|$))(?!.*\\/\\/)(?!.*[:*?<>|])(?!.*[. ](?:\\/|$))(?!(?:.*\\/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:\\/|$)).+$"
 };
 
 // src/contracts/schemas/v1/primitives.schema.json
@@ -45673,7 +45673,7 @@ var project_error_schema_default = {
       minLength: 1,
       "x-archflow-max-utf8-bytes": 1024,
       "x-archflow-nfc": true,
-      pattern: "^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:/|$))(?!.*\\/\\.\\.?(?:/|$))(?!.*//)(?!.*[:*?\\[\\]<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:/|$)).+$"
+      pattern: "^(?!/)(?![A-Za-z]:)(?!//)(?!.*\\\\)(?!.*[\\u0000-\\u001F\\u007F-\\u009F])(?!\\.\\.?(?:/|$))(?!.*\\/\\.\\.?(?:/|$))(?!.*//)(?!.*[:*?<>|])(?!.*[. ](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:/|$)).+$"
     },
     issue: {
       type: "object",

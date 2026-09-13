@@ -37,7 +37,7 @@ describe("normative shared primitive schemas agree with Zod mirrors", () => {
 
   it("agrees on lexical structure in both authorities", async () => {
     const validator = createJsonSchemaValidator<string>(await schema("path-claim"));
-    for (const valid of ["review.md", "資料/設計.md", "é".repeat(512)]) {
+    for (const valid of ["review.md", "資料/設計.md", "é".repeat(512), "a[b]", "src/app/api/management/jobs/[id]/confirm-empty/route.ts", "src/app/api/management/jobs/[id]/retry/route.ts", "src/app/[...slug]/page.tsx", "src/app/[[...slug]]/page.tsx"]) {
       expect(assertZodAgreement(valid, validator, taskPathClaimV1Schema)).toBe(valid);
     }
     for (const invalid of [
@@ -47,7 +47,6 @@ describe("normative shared primitive schemas agree with Zod mirrors", () => {
       "file.txt:stream",
       "a*b",
       "a?b",
-      "a[b]",
       "a<b",
       "a>b",
       "a|b",
