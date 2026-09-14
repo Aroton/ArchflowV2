@@ -63,6 +63,16 @@ function snapshot(
   };
 }
 
+function humanRevisionState(): TaskStateV1 {
+  const durable = state("produce", "running");
+  return { ...durable, pending_human_revision: {
+    gate_id: "human-revise" as NonNullable<TaskStateV1["pending_human_revision"]>["gate_id"],
+    gate_kind: "artifact-approval", predecessor_subject_digest: digest("a"),
+    predecessor_input_fingerprint: durable.input_fingerprint, requested_at_revision: durable.revision,
+    attempt: durable.attempt, evidence: [],
+  } };
+}
+
 function apply(
   current: SemanticStatusSnapshotV1,
   owner: WorkflowInvocationV1,
@@ -101,7 +111,7 @@ describe("semantic one-action planning", () => {
   });
 
   it("strictly matches submissions and binds changed work facts to a different operation", () => {
-    const current = snapshot(state("produce", "running"), {
+    const current = snapshot(humanRevisionState(), {
       code: "run-step", detail: "Submit produce.", human_required: false, phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "produce",
     });
     const work = (rationale: string): ApplySubmissionV1 => ({
@@ -115,6 +125,28 @@ describe("semantic one-action planning", () => {
     expect(first.request_facts).toMatchObject({ kind: "produce" });
     const offered = projectSemanticStatus(current, invocation).view.next_action.offer!;
     expect(() => planSemanticAction(current, { schema_version: "1", task_id: "api-refactor", invocation, action: { offer: offered, submission: { kind: "gate-summary", summary: "Wrong." } } })).toThrow(/expects work-result/u);
+  });
+
+  it("requires a human revision declaration only for successful pending human revisions", () => {
+    const action = {
+      code: "run-step", detail: "Submit work.", human_required: false,
+      phase_instance: "phase-design-1" as TaskStateV1["phase_instance"], step: "produce",
+    } as const;
+    const pending = snapshot(humanRevisionState(), action);
+    const ordinary = snapshot(state("produce", "running"), action);
+    expect(projectSemanticStatus(pending, invocation).view.next_action.instruction).toContain("human_revision.classification");
+    expect(projectSemanticStatus(ordinary, invocation).view.next_action.instruction).not.toContain("human_revision");
+    expect(() => apply(pending, invocation, { kind: "work-result", outcome: "succeeded" }))
+      .toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH", message: expect.stringContaining("human_revision.rationale") }));
+    for (const classification of ["simple", "significant"] as const) {
+      const submission = { kind: "work-result", outcome: "succeeded", human_revision: { classification, rationale: "Describes the actual diff." } } as const;
+      expect(apply(pending, invocation, submission).request_facts).toMatchObject({ human_revision: submission.human_revision });
+      expect(() => apply(ordinary, invocation, submission))
+        .toThrowError(expect.objectContaining({ code: "SEMANTIC_SUBMISSION_MISMATCH" }));
+    }
+    expect(apply(ordinary, invocation, { kind: "work-result", outcome: "succeeded" }).action_kind).toBe("submit-work");
+    expect(apply(pending, invocation, { kind: "work-result", outcome: "failed", reason: "Verification failed." }).request_facts)
+      .toMatchObject({ kind: "failed" });
   });
 
   it("requires implementation facts at a phase-impl position and refuses them at document positions", () => {

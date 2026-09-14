@@ -373,6 +373,19 @@ describe("semantic status projection", () => {
     expect(failedDispatchView.dispatch_failure).not.toHaveProperty("attempt");
     expect(failedDispatchView.dispatch_failure).not.toHaveProperty("observed_at_revision");
 
+    const invalidAdjudication = fullStatus(action("run-step", { step: "counter_review" }), {
+      step: "counter_review", status: "running",
+      dispatch_failure: {
+        role: "adjudicator", code: "MODEL_OUTPUT_INVALID",
+        message: "The reviewer CLI response was missing structured_output.",
+        route: { model: "gemini-3.8-flash-high", effort: "high", source: "configured" },
+        recovery: { status: "repair-required", dispatches: 1, maximum_dispatches: 3 },
+      },
+    });
+    const invalidView = projectSemanticStatus(snapshot(invalidAdjudication), invocation).view;
+    expect(invalidView.dispatch_failure).toEqual(invalidAdjudication.dispatch_failure);
+    expect(invalidView.detail).toContain("missing structured_output");
+
     const emptyTriage = fullStatus(action("run-step", { step: "triage" }), { step: "counter_review", status: "succeeded" });
     expect(projectSemanticStatus(snapshot(emptyTriage), invocation).view.next_action.kind).toBe("review");
 

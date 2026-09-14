@@ -13,13 +13,13 @@ describe("config template", () => {
 
     // Claude host
     expect(resolveDispatchRoute(config, "phase-impl", "counter-reviewer", "claude")).toMatchObject({
-      model: "gpt-5.6-sol",
-      effort: "medium",
+      model: "gpt-6-astra",
+      effort: "low",
       family: "codex",
       adapter: "codex-cli",
     });
     expect(resolveDispatchRoute(config, "phase-impl", "adjudicator", "claude")).toMatchObject({
-      model: "gemini-3.7-flash-high",
+      model: "gemini-3.8-flash-high",
       effort: "high",
       family: "gemini",
       adapter: "antigravity-cli",
@@ -27,11 +27,11 @@ describe("config template", () => {
 
     // Antigravity host (multi-reviewer)
     expect(resolveDispatchRoutes(config, "phase-impl", "counter-reviewer", "antigravity")).toEqual([
-      { model: "gpt-5.6-sol", effort: "medium", family: "codex", adapter: "codex-cli" },
+      { model: "gpt-6-astra", effort: "low", family: "codex", adapter: "codex-cli" },
       { model: "claude-fable-5-1", effort: "medium", family: "claude", adapter: "claude-cli" },
     ]);
     expect(resolveDispatchRoute(config, "phase-impl", "adjudicator", "antigravity")).toMatchObject({
-      model: "gemini-3.7-flash-high",
+      model: "gemini-3.8-flash-high",
       effort: "high",
       family: "gemini",
       adapter: "antigravity-cli",
@@ -45,7 +45,7 @@ describe("config template", () => {
       adapter: "claude-cli",
     });
     expect(resolveDispatchRoute(config, "phase-impl", "adjudicator", "codex")).toMatchObject({
-      model: "gemini-3.7-flash-high",
+      model: "gemini-3.8-flash-high",
       effort: "high",
       family: "gemini",
       adapter: "antigravity-cli",
@@ -53,12 +53,12 @@ describe("config template", () => {
 
     // Fallback roles
     expect(resolveDispatchRoute(config, "phase-impl", "counter-reviewer")).toMatchObject({
-      model: "gpt-5.6-sol",
-      effort: "medium",
+      model: "gpt-6-astra",
+      effort: "low",
     });
     expect(resolveDispatchRoute(config, "phase-impl", "test-reviewer")).toMatchObject({
-      model: "gpt-5.6-luna",
-      effort: "xhigh",
+      model: "gpt-5.6-sol",
+      effort: "medium",
       family: "codex",
       adapter: "codex-cli",
     });

@@ -666,7 +666,7 @@ else {
       if (mergedReview?.assurance !== "server-attested") throw new Error("server-attested review unavailable");
       expect(mergedReview.reviewer_runs).toMatchObject([
         { reviewer_id: "general", focus: "general", routing_role: "counter-reviewer", model: "gpt-fixture" },
-        { reviewer_id: "test", focus: "tests", routing_role: "test-reviewer", model: "gpt-5.6-luna", effort: "xhigh" },
+        { reviewer_id: "test", focus: "tests", routing_role: "test-reviewer", model: "gpt-5.6-sol", effort: "medium" },
       ]);
       const current = directReviews.value.current_evidence_set;
       await invoke("archflow_state", { schema_version: "1", task_id: task, intent_id: "triage-running", expected_revision: 7,

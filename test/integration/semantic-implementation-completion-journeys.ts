@@ -865,6 +865,15 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     // The client fixes the work, captures a fresh transcript, and resubmits.
     work = writeClientImplementation(workspace, view, "request-changes-round-2");
     const revisionSubmission = implementationSubmission(workspace, work.outputs);
+    expect(view.next_action.instruction).toContain("human_revision.classification");
+    const stateBeforeMissingDeclaration = readFileSync(workspace.services.authority.state.absolute, "utf8");
+    const missingDeclaration = await h.apply(invocation, view, revisionSubmission);
+    expect(missingDeclaration).toMatchObject({
+      ok: false, error: { code: "SEMANTIC_SUBMISSION_MISMATCH", message: expect.stringContaining("human_revision.rationale") },
+    });
+    expect(readFileSync(workspace.services.authority.state.absolute, "utf8")).toBe(stateBeforeMissingDeclaration);
+    expect(reviewCountAt(workspace)).toBe(reviewsAfterReview);
+    expect(missingDeclaration).toHaveProperty("view.next_action.kind", "submit-work");
     view = await applied(h, invocation, view, {
       ...revisionSubmission,
       human_revision: { classification: "significant", rationale: "Deepened the verification to answer the requested change." },

@@ -233,7 +233,9 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
       if (status.step === "produce" && status.status === "running") {
         return Object.freeze({
           condition: "awaiting-client", headline: "Client work is in progress", detail: action.detail,
-          action_kind: "submit-work", instruction: "Complete and verify the client-owned work, then submit its result.",
+          action_kind: "submit-work", instruction: snapshot.state?.pending_human_revision === undefined
+            ? "Complete and verify the client-owned work, then submit its result."
+            : "Complete and verify the human-requested revision, then submit its result. A succeeded work-result requires human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes. Simple means wording or formatting only with no change in meaning; otherwise classify as significant, including when uncertain. Record any explicit human override in human_revision.user_override.",
           expected_submission: "work-result",
         });
       }

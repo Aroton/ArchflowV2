@@ -92,6 +92,31 @@ const selected = { raw_route: { model: "gpt-5.6-sol", effort: "medium" }, source
 const limited = () => new DispatchRoutingError(createProjectError("RATE_LIMITED", { adapter: "codex-cli", attempt: 1 }));
 
 describe("durable dispatch recovery", () => {
+  it("preserves the specific adjudicator output failure through recovery and diagnostic reads", async () => {
+    const context = await fixture();
+    const route = { raw_route: { model: "gemini-3.8-flash-high", effort: "high" }, source: { provenance: "configured" } } as const;
+    const error = new DispatchRoutingError(createProjectError("MODEL_OUTPUT_INVALID", {
+      adapter: "antigravity-cli", attempt: 1, issue_code: "structured-output-missing",
+    }));
+    const expectedMessage = "The reviewer CLI response was missing structured_output.";
+    let calls = 0;
+    await expect(createDispatchRecovery(context).run("adjudicator", route, async () => { calls++; throw error; })).rejects.toThrow();
+    expect(calls).toBe(1);
+    expect(await readDispatchRecovery(context)).toMatchObject({
+      role: "adjudicator", code: "MODEL_OUTPUT_INVALID", message: expectedMessage,
+      recovery: { status: "repair-required" },
+    });
+    await writeDispatchFailureObservation({
+      ...context, phase_instance: context.state.phase_instance, attempt: context.state.attempt,
+      observed_at_revision: context.state.revision,
+    }, { role: "adjudicator", selected: route, error });
+    expect(await readCurrentDispatchFailure(context.dependencies, context.authority, context.state))
+      .toMatchObject({ message: expectedMessage });
+    // Losing the disposable projection does not lose the message retained in durable recovery.
+    rmSync(join(context.authority.workspace_root, "diagnostics"), { recursive: true, force: true });
+    expect(await readDispatchRecovery({ ...context })).toMatchObject({ message: expectedMessage });
+  });
+
   it("retries two transient failures on the same route and clears the boundary after success", async () => {
     const context = await fixture();
     let calls = 0;

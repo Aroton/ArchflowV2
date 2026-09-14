@@ -9,46 +9,46 @@ schema_version: "1"
 # Fallback roles used only when a connected client is not listed under `producers` below:
 roles:
   counter-reviewer:
-    model: gpt-5.6-sol
-    effort: medium
+    model: gpt-6-astra
+    effort: low
   # Used only for phase-design and phase-impl. Older task configs without this
-  # role receive this shipped Luna/xhigh route as the final fallback; general
+  # role receive this shipped Sol/medium route as the final fallback; general
   # reviewers never inherit the test-owned criteria.
   test-reviewer:
-    model: gpt-5.6-luna
-    effort: xhigh
+    model: gpt-5.6-sol
+    effort: medium
   # Used only for phase-design. Assigns implementation model + effort per component.
   effort-reviewer:
     model: gpt-5.6-luna
     effort: xhigh
   adjudicator:
-    model: gemini-3.7-flash-high
+    model: gemini-3.8-flash-high
     effort: high
 
 # Client-specific counter-review and constitution review routing
 producers:
   claude:
     counter-reviewer:
-      model: gpt-5.6-sol
-      effort: medium
+      model: gpt-6-astra
+      effort: low
     adjudicator:
-      model: gemini-3.7-flash-high
+      model: gemini-3.8-flash-high
       effort: high
   antigravity:
     counter-reviewers:
-      - model: gpt-5.6-sol
-        effort: medium
+      - model: gpt-6-astra
+        effort: low
       - model: claude-fable-5-1
         effort: medium
     adjudicator:
-      model: gemini-3.7-flash-high
+      model: gemini-3.8-flash-high
       effort: high
   codex:
     counter-reviewer:
       model: claude-fable-5-1
       effort: medium
     adjudicator:
-      model: gemini-3.7-flash-high
+      model: gemini-3.8-flash-high
       effort: high
 
 # Routes accept an optional `provider`: a cc-switch provider id (claude routes

@@ -73815,10 +73815,24 @@ var SAFE_MESSAGES = Object.freeze({
   RATE_LIMITED: "The reviewer service rate limit prevented this dispatch.",
   UNSUPPORTED_MODEL: "The reviewer service does not support the selected model.",
   CLI_VERSION_UNSUPPORTED: "The installed reviewer CLI version is not supported.",
-  MODEL_OUTPUT_INVALID: "The reviewer returned invalid structured output. Repair the response contract before retrying.",
+  MODEL_OUTPUT_INVALID: "The reviewer returned unusable structured output. Inspect the output validation failure before retrying.",
   PROCESS_FAILED: "The reviewer process failed before producing a usable result.",
   REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review."
 });
+var OUTPUT_FAILURE_MESSAGES = /* @__PURE__ */ new Map([
+  ["antigravity-wrapper-invalid", "The Antigravity CLI response did not contain a valid final result wrapper."],
+  ["structured-output-missing", "The reviewer CLI response was missing structured_output."],
+  ["structured-output-invalid", "The reviewer CLI structured_output was not a valid plain JSON value."],
+  ["adjudication-json-invalid", "The constitution reviewer returned invalid JSON."],
+  ["adjudication-rule-slot-coverage", "The constitution reviewer did not return the required judgment shape for every assigned rule slot."],
+  ["constitution-rule-coverage", "The constitution review did not cover every active rule exactly once."],
+  ["constitution-rule-version", "The constitution review returned a rule identity or version that does not match its assignment."],
+  ["adjudication-upstream-coverage", "The constitution review did not cover the required approved upstream documents."],
+  ["adjudication-finding-duplicate", "The constitution review findings were duplicated or incorrectly ordered."],
+  ["adjudication-unexpected-fields", "The constitution reviewer returned fields outside the expected response contract."],
+  ["adjudication-binding-mismatch", "The constitution review did not match the authenticated observation binding."],
+  ["adjudication-schema-invalid", "The constitution reviewer returned JSON that did not satisfy the required response schema."]
+]);
 function carriedProjectError(error51) {
   if (error51 === null || typeof error51 !== "object") return void 0;
   const descriptor = Object.getOwnPropertyDescriptor(error51, "project_error");
@@ -73835,7 +73849,9 @@ function classifiedDispatchFailure(error51) {
   const code2 = projectError.code;
   const repositoryName7 = code2 === "REPOSITORY_VIEW_UNAVAILABLE" ? projectError.diagnostic.parameters.repository_name : void 0;
   const astraMax = code2 === "CONFIG_INVALID" && projectError.diagnostic.parameters.issue_code === "astra-max-disallowed";
-  return Object.freeze({ code: code2, message: astraMax ? "GPT-6 Astra max effort is disabled. Choose low or high effort." : SAFE_MESSAGES[code2], ...typeof repositoryName7 === "string" ? { repository_name: repositoryName7 } : {} });
+  const issueCode = projectError.diagnostic.parameters.issue_code;
+  const outputMessage = code2 === "MODEL_OUTPUT_INVALID" && typeof issueCode === "string" ? OUTPUT_FAILURE_MESSAGES.get(issueCode) : void 0;
+  return Object.freeze({ code: code2, message: astraMax ? "GPT-6 Astra max effort is disabled. Choose low or high effort." : outputMessage ?? SAFE_MESSAGES[code2], ...typeof repositoryName7 === "string" ? { repository_name: repositoryName7 } : {} });
 }
 function observationClaim(phaseInstance5, attempt) {
   return parseWorkspacePathClaim(
@@ -74021,7 +74037,7 @@ function configuredRoutes(config2, phaseKind2, role, host) {
     return [baseRoles.adjudicator];
   }
   if (role === "test-reviewer" && (phaseKind2 === "phase-design" || phaseKind2 === "phase-impl")) {
-    return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" })];
+    return [Object.freeze({ model: "gpt-5.6-sol", effort: "medium" })];
   }
   return [];
 }
@@ -81121,7 +81137,7 @@ function mapRunStep(status, action2, snapshot) {
           headline: "Client work is in progress",
           detail: action2.detail,
           action_kind: "submit-work",
-          instruction: "Complete and verify the client-owned work, then submit its result.",
+          instruction: snapshot.state?.pending_human_revision === void 0 ? "Complete and verify the client-owned work, then submit its result." : "Complete and verify the human-requested revision, then submit its result. A succeeded work-result requires human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes. Simple means wording or formatting only with no change in meaning; otherwise classify as significant, including when uncertain. Record any explicit human override in human_revision.user_override.",
           expected_submission: "work-result"
         });
       }
@@ -82566,7 +82582,7 @@ function assertSubmissionMatches(expected, submission) {
     throw new SemanticActionPlanError("SEMANTIC_SUBMISSION_MISMATCH", expectedSubmissionMessage(expected, actual));
   }
 }
-function assertWorkResultFactsMatchPosition(offer, submission) {
+function assertWorkResultFactsMatchPosition(offer, submission, state) {
   if (offer.action_kind !== "submit-work" || submission?.kind !== "work-result") return;
   const position2 = offer.phase_instance === void 0 ? void 0 : decodePhaseInstance(offer.phase_instance).kind;
   if (submission.outcome === "failed") {
@@ -82577,6 +82593,18 @@ function assertWorkResultFactsMatchPosition(offer, submission) {
       );
     }
     return;
+  }
+  if (state?.pending_human_revision !== void 0 && submission.human_revision === void 0) {
+    throw new SemanticActionPlanError(
+      "SEMANTIC_SUBMISSION_MISMATCH",
+      "This work completes a human-requested revision. Include human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes on the succeeded work-result."
+    );
+  }
+  if (state?.pending_human_revision === void 0 && submission.human_revision !== void 0) {
+    throw new SemanticActionPlanError(
+      "SEMANTIC_SUBMISSION_MISMATCH",
+      "human_revision is accepted only when a human-requested revision is pending. Submit this work-result without human_revision."
+    );
   }
   if (position2 === "phase-impl") {
     if (submission.implementation === void 0) {
@@ -82869,7 +82897,7 @@ function planSemanticAction(snapshot, value) {
   if (offer === void 0) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
-  assertWorkResultFactsMatchPosition(offer, input.action.submission);
+  assertWorkResultFactsMatchPosition(offer, input.action.submission, snapshot.state);
   const expectedToken = semanticOfferToken(offer);
   const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact" ? markerField(snapshot.archived_decision, "operation_digest") : void 0;
   const revisionContinuation = snapshot.state === void 0 ? void 0 : authenticatedSemanticRevisionContinuation(snapshot.state);

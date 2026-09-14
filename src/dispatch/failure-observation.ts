@@ -31,10 +31,27 @@ const SAFE_MESSAGES: Readonly<Record<DispatchFailureCodeV1, string>> = Object.fr
   RATE_LIMITED: "The reviewer service rate limit prevented this dispatch.",
   UNSUPPORTED_MODEL: "The reviewer service does not support the selected model.",
   CLI_VERSION_UNSUPPORTED: "The installed reviewer CLI version is not supported.",
-  MODEL_OUTPUT_INVALID: "The reviewer returned invalid structured output. Repair the response contract before retrying.",
+  MODEL_OUTPUT_INVALID: "The reviewer returned unusable structured output. Inspect the output validation failure before retrying.",
   PROCESS_FAILED: "The reviewer process failed before producing a usable result.",
   REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review.",
 });
+
+// Only server-defined issue codes select these messages. Never copy exception text, unknown
+// issue codes, or model output into a recovery record or the human-facing status projection.
+const OUTPUT_FAILURE_MESSAGES: ReadonlyMap<string, string> = new Map([
+  ["antigravity-wrapper-invalid", "The Antigravity CLI response did not contain a valid final result wrapper."],
+  ["structured-output-missing", "The reviewer CLI response was missing structured_output."],
+  ["structured-output-invalid", "The reviewer CLI structured_output was not a valid plain JSON value."],
+  ["adjudication-json-invalid", "The constitution reviewer returned invalid JSON."],
+  ["adjudication-rule-slot-coverage", "The constitution reviewer did not return the required judgment shape for every assigned rule slot."],
+  ["constitution-rule-coverage", "The constitution review did not cover every active rule exactly once."],
+  ["constitution-rule-version", "The constitution review returned a rule identity or version that does not match its assignment."],
+  ["adjudication-upstream-coverage", "The constitution review did not cover the required approved upstream documents."],
+  ["adjudication-finding-duplicate", "The constitution review findings were duplicated or incorrectly ordered."],
+  ["adjudication-unexpected-fields", "The constitution reviewer returned fields outside the expected response contract."],
+  ["adjudication-binding-mismatch", "The constitution review did not match the authenticated observation binding."],
+  ["adjudication-schema-invalid", "The constitution reviewer returned JSON that did not satisfy the required response schema."],
+]);
 
 export type DispatchFailureObserver = (
   role: DispatchFailureRoleV1,
@@ -80,9 +97,13 @@ export function classifiedDispatchFailure(error: unknown): Readonly<{
     : undefined;
   const astraMax = code === "CONFIG_INVALID" &&
     (projectError.diagnostic.parameters as Readonly<Record<string, unknown>>).issue_code === "astra-max-disallowed";
+  const issueCode = (projectError.diagnostic.parameters as Readonly<Record<string, unknown>>).issue_code;
+  const outputMessage = code === "MODEL_OUTPUT_INVALID" && typeof issueCode === "string"
+    ? OUTPUT_FAILURE_MESSAGES.get(issueCode)
+    : undefined;
   return Object.freeze({ code, message: astraMax
     ? "GPT-6 Astra max effort is disabled. Choose low or high effort."
-    : SAFE_MESSAGES[code], ...(typeof repositoryName === "string" ? { repository_name: repositoryName } : {}) });
+    : outputMessage ?? SAFE_MESSAGES[code], ...(typeof repositoryName === "string" ? { repository_name: repositoryName } : {}) });
 }
 
 function observationClaim(phaseInstance: PhaseInstanceId, attempt: SafeInteger) {

@@ -1244,7 +1244,7 @@ describe("counter-review route override", () => {
 
     expect(routes).toEqual([
       { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" },
-      { adapter: "codex-cli", family: "codex", model: "gpt-5.6-luna", effort: "xhigh" },
+      { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "medium" },
       { adapter: "codex-cli", family: "codex", model: "gpt-fixture", effort: "high" },
     ]);
 
@@ -1292,7 +1292,7 @@ describe("counter-review route override", () => {
 
     expect(routes).toEqual([
       { adapter: "codex-cli", family: "codex", model: "gpt-fixture", effort: "high" },
-      { adapter: "codex-cli", family: "codex", model: "gpt-5.6-luna", effort: "xhigh" },
+      { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "medium" },
       { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" },
     ]);
 
@@ -1440,6 +1440,8 @@ describe("partial review round retry", () => {
     schema_version: "1",
     roles: {
       "counter-reviewer": { model: SOL, effort: "high" },
+      // These scenarios address children by model to script independent failures.
+      "test-reviewer": { model: LUNA, effort: "xhigh" },
       adjudicator: { model: ADJUDICATOR, effort: "high" },
     },
     producers: {

@@ -122,3 +122,5 @@ Fresh semantic failure projection never exposes an effort-selector failure: inva
 ## Automation responsibility
 
 Semantic workflow views include optional `progress`: pipeline step/status, completed review count/limit, boundary and explanation, and any current dispatch recovery. The offered action remains the only mutation authority. Automation status v3 represents successor launch as a human-owned transition; semantic offer ownership still belongs only to the exact successor invocation.
+
+A successful work submission completing a pending human-requested revision requires the client's `human_revision.classification` and `human_revision.rationale`. The current submit-work instruction states this requirement. Semantic planning rejects missing declarations, or declarations without a pending human revision, with `SEMANTIC_SUBMISSION_MISMATCH` and a refreshed workflow view before building the artifact or dispatching review. The client can correct its submission without resetting state. Failed submissions need no classification; the pending revision remains to be completed. The server never guesses the client's judgment.

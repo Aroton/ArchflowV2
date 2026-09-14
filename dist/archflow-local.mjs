@@ -40635,7 +40635,7 @@ var SAFE_MESSAGES = Object.freeze({
   RATE_LIMITED: "The reviewer service rate limit prevented this dispatch.",
   UNSUPPORTED_MODEL: "The reviewer service does not support the selected model.",
   CLI_VERSION_UNSUPPORTED: "The installed reviewer CLI version is not supported.",
-  MODEL_OUTPUT_INVALID: "The reviewer returned invalid structured output. Repair the response contract before retrying.",
+  MODEL_OUTPUT_INVALID: "The reviewer returned unusable structured output. Inspect the output validation failure before retrying.",
   PROCESS_FAILED: "The reviewer process failed before producing a usable result.",
   REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review."
 });
@@ -40768,7 +40768,7 @@ function configuredRoutes(config2, phaseKind2, role, host) {
     return [baseRoles.adjudicator];
   }
   if (role === "test-reviewer" && (phaseKind2 === "phase-design" || phaseKind2 === "phase-impl")) {
-    return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" })];
+    return [Object.freeze({ model: "gpt-5.6-sol", effort: "medium" })];
   }
   return [];
 }
@@ -46210,7 +46210,7 @@ function mapRunStep(status, action3, snapshot2) {
           headline: "Client work is in progress",
           detail: action3.detail,
           action_kind: "submit-work",
-          instruction: "Complete and verify the client-owned work, then submit its result.",
+          instruction: snapshot2.state?.pending_human_revision === void 0 ? "Complete and verify the client-owned work, then submit its result." : "Complete and verify the human-requested revision, then submit its result. A succeeded work-result requires human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes. Simple means wording or formatting only with no change in meaning; otherwise classify as significant, including when uncertain. Record any explicit human override in human_revision.user_override.",
           expected_submission: "work-result"
         });
       }

@@ -106,6 +106,7 @@ function assertSubmissionMatches(expected: ApplySubmissionKindV1, submission: Ap
 function assertWorkResultFactsMatchPosition(
   offer: SemanticActionOfferV1,
   submission: ApplySubmissionV1 | undefined,
+  state: TaskStateV1 | undefined,
 ): void {
   if (offer.action_kind !== "submit-work" || submission?.kind !== "work-result") return;
   const position = offer.phase_instance === undefined ? undefined : decodePhaseInstance(offer.phase_instance).kind;
@@ -117,6 +118,18 @@ function assertWorkResultFactsMatchPosition(
       );
     }
     return;
+  }
+  if (state?.pending_human_revision !== undefined && submission.human_revision === undefined) {
+    throw new SemanticActionPlanError(
+      "SEMANTIC_SUBMISSION_MISMATCH",
+      "This work completes a human-requested revision. Include human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes on the succeeded work-result.",
+    );
+  }
+  if (state?.pending_human_revision === undefined && submission.human_revision !== undefined) {
+    throw new SemanticActionPlanError(
+      "SEMANTIC_SUBMISSION_MISMATCH",
+      "human_revision is accepted only when a human-requested revision is pending. Submit this work-result without human_revision.",
+    );
   }
   if (position === "phase-impl") {
     if (submission.implementation === undefined) {
@@ -442,7 +455,7 @@ export function planSemanticAction(
   if (offer === undefined) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
-  assertWorkResultFactsMatchPosition(offer, input.action.submission);
+  assertWorkResultFactsMatchPosition(offer, input.action.submission, snapshot.state);
   const expectedToken = semanticOfferToken(offer);
   const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact"
     ? markerField(snapshot.archived_decision, "operation_digest") as Sha256Digest | undefined

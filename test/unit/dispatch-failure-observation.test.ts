@@ -78,6 +78,25 @@ async function fixture() {
 }
 
 describe("dispatch-failure observation", () => {
+  it.each([
+    ["structured-output-missing", "missing structured_output"],
+    ["antigravity-wrapper-invalid", "valid final result wrapper"],
+    ["adjudication-json-invalid", "invalid JSON"],
+    ["adjudication-rule-slot-coverage", "every assigned rule slot"],
+    ["adjudication-unexpected-fields", "fields outside"],
+    ["adjudication-schema-invalid", "required response schema"],
+    ["constitution-rule-coverage", "every active rule exactly once"],
+  ])("explains %s without copying raw exception text", (issueCode, explanation) => {
+    const error = new DispatchRoutingError(createProjectError("MODEL_OUTPUT_INVALID", {
+      adapter: "antigravity-cli", attempt: 1, issue_code: issueCode,
+    }));
+    error.message = "private raw model response";
+    const classified = classifiedDispatchFailure(error)!;
+    expect(classified.message).toContain(explanation);
+    expect(classified.message.length).toBeLessThanOrEqual(256);
+    expect(classified.message).not.toContain("private");
+  });
+
   it("classifies only the bounded outage set without carrying raw exception text", () => {
     const classified = classifiedDispatchFailure(new DispatchRoutingError(
       createProjectError("AUTH_UNAVAILABLE", { adapter: "claude-cli" }),
@@ -88,7 +107,7 @@ describe("dispatch-failure observation", () => {
     });
     expect(classifiedDispatchFailure(new DispatchRoutingError(
       createProjectError("MODEL_OUTPUT_INVALID", { adapter: "claude-cli", attempt: 1, issue_code: "secret-tail" }),
-    ))).toEqual({ code: "MODEL_OUTPUT_INVALID", message: "The reviewer returned invalid structured output. Repair the response contract before retrying." });
+    ))).toEqual({ code: "MODEL_OUTPUT_INVALID", message: "The reviewer returned unusable structured output. Inspect the output validation failure before retrying." });
     expect(classifiedDispatchFailure(new Error("raw child stderr"))).toBeUndefined();
   });
 
