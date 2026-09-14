@@ -152,6 +152,47 @@
   },
   "type": "object",
   "properties": {
+    "editorial_predecessor": {
+      "type": "object",
+      "properties": {
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "triage_result_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        }
+      },
+      "required": [
+        "subject_digest",
+        "input_fingerprint",
+        "triage_result_digest"
+      ],
+      "additionalProperties": false
+    },
+    "review_revision": {
+      "type": "object",
+      "properties": {
+        "classification": {
+          "type": "string",
+          "enum": [
+            "minor",
+            "significant"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "classification",
+        "rationale"
+      ],
+      "additionalProperties": false
+    },
     "schema_version": {
       "type": "string",
       "const": "1"

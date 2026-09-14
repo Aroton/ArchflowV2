@@ -1,4 +1,5 @@
 import { reviewFindings } from "../contracts/review.js";
+import type { ImplementationOutputV1 } from "../contracts/durable-implementation-output.js";
 import {
   canonicalDocument,
   canonicalJsonDigest,
@@ -820,8 +821,8 @@ async function currentProduceSubject(
 }
 
 /**
- * The retained triage entry, but only when it is an editorial authorizer: every accepted finding
- * is `accepted-editorial` and the triage binds the derived current review set exactly.
+ * A minor-revision authorizer: report triage chose revise-minor, or every accepted archived
+ * finding is accepted-editorial. The triage binds the derived current review set exactly.
  */
 function retainedEditorialTriage(retained: RetainedEvidenceSet): RetainedEditorialTriage | undefined {
   const entry = retained.get("triage");
@@ -830,7 +831,7 @@ function retainedEditorialTriage(retained: RetainedEvidenceSet): RetainedEditori
   const triage = source.evidence;
   if (
     triage.accepted_count !== 0 ||
-    (triage.accepted_editorial_count ?? 0) === 0 ||
+    ((triage.accepted_editorial_count ?? 0) === 0 && triage.response?.decision !== "revise-minor") ||
     (triage.escalated_human_count ?? 0) !== 0
   ) return undefined;
   let derived: DerivedCurrentEvidenceSet;
@@ -860,12 +861,13 @@ export async function derivePendingEditorialPredecessor(
   dependencies: EditorialSubjectDependencies,
   state: TaskStateV1,
 ): Promise<EditorialPredecessorRef | undefined> {
+  if (state.pending_human_revision !== undefined) return undefined;
   const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
   if (!retained.ok) return undefined;
   const editorial = retainedEditorialTriage(retained.value);
   if (editorial === undefined) return undefined;
   const produced = await currentProduceSubject(dependencies, state);
-  if (!produced.ok || produced.value.artifact.artifact_kind !== "document") return undefined;
+  if (!produced.ok) return undefined;
   if (editorial.triage.subject_digest !== produced.value.artifact_digest) return undefined;
   // The pair carries the fingerprint the review evidence is bound to — the review cycle's, from
   // the triage — not the produce artifact's own produce-time fingerprint (the two differ: the
@@ -880,16 +882,15 @@ export async function derivePendingEditorialPredecessor(
 /**
  * Record-time validation of a declared editorial predecessor. Accepts the artifact only when the
  * declared predecessor is the produce result currently retained in durable authority, the
- * retained triage authorizes exactly this revision (current for the predecessor pair, editorial
- * accepts only, result digest as declared), and the bytes actually changed.
+ * retained triage authorizes exactly this revision. The producer judges the actual diff's meaning
+ * and breadth; the server authenticates the declaration, predecessor, and unchanged input boundary.
  */
 export async function validateEditorialPredecessorDeclaration(
   dependencies: EditorialSubjectDependencies,
   state: TaskStateV1,
-  artifact: DocumentArtifactV1,
+  artifact: DocumentArtifactV1 | ImplementationOutputV1,
 ): Promise<ProjectResult<undefined>> {
   const declared = artifact.editorial_predecessor;
-  if (declared === undefined) return ok(undefined);
   const invalid = (issue: string): ProjectResult<undefined> => Object.freeze({
     schema_version: "1",
     ok: false,
@@ -899,20 +900,51 @@ export async function validateEditorialPredecessorDeclaration(
     }),
   });
   const produced = await currentProduceSubject(dependencies, state);
-  if (
-    !produced.ok ||
-    produced.value.artifact.artifact_kind !== "document" ||
-    produced.value.artifact_digest !== declared.subject_digest
-  ) return invalid("editorial-predecessor-not-current-produce");
+  const pending = await derivePendingEditorialPredecessor(dependencies, state);
   const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
   if (!retained.ok) return invalid("editorial-authorizing-triage-invalid");
   const editorial = retainedEditorialTriage(retained.value);
+  const minorPending = pending !== undefined && editorial?.triage.response?.decision === "revise-minor";
+  const revision = artifact.review_revision;
+  if (minorPending !== (revision !== undefined)) return invalid("minor-revision-declaration-required-only-when-pending");
+  if (revision?.classification === "significant") {
+    return declared === undefined ? ok(undefined) : invalid("significant-revision-cannot-reuse-review");
+  }
+  if (revision?.classification === "minor" && declared === undefined) return invalid("minor-revision-predecessor-required");
+  if (declared === undefined) return ok(undefined);
+  if (
+    !produced.ok || pending === undefined ||
+    produced.value.artifact.artifact_kind !== artifact.artifact_kind ||
+    produced.value.artifact_digest !== declared.subject_digest
+  ) return invalid("editorial-predecessor-not-current-produce");
   if (
     editorial === undefined ||
     editorial.triage.subject_digest !== declared.subject_digest ||
     editorial.triage.input_fingerprint !== declared.input_fingerprint ||
     editorial.triage_result_digest !== declared.triage_result_digest
   ) return invalid("editorial-authorizing-triage-invalid");
+  if (canonicalJsonDigest(artifact.declared_inputs) !== canonicalJsonDigest(produced.value.artifact.declared_inputs)) {
+    return invalid("editorial-revision-inputs-changed");
+  }
+  if (artifact.artifact_kind === "implementation-output") {
+    const previous = produced.value.artifact;
+    if (previous.artifact_kind !== "implementation-output" || !minorPending) return invalid("implementation-minor-revision-not-authorized");
+    const boundary = (output: ImplementationOutputV1): string => canonicalJsonDigest({
+      base_commit: output.base_commit,
+      paths: output.outputs.map(entry => entry.path),
+      parents: output.parent_documents.filter(document => document.role !== "impl-notes"),
+      secondary: (output.secondary_repositories ?? []).map(section => ({
+        repository: section.repository, repository_identity_digest: section.repository_identity_digest,
+        base_commit: section.base_commit, paths: section.outputs.map(entry => entry.path), declared_inputs: section.declared_inputs,
+      })),
+    });
+    if (boundary(artifact) !== boundary(previous)) return invalid("editorial-revision-implementation-boundary-changed");
+    return ok(undefined);
+  }
+  if (produced.value.artifact.artifact_kind !== "document") return invalid("editorial-revision-kind-changed");
+  if (artifact.document_path !== produced.value.artifact.document_path || artifact.projection_target !== produced.value.artifact.projection_target) {
+    return invalid("editorial-revision-document-target-changed");
+  }
   if (artifact.content_digest === produced.value.artifact.content_digest) {
     return invalid("editorial-revision-unchanged-bytes");
   }
@@ -981,7 +1013,7 @@ export async function loadCurrentReviewSet(
       { load_retained_manifest: dependencies.load_retained_manifest },
       stateDocument.value,
     );
-    const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document"
+    const predecessor = produced.ok
       ? produced.value.artifact.editorial_predecessor
       : undefined;
     if (

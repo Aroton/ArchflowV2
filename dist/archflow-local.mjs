@@ -26875,6 +26875,10 @@ var additionalDocumentArtifactV1Schema = external_exports.object({
   content_digest: sha256DigestV1Schema,
   projection_target: repositoryPathClaimV1Schema
 }).strict();
+var reviewRevisionDeclarationSchema = external_exports.object({
+  classification: external_exports.enum(["minor", "significant"]),
+  rationale: external_exports.string().trim().min(1)
+}).strict();
 var editorialPredecessorRefV1Schema = external_exports.object({
   subject_digest: sha256DigestV1Schema,
   input_fingerprint: sha256DigestV1Schema,
@@ -26895,7 +26899,8 @@ var documentArtifactV1Schema = external_exports.object({
   snapshot_digest: sha256DigestV1Schema,
   projection_target: repositoryPathClaimV1Schema,
   additional_documents: external_exports.array(additionalDocumentArtifactV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "additional_documents must be sorted by document_path with no duplicates").optional(),
-  editorial_predecessor: editorialPredecessorRefV1Schema.optional()
+  editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional()
 }).strict().superRefine((artifact, context2) => {
   if (artifact.additional_documents?.some((document2) => document2.document_path === artifact.document_path)) {
     context2.addIssue({ code: "custom", message: "additional_documents must not repeat document_path", path: ["additional_documents"] });
@@ -26990,6 +26995,8 @@ var implementationRepositorySectionV1Schema = external_exports.object({
   }).strict()).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates")
 }).strict();
 var implementationOutputV1Schema = external_exports.object({
+  editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional(),
   schema_version: external_exports.literal("1"),
   artifact_kind: external_exports.literal("implementation-output"),
   task_id: taskSlugV1Schema,
@@ -27039,6 +27046,7 @@ var TRIAGE_DISPOSITIONS = [
 ];
 var reviewResponseSchema = external_exports.discriminatedUnion("decision", [
   external_exports.object({ decision: external_exports.literal("finish"), rationale: external_exports.string().trim().min(1) }).strict(),
+  external_exports.object({ decision: external_exports.literal("revise-minor"), rationale: external_exports.string().trim().min(1) }).strict(),
   external_exports.object({ decision: external_exports.literal("escalate"), rationale: external_exports.string().trim().min(1) }).strict(),
   external_exports.object({ decision: external_exports.literal("revise"), rationale: external_exports.string().trim().min(1), reviewers: external_exports.array(external_exports.object({ reviewer_id: external_exports.string().min(1), request: external_exports.string().trim().min(1) }).strict()).min(1) }).strict()
 ]);
@@ -39352,6 +39360,7 @@ var workflowViewV1Schema = external_exports.object({
   previous_review_reports: external_exports.array(reviewReportV1Schema).optional(),
   partial_review_reports: external_exports.array(reviewReportV1Schema).optional(),
   review_response: reviewResponseSchema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional(),
   implementation_recommendation: implementationRecommendationV1Schema,
   presentation: humanPresentationV1Schema.optional(),
   dispatch_failure: publicDispatchFailureV1Schema.optional(),
@@ -39400,7 +39409,7 @@ var routeOverrideDeclarationV1Schema = external_exports.object({
 var applySubmissionV1Schema = external_exports.union([
   external_exports.object({ kind: external_exports.literal("task-ask"), text: boundedText2 }).strict(),
   external_exports.object({ kind: external_exports.literal("reopening-request"), request: boundedText2 }).strict(),
-  external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("succeeded"), implementation: implementationFactsV1Schema.optional(), human_revision: humanRevisionDeclarationV1Schema.optional() }).strict(),
+  external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("succeeded"), implementation: implementationFactsV1Schema.optional(), human_revision: humanRevisionDeclarationV1Schema.optional(), review_revision: reviewRevisionDeclarationSchema.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("failed"), reason: boundedText2, validation_override_request: semanticValidationOverrideRequestV1Schema.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("triage"), dispositions: external_exports.array(triageDispositionV1Schema).optional(), response: reviewResponseSchema.optional() }).strict().refine((value) => value.dispositions === void 0 !== (value.response === void 0), "supply either response or archived dispositions"),
   external_exports.object({ kind: external_exports.literal("gate-summary"), summary: boundedText2 }).strict(),
@@ -40527,7 +40536,7 @@ function retainedEditorialTriage(retained) {
   const source = entry?.manifest.source_artifact;
   if (entry === void 0 || source?.artifact_kind !== "triage") return void 0;
   const triage = source.evidence;
-  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0 || (triage.escalated_human_count ?? 0) !== 0) return void 0;
+  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0 && triage.response?.decision !== "revise-minor" || (triage.escalated_human_count ?? 0) !== 0) return void 0;
   let derived;
   try {
     derived = deriveCurrentEvidenceSet(retained);
@@ -40537,9 +40546,23 @@ function retainedEditorialTriage(retained) {
   if (triage.subject_digest !== derived.subject_digest || triage.input_fingerprint !== derived.input_fingerprint || triage.current_evidence_set_digest !== derived.current_evidence_set.set_digest || triage.source_evidence_digests.length !== derived.current_evidence_set.slots.length || triage.source_evidence_digests.some((digest12, index) => digest12 !== derived.current_evidence_set.slots[index].evidence_digest)) return void 0;
   return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
 }
+async function derivePendingEditorialPredecessor(dependencies, state) {
+  if (state.pending_human_revision !== void 0) return void 0;
+  const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
+  if (!retained.ok) return void 0;
+  const editorial = retainedEditorialTriage(retained.value);
+  if (editorial === void 0) return void 0;
+  const produced = await currentProduceSubject(dependencies, state);
+  if (!produced.ok) return void 0;
+  if (editorial.triage.subject_digest !== produced.value.artifact_digest) return void 0;
+  return Object.freeze({
+    subject_digest: produced.value.artifact_digest,
+    input_fingerprint: editorial.triage.input_fingerprint,
+    triage_result_digest: editorial.triage_result_digest
+  });
+}
 async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
   const declared = artifact.editorial_predecessor;
-  if (declared === void 0) return ok14(void 0);
   const invalid2 = (issue4) => Object.freeze({
     schema_version: "1",
     ok: false,
@@ -40549,11 +40572,45 @@ async function validateEditorialPredecessorDeclaration(dependencies, state, arti
     })
   });
   const produced = await currentProduceSubject(dependencies, state);
-  if (!produced.ok || produced.value.artifact.artifact_kind !== "document" || produced.value.artifact_digest !== declared.subject_digest) return invalid2("editorial-predecessor-not-current-produce");
+  const pending = await derivePendingEditorialPredecessor(dependencies, state);
   const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
   if (!retained.ok) return invalid2("editorial-authorizing-triage-invalid");
   const editorial = retainedEditorialTriage(retained.value);
+  const minorPending = pending !== void 0 && editorial?.triage.response?.decision === "revise-minor";
+  const revision2 = artifact.review_revision;
+  if (minorPending !== (revision2 !== void 0)) return invalid2("minor-revision-declaration-required-only-when-pending");
+  if (revision2?.classification === "significant") {
+    return declared === void 0 ? ok14(void 0) : invalid2("significant-revision-cannot-reuse-review");
+  }
+  if (revision2?.classification === "minor" && declared === void 0) return invalid2("minor-revision-predecessor-required");
+  if (declared === void 0) return ok14(void 0);
+  if (!produced.ok || pending === void 0 || produced.value.artifact.artifact_kind !== artifact.artifact_kind || produced.value.artifact_digest !== declared.subject_digest) return invalid2("editorial-predecessor-not-current-produce");
   if (editorial === void 0 || editorial.triage.subject_digest !== declared.subject_digest || editorial.triage.input_fingerprint !== declared.input_fingerprint || editorial.triage_result_digest !== declared.triage_result_digest) return invalid2("editorial-authorizing-triage-invalid");
+  if (canonicalJsonDigest(artifact.declared_inputs) !== canonicalJsonDigest(produced.value.artifact.declared_inputs)) {
+    return invalid2("editorial-revision-inputs-changed");
+  }
+  if (artifact.artifact_kind === "implementation-output") {
+    const previous = produced.value.artifact;
+    if (previous.artifact_kind !== "implementation-output" || !minorPending) return invalid2("implementation-minor-revision-not-authorized");
+    const boundary = (output) => canonicalJsonDigest({
+      base_commit: output.base_commit,
+      paths: output.outputs.map((entry) => entry.path),
+      parents: output.parent_documents.filter((document2) => document2.role !== "impl-notes"),
+      secondary: (output.secondary_repositories ?? []).map((section) => ({
+        repository: section.repository,
+        repository_identity_digest: section.repository_identity_digest,
+        base_commit: section.base_commit,
+        paths: section.outputs.map((entry) => entry.path),
+        declared_inputs: section.declared_inputs
+      }))
+    });
+    if (boundary(artifact) !== boundary(previous)) return invalid2("editorial-revision-implementation-boundary-changed");
+    return ok14(void 0);
+  }
+  if (produced.value.artifact.artifact_kind !== "document") return invalid2("editorial-revision-kind-changed");
+  if (artifact.document_path !== produced.value.artifact.document_path || artifact.projection_target !== produced.value.artifact.projection_target) {
+    return invalid2("editorial-revision-document-target-changed");
+  }
   if (artifact.content_digest === produced.value.artifact.content_digest) {
     return invalid2("editorial-revision-unchanged-bytes");
   }
@@ -40599,7 +40656,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
       { load_retained_manifest: dependencies.load_retained_manifest },
       stateDocument.value
     );
-    const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document" ? produced.value.artifact.editorial_predecessor : void 0;
+    const predecessor = produced.ok ? produced.value.artifact.editorial_predecessor : void 0;
     if (predecessor === void 0 || derived.subject_digest !== predecessor.subject_digest || derived.input_fingerprint !== predecessor.input_fingerprint) {
       throw new TypeError("retained reviews do not form one current review set");
     }
@@ -41090,12 +41147,14 @@ function currentReviewSet(state, retained, subject) {
   try {
     const derived = deriveCurrentEvidenceSet(retained);
     const phaseDesign = state.phase_instance.startsWith("phase-design-");
-    const current = phaseDesign ? boundToSubjectExactly(derived, subject) : boundToSubjectOrDeclaredPredecessor(derived, subject);
+    const triageSource = retained.get("triage")?.manifest.source_artifact;
+    const minorReuse = triageSource?.artifact_kind === "triage" && triageSource.evidence.response?.decision === "revise-minor";
+    const current = phaseDesign && !minorReuse ? boundToSubjectExactly(derived, subject) : boundToSubjectOrDeclaredPredecessor(derived, subject);
     if (!current) return void 0;
     if (phaseDesign) {
       const counter2 = derived.reviews[0]?.evidence;
       const effort = counter2?.assurance === "server-attested" ? counter2.effort_review : void 0;
-      if (effort !== void 0 && (effort.task_id !== state.task_id || effort.phase_instance !== state.phase_instance || effort.attempt !== state.attempt || !boundToSubjectExactly(effort, subject))) return void 0;
+      if (effort !== void 0 && (effort.task_id !== state.task_id || effort.phase_instance !== state.phase_instance || !minorReuse && effort.attempt !== state.attempt || !(minorReuse ? boundToSubjectOrDeclaredPredecessor(effort, subject) : boundToSubjectExactly(effort, subject)))) return void 0;
     }
     const counter = derived.reviews[0]?.evidence;
     if (counter?.schema_version === "3") {
@@ -41385,7 +41444,7 @@ function acceptedFindingsForceReentry(state, disposition) {
   return disposition.accepted && state.step === "triage" && state.status === "succeeded";
 }
 function editorialRevisionPending(triageCurrent, disposition, subject, acceptedSettled) {
-  return triageCurrent !== void 0 && disposition.complete && (triageCurrent.accepted_count === 0 || acceptedSettled) && (triageCurrent.accepted_editorial_count ?? 0) > 0 && (triageCurrent.escalated_human_count ?? 0) === 0 && boundToSubjectExactly(triageCurrent, subject);
+  return triageCurrent !== void 0 && disposition.complete && (triageCurrent.accepted_count === 0 || acceptedSettled) && ((triageCurrent.accepted_editorial_count ?? 0) > 0 || triageCurrent.response?.decision === "revise-minor") && (triageCurrent.escalated_human_count ?? 0) === 0 && boundToSubjectExactly(triageCurrent, subject);
 }
 function decision2(next, flags) {
   return Object.freeze({
@@ -41449,7 +41508,7 @@ function decideNextAction(state, retained, subject, current, disposition, triage
   if (!current.includes("triage") || !disposition.complete) return decision2("triage");
   if (disposition.accepted && !acceptedSettled) return decision2("triage");
   if (editorialRevisionPending(triageCurrent, disposition, subject, acceptedSettled)) {
-    if (state.phase_instance !== "prd" && state.phase_instance !== "design") {
+    if (triageCurrent?.response?.decision !== "revise-minor" && state.phase_instance !== "prd" && state.phase_instance !== "design") {
       return decision2("produce", { reentry_required: true });
     }
     return decision2("produce", { editorial_revision_required: true });
@@ -42557,7 +42616,7 @@ function deriveNextAction(input) {
     if (next === "produce" && input.assessment?.editorial_revision_required === true) {
       return action(
         "run-step",
-        "Apply exactly the accepted editorial revision intents to the artifact, then run the produce step; nothing is re-run \u2014 the retained reviews and constitution verdict stay bound to the declared predecessor.",
+        "Apply the accepted minor or editorial corrections and run applicable checks. The retained reviews and constitution verdict can be reused once for the declared predecessor; significant changes require fresh review.",
         false,
         state,
         { step: "produce", editorial_revision: true }
@@ -44036,7 +44095,7 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
 }
 function currentReviewPredecessor(state, produceSubject) {
   const midProduce = state.step === "produce" && state.status !== "succeeded";
-  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
+  const declaredPredecessor = !midProduce && produceSubject !== void 0 ? produceSubject.artifact.editorial_predecessor : void 0;
   const currentProduceReference = state.authoritative_results.find((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
   const simpleHumanRevision = currentProduceReference === void 0 ? void 0 : [...state.human_revision_history ?? []].reverse().find((revision2) => revision2.phase_instance === state.phase_instance && revision2.classification === "simple" && revision2.resulting_result_digest === currentProduceReference.result_digest);
   return declaredPredecessor === void 0 ? simpleHumanRevision === void 0 ? void 0 : Object.freeze({
@@ -44806,7 +44865,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       }
     }
   }
-  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
+  const declaredPredecessor = !midProduce && produceSubject !== void 0 ? produceSubject.artifact.editorial_predecessor : void 0;
   const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
   let assessment;
   let assessmentSubject;
@@ -44836,7 +44895,10 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     if (resolvedAssessment.blocking_reason !== void 0) blockers.push(resolvedAssessment.blocking_reason);
   }
   let editorialRevision;
-  if (declaredPredecessor !== void 0) {
+  const triageArtifact = retained.get("triage")?.manifest.source_artifact;
+  const minorRevisionPending = state.pending_human_revision === void 0 && produceSubject !== void 0 && triageArtifact?.artifact_kind === "triage" && triageArtifact.evidence.response?.decision === "revise-minor" && triageArtifact.evidence.subject_digest === produceSubject.artifact_digest;
+  const reviewedArtifact = retained.get("counter_review")?.manifest.source_artifact;
+  if (declaredPredecessor !== void 0 && reviewedArtifact?.artifact_kind === "review-evidence" && reviewedArtifact.evidence.subject_digest === declaredPredecessor.subject_digest) {
     const triageSource = retained.get("triage")?.manifest.source_artifact;
     const dispositions = triageSource?.artifact_kind === "triage" ? triageSource.evidence.dispositions.filter((item) => item.disposition === "accepted-editorial").map((item) => Object.freeze({
       finding_id: item.finding_id,
@@ -45166,7 +45228,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     state,
     produceSubject.artifact_digest,
     produceSubject.artifact.phase_instance
-  ) ?? (produceSubject.artifact.artifact_kind === "document" && produceSubject.artifact.editorial_predecessor !== void 0 ? latestEligibleRuleSettlement(
+  ) ?? (produceSubject.artifact.editorial_predecessor !== void 0 ? latestEligibleRuleSettlement(
     state,
     produceSubject.artifact.editorial_predecessor.subject_digest,
     produceSubject.artifact.phase_instance
@@ -45395,6 +45457,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     ...statusReconciliation === void 0 ? {} : { reconciliation: statusReconciliation },
     evidence,
     ...editorialRevision === void 0 ? {} : { editorial_revision: editorialRevision },
+    ...produceSubject?.artifact.review_revision === void 0 ? {} : { review_revision: produceSubject.artifact.review_revision },
+    ...minorRevisionPending ? { minor_revision_pending: true } : {},
     ...gateInput === void 0 ? {} : { gate_input: gateInput },
     ...baselineAdoptionInput === void 0 ? {} : { baseline_adoption_gate: baselineAdoptionInput },
     ...milestoneRecoveryFacts === void 0 ? {} : { milestone_recovery: milestoneRecoveryFacts },
@@ -45547,7 +45611,8 @@ async function currentImplementationRecommendation(dependencies, authority, deta
       phase3
     );
   }
-  if (review.subject_digest !== produce.artifact_digest) {
+  const predecessor = produce.artifact.review_revision?.classification === "minor" ? produce.artifact.editorial_predecessor : void 0;
+  if (review.subject_digest !== produce.artifact_digest && !(predecessor !== void 0 && review.subject_digest === predecessor.subject_digest && review.input_fingerprint === predecessor.input_fingerprint)) {
     return unavailableImplementationRecommendation(
       "subject-stale",
       "The retained effort assessment describes earlier phase-design bytes and is not current.",
@@ -45961,6 +46026,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
       return current ? { review_reports: source.evidence.reports, ...source.evidence.previous_reports === void 0 ? {} : { previous_review_reports: source.evidence.previous_reports } } : { previous_review_reports: [...source.evidence.previous_reports ?? [], ...source.evidence.reports] };
     })(),
     ...triageArtifact?.artifact_kind === "triage" && triageArtifact.evidence.response !== void 0 ? { review_response: triageArtifact.evidence.response } : {},
+    ...status.review_revision === void 0 ? {} : { review_revision: status.review_revision },
     ...await (async () => {
       const reports = state === void 0 ? void 0 : await readReceivedFeedback(authority, dependencies, state);
       return reports === void 0 ? {} : { partial_review_reports: reports };
@@ -46016,6 +46082,7 @@ function computeSemanticStatusSnapshot(status, enrichments) {
     ...enrichments.partial_review_reports === void 0 ? {} : { partial_review_reports: enrichments.partial_review_reports },
     ...enrichments.review_reports === void 0 ? {} : { review_reports: enrichments.review_reports },
     ...enrichments.review_response === void 0 ? {} : { review_response: enrichments.review_response },
+    ...enrichments.review_revision === void 0 ? {} : { review_revision: enrichments.review_revision },
     full_findings: Object.freeze(findings),
     finding_history: Object.freeze(history),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) => Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))))),
@@ -46210,7 +46277,7 @@ function mapRunStep(status, action3, snapshot2) {
           headline: "Client work is in progress",
           detail: action3.detail,
           action_kind: "submit-work",
-          instruction: snapshot2.state?.pending_human_revision === void 0 ? "Complete and verify the client-owned work, then submit its result." : "Complete and verify the human-requested revision, then submit its result. A succeeded work-result requires human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes. Simple means wording or formatting only with no change in meaning; otherwise classify as significant, including when uncertain. Record any explicit human override in human_revision.user_override.",
+          instruction: snapshot2.state?.pending_human_revision === void 0 ? status.minor_revision_pending === true ? "Complete the localized correction and applicable automated checks. Include review_revision.classification (minor or significant) and review_revision.rationale describing the actual diff. Minor may clarify established intent, but new requirements, behavior changes, or coordinated rewrites require significant classification and fresh review." : "Complete and verify the client-owned work, then submit its result." : "Complete and verify the human-requested revision, then submit its result. A succeeded work-result requires human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes. Simple means wording or formatting only with no change in meaning; otherwise classify as significant, including when uncertain. Record any explicit human override in human_revision.user_override.",
           expected_submission: "work-result"
         });
       }
@@ -46233,7 +46300,7 @@ function mapRunStep(status, action3, snapshot2) {
         expected_submission: "review-dispatch"
       });
     case "triage":
-      return snapshot2.review_reports !== void 0 ? Object.freeze({ condition: "awaiting-client", headline: "Review feedback is ready", detail: "Read the reviewer reports and decide whether to revise, finish, or ask the human.", action_kind: "triage", instruction: "Submit a response with decision and rationale; for revise include selected reviewer IDs and verification requests.", expected_submission: "triage" }) : snapshot2.full_findings.length === 0 ? Object.freeze({
+      return snapshot2.review_reports !== void 0 ? Object.freeze({ condition: "awaiting-client", headline: "Review feedback is ready", detail: "Read the reviewer reports and decide whether to revise, make a minor correction, finish, or ask the human.", action_kind: "triage", instruction: "Submit decision and rationale. Use revise with selected reviewer IDs and verification requests for substantive changes; revise-minor without reviewer selection for localized corrections or clarification of established intent. Coordinated rewrites and new requirements need review. Use finish when no worthwhile change remains, or escalate for human judgment.", expected_submission: "triage" }) : snapshot2.full_findings.length === 0 ? Object.freeze({
         condition: "awaiting-client",
         headline: "Review settlement is ready",
         detail: "The authenticated review has no findings; record its deterministic empty triage.",
@@ -46545,7 +46612,7 @@ function projectSemanticStatus(snapshot2, invocation) {
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch2}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}`,
+    detail: `${shape.detail}${mismatch2}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}${status.editorial_revision !== void 0 ? " The minor revision reuses the prior review; the final correction has not received another AI review." : ""}`,
     ...position2 === void 0 ? {} : { position: position2 },
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
@@ -46559,6 +46626,7 @@ function projectSemanticStatus(snapshot2, invocation) {
     ...snapshot2.previous_review_reports === void 0 ? {} : { previous_review_reports: snapshot2.previous_review_reports },
     ...snapshot2.partial_review_reports === void 0 ? {} : { partial_review_reports: snapshot2.partial_review_reports },
     ...snapshot2.review_response === void 0 ? {} : { review_response: snapshot2.review_response },
+    ...snapshot2.review_revision === void 0 ? {} : { review_revision: snapshot2.review_revision },
     implementation_recommendation: snapshot2.implementation_recommendation,
     ...snapshot2.validation_overrides === void 0 ? {} : {
       validation_overrides: snapshot2.validation_overrides
@@ -51542,7 +51610,7 @@ function validRuleSettlementBoundary(input, settlement) {
   if (input.target.step !== "produce" || input.current.step !== "produce" || input.current.status !== "running" || input.resulting_subject_digest !== settlement.subject_digest) {
     return false;
   }
-  const editorial = input.artifact?.artifact_kind === "document" && input.artifact.editorial_predecessor !== void 0;
+  const editorial = (input.artifact?.artifact_kind === "document" || input.artifact?.artifact_kind === "implementation-output") && input.artifact.editorial_predecessor !== void 0;
   return editorial && input.current.pending_human_revision === void 0 && input.human_revision === void 0;
 }
 function hasAuthenticatedMigrationAudit(input) {
@@ -53221,7 +53289,7 @@ async function handleState(call, context2) {
           if (retainedBytes === void 0 || scanner === void 0) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
           }
-          if (artifact.artifact_kind === "document" && artifact.editorial_predecessor !== void 0) {
+          {
             const authorized = await validateEditorialPredecessorDeclaration(
               services2.dependencies,
               current.value,
@@ -53276,7 +53344,7 @@ async function handleState(call, context2) {
               issue_code: "produce-derived-final-phase-below-current"
             }));
           }
-          const settlesProduceReentry = call.input.phase_instance === current.value.phase_instance && call.input.step === "produce" && call.input.status === "succeeded" && artifact.artifact_kind === "document" && artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0 && call.input.human_revision === void 0;
+          const settlesProduceReentry = call.input.phase_instance === current.value.phase_instance && call.input.step === "produce" && call.input.status === "succeeded" && artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0 && call.input.human_revision === void 0;
           if (settlesProduceReentry) {
             const loadManifest = services2.dependencies.load_retained_manifest;
             if (loadManifest === void 0) throw new TypeError("evidence preparation dependencies are unavailable");

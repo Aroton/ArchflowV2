@@ -80,11 +80,13 @@ export type DocumentArtifactV1 = {
   /**
    * Declares this document as an editorial revision of the produce result it replaces: the
    * predecessor's retained artifact digest and input fingerprint, plus the retained result digest
-   * of the triage whose only accepted findings were `accepted-editorial`. The link is what lets
+   * of the triage that chose `revise-minor` or accepted only `accepted-editorial` findings. The link lets
    * predecessor-bound review/triage evidence stay current for exactly one hop; record time
    * refuses it unless the named triage authorizes it and the bytes actually changed.
    */
   readonly editorial_predecessor?: EditorialPredecessorRef;
+  /** Producer judgment of the actual diff after a report-based minor revision request. */
+  readonly review_revision?: ReviewRevisionDeclaration;
 };
 
 export type AdditionalDocumentArtifactV1 = {
@@ -108,6 +110,16 @@ export type EditorialPredecessorRef = {
   readonly input_fingerprint: Sha256Digest;
   readonly triage_result_digest: Sha256Digest;
 };
+
+export type ReviewRevisionDeclaration = {
+  readonly classification: "minor" | "significant";
+  readonly rationale: string;
+};
+
+export const reviewRevisionDeclarationSchema = z.object({
+  classification: z.enum(["minor", "significant"]),
+  rationale: z.string().trim().min(1),
+}).strict() as z.ZodType<ReviewRevisionDeclaration>;
 
 export const editorialPredecessorRefV1Schema = z.object({
   subject_digest: sha256DigestV1Schema,
@@ -138,6 +150,7 @@ export const documentArtifactV1Schema = z.object({
     .refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "additional_documents must be sorted by document_path with no duplicates")
     .optional(),
   editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional(),
 }).strict().superRefine((artifact, context) => {
   if (artifact.additional_documents?.some((document) => document.document_path === artifact.document_path)) {
     context.addIssue({ code: "custom", message: "additional_documents must not repeat document_path", path: ["additional_documents"] });

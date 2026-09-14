@@ -6,6 +6,8 @@
 
 ## Two advertised tools
 
+Review triage accepts `revise-minor` with a rationale and no reviewer selection. The returned revision window allows localized corrections, followed by a succeeded work result declaring `review_revision.classification` (`minor` or `significant`) and a rationale about the actual diff. Missing or unsolicited declarations receive a semantic submission error. Minor reuses the authenticated review group once; significant returns to review. The public view exposes the declaration and discloses when the correction has not received another AI review. Human gates and commit authorization remain bound to the final output.
+
 The host catalogue contains exactly two tools, each with a purpose description and a compact plain-object input/output schema generated from the semantic workflow contract. They are the only advertised and dispatched surface; every workflow — document production, implementation, status reporting, and the post-adoption half of a legacy upgrade — runs through them.
 
 | Tool | What it does |

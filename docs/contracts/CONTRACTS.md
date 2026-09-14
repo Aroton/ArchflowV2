@@ -2,6 +2,8 @@
 
 **Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
 
+The semantic review response includes `decision: "revise-minor"` with a rationale and no reviewer list. Its subsequent succeeded work result requires `review_revision: {classification: "minor" | "significant", rationale: string}`; ordinary submissions omit this field. Document and implementation artifacts retain the declaration. Minor revisions carry a server-derived `editorial_predecessor` linking the reviewed artifact, review fingerprint, and authorizing triage result; significant revisions cannot carry that link. Public status exposes the declaration and explains when prior review is reused. Existing archived shapes remain readable without rewriting.
+
 `src/contracts/` is the bottom layer: TypeScript contract modules plus generated JSON Schemas that define what a valid thing looks like and how to prove a thing is what it claims. Everything else imports from here; nothing here imports back out.
 
 The premise it serves: durable files in `.archflow/` are the system's *only* memory across sessions, and the things writing them are language models. So the whole layer is built around one idea — **nothing an agent says is trusted until the server has re-derived it.**

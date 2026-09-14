@@ -28,6 +28,24 @@
           "properties": {
             "decision": {
               "type": "string",
+              "const": "revise-minor"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "decision",
+            "rationale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
               "const": "escalate"
             },
             "rationale": {

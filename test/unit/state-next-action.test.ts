@@ -448,8 +448,8 @@ describe("deriveNextAction", () => {
       editorial_revision: true,
       human_required: false,
     });
-    expect(editorial.detail).toMatch(/editorial revision intents/u);
-    expect(editorial.detail).toMatch(/nothing is re-run/u);
+    expect(editorial.detail).toMatch(/run applicable checks/u);
+    expect(editorial.detail).toMatch(/reused once/u);
     // A full re-entry keeps the ordinary produce wording and no editorial flag.
     const reentry = deriveNextAction(input({
       assessment: { ...assessment("produce"), reentry_required: true },

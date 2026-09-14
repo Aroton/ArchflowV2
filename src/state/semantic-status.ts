@@ -46,6 +46,7 @@ import { deriveCurrentEvidenceSet, loadGoverningPhaseDesignEffortEvidence } from
 import { readCanonical, type GateLifecycleDependencies } from "./gate-core.js";
 import { computeTaskStatusDetailed, type DetailedTaskStatusV1, type TaskStatusV1 } from "./status.js";
 import { isWaiverOriginRequest } from "./waiver-origin.js";
+import type { ReviewRevisionDeclaration } from "../contracts/durable-document.js";
 
 /**
  * Enrichments that detailed status obtains while it still owns the canonical read. They are
@@ -62,6 +63,7 @@ export type SemanticStatusEnrichmentsV1 = Readonly<{
   previous_review_reports?: readonly ReviewReportV1[];
   partial_review_reports?: readonly ReviewReportV1[];
   review_response?: ReviewResponse;
+  review_revision?: ReviewRevisionDeclaration;
   full_findings: readonly PublicFindingV1[];
   finding_history?: readonly PublicFindingV1[];
   review_rounds?: readonly PublicReviewRoundV1[];
@@ -133,7 +135,9 @@ export async function currentImplementationRecommendation(
       phase,
     );
   }
-  if (review.subject_digest !== produce.artifact_digest) {
+  const predecessor = produce.artifact.review_revision?.classification === "minor" ? produce.artifact.editorial_predecessor : undefined;
+  if (review.subject_digest !== produce.artifact_digest &&
+      !(predecessor !== undefined && review.subject_digest === predecessor.subject_digest && review.input_fingerprint === predecessor.input_fingerprint)) {
     return unavailableImplementationRecommendation(
       "subject-stale",
       "The retained effort assessment describes earlier phase-design bytes and is not current.",
@@ -680,6 +684,7 @@ export async function computeAuthoritativeSemanticStatus(
         : { previous_review_reports: [...(source.evidence.previous_reports ?? []), ...source.evidence.reports] };
     })(),
     ...(triageArtifact?.artifact_kind === "triage" && triageArtifact.evidence.response !== undefined ? { review_response: triageArtifact.evidence.response } : {}),
+    ...(status.review_revision === undefined ? {} : { review_revision: status.review_revision }),
     ...await (async () => { const reports = state === undefined ? undefined : await readReceivedFeedback(authority, dependencies, state); return reports === undefined ? {} : { partial_review_reports: reports }; })(),
     full_findings: fullFindings(detailed.value),
     finding_history: findingHistory(detailed.value),
@@ -754,6 +759,7 @@ export function computeSemanticStatusSnapshot(
     ...(enrichments.partial_review_reports === undefined ? {} : { partial_review_reports: enrichments.partial_review_reports }),
     ...(enrichments.review_reports === undefined ? {} : { review_reports: enrichments.review_reports }),
     ...(enrichments.review_response === undefined ? {} : { review_response: enrichments.review_response }),
+    ...(enrichments.review_revision === undefined ? {} : { review_revision: enrichments.review_revision }),
     full_findings: Object.freeze(findings),
     finding_history: Object.freeze(history),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) =>

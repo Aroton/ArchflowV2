@@ -234,7 +234,9 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
         return Object.freeze({
           condition: "awaiting-client", headline: "Client work is in progress", detail: action.detail,
           action_kind: "submit-work", instruction: snapshot.state?.pending_human_revision === undefined
-            ? "Complete and verify the client-owned work, then submit its result."
+            ? status.minor_revision_pending === true
+              ? "Complete the localized correction and applicable automated checks. Include review_revision.classification (minor or significant) and review_revision.rationale describing the actual diff. Minor may clarify established intent, but new requirements, behavior changes, or coordinated rewrites require significant classification and fresh review."
+              : "Complete and verify the client-owned work, then submit its result."
             : "Complete and verify the human-requested revision, then submit its result. A succeeded work-result requires human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes. Simple means wording or formatting only with no change in meaning; otherwise classify as significant, including when uncertain. Record any explicit human override in human_revision.user_override.",
           expected_submission: "work-result",
         });
@@ -254,7 +256,7 @@ function mapRunStep(status: TaskStatusV1, action: NextAction, snapshot: Semantic
       });
     case "triage":
       return snapshot.review_reports !== undefined
-        ? Object.freeze({ condition: "awaiting-client", headline: "Review feedback is ready", detail: "Read the reviewer reports and decide whether to revise, finish, or ask the human.", action_kind: "triage", instruction: "Submit a response with decision and rationale; for revise include selected reviewer IDs and verification requests.", expected_submission: "triage" })
+        ? Object.freeze({ condition: "awaiting-client", headline: "Review feedback is ready", detail: "Read the reviewer reports and decide whether to revise, make a minor correction, finish, or ask the human.", action_kind: "triage", instruction: "Submit decision and rationale. Use revise with selected reviewer IDs and verification requests for substantive changes; revise-minor without reviewer selection for localized corrections or clarification of established intent. Coordinated rewrites and new requirements need review. Use finish when no worthwhile change remains, or escalate for human judgment.", expected_submission: "triage" })
         : snapshot.full_findings.length === 0
         ? Object.freeze({
             condition: "awaiting-client", headline: "Review settlement is ready",
@@ -567,7 +569,7 @@ export function projectSemanticStatus(
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}`,
+    detail: `${shape.detail}${mismatch}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}${status.editorial_revision !== undefined ? " The minor revision reuses the prior review; the final correction has not received another AI review." : ""}`,
     ...(position === undefined ? {} : { position }),
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
@@ -583,6 +585,7 @@ export function projectSemanticStatus(
     ...(snapshot.previous_review_reports === undefined ? {} : { previous_review_reports: snapshot.previous_review_reports }),
     ...(snapshot.partial_review_reports === undefined ? {} : { partial_review_reports: snapshot.partial_review_reports }),
     ...(snapshot.review_response === undefined ? {} : { review_response: snapshot.review_response }),
+    ...(snapshot.review_revision === undefined ? {} : { review_revision: snapshot.review_revision }),
     implementation_recommendation: snapshot.implementation_recommendation,
     ...(snapshot.validation_overrides === undefined ? {} : {
       validation_overrides: snapshot.validation_overrides,

@@ -6,6 +6,8 @@ This is a self-contained integration brief for an application that orchestrates 
 
 ## 1. Integration architecture
 
+Minor corrections are normal producer work. At report triage, the producer can choose `revise-minor`, enter the returned revision window, run applicable checks, and submit `review_revision` with the actual classification and rationale. A localized clarification may reuse the prior review group once; substantive changes and coordinated rewrites return to review. Controllers continue following returned actions: this option requires no new configuration, approval dialog, or controller-side classification. Any returned human gate still requires the human's decision on the final bytes.
+
 Use `archflow-local automation-status --task <task>` to observe a task, then handle its returned condition and exact skill descriptor in a supported coding-agent host. Current-skill work can resume automatically; a completed skill hands off to the human to launch its successor. ArchFlow already decides which workflow action is next. Your application supplies process supervision, session persistence, scheduling, and a human conversation interface.
 
 | Component | Responsibility |

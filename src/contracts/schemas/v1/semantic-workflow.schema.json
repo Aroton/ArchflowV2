@@ -2138,6 +2138,24 @@
               "properties": {
                 "decision": {
                   "type": "string",
+                  "const": "revise-minor"
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "decision",
+                "rationale"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string",
                   "const": "escalate"
                 },
                 "rationale": {
@@ -2193,6 +2211,27 @@
               "additionalProperties": false
             }
           ]
+        },
+        "review_revision": {
+          "type": "object",
+          "properties": {
+            "classification": {
+              "type": "string",
+              "enum": [
+                "minor",
+                "significant"
+              ]
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "classification",
+            "rationale"
+          ],
+          "additionalProperties": false
         },
         "implementation_recommendation": {
           "$ref": "#/$defs/implementationRecommendation"
@@ -2863,6 +2902,27 @@
                 "rationale"
               ],
               "additionalProperties": false
+            },
+            "review_revision": {
+              "type": "object",
+              "properties": {
+                "classification": {
+                  "type": "string",
+                  "enum": [
+                    "minor",
+                    "significant"
+                  ]
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "classification",
+                "rationale"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -3065,6 +3125,24 @@
                     "decision": {
                       "type": "string",
                       "const": "finish"
+                    },
+                    "rationale": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "decision",
+                    "rationale"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "decision": {
+                      "type": "string",
+                      "const": "revise-minor"
                     },
                     "rationale": {
                       "type": "string",
@@ -4027,6 +4105,24 @@
           "properties": {
             "decision": {
               "type": "string",
+              "const": "revise-minor"
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "decision",
+            "rationale"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
               "const": "escalate"
             },
             "rationale": {
@@ -4082,6 +4178,27 @@
           "additionalProperties": false
         }
       ]
+    },
+    "review_revision": {
+      "type": "object",
+      "properties": {
+        "classification": {
+          "type": "string",
+          "enum": [
+            "minor",
+            "significant"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "classification",
+        "rationale"
+      ],
+      "additionalProperties": false
     },
     "implementation_recommendation": {
       "$ref": "#/$defs/implementationRecommendation"

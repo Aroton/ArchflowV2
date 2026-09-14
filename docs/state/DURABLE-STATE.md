@@ -2,6 +2,8 @@
 
 **Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/state/`, `src/contracts/durable-state.ts`, `src/contracts/durable-implementation-output.ts`, `src/repository/`, `src/init/`, `src/local/`, `src/mcp/handlers/semantic.ts`, `src/dispatch/failure-observation.ts`, `src/dispatch/recovery.ts`
 
+Minor review revisions retain the producer's `review_revision` classification and rationale on the new document or implementation artifact. For `minor`, the server derives and validates `editorial_predecessor` against the exact retained `revise-minor` triage and reviewed subject. Evidence remains bound to its original bytes for one hop; it is never rewritten as a review of the correction. `significant` carries no predecessor and requires fresh review. The correction can settle normal approval rules at produce completion, while required human and commit approvals bind to the final output.
+
 Durable state is ArchFlow's memory and authority, but not every file the workflow uses deserves that status. The repository now separates tracked, reviewable authority from an ignored workspace containing bytes that are transient, reconstructible, or useful only for diagnosis.
 
 Repository review coverage is recovered from retained evidence, not inferred from live configuration. Status accepts only the current workflow position's server-attested counter-review repository pins for `last_reviewed_commit`. When a gate binds that exact evidence set, its disposable human presentation lists the abbreviated reviewed commits and flags a differing live HEAD; losing the presentation cannot affect the durable gate. Baseline adoption binds drift rather than review evidence, so it intentionally has no such lines.

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { editorialPredecessorRefV1Schema, reviewRevisionDeclarationSchema, type EditorialPredecessorRef, type ReviewRevisionDeclaration } from "./durable-document.js";
 
 import type { GitOid } from "./canonical.js";
 import { gitOidV1Schema } from "./canonical.js";
@@ -111,6 +112,8 @@ export type SecondaryDeclaredInputRefV1 = DeclaredInputRef & {
  * clauses read present, typed, and required.
  */
 export type ImplementationOutputV1 = {
+  readonly editorial_predecessor?: EditorialPredecessorRef;
+  readonly review_revision?: ReviewRevisionDeclaration;
   readonly schema_version: "1";
   /** The discriminant of the `DurableArtifact` union (chunk 10). */
   readonly artifact_kind: "implementation-output";
@@ -206,6 +209,8 @@ export const implementationRepositorySectionV1Schema = z.object({
  * predicate.
  */
 export const implementationOutputV1Schema = z.object({
+  editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional(),
   schema_version: z.literal("1"),
   artifact_kind: z.literal("implementation-output"),
   task_id: taskSlugV1Schema,

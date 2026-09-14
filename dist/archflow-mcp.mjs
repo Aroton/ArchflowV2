@@ -38688,6 +38688,7 @@ var TRIAGE_DISPOSITIONS = [
 ];
 var reviewResponseSchema = external_exports.discriminatedUnion("decision", [
   external_exports.object({ decision: external_exports.literal("finish"), rationale: external_exports.string().trim().min(1) }).strict(),
+  external_exports.object({ decision: external_exports.literal("revise-minor"), rationale: external_exports.string().trim().min(1) }).strict(),
   external_exports.object({ decision: external_exports.literal("escalate"), rationale: external_exports.string().trim().min(1) }).strict(),
   external_exports.object({ decision: external_exports.literal("revise"), rationale: external_exports.string().trim().min(1), reviewers: external_exports.array(external_exports.object({ reviewer_id: external_exports.string().min(1), request: external_exports.string().trim().min(1) }).strict()).min(1) }).strict()
 ]);
@@ -38966,6 +38967,185 @@ function validateTriage(current, candidate, dispositionLedger, reviewRoundHistor
   });
   registerValidatedTriage(validated);
   return validated;
+}
+
+// src/contracts/validators.ts
+function isSortedUniqueBy(items, key2 = String) {
+  if (!Array.isArray(items)) return false;
+  if (items.length <= 1) return true;
+  let prevKey = key2(items[0]);
+  for (let i = 1; i < items.length; i++) {
+    const currentKey = key2(items[i]);
+    if (prevKey >= currentKey) return false;
+    prevKey = currentKey;
+  }
+  return true;
+}
+var tupleKeyCache = /* @__PURE__ */ new Map();
+function tupleKey(properties) {
+  const cacheKey = typeof properties === "string" ? properties : properties.join("\0");
+  const cached2 = tupleKeyCache.get(cacheKey);
+  if (cached2 !== void 0) return cached2;
+  const propertyNames = typeof properties === "string" ? [properties] : [...properties];
+  let fn;
+  if (propertyNames.length === 1) {
+    const prop = propertyNames[0];
+    fn = (value) => {
+      if (typeof value !== "object" || value === null) return String(value);
+      const descriptor = Object.getOwnPropertyDescriptor(value, prop);
+      return String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
+    };
+  } else {
+    fn = (value) => {
+      if (typeof value !== "object" || value === null) return String(value);
+      return propertyNames.map((property) => {
+        const descriptor = Object.getOwnPropertyDescriptor(value, property);
+        return String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
+      }).join("\0");
+    };
+  }
+  tupleKeyCache.set(cacheKey, fn);
+  return fn;
+}
+
+// src/contracts/durable-primitives.ts
+var durableRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
+var BLOB_TREE_MODES = ["100644", "100755", "120000"];
+var CLAIMABLE_OUTPUT_PATH_CLASSES = [
+  "document",
+  "repository-source",
+  "task-branch-constitution"
+];
+var gitOid = gitOidV1Schema;
+var safeInteger2 = safeIntegerV1Schema;
+var sha256Digest = sha256DigestV1Schema;
+var blobTreeModeV1Schema = external_exports.enum(BLOB_TREE_MODES);
+var claimableOutputPathClassV1Schema = external_exports.enum(CLAIMABLE_OUTPUT_PATH_CLASSES);
+var regularBlobIdentityV1Schema = external_exports.object({
+  oid: gitOid,
+  mode: external_exports.enum(["100644", "100755"]),
+  size_bytes: safeInteger2
+}).strict();
+var symlinkBlobIdentityV1Schema = external_exports.object({
+  oid: gitOid,
+  mode: external_exports.literal("120000"),
+  size_bytes: safeInteger2
+}).strict();
+var blobIdentityV1Schema = external_exports.union([regularBlobIdentityV1Schema, symlinkBlobIdentityV1Schema]);
+var common = {
+  path: repositoryPathClaimV1Schema,
+  path_class: claimableOutputPathClassV1Schema
+};
+var gitStorage = { storage: external_exports.literal("git-object") };
+var rawStorage = {
+  storage: external_exports.literal("raw-payload"),
+  payload_bytes: safeInteger2,
+  payload_digest: sha256Digest
+};
+var addGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("regular"), after: regularBlobIdentityV1Schema }).strict();
+var addGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("symlink"), after: symlinkBlobIdentityV1Schema }).strict();
+var addRawRegular = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("regular"), after: regularBlobIdentityV1Schema }).strict();
+var addRawSymlink = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("symlink"), after: symlinkBlobIdentityV1Schema }).strict();
+var modifyGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("modify"), file_type: external_exports.literal("regular"), before: blobIdentityV1Schema, after: regularBlobIdentityV1Schema }).strict();
+var modifyGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("modify"), file_type: external_exports.literal("symlink"), before: blobIdentityV1Schema, after: symlinkBlobIdentityV1Schema }).strict();
+var modifyRawRegular = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("modify"), file_type: external_exports.literal("regular"), before: blobIdentityV1Schema, after: regularBlobIdentityV1Schema }).strict();
+var modifyRawSymlink = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("modify"), file_type: external_exports.literal("symlink"), before: blobIdentityV1Schema, after: symlinkBlobIdentityV1Schema }).strict();
+var renameGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("rename"), file_type: external_exports.literal("regular"), before: blobIdentityV1Schema, after: regularBlobIdentityV1Schema, previous_path: repositoryPathClaimV1Schema }).strict();
+var renameGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("rename"), file_type: external_exports.literal("symlink"), before: blobIdentityV1Schema, after: symlinkBlobIdentityV1Schema, previous_path: repositoryPathClaimV1Schema }).strict();
+var renameRawRegular = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("rename"), file_type: external_exports.literal("regular"), before: blobIdentityV1Schema, after: regularBlobIdentityV1Schema, previous_path: repositoryPathClaimV1Schema }).strict();
+var renameRawSymlink = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("rename"), file_type: external_exports.literal("symlink"), before: blobIdentityV1Schema, after: symlinkBlobIdentityV1Schema, previous_path: repositoryPathClaimV1Schema }).strict();
+var deleteGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("delete"), file_type: external_exports.literal("regular"), before: regularBlobIdentityV1Schema }).strict();
+var deleteGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("delete"), file_type: external_exports.literal("symlink"), before: symlinkBlobIdentityV1Schema }).strict();
+var outputEntryV1Schema = external_exports.discriminatedUnion("operation", [
+  external_exports.discriminatedUnion("storage", [
+    external_exports.discriminatedUnion("file_type", [addGitRegular, addGitSymlink]),
+    external_exports.discriminatedUnion("file_type", [addRawRegular, addRawSymlink])
+  ]),
+  external_exports.discriminatedUnion("storage", [
+    external_exports.discriminatedUnion("file_type", [modifyGitRegular, modifyGitSymlink]),
+    external_exports.discriminatedUnion("file_type", [modifyRawRegular, modifyRawSymlink])
+  ]),
+  external_exports.discriminatedUnion("storage", [
+    external_exports.discriminatedUnion("file_type", [renameGitRegular, renameGitSymlink]),
+    external_exports.discriminatedUnion("file_type", [renameRawRegular, renameRawSymlink])
+  ]),
+  external_exports.discriminatedUnion("storage", [
+    external_exports.discriminatedUnion("file_type", [deleteGitRegular, deleteGitSymlink])
+  ])
+]);
+var canonicalTaskPathsV1Schema = external_exports.object({
+  task_root: repositoryPathClaimV1Schema,
+  config: repositoryPathClaimV1Schema,
+  state: repositoryPathClaimV1Schema,
+  workflow: repositoryPathClaimV1Schema,
+  constitution_root: repositoryPathClaimV1Schema
+}).strict();
+var declaredInputRefV1Schema = external_exports.object({
+  input_id: safeIdV1Schema,
+  digest: sha256DigestV1Schema
+}).strict();
+var projectionDigestRefV1Schema = external_exports.object({
+  repository: durableRepositoryNameV1Schema.optional(),
+  path: repositoryPathClaimV1Schema,
+  content_digest: sha256Digest
+}).strict();
+var RESULT_BYTE_CAP = 26214400;
+var TASK_BYTE_CAP = 262144e3;
+var snapshotAccountingEntryV1Schema = external_exports.discriminatedUnion("storage", [
+  external_exports.object({ path: repositoryPathClaimV1Schema, storage: external_exports.literal("git-object"), stored_bytes: external_exports.literal(0) }).strict(),
+  external_exports.object({ path: repositoryPathClaimV1Schema, storage: external_exports.literal("raw-payload"), stored_bytes: safeInteger2 }).strict()
+]);
+var snapshotAccountingV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  result_bytes: external_exports.number().int().min(0).max(RESULT_BYTE_CAP),
+  task_bytes: external_exports.number().int().min(0).max(TASK_BYTE_CAP),
+  result_byte_cap: external_exports.literal(RESULT_BYTE_CAP),
+  task_byte_cap: external_exports.literal(TASK_BYTE_CAP),
+  counted_entries: external_exports.array(snapshotAccountingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "counted_entries must be sorted by path with no duplicates"),
+  measured_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
+}).strict();
+
+// src/contracts/durable-document.ts
+var additionalDocumentArtifactV1Schema = external_exports.object({
+  document_path: taskPathClaimV1Schema,
+  byte_count: safeIntegerV1Schema,
+  content_digest: sha256DigestV1Schema,
+  projection_target: repositoryPathClaimV1Schema
+}).strict();
+var reviewRevisionDeclarationSchema = external_exports.object({
+  classification: external_exports.enum(["minor", "significant"]),
+  rationale: external_exports.string().trim().min(1)
+}).strict();
+var editorialPredecessorRefV1Schema = external_exports.object({
+  subject_digest: sha256DigestV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  triage_result_digest: sha256DigestV1Schema
+}).strict();
+var documentArtifactV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("document"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  document_path: taskPathClaimV1Schema,
+  path_class: external_exports.literal("document"),
+  byte_count: safeIntegerV1Schema,
+  content_digest: sha256DigestV1Schema,
+  declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
+  input_fingerprint: sha256DigestV1Schema,
+  snapshot_digest: sha256DigestV1Schema,
+  projection_target: repositoryPathClaimV1Schema,
+  additional_documents: external_exports.array(additionalDocumentArtifactV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "additional_documents must be sorted by document_path with no duplicates").optional(),
+  editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional()
+}).strict().superRefine((artifact, context2) => {
+  if (artifact.additional_documents?.some((document2) => document2.document_path === artifact.document_path)) {
+    context2.addIssue({ code: "custom", message: "additional_documents must not repeat document_path", path: ["additional_documents"] });
+  }
+});
+function parseDocumentArtifact(value) {
+  assertPlainJson(value, "document artifact");
+  return documentArtifactV1Schema.parse(value);
 }
 
 // src/contracts/dispatch-failure.ts
@@ -39410,6 +39590,7 @@ var workflowViewV1Schema = external_exports.object({
   previous_review_reports: external_exports.array(reviewReportV1Schema).optional(),
   partial_review_reports: external_exports.array(reviewReportV1Schema).optional(),
   review_response: reviewResponseSchema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional(),
   implementation_recommendation: implementationRecommendationV1Schema,
   presentation: humanPresentationV1Schema.optional(),
   dispatch_failure: publicDispatchFailureV1Schema.optional(),
@@ -39458,7 +39639,7 @@ var routeOverrideDeclarationV1Schema = external_exports.object({
 var applySubmissionV1Schema = external_exports.union([
   external_exports.object({ kind: external_exports.literal("task-ask"), text: boundedText2 }).strict(),
   external_exports.object({ kind: external_exports.literal("reopening-request"), request: boundedText2 }).strict(),
-  external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("succeeded"), implementation: implementationFactsV1Schema.optional(), human_revision: humanRevisionDeclarationV1Schema.optional() }).strict(),
+  external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("succeeded"), implementation: implementationFactsV1Schema.optional(), human_revision: humanRevisionDeclarationV1Schema.optional(), review_revision: reviewRevisionDeclarationSchema.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("failed"), reason: boundedText2, validation_override_request: semanticValidationOverrideRequestV1Schema.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("triage"), dispositions: external_exports.array(triageDispositionV1Schema).optional(), response: reviewResponseSchema.optional() }).strict().refine((value) => value.dispositions === void 0 !== (value.response === void 0), "supply either response or archived dispositions"),
   external_exports.object({ kind: external_exports.literal("gate-summary"), summary: boundedText2 }).strict(),
@@ -39803,6 +39984,27 @@ var document_artifact_schema_default = {
         "subject_digest",
         "input_fingerprint",
         "triage_result_digest"
+      ],
+      additionalProperties: false
+    },
+    review_revision: {
+      type: "object",
+      properties: {
+        classification: {
+          type: "string",
+          enum: [
+            "minor",
+            "significant"
+          ]
+        },
+        rationale: {
+          type: "string",
+          minLength: 1
+        }
+      },
+      required: [
+        "classification",
+        "rationale"
       ],
       additionalProperties: false
     }
@@ -45249,6 +45451,47 @@ var implementation_output_schema_default = {
   },
   type: "object",
   properties: {
+    editorial_predecessor: {
+      type: "object",
+      properties: {
+        subject_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        input_fingerprint: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        triage_result_digest: {
+          $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        }
+      },
+      required: [
+        "subject_digest",
+        "input_fingerprint",
+        "triage_result_digest"
+      ],
+      additionalProperties: false
+    },
+    review_revision: {
+      type: "object",
+      properties: {
+        classification: {
+          type: "string",
+          enum: [
+            "minor",
+            "significant"
+          ]
+        },
+        rationale: {
+          type: "string",
+          minLength: 1
+        }
+      },
+      required: [
+        "classification",
+        "rationale"
+      ],
+      additionalProperties: false
+    },
     schema_version: {
       type: "string",
       const: "1"
@@ -51048,6 +51291,24 @@ var triage_schema_default = {
           properties: {
             decision: {
               type: "string",
+              const: "revise-minor"
+            },
+            rationale: {
+              type: "string",
+              minLength: 1
+            }
+          },
+          required: [
+            "decision",
+            "rationale"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            decision: {
+              type: "string",
               const: "escalate"
             },
             rationale: {
@@ -53994,6 +54255,24 @@ var semantic_workflow_schema_default = {
               properties: {
                 decision: {
                   type: "string",
+                  const: "revise-minor"
+                },
+                rationale: {
+                  type: "string",
+                  minLength: 1
+                }
+              },
+              required: [
+                "decision",
+                "rationale"
+              ],
+              additionalProperties: false
+            },
+            {
+              type: "object",
+              properties: {
+                decision: {
+                  type: "string",
                   const: "escalate"
                 },
                 rationale: {
@@ -54049,6 +54328,27 @@ var semantic_workflow_schema_default = {
               additionalProperties: false
             }
           ]
+        },
+        review_revision: {
+          type: "object",
+          properties: {
+            classification: {
+              type: "string",
+              enum: [
+                "minor",
+                "significant"
+              ]
+            },
+            rationale: {
+              type: "string",
+              minLength: 1
+            }
+          },
+          required: [
+            "classification",
+            "rationale"
+          ],
+          additionalProperties: false
         },
         implementation_recommendation: {
           $ref: "#/$defs/implementationRecommendation"
@@ -54719,6 +55019,27 @@ var semantic_workflow_schema_default = {
                 "rationale"
               ],
               additionalProperties: false
+            },
+            review_revision: {
+              type: "object",
+              properties: {
+                classification: {
+                  type: "string",
+                  enum: [
+                    "minor",
+                    "significant"
+                  ]
+                },
+                rationale: {
+                  type: "string",
+                  minLength: 1
+                }
+              },
+              required: [
+                "classification",
+                "rationale"
+              ],
+              additionalProperties: false
             }
           },
           required: [
@@ -54921,6 +55242,24 @@ var semantic_workflow_schema_default = {
                     decision: {
                       type: "string",
                       const: "finish"
+                    },
+                    rationale: {
+                      type: "string",
+                      minLength: 1
+                    }
+                  },
+                  required: [
+                    "decision",
+                    "rationale"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    decision: {
+                      type: "string",
+                      const: "revise-minor"
                     },
                     rationale: {
                       type: "string",
@@ -55883,6 +56222,24 @@ var semantic_workflow_schema_default = {
           properties: {
             decision: {
               type: "string",
+              const: "revise-minor"
+            },
+            rationale: {
+              type: "string",
+              minLength: 1
+            }
+          },
+          required: [
+            "decision",
+            "rationale"
+          ],
+          additionalProperties: false
+        },
+        {
+          type: "object",
+          properties: {
+            decision: {
+              type: "string",
               const: "escalate"
             },
             rationale: {
@@ -55938,6 +56295,27 @@ var semantic_workflow_schema_default = {
           additionalProperties: false
         }
       ]
+    },
+    review_revision: {
+      type: "object",
+      properties: {
+        classification: {
+          type: "string",
+          enum: [
+            "minor",
+            "significant"
+          ]
+        },
+        rationale: {
+          type: "string",
+          minLength: 1
+        }
+      },
+      required: [
+        "classification",
+        "rationale"
+      ],
+      additionalProperties: false
     },
     implementation_recommendation: {
       $ref: "#/$defs/implementationRecommendation"
@@ -56934,10 +57312,10 @@ var idSchema = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,12
 var digestSchema = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var phaseSchema = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u);
 var familySchema = external_exports.enum(MODEL_FAMILIES);
-var safeInteger2 = external_exports.number().int().nonnegative().safe();
-var agentAuthoritySchema = external_exports.object({ kind: external_exports.literal("agent-declared"), result_id: idSchema, result_digest: digestSchema, state_revision: safeInteger2 }).strict();
-var serverAuthoritySchema = external_exports.object({ kind: external_exports.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger2, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
-var degradedAuthoritySchema = external_exports.object({ kind: external_exports.literal("degraded"), checkpoint_digest: digestSchema, checkpoint_revision: safeInteger2 }).strict();
+var safeInteger3 = external_exports.number().int().nonnegative().safe();
+var agentAuthoritySchema = external_exports.object({ kind: external_exports.literal("agent-declared"), result_id: idSchema, result_digest: digestSchema, state_revision: safeInteger3 }).strict();
+var serverAuthoritySchema = external_exports.object({ kind: external_exports.literal("server"), invocation_id: idSchema, result_id: idSchema, receipt_id: idSchema, state_revision: safeInteger3, envelope_input_digest: digestSchema, observed_output_digest: digestSchema, result_digest: digestSchema }).strict();
+var degradedAuthoritySchema = external_exports.object({ kind: external_exports.literal("degraded"), checkpoint_digest: digestSchema, checkpoint_revision: safeInteger3 }).strict();
 var authorityReferencesSchema = external_exports.discriminatedUnion("kind", [agentAuthoritySchema, serverAuthoritySchema, degradedAuthoritySchema]);
 var authorityLinkDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), evidence_kind: external_exports.enum(["review", "adjudication"]), assurance: external_exports.enum(["agent-declared", "server-attested", "degraded"]), role: external_exports.enum(["counter-review", "adjudication"]), task_id: taskSlugV1Schema, phase_instance: phaseSchema, subject_digest: digestSchema, input_fingerprint: digestSchema, evidence_digest: digestSchema, authority: authorityReferencesSchema }).strict().superRefine((link2, context2) => {
   if (link2.evidence_kind === "adjudication" !== (link2.role === "adjudication")) context2.addIssue({ code: "custom", path: ["role"], message: "role must match evidence kind" });
@@ -57356,180 +57734,6 @@ function parseActiveGate(value) {
 // src/contracts/mcp-tools.ts
 import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 
-// src/contracts/validators.ts
-function isSortedUniqueBy(items, key2 = String) {
-  if (!Array.isArray(items)) return false;
-  if (items.length <= 1) return true;
-  let prevKey = key2(items[0]);
-  for (let i = 1; i < items.length; i++) {
-    const currentKey = key2(items[i]);
-    if (prevKey >= currentKey) return false;
-    prevKey = currentKey;
-  }
-  return true;
-}
-var tupleKeyCache = /* @__PURE__ */ new Map();
-function tupleKey(properties) {
-  const cacheKey = typeof properties === "string" ? properties : properties.join("\0");
-  const cached2 = tupleKeyCache.get(cacheKey);
-  if (cached2 !== void 0) return cached2;
-  const propertyNames = typeof properties === "string" ? [properties] : [...properties];
-  let fn;
-  if (propertyNames.length === 1) {
-    const prop = propertyNames[0];
-    fn = (value) => {
-      if (typeof value !== "object" || value === null) return String(value);
-      const descriptor = Object.getOwnPropertyDescriptor(value, prop);
-      return String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
-    };
-  } else {
-    fn = (value) => {
-      if (typeof value !== "object" || value === null) return String(value);
-      return propertyNames.map((property) => {
-        const descriptor = Object.getOwnPropertyDescriptor(value, property);
-        return String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
-      }).join("\0");
-    };
-  }
-  tupleKeyCache.set(cacheKey, fn);
-  return fn;
-}
-
-// src/contracts/durable-primitives.ts
-var durableRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
-var BLOB_TREE_MODES = ["100644", "100755", "120000"];
-var CLAIMABLE_OUTPUT_PATH_CLASSES = [
-  "document",
-  "repository-source",
-  "task-branch-constitution"
-];
-var gitOid = gitOidV1Schema;
-var safeInteger3 = safeIntegerV1Schema;
-var sha256Digest = sha256DigestV1Schema;
-var blobTreeModeV1Schema = external_exports.enum(BLOB_TREE_MODES);
-var claimableOutputPathClassV1Schema = external_exports.enum(CLAIMABLE_OUTPUT_PATH_CLASSES);
-var regularBlobIdentityV1Schema = external_exports.object({
-  oid: gitOid,
-  mode: external_exports.enum(["100644", "100755"]),
-  size_bytes: safeInteger3
-}).strict();
-var symlinkBlobIdentityV1Schema = external_exports.object({
-  oid: gitOid,
-  mode: external_exports.literal("120000"),
-  size_bytes: safeInteger3
-}).strict();
-var blobIdentityV1Schema = external_exports.union([regularBlobIdentityV1Schema, symlinkBlobIdentityV1Schema]);
-var common = {
-  path: repositoryPathClaimV1Schema,
-  path_class: claimableOutputPathClassV1Schema
-};
-var gitStorage = { storage: external_exports.literal("git-object") };
-var rawStorage = {
-  storage: external_exports.literal("raw-payload"),
-  payload_bytes: safeInteger3,
-  payload_digest: sha256Digest
-};
-var addGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("regular"), after: regularBlobIdentityV1Schema }).strict();
-var addGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("symlink"), after: symlinkBlobIdentityV1Schema }).strict();
-var addRawRegular = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("regular"), after: regularBlobIdentityV1Schema }).strict();
-var addRawSymlink = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("add"), file_type: external_exports.literal("symlink"), after: symlinkBlobIdentityV1Schema }).strict();
-var modifyGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("modify"), file_type: external_exports.literal("regular"), before: blobIdentityV1Schema, after: regularBlobIdentityV1Schema }).strict();
-var modifyGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("modify"), file_type: external_exports.literal("symlink"), before: blobIdentityV1Schema, after: symlinkBlobIdentityV1Schema }).strict();
-var modifyRawRegular = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("modify"), file_type: external_exports.literal("regular"), before: blobIdentityV1Schema, after: regularBlobIdentityV1Schema }).strict();
-var modifyRawSymlink = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("modify"), file_type: external_exports.literal("symlink"), before: blobIdentityV1Schema, after: symlinkBlobIdentityV1Schema }).strict();
-var renameGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("rename"), file_type: external_exports.literal("regular"), before: blobIdentityV1Schema, after: regularBlobIdentityV1Schema, previous_path: repositoryPathClaimV1Schema }).strict();
-var renameGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("rename"), file_type: external_exports.literal("symlink"), before: blobIdentityV1Schema, after: symlinkBlobIdentityV1Schema, previous_path: repositoryPathClaimV1Schema }).strict();
-var renameRawRegular = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("rename"), file_type: external_exports.literal("regular"), before: blobIdentityV1Schema, after: regularBlobIdentityV1Schema, previous_path: repositoryPathClaimV1Schema }).strict();
-var renameRawSymlink = external_exports.object({ ...common, ...rawStorage, operation: external_exports.literal("rename"), file_type: external_exports.literal("symlink"), before: blobIdentityV1Schema, after: symlinkBlobIdentityV1Schema, previous_path: repositoryPathClaimV1Schema }).strict();
-var deleteGitRegular = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("delete"), file_type: external_exports.literal("regular"), before: regularBlobIdentityV1Schema }).strict();
-var deleteGitSymlink = external_exports.object({ ...common, ...gitStorage, operation: external_exports.literal("delete"), file_type: external_exports.literal("symlink"), before: symlinkBlobIdentityV1Schema }).strict();
-var outputEntryV1Schema = external_exports.discriminatedUnion("operation", [
-  external_exports.discriminatedUnion("storage", [
-    external_exports.discriminatedUnion("file_type", [addGitRegular, addGitSymlink]),
-    external_exports.discriminatedUnion("file_type", [addRawRegular, addRawSymlink])
-  ]),
-  external_exports.discriminatedUnion("storage", [
-    external_exports.discriminatedUnion("file_type", [modifyGitRegular, modifyGitSymlink]),
-    external_exports.discriminatedUnion("file_type", [modifyRawRegular, modifyRawSymlink])
-  ]),
-  external_exports.discriminatedUnion("storage", [
-    external_exports.discriminatedUnion("file_type", [renameGitRegular, renameGitSymlink]),
-    external_exports.discriminatedUnion("file_type", [renameRawRegular, renameRawSymlink])
-  ]),
-  external_exports.discriminatedUnion("storage", [
-    external_exports.discriminatedUnion("file_type", [deleteGitRegular, deleteGitSymlink])
-  ])
-]);
-var canonicalTaskPathsV1Schema = external_exports.object({
-  task_root: repositoryPathClaimV1Schema,
-  config: repositoryPathClaimV1Schema,
-  state: repositoryPathClaimV1Schema,
-  workflow: repositoryPathClaimV1Schema,
-  constitution_root: repositoryPathClaimV1Schema
-}).strict();
-var declaredInputRefV1Schema = external_exports.object({
-  input_id: safeIdV1Schema,
-  digest: sha256DigestV1Schema
-}).strict();
-var projectionDigestRefV1Schema = external_exports.object({
-  repository: durableRepositoryNameV1Schema.optional(),
-  path: repositoryPathClaimV1Schema,
-  content_digest: sha256Digest
-}).strict();
-var RESULT_BYTE_CAP = 26214400;
-var TASK_BYTE_CAP = 262144e3;
-var snapshotAccountingEntryV1Schema = external_exports.discriminatedUnion("storage", [
-  external_exports.object({ path: repositoryPathClaimV1Schema, storage: external_exports.literal("git-object"), stored_bytes: external_exports.literal(0) }).strict(),
-  external_exports.object({ path: repositoryPathClaimV1Schema, storage: external_exports.literal("raw-payload"), stored_bytes: safeInteger3 }).strict()
-]);
-var snapshotAccountingV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  result_bytes: external_exports.number().int().min(0).max(RESULT_BYTE_CAP),
-  task_bytes: external_exports.number().int().min(0).max(TASK_BYTE_CAP),
-  result_byte_cap: external_exports.literal(RESULT_BYTE_CAP),
-  task_byte_cap: external_exports.literal(TASK_BYTE_CAP),
-  counted_entries: external_exports.array(snapshotAccountingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "counted_entries must be sorted by path with no duplicates"),
-  measured_at_revision: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
-}).strict();
-
-// src/contracts/durable-document.ts
-var additionalDocumentArtifactV1Schema = external_exports.object({
-  document_path: taskPathClaimV1Schema,
-  byte_count: safeIntegerV1Schema,
-  content_digest: sha256DigestV1Schema,
-  projection_target: repositoryPathClaimV1Schema
-}).strict();
-var editorialPredecessorRefV1Schema = external_exports.object({
-  subject_digest: sha256DigestV1Schema,
-  input_fingerprint: sha256DigestV1Schema,
-  triage_result_digest: sha256DigestV1Schema
-}).strict();
-var documentArtifactV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("document"),
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  document_path: taskPathClaimV1Schema,
-  path_class: external_exports.literal("document"),
-  byte_count: safeIntegerV1Schema,
-  content_digest: sha256DigestV1Schema,
-  declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
-  input_fingerprint: sha256DigestV1Schema,
-  snapshot_digest: sha256DigestV1Schema,
-  projection_target: repositoryPathClaimV1Schema,
-  additional_documents: external_exports.array(additionalDocumentArtifactV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "additional_documents must be sorted by document_path with no duplicates").optional(),
-  editorial_predecessor: editorialPredecessorRefV1Schema.optional()
-}).strict().superRefine((artifact, context2) => {
-  if (artifact.additional_documents?.some((document2) => document2.document_path === artifact.document_path)) {
-    context2.addIssue({ code: "custom", message: "additional_documents must not repeat document_path", path: ["additional_documents"] });
-  }
-});
-function parseDocumentArtifact(value) {
-  assertPlainJson(value, "document artifact");
-  return documentArtifactV1Schema.parse(value);
-}
-
 // src/contracts/secret-scan.ts
 var detectorId = safeIdV1Schema;
 var pathClass2 = external_exports.enum(PATH_CLASSES);
@@ -57602,6 +57806,8 @@ var implementationRepositorySectionV1Schema = external_exports.object({
   }).strict()).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates")
 }).strict();
 var implementationOutputV1Schema = external_exports.object({
+  editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional(),
   schema_version: external_exports.literal("1"),
   artifact_kind: external_exports.literal("implementation-output"),
   task_id: taskSlugV1Schema,
@@ -57624,6 +57830,10 @@ var implementationOutputV1Schema = external_exports.object({
   constitution_edit_gate_id: pathSafeIdV1Schema.optional(),
   secondary_repositories: external_exports.array(implementationRepositorySectionV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_repositories must be sorted by repository with no duplicates").optional()
 }).strict();
+function parseImplementationOutput(value) {
+  assertPlainJson(value, "implementation output");
+  return implementationOutputV1Schema.parse(value);
+}
 
 // src/contracts/durable-legacy-import.ts
 var sha256Digest3 = sha256DigestV1Schema;
@@ -69450,7 +69660,7 @@ function retainedEditorialTriage(retained) {
   const source = entry?.manifest.source_artifact;
   if (entry === void 0 || source?.artifact_kind !== "triage") return void 0;
   const triage = source.evidence;
-  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0 || (triage.escalated_human_count ?? 0) !== 0) return void 0;
+  if (triage.accepted_count !== 0 || (triage.accepted_editorial_count ?? 0) === 0 && triage.response?.decision !== "revise-minor" || (triage.escalated_human_count ?? 0) !== 0) return void 0;
   let derived;
   try {
     derived = deriveCurrentEvidenceSet(retained);
@@ -69461,12 +69671,13 @@ function retainedEditorialTriage(retained) {
   return Object.freeze({ triage, triage_result_digest: entry.reference.result_digest });
 }
 async function derivePendingEditorialPredecessor(dependencies, state) {
+  if (state.pending_human_revision !== void 0) return void 0;
   const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
   if (!retained.ok) return void 0;
   const editorial = retainedEditorialTriage(retained.value);
   if (editorial === void 0) return void 0;
   const produced = await currentProduceSubject(dependencies, state);
-  if (!produced.ok || produced.value.artifact.artifact_kind !== "document") return void 0;
+  if (!produced.ok) return void 0;
   if (editorial.triage.subject_digest !== produced.value.artifact_digest) return void 0;
   return Object.freeze({
     subject_digest: produced.value.artifact_digest,
@@ -69476,7 +69687,6 @@ async function derivePendingEditorialPredecessor(dependencies, state) {
 }
 async function validateEditorialPredecessorDeclaration(dependencies, state, artifact) {
   const declared = artifact.editorial_predecessor;
-  if (declared === void 0) return ok9(void 0);
   const invalid2 = (issue4) => Object.freeze({
     schema_version: "1",
     ok: false,
@@ -69486,11 +69696,45 @@ async function validateEditorialPredecessorDeclaration(dependencies, state, arti
     })
   });
   const produced = await currentProduceSubject(dependencies, state);
-  if (!produced.ok || produced.value.artifact.artifact_kind !== "document" || produced.value.artifact_digest !== declared.subject_digest) return invalid2("editorial-predecessor-not-current-produce");
+  const pending = await derivePendingEditorialPredecessor(dependencies, state);
   const retained = await loadRetainedEvidence(dependencies, state, state.phase_instance);
   if (!retained.ok) return invalid2("editorial-authorizing-triage-invalid");
   const editorial = retainedEditorialTriage(retained.value);
+  const minorPending = pending !== void 0 && editorial?.triage.response?.decision === "revise-minor";
+  const revision = artifact.review_revision;
+  if (minorPending !== (revision !== void 0)) return invalid2("minor-revision-declaration-required-only-when-pending");
+  if (revision?.classification === "significant") {
+    return declared === void 0 ? ok9(void 0) : invalid2("significant-revision-cannot-reuse-review");
+  }
+  if (revision?.classification === "minor" && declared === void 0) return invalid2("minor-revision-predecessor-required");
+  if (declared === void 0) return ok9(void 0);
+  if (!produced.ok || pending === void 0 || produced.value.artifact.artifact_kind !== artifact.artifact_kind || produced.value.artifact_digest !== declared.subject_digest) return invalid2("editorial-predecessor-not-current-produce");
   if (editorial === void 0 || editorial.triage.subject_digest !== declared.subject_digest || editorial.triage.input_fingerprint !== declared.input_fingerprint || editorial.triage_result_digest !== declared.triage_result_digest) return invalid2("editorial-authorizing-triage-invalid");
+  if (canonicalJsonDigest(artifact.declared_inputs) !== canonicalJsonDigest(produced.value.artifact.declared_inputs)) {
+    return invalid2("editorial-revision-inputs-changed");
+  }
+  if (artifact.artifact_kind === "implementation-output") {
+    const previous = produced.value.artifact;
+    if (previous.artifact_kind !== "implementation-output" || !minorPending) return invalid2("implementation-minor-revision-not-authorized");
+    const boundary = (output) => canonicalJsonDigest({
+      base_commit: output.base_commit,
+      paths: output.outputs.map((entry) => entry.path),
+      parents: output.parent_documents.filter((document2) => document2.role !== "impl-notes"),
+      secondary: (output.secondary_repositories ?? []).map((section) => ({
+        repository: section.repository,
+        repository_identity_digest: section.repository_identity_digest,
+        base_commit: section.base_commit,
+        paths: section.outputs.map((entry) => entry.path),
+        declared_inputs: section.declared_inputs
+      }))
+    });
+    if (boundary(artifact) !== boundary(previous)) return invalid2("editorial-revision-implementation-boundary-changed");
+    return ok9(void 0);
+  }
+  if (produced.value.artifact.artifact_kind !== "document") return invalid2("editorial-revision-kind-changed");
+  if (artifact.document_path !== produced.value.artifact.document_path || artifact.projection_target !== produced.value.artifact.projection_target) {
+    return invalid2("editorial-revision-document-target-changed");
+  }
   if (artifact.content_digest === produced.value.artifact.content_digest) {
     return invalid2("editorial-revision-unchanged-bytes");
   }
@@ -69536,7 +69780,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
       { load_retained_manifest: dependencies.load_retained_manifest },
       stateDocument.value
     );
-    const predecessor = produced.ok && produced.value.artifact.artifact_kind === "document" ? produced.value.artifact.editorial_predecessor : void 0;
+    const predecessor = produced.ok ? produced.value.artifact.editorial_predecessor : void 0;
     if (predecessor === void 0 || derived.subject_digest !== predecessor.subject_digest || derived.input_fingerprint !== predecessor.input_fingerprint) {
       throw new TypeError("retained reviews do not form one current review set");
     }
@@ -69781,12 +70025,14 @@ function currentReviewSet(state, retained, subject) {
   try {
     const derived = deriveCurrentEvidenceSet(retained);
     const phaseDesign = state.phase_instance.startsWith("phase-design-");
-    const current = phaseDesign ? boundToSubjectExactly(derived, subject) : boundToSubjectOrDeclaredPredecessor(derived, subject);
+    const triageSource = retained.get("triage")?.manifest.source_artifact;
+    const minorReuse = triageSource?.artifact_kind === "triage" && triageSource.evidence.response?.decision === "revise-minor";
+    const current = phaseDesign && !minorReuse ? boundToSubjectExactly(derived, subject) : boundToSubjectOrDeclaredPredecessor(derived, subject);
     if (!current) return void 0;
     if (phaseDesign) {
       const counter2 = derived.reviews[0]?.evidence;
       const effort = counter2?.assurance === "server-attested" ? counter2.effort_review : void 0;
-      if (effort !== void 0 && (effort.task_id !== state.task_id || effort.phase_instance !== state.phase_instance || effort.attempt !== state.attempt || !boundToSubjectExactly(effort, subject))) return void 0;
+      if (effort !== void 0 && (effort.task_id !== state.task_id || effort.phase_instance !== state.phase_instance || !minorReuse && effort.attempt !== state.attempt || !(minorReuse ? boundToSubjectOrDeclaredPredecessor(effort, subject) : boundToSubjectExactly(effort, subject)))) return void 0;
     }
     const counter = derived.reviews[0]?.evidence;
     if (counter?.schema_version === "3") {
@@ -70076,7 +70322,7 @@ function acceptedFindingsForceReentry(state, disposition) {
   return disposition.accepted && state.step === "triage" && state.status === "succeeded";
 }
 function editorialRevisionPending(triageCurrent, disposition, subject, acceptedSettled) {
-  return triageCurrent !== void 0 && disposition.complete && (triageCurrent.accepted_count === 0 || acceptedSettled) && (triageCurrent.accepted_editorial_count ?? 0) > 0 && (triageCurrent.escalated_human_count ?? 0) === 0 && boundToSubjectExactly(triageCurrent, subject);
+  return triageCurrent !== void 0 && disposition.complete && (triageCurrent.accepted_count === 0 || acceptedSettled) && ((triageCurrent.accepted_editorial_count ?? 0) > 0 || triageCurrent.response?.decision === "revise-minor") && (triageCurrent.escalated_human_count ?? 0) === 0 && boundToSubjectExactly(triageCurrent, subject);
 }
 function decision2(next, flags) {
   return Object.freeze({
@@ -70140,7 +70386,7 @@ function decideNextAction(state, retained, subject, current, disposition, triage
   if (!current.includes("triage") || !disposition.complete) return decision2("triage");
   if (disposition.accepted && !acceptedSettled) return decision2("triage");
   if (editorialRevisionPending(triageCurrent, disposition, subject, acceptedSettled)) {
-    if (state.phase_instance !== "prd" && state.phase_instance !== "design") {
+    if (triageCurrent?.response?.decision !== "revise-minor" && state.phase_instance !== "prd" && state.phase_instance !== "design") {
       return decision2("produce", { reentry_required: true });
     }
     return decision2("produce", { editorial_revision_required: true });
@@ -71453,7 +71699,7 @@ function validRuleSettlementBoundary(input, settlement) {
   if (input.target.step !== "produce" || input.current.step !== "produce" || input.current.status !== "running" || input.resulting_subject_digest !== settlement.subject_digest) {
     return false;
   }
-  const editorial = input.artifact?.artifact_kind === "document" && input.artifact.editorial_predecessor !== void 0;
+  const editorial = (input.artifact?.artifact_kind === "document" || input.artifact?.artifact_kind === "implementation-output") && input.artifact.editorial_predecessor !== void 0;
   return editorial && input.current.pending_human_revision === void 0 && input.human_revision === void 0;
 }
 function legalRunStepStatus(current, step) {
@@ -74698,7 +74944,7 @@ function deriveNextAction(input) {
     if (next === "produce" && input.assessment?.editorial_revision_required === true) {
       return action(
         "run-step",
-        "Apply exactly the accepted editorial revision intents to the artifact, then run the produce step; nothing is re-run \u2014 the retained reviews and constitution verdict stay bound to the declared predecessor.",
+        "Apply the accepted minor or editorial corrections and run applicable checks. The retained reviews and constitution verdict can be reused once for the declared predecessor; significant changes require fresh review.",
         false,
         state,
         { step: "produce", editorial_revision: true }
@@ -75281,7 +75527,7 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
 }
 function currentReviewPredecessor(state, produceSubject) {
   const midProduce = state.step === "produce" && state.status !== "succeeded";
-  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
+  const declaredPredecessor = !midProduce && produceSubject !== void 0 ? produceSubject.artifact.editorial_predecessor : void 0;
   const currentProduceReference = state.authoritative_results.find((reference) => reference.phase_instance === state.phase_instance && reference.step === "produce");
   const simpleHumanRevision = currentProduceReference === void 0 ? void 0 : [...state.human_revision_history ?? []].reverse().find((revision) => revision.phase_instance === state.phase_instance && revision.classification === "simple" && revision.resulting_result_digest === currentProduceReference.result_digest);
   return declaredPredecessor === void 0 ? simpleHumanRevision === void 0 ? void 0 : Object.freeze({
@@ -76082,7 +76328,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       }
     }
   }
-  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document" ? produceSubject.artifact.editorial_predecessor : void 0;
+  const declaredPredecessor = !midProduce && produceSubject !== void 0 ? produceSubject.artifact.editorial_predecessor : void 0;
   const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
   let assessment;
   let assessmentSubject;
@@ -76112,7 +76358,10 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     if (resolvedAssessment.blocking_reason !== void 0) blockers.push(resolvedAssessment.blocking_reason);
   }
   let editorialRevision;
-  if (declaredPredecessor !== void 0) {
+  const triageArtifact = retained.get("triage")?.manifest.source_artifact;
+  const minorRevisionPending = state.pending_human_revision === void 0 && produceSubject !== void 0 && triageArtifact?.artifact_kind === "triage" && triageArtifact.evidence.response?.decision === "revise-minor" && triageArtifact.evidence.subject_digest === produceSubject.artifact_digest;
+  const reviewedArtifact = retained.get("counter_review")?.manifest.source_artifact;
+  if (declaredPredecessor !== void 0 && reviewedArtifact?.artifact_kind === "review-evidence" && reviewedArtifact.evidence.subject_digest === declaredPredecessor.subject_digest) {
     const triageSource = retained.get("triage")?.manifest.source_artifact;
     const dispositions = triageSource?.artifact_kind === "triage" ? triageSource.evidence.dispositions.filter((item) => item.disposition === "accepted-editorial").map((item) => Object.freeze({
       finding_id: item.finding_id,
@@ -76442,7 +76691,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     state,
     produceSubject.artifact_digest,
     produceSubject.artifact.phase_instance
-  ) ?? (produceSubject.artifact.artifact_kind === "document" && produceSubject.artifact.editorial_predecessor !== void 0 ? latestEligibleRuleSettlement(
+  ) ?? (produceSubject.artifact.editorial_predecessor !== void 0 ? latestEligibleRuleSettlement(
     state,
     produceSubject.artifact.editorial_predecessor.subject_digest,
     produceSubject.artifact.phase_instance
@@ -76671,6 +76920,8 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     ...statusReconciliation === void 0 ? {} : { reconciliation: statusReconciliation },
     evidence,
     ...editorialRevision === void 0 ? {} : { editorial_revision: editorialRevision },
+    ...produceSubject?.artifact.review_revision === void 0 ? {} : { review_revision: produceSubject.artifact.review_revision },
+    ...minorRevisionPending ? { minor_revision_pending: true } : {},
     ...gateInput === void 0 ? {} : { gate_input: gateInput },
     ...baselineAdoptionInput === void 0 ? {} : { baseline_adoption_gate: baselineAdoptionInput },
     ...milestoneRecoveryFacts === void 0 ? {} : { milestone_recovery: milestoneRecoveryFacts },
@@ -77118,7 +77369,7 @@ function nextStateForRecord(state, record3, digest11, plannedFinalPhase) {
   return canonicalDocument({ ...preserved, revision, approvals, waivers });
 }
 function waiverReviewPredecessor(state, produce) {
-  const declared = produce.artifact.artifact_kind === "document" ? produce.artifact.editorial_predecessor : void 0;
+  const declared = produce.artifact.editorial_predecessor;
   if (declared !== void 0) return Object.freeze({
     subject_digest: declared.subject_digest,
     input_fingerprint: declared.input_fingerprint
@@ -77141,7 +77392,7 @@ async function stateAfterPolicyWaiverSettlement(dependencies, authority, current
     return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-subject-stale");
   }
   const finalTriage = current.value.step === "triage";
-  const editorialReentry = current.value.step === "produce" && produce.value.artifact.artifact_kind === "document" && produce.value.artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0;
+  const editorialReentry = current.value.step === "produce" && produce.value.artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0;
   if (!finalTriage && !editorialReentry) {
     return ok7(nextStateForRecord(current.value, record3, digest11));
   }
@@ -79922,7 +80173,7 @@ var BUILD_REQUEST_KINDS = Object.freeze([
   "recover-approval-trigger-authority",
   "refresh-stale-baseline"
 ]);
-var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"response"?:{"decision":"finish"|"revise"|"escalate","rationale":<text>,"reviewers"?:[{"reviewer_id":<id>,"request":<verification request>}]},"summary"?:<gate summary text>,"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"route_override"?:{"reason":<why the selected reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"test-reviewer"?:{...},"adjudicator"?:{...}},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}`;
+var PAYLOAD_SHAPE = `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},"step"?:<pipeline step for kind running>,"document"?:{...},"implementation"?:{...},"review_revision"?:{"classification":"minor"|"significant","rationale":<text>},"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],"response"?:{"decision":"finish"|"revise"|"revise-minor"|"escalate","rationale":<text>,"reviewers"?:[{"reviewer_id":<id>,"request":<verification request>}]},"summary"?:<gate summary text>,"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},"route_override"?:{"reason":<why the selected reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"test-reviewer"?:{...},"adjudicator"?:{...}},"origin"?:<waiver origin>,"rationale"?:<waiver rationale>}`;
 function record2(value, name) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${name} must be an object; expected ${PAYLOAD_SHAPE}`);
@@ -80134,12 +80385,23 @@ async function composeProduce(services, state, intentId, snapshot) {
       input_fingerprint: state.input_fingerprint
     });
     if (!built.ok) return built;
-    const editorial = await derivePendingEditorialPredecessor(services.dependencies, state);
-    artifact = editorial === void 0 ? built.value : parseDocumentArtifact({
-      ...built.value,
-      editorial_predecessor: editorial
-    });
+    artifact = built.value;
   }
+  const editorial = await derivePendingEditorialPredecessor(services.dependencies, state);
+  const retained = await loadRetainedEvidence(services.dependencies, state, state.phase_instance);
+  if (!retained.ok) return retained;
+  const triage = retained.value.get("triage")?.manifest.source_artifact;
+  const minorPending = editorial !== void 0 && triage?.artifact_kind === "triage" && triage.evidence.response?.decision === "revise-minor";
+  if (minorPending !== (snapshot.review_revision !== void 0)) {
+    throw new TypeError(minorPending ? "This minor revision requires review_revision.classification (minor or significant) and rationale describing the actual diff." : "review_revision is accepted only while a report-based minor revision is pending.");
+  }
+  const revision = snapshot.review_revision === void 0 ? void 0 : reviewRevisionDeclarationSchema.parse(snapshot.review_revision);
+  const candidate = {
+    ...record2(artifact, "produced artifact"),
+    ...revision === void 0 ? {} : { review_revision: revision },
+    ...editorial === void 0 || revision?.classification === "significant" ? {} : { editorial_predecessor: editorial }
+  };
+  artifact = phaseKind2 === "phase-impl" ? parseImplementationOutput(candidate) : parseDocumentArtifact(candidate);
   let humanRevision;
   if (state.pending_human_revision !== void 0) {
     if (snapshot.human_revision === void 0) {
@@ -80527,7 +80789,7 @@ async function composeGate(services, state, intentId, snapshot) {
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
-  const editorialPredecessorDigest = subject.value.artifact.artifact_kind === "document" ? subject.value.artifact.editorial_predecessor?.subject_digest : void 0;
+  const editorialPredecessorDigest = subject.value.artifact.editorial_predecessor?.subject_digest;
   let settledRule = latestEligibleRuleSettlement(
     state,
     subject.value.artifact_digest,
@@ -81137,7 +81399,7 @@ function mapRunStep(status, action2, snapshot) {
           headline: "Client work is in progress",
           detail: action2.detail,
           action_kind: "submit-work",
-          instruction: snapshot.state?.pending_human_revision === void 0 ? "Complete and verify the client-owned work, then submit its result." : "Complete and verify the human-requested revision, then submit its result. A succeeded work-result requires human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes. Simple means wording or formatting only with no change in meaning; otherwise classify as significant, including when uncertain. Record any explicit human override in human_revision.user_override.",
+          instruction: snapshot.state?.pending_human_revision === void 0 ? status.minor_revision_pending === true ? "Complete the localized correction and applicable automated checks. Include review_revision.classification (minor or significant) and review_revision.rationale describing the actual diff. Minor may clarify established intent, but new requirements, behavior changes, or coordinated rewrites require significant classification and fresh review." : "Complete and verify the client-owned work, then submit its result." : "Complete and verify the human-requested revision, then submit its result. A succeeded work-result requires human_revision.classification (simple or significant) and human_revision.rationale describing the actual changes. Simple means wording or formatting only with no change in meaning; otherwise classify as significant, including when uncertain. Record any explicit human override in human_revision.user_override.",
           expected_submission: "work-result"
         });
       }
@@ -81160,7 +81422,7 @@ function mapRunStep(status, action2, snapshot) {
         expected_submission: "review-dispatch"
       });
     case "triage":
-      return snapshot.review_reports !== void 0 ? Object.freeze({ condition: "awaiting-client", headline: "Review feedback is ready", detail: "Read the reviewer reports and decide whether to revise, finish, or ask the human.", action_kind: "triage", instruction: "Submit a response with decision and rationale; for revise include selected reviewer IDs and verification requests.", expected_submission: "triage" }) : snapshot.full_findings.length === 0 ? Object.freeze({
+      return snapshot.review_reports !== void 0 ? Object.freeze({ condition: "awaiting-client", headline: "Review feedback is ready", detail: "Read the reviewer reports and decide whether to revise, make a minor correction, finish, or ask the human.", action_kind: "triage", instruction: "Submit decision and rationale. Use revise with selected reviewer IDs and verification requests for substantive changes; revise-minor without reviewer selection for localized corrections or clarification of established intent. Coordinated rewrites and new requirements need review. Use finish when no worthwhile change remains, or escalate for human judgment.", expected_submission: "triage" }) : snapshot.full_findings.length === 0 ? Object.freeze({
         condition: "awaiting-client",
         headline: "Review settlement is ready",
         detail: "The authenticated review has no findings; record its deterministic empty triage.",
@@ -81472,7 +81734,7 @@ function projectSemanticStatus(snapshot, invocation) {
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch2}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}`,
+    detail: `${shape.detail}${mismatch2}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}${status.editorial_revision !== void 0 ? " The minor revision reuses the prior review; the final correction has not received another AI review." : ""}`,
     ...position2 === void 0 ? {} : { position: position2 },
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
@@ -81486,6 +81748,7 @@ function projectSemanticStatus(snapshot, invocation) {
     ...snapshot.previous_review_reports === void 0 ? {} : { previous_review_reports: snapshot.previous_review_reports },
     ...snapshot.partial_review_reports === void 0 ? {} : { partial_review_reports: snapshot.partial_review_reports },
     ...snapshot.review_response === void 0 ? {} : { review_response: snapshot.review_response },
+    ...snapshot.review_revision === void 0 ? {} : { review_revision: snapshot.review_revision },
     implementation_recommendation: snapshot.implementation_recommendation,
     ...snapshot.validation_overrides === void 0 ? {} : {
       validation_overrides: snapshot.validation_overrides
@@ -82582,7 +82845,7 @@ function assertSubmissionMatches(expected, submission) {
     throw new SemanticActionPlanError("SEMANTIC_SUBMISSION_MISMATCH", expectedSubmissionMessage(expected, actual));
   }
 }
-function assertWorkResultFactsMatchPosition(offer, submission, state) {
+function assertWorkResultFactsMatchPosition(offer, submission, state, minorRevisionPending) {
   if (offer.action_kind !== "submit-work" || submission?.kind !== "work-result") return;
   const position2 = offer.phase_instance === void 0 ? void 0 : decodePhaseInstance(offer.phase_instance).kind;
   if (submission.outcome === "failed") {
@@ -82605,6 +82868,9 @@ function assertWorkResultFactsMatchPosition(offer, submission, state) {
       "SEMANTIC_SUBMISSION_MISMATCH",
       "human_revision is accepted only when a human-requested revision is pending. Submit this work-result without human_revision."
     );
+  }
+  if (minorRevisionPending !== (submission.review_revision !== void 0)) {
+    throw new SemanticActionPlanError("SEMANTIC_SUBMISSION_MISMATCH", minorRevisionPending ? "This minor revision requires review_revision.classification (minor or significant) and review_revision.rationale describing the actual diff." : "review_revision is accepted only while a report-based minor revision is pending.");
   }
   if (position2 === "phase-impl") {
     if (submission.implementation === void 0) {
@@ -82842,7 +83108,8 @@ function requestFacts(action2, substep, intentId, submission, nextActionCode, in
         kind: "produce",
         intent_id: intentId,
         ...submission.implementation === void 0 ? {} : { implementation: submission.implementation },
-        ...submission.human_revision === void 0 ? {} : { human_revision: submission.human_revision }
+        ...submission.human_revision === void 0 ? {} : { human_revision: submission.human_revision },
+        ...submission.review_revision === void 0 ? {} : { review_revision: submission.review_revision }
       } };
     }
     case "review":
@@ -82897,7 +83164,7 @@ function planSemanticAction(snapshot, value) {
   if (offer === void 0) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
-  assertWorkResultFactsMatchPosition(offer, input.action.submission, snapshot.state);
+  assertWorkResultFactsMatchPosition(offer, input.action.submission, snapshot.state, markerField(snapshot.status, "minor_revision_pending") === true);
   const expectedToken = semanticOfferToken(offer);
   const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact" ? markerField(snapshot.archived_decision, "operation_digest") : void 0;
   const revisionContinuation = snapshot.state === void 0 ? void 0 : authenticatedSemanticRevisionContinuation(snapshot.state);
@@ -83347,7 +83614,8 @@ async function currentImplementationRecommendation(dependencies, authority, deta
       phase3
     );
   }
-  if (review.subject_digest !== produce.artifact_digest) {
+  const predecessor = produce.artifact.review_revision?.classification === "minor" ? produce.artifact.editorial_predecessor : void 0;
+  if (review.subject_digest !== produce.artifact_digest && !(predecessor !== void 0 && review.subject_digest === predecessor.subject_digest && review.input_fingerprint === predecessor.input_fingerprint)) {
     return unavailableImplementationRecommendation(
       "subject-stale",
       "The retained effort assessment describes earlier phase-design bytes and is not current.",
@@ -83761,6 +84029,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
       return current ? { review_reports: source.evidence.reports, ...source.evidence.previous_reports === void 0 ? {} : { previous_review_reports: source.evidence.previous_reports } } : { previous_review_reports: [...source.evidence.previous_reports ?? [], ...source.evidence.reports] };
     })(),
     ...triageArtifact?.artifact_kind === "triage" && triageArtifact.evidence.response !== void 0 ? { review_response: triageArtifact.evidence.response } : {},
+    ...status.review_revision === void 0 ? {} : { review_revision: status.review_revision },
     ...await (async () => {
       const reports = state === void 0 ? void 0 : await readReceivedFeedback(authority, dependencies, state);
       return reports === void 0 ? {} : { partial_review_reports: reports };
@@ -83816,6 +84085,7 @@ function computeSemanticStatusSnapshot(status, enrichments) {
     ...enrichments.partial_review_reports === void 0 ? {} : { partial_review_reports: enrichments.partial_review_reports },
     ...enrichments.review_reports === void 0 ? {} : { review_reports: enrichments.review_reports },
     ...enrichments.review_response === void 0 ? {} : { review_response: enrichments.review_response },
+    ...enrichments.review_revision === void 0 ? {} : { review_revision: enrichments.review_revision },
     full_findings: Object.freeze(findings),
     finding_history: Object.freeze(history),
     review_rounds: Object.freeze((enrichments.review_rounds ?? []).map((round) => Object.freeze(publicReviewRoundV1Schema.parse(materializeJson(round, "semantic review round"))))),
@@ -88951,7 +89221,7 @@ async function handleState(call, context2) {
           if (retainedBytes === void 0 || scanner === void 0) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
           }
-          if (artifact.artifact_kind === "document" && artifact.editorial_predecessor !== void 0) {
+          {
             const authorized = await validateEditorialPredecessorDeclaration(
               services.dependencies,
               current.value,
@@ -89006,7 +89276,7 @@ async function handleState(call, context2) {
               issue_code: "produce-derived-final-phase-below-current"
             }));
           }
-          const settlesProduceReentry = call.input.phase_instance === current.value.phase_instance && call.input.step === "produce" && call.input.status === "succeeded" && artifact.artifact_kind === "document" && artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0 && call.input.human_revision === void 0;
+          const settlesProduceReentry = call.input.phase_instance === current.value.phase_instance && call.input.step === "produce" && call.input.status === "succeeded" && artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0 && call.input.human_revision === void 0;
           if (settlesProduceReentry) {
             const loadManifest = services.dependencies.load_retained_manifest;
             if (loadManifest === void 0) throw new TypeError("evidence preparation dependencies are unavailable");

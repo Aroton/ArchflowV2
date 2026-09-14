@@ -713,9 +713,7 @@ function waiverReviewPredecessor(
   state: TaskStateV1,
   produce: CurrentProduceSubject,
 ): Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }> | undefined {
-  const declared = produce.artifact.artifact_kind === "document"
-    ? produce.artifact.editorial_predecessor
-    : undefined;
+  const declared = produce.artifact.editorial_predecessor;
   if (declared !== undefined) return Object.freeze({
     subject_digest: declared.subject_digest,
     input_fingerprint: declared.input_fingerprint,
@@ -765,7 +763,6 @@ async function stateAfterPolicyWaiverSettlement(
   }
   const finalTriage = current.value.step === "triage";
   const editorialReentry = current.value.step === "produce" &&
-    produce.value.artifact.artifact_kind === "document" &&
     produce.value.artifact.editorial_predecessor !== undefined &&
     current.value.pending_human_revision === undefined;
   if (!finalTriage && !editorialReentry) {

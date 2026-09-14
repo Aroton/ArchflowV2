@@ -107,6 +107,7 @@ function assertWorkResultFactsMatchPosition(
   offer: SemanticActionOfferV1,
   submission: ApplySubmissionV1 | undefined,
   state: TaskStateV1 | undefined,
+  minorRevisionPending: boolean,
 ): void {
   if (offer.action_kind !== "submit-work" || submission?.kind !== "work-result") return;
   const position = offer.phase_instance === undefined ? undefined : decodePhaseInstance(offer.phase_instance).kind;
@@ -130,6 +131,11 @@ function assertWorkResultFactsMatchPosition(
       "SEMANTIC_SUBMISSION_MISMATCH",
       "human_revision is accepted only when a human-requested revision is pending. Submit this work-result without human_revision.",
     );
+  }
+  if (minorRevisionPending !== (submission.review_revision !== undefined)) {
+    throw new SemanticActionPlanError("SEMANTIC_SUBMISSION_MISMATCH", minorRevisionPending
+      ? "This minor revision requires review_revision.classification (minor or significant) and review_revision.rationale describing the actual diff."
+      : "review_revision is accepted only while a report-based minor revision is pending.");
   }
   if (position === "phase-impl") {
     if (submission.implementation === undefined) {
@@ -396,6 +402,7 @@ function requestFacts(
         intent_id: intentId,
         ...(submission.implementation === undefined ? {} : { implementation: submission.implementation }),
         ...(submission.human_revision === undefined ? {} : { human_revision: submission.human_revision }),
+        ...(submission.review_revision === undefined ? {} : { review_revision: submission.review_revision }),
       } };
     }
     case "review":
@@ -455,7 +462,7 @@ export function planSemanticAction(
   if (offer === undefined) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
   }
-  assertWorkResultFactsMatchPosition(offer, input.action.submission, snapshot.state);
+  assertWorkResultFactsMatchPosition(offer, input.action.submission, snapshot.state, markerField(snapshot.status, "minor_revision_pending") === true);
   const expectedToken = semanticOfferToken(offer);
   const archivedOperation = offer.action_kind === "decide" && markerField(snapshot.archived_decision, "status") === "exact"
     ? markerField(snapshot.archived_decision, "operation_digest") as Sha256Digest | undefined

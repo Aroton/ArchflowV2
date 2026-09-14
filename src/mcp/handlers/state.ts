@@ -837,7 +837,7 @@ export async function handleState(
           if (retainedBytes === undefined || scanner === undefined) {
             throw new TypeError("snapshot preparation dependencies are unavailable");
           }
-          if (artifact.artifact_kind === "document" && artifact.editorial_predecessor !== undefined) {
+          {
             // An editorial revision is accepted only against the retained produce result it
             // names, only when the retained triage authorizes exactly it, and only when the
             // bytes actually changed. `current.value` still holds the predecessor's reference:
@@ -910,7 +910,7 @@ export async function handleState(
           }
           const settlesProduceReentry = call.input.phase_instance === current.value.phase_instance &&
             call.input.step === "produce" && call.input.status === "succeeded" &&
-            artifact.artifact_kind === "document" && artifact.editorial_predecessor !== undefined &&
+            artifact.editorial_predecessor !== undefined &&
             current.value.pending_human_revision === undefined && call.input.human_revision === undefined;
           if (settlesProduceReentry) {
             const loadManifest = services.dependencies.load_retained_manifest;

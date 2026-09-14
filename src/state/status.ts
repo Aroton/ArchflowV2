@@ -569,6 +569,8 @@ export type TaskStatusV1 = Readonly<{
       revision_intent: string;
     }>[];
   }>;
+  review_revision?: import("../contracts/durable-document.js").ReviewRevisionDeclaration;
+  minor_revision_pending?: true;
   gate_input?: CommitAuthorizationInput;
   /** The complete baseline-adoption gate subject when status routes to that decision. */
   baseline_adoption_gate?: BaselineAdoptionInput;
@@ -784,7 +786,7 @@ export function currentReviewPredecessor(
   produceSubject: CurrentProduceSubject | undefined,
 ): Readonly<{ subject_digest: Sha256Digest; input_fingerprint: Sha256Digest }> | undefined {
   const midProduce = state.step === "produce" && state.status !== "succeeded";
-  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
+  const declaredPredecessor = !midProduce && produceSubject !== undefined
     ? produceSubject.artifact.editorial_predecessor
     : undefined;
   const currentProduceReference = state.authoritative_results.find((reference) =>
@@ -1839,7 +1841,7 @@ async function computeTaskStatusDetailedInternal(
     }
   }
 
-  const declaredPredecessor = !midProduce && produceSubject?.artifact.artifact_kind === "document"
+  const declaredPredecessor = !midProduce && produceSubject !== undefined
     ? produceSubject.artifact.editorial_predecessor
     : undefined;
   const reviewPredecessor = currentReviewPredecessor(state, produceSubject);
@@ -1872,7 +1874,13 @@ async function computeTaskStatusDetailedInternal(
   }
 
   let editorialRevision: TaskStatusV1["editorial_revision"];
-  if (declaredPredecessor !== undefined) {
+  const triageArtifact = retained.get("triage")?.manifest.source_artifact;
+  const minorRevisionPending = state.pending_human_revision === undefined && produceSubject !== undefined &&
+    triageArtifact?.artifact_kind === "triage" && triageArtifact.evidence.response?.decision === "revise-minor" &&
+    triageArtifact.evidence.subject_digest === produceSubject.artifact_digest;
+  const reviewedArtifact = retained.get("counter_review")?.manifest.source_artifact;
+  if (declaredPredecessor !== undefined && reviewedArtifact?.artifact_kind === "review-evidence" &&
+      reviewedArtifact.evidence.subject_digest === declaredPredecessor.subject_digest) {
     const triageSource = retained.get("triage")?.manifest.source_artifact;
     const dispositions = triageSource?.artifact_kind === "triage"
       ? triageSource.evidence.dispositions
@@ -2293,7 +2301,7 @@ async function computeTaskStatusDetailedInternal(
     ? undefined
     : (latestEligibleRuleSettlement(
         state, produceSubject.artifact_digest, produceSubject.artifact.phase_instance,
-      ) ?? (produceSubject.artifact.artifact_kind === "document" && produceSubject.artifact.editorial_predecessor !== undefined
+      ) ?? (produceSubject.artifact.editorial_predecessor !== undefined
         ? latestEligibleRuleSettlement(
             state,
             produceSubject.artifact.editorial_predecessor.subject_digest,
@@ -2570,6 +2578,8 @@ async function computeTaskStatusDetailedInternal(
     ...(statusReconciliation === undefined ? {} : { reconciliation: statusReconciliation }),
     evidence,
     ...(editorialRevision === undefined ? {} : { editorial_revision: editorialRevision }),
+    ...(produceSubject?.artifact.review_revision === undefined ? {} : { review_revision: produceSubject.artifact.review_revision }),
+    ...(minorRevisionPending ? { minor_revision_pending: true as const } : {}),
     ...(gateInput === undefined ? {} : { gate_input: gateInput }),
     ...(baselineAdoptionInput === undefined ? {} : { baseline_adoption_gate: baselineAdoptionInput }),
     ...(milestoneRecoveryFacts === undefined ? {} : { milestone_recovery: milestoneRecoveryFacts }),

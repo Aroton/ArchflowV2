@@ -27,7 +27,8 @@ import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js
 import { parseTriageCandidate, type TriageDisposition } from "../contracts/triage.js";
 import { isSubstantiveClaim } from "../contracts/review.js";
 import { PIPELINE_STEPS, type PipelineStep } from "../contracts/vocabulary.js";
-import { parseDocumentArtifact } from "../contracts/durable-document.js";
+import { parseDocumentArtifact, reviewRevisionDeclarationSchema } from "../contracts/durable-document.js";
+import { parseImplementationOutput } from "../contracts/durable-implementation-output.js";
 import { stageTaskInitialization } from "../init/task-initialization.js";
 import { readChangedGitPaths, resolveCommit } from "../repository/git.js";
 import { buildDocumentArtifact, type DocumentArtifactInput } from "./document-artifact.js";
@@ -110,9 +111,10 @@ const PAYLOAD_SHAPE =
   `{"intent_id"?:<id; omitted = generated>,"kind"?:${BUILD_REQUEST_KINDS.map((kind) => JSON.stringify(kind)).join("|")},` +
   '"step"?:<pipeline step for kind running>,' +
   '"document"?:{...},"implementation"?:{...},' +
+  '"review_revision"?:{"classification":"minor"|"significant","rationale":<text>},' +
   '"human_revision"?:{"classification":"simple"|"significant","rationale":<text>,"user_override"?:{"agent_classification":"simple"|"significant","rationale":<text>}},' +
   '"dispositions"?:[{"finding_id":<id>,"disposition":"accepted"|"accepted-editorial"|"rejected","rationale":<text>,"revision_intent"?:<text>,"evidence"?:<text>,"review_evidence_digest"?:<sha256>}],' +
-  '"response"?:{"decision":"finish"|"revise"|"escalate","rationale":<text>,"reviewers"?:[{"reviewer_id":<id>,"request":<verification request>}]},' +
+  '"response"?:{"decision":"finish"|"revise"|"revise-minor"|"escalate","rationale":<text>,"reviewers"?:[{"reviewer_id":<id>,"request":<verification request>}]},' +
   '"summary"?:<gate summary text>,' +
   '"invocation_routes"?:{"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"adjudicator"?:{...}},' +
   '"route_override"?:{"reason":<why the selected reviewer was substituted>,"counter-reviewer"?:{"model":<model>,"effort":<effort>,"provider"?:<cc-switch provider>},"test-reviewer"?:{...},"adjudicator"?:{...}},' +
@@ -408,17 +410,27 @@ async function composeProduce(
       input_fingerprint: state.input_fingerprint,
     } as unknown as DocumentArtifactInput);
     if (!built.ok) return built;
-    // When durable authority shows a pending editorial revision — the retained triage accepted
-    // only editorial findings against the retained produce artifact — the predecessor link is
-    // attached here from that authority, never hand-copied by the model.
-    const editorial = await derivePendingEditorialPredecessor(services.dependencies, state);
-    artifact = (editorial === undefined
-      ? built.value
-      : parseDocumentArtifact({
-          ...built.value,
-          editorial_predecessor: editorial,
-        })) as unknown as PlainJsonValue;
+    artifact = built.value as unknown as PlainJsonValue;
   }
+
+  const editorial = await derivePendingEditorialPredecessor(services.dependencies, state);
+  const retained = await loadRetainedEvidence(services.dependencies, state, state.phase_instance);
+  if (!retained.ok) return retained;
+  const triage = retained.value.get("triage")?.manifest.source_artifact;
+  const minorPending = editorial !== undefined && triage?.artifact_kind === "triage" &&
+    triage.evidence.response?.decision === "revise-minor";
+  if (minorPending !== (snapshot.review_revision !== undefined)) {
+    throw new TypeError(minorPending
+      ? "This minor revision requires review_revision.classification (minor or significant) and rationale describing the actual diff."
+      : "review_revision is accepted only while a report-based minor revision is pending.");
+  }
+  const revision = snapshot.review_revision === undefined ? undefined : reviewRevisionDeclarationSchema.parse(snapshot.review_revision);
+  const candidate = {
+    ...record(artifact, "produced artifact"),
+    ...(revision === undefined ? {} : { review_revision: revision }),
+    ...(editorial === undefined || revision?.classification === "significant" ? {} : { editorial_predecessor: editorial }),
+  };
+  artifact = (phaseKind === "phase-impl" ? parseImplementationOutput(candidate) : parseDocumentArtifact(candidate)) as unknown as PlainJsonValue;
 
   let humanRevision: PlainJsonValue | undefined;
   if (state.pending_human_revision !== undefined) {
@@ -892,9 +904,7 @@ async function composeGate(
   }
   const subject = await loadCurrentProduceSubject(services.dependencies, state);
   if (!subject.ok) return subject;
-  const editorialPredecessorDigest = subject.value.artifact.artifact_kind === "document"
-    ? subject.value.artifact.editorial_predecessor?.subject_digest
-    : undefined;
+  const editorialPredecessorDigest = subject.value.artifact.editorial_predecessor?.subject_digest;
   let settledRule = latestEligibleRuleSettlement(
     state, subject.value.artifact_digest, state.phase_instance,
   ) ?? (editorialPredecessorDigest === undefined

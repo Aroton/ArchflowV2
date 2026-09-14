@@ -217,11 +217,12 @@ function currentReviewSet(
 ): DerivedCurrentEvidenceSet | undefined {
   try {
     const derived = deriveCurrentEvidenceSet(retained);
-    // Phase designs never inherit review currency across an editorial or simple-human revision:
-    // effort assessment belongs to the complete component set on the exact current bytes. Other
-    // phase kinds retain the established one-hop predecessor behavior.
+    // Minor triage revisions reuse the complete review group, including effort, once.
+    // Simple human revisions retain the existing exact-byte phase-design behavior.
     const phaseDesign = state.phase_instance.startsWith("phase-design-");
-    const current = phaseDesign
+    const triageSource = retained.get("triage")?.manifest.source_artifact;
+    const minorReuse = triageSource?.artifact_kind === "triage" && triageSource.evidence.response?.decision === "revise-minor";
+    const current = phaseDesign && !minorReuse
       ? boundToSubjectExactly(derived, subject)
       : boundToSubjectOrDeclaredPredecessor(derived, subject);
     if (!current) return undefined;
@@ -236,8 +237,8 @@ function currentReviewSet(
       if (effort !== undefined && (
         effort.task_id !== state.task_id ||
         effort.phase_instance !== state.phase_instance ||
-        effort.attempt !== state.attempt ||
-        !boundToSubjectExactly(effort, subject)
+        (!minorReuse && effort.attempt !== state.attempt) ||
+        !(minorReuse ? boundToSubjectOrDeclaredPredecessor(effort, subject) : boundToSubjectExactly(effort, subject))
       )) return undefined;
     }
     const counter = derived.reviews[0]?.evidence;
@@ -795,7 +796,7 @@ function editorialRevisionPending(
   return triageCurrent !== undefined &&
     disposition.complete &&
     (triageCurrent.accepted_count === 0 || acceptedSettled) &&
-    (triageCurrent.accepted_editorial_count ?? 0) > 0 &&
+    ((triageCurrent.accepted_editorial_count ?? 0) > 0 || triageCurrent.response?.decision === "revise-minor") &&
     (triageCurrent.escalated_human_count ?? 0) === 0 &&
     boundToSubjectExactly(triageCurrent, subject);
 }
@@ -922,7 +923,7 @@ function decideNextAction(
   // review; otherwise triage remains the fail-closed action.
   if (disposition.accepted && !acceptedSettled) return decision("triage");
   if (editorialRevisionPending(triageCurrent, disposition, subject, acceptedSettled)) {
-    if (state.phase_instance !== "prd" && state.phase_instance !== "design") {
+    if (triageCurrent?.response?.decision !== "revise-minor" && state.phase_instance !== "prd" && state.phase_instance !== "design") {
       // Non-document positions stay bound to exact bytes and force full re-entry.
       return decision("produce", { reentry_required: true });
     }

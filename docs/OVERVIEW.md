@@ -2,7 +2,7 @@
 
 **Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** the whole repository
 
-Fresh reviews return readable reports to the working AI, which chooses finish, revision with selected verification reviewers, or human escalation. Constitution and commit approval remain separate.
+Fresh reviews return readable reports to the working AI, which chooses finish, revision with selected verification reviewers, a localized minor correction without repeat review, or human escalation. Minor corrections may clarify established intent; coordinated rewrites and new requirements need fresh review. Applicable automated checks, constitution requirements, and final-byte human and commit approval remain in force.
 
 ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, with Claude, Codex, and Antigravity routes available by configuration). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
 

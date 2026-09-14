@@ -701,7 +701,7 @@ export function deriveNextAction(input: NextActionInput): NextAction {
     if (next === "produce" && input.assessment?.editorial_revision_required === true) {
       return action(
         "run-step",
-        "Apply exactly the accepted editorial revision intents to the artifact, then run the produce step; nothing is re-run — the retained reviews and constitution verdict stay bound to the declared predecessor.",
+        "Apply the accepted minor or editorial corrections and run applicable checks. The retained reviews and constitution verdict can be reused once for the declared predecessor; significant changes require fresh review.",
         false,
         state,
         { step: "produce", editorial_revision: true },

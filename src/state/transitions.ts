@@ -394,10 +394,10 @@ function validRuleSettlementBoundary(input: TransitionPlanInput, settlement: Rul
       input.current.status !== "running" || input.resulting_subject_digest !== settlement.subject_digest) {
     return false;
   }
-  const editorial = input.artifact?.artifact_kind === "document" &&
+  const editorial = (input.artifact?.artifact_kind === "document" || input.artifact?.artifact_kind === "implementation-output") &&
     input.artifact.editorial_predecessor !== undefined;
   // A human-requested revision always returns to a human gate, including the one-hop `simple`
-  // classification. Only triage-authorized editorial wording can re-use review and settle here.
+  // classification. Only triage-authorized minor corrections can reuse review and settle here.
   return editorial && input.current.pending_human_revision === undefined &&
     input.human_revision === undefined;
 }

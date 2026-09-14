@@ -118,10 +118,12 @@ export type ReviewRoundHistoryEntryV1 = {
 };
 export type ReviewResponse =
   | { readonly decision: "finish"; readonly rationale: string }
+  | { readonly decision: "revise-minor"; readonly rationale: string }
   | { readonly decision: "escalate"; readonly rationale: string }
   | { readonly decision: "revise"; readonly rationale: string; readonly reviewers: readonly { readonly reviewer_id: string; readonly request: string }[] };
 export const reviewResponseSchema = z.discriminatedUnion("decision", [
   z.object({ decision: z.literal("finish"), rationale: z.string().trim().min(1) }).strict(),
+  z.object({ decision: z.literal("revise-minor"), rationale: z.string().trim().min(1) }).strict(),
   z.object({ decision: z.literal("escalate"), rationale: z.string().trim().min(1) }).strict(),
   z.object({ decision: z.literal("revise"), rationale: z.string().trim().min(1), reviewers: z.array(z.object({ reviewer_id: z.string().min(1), request: z.string().trim().min(1) }).strict()).min(1) }).strict(),
 ]) as z.ZodType<ReviewResponse>;

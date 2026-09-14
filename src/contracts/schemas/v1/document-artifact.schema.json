@@ -105,6 +105,27 @@
         "triage_result_digest"
       ],
       "additionalProperties": false
+    },
+    "review_revision": {
+      "type": "object",
+      "properties": {
+        "classification": {
+          "type": "string",
+          "enum": [
+            "minor",
+            "significant"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "classification",
+        "rationale"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
