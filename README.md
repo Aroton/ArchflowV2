@@ -17,7 +17,7 @@ ArchFlow guides you through a structured development process:
        |
 /archflow-design my-feature Design how to build it (architecture + phases)
        |
-/archflow-phase-design my-feature 1   Design phase 1 (review, approve)
+/archflow-phase-design my-feature 1   Design phase 1 (automated review)
 /archflow-phase-impl my-feature 1     Implement phase 1 (fresh session)
 /archflow-phase-design my-feature 2   ...until done
 ```
@@ -31,6 +31,10 @@ An in-flight legacy task takes an explicit side path into a new task, then rejoi
        |
 /archflow-design new-task
 ```
+
+By default, you review the PRD, overall design, material changes to their approved decisions, and SQL/database changes—including embedded queries, ORM operations, and migrations. Other phase work runs through automated review, fixes, verification, and commits. You still launch each successor skill. Custom constitution rules can require human review, and unresolved blockers still escalate.
+
+Every active constitution rule receives automated compliance review. Its optional `review_trigger` specifically adds **human review** when a condition matches; removing that field does not disable AI review.
 
 The phase skills drive the MCP-backed workflow and stop whenever the server requires human approval. Before work advances, an independent counter-review, triage, and any constitution review must reach a fixed point. The review runs before the gate; there is no optional supplemental gate review.
 
@@ -60,7 +64,7 @@ From the repository you want to initialize, run `/archflow-init` in Claude Code 
 project MCP registrations, then reports the host approval/trust steps that still require you.
 It also creates `.archflow/.gitignore` with the single `/runtime/` rule and diagnoses whether that
 workspace is ignored and free of tracked files. It never edits the project root `.gitignore`.
-Initialization does not create a task, commit changes, or claim that host approval has completed.
+The init command creates no task or commit. The skill commits the requested scaffolded repository files automatically and reports any host trust steps that still require you.
 
 Use `/archflow-constitution` (or `$archflow-constitution` in Codex) to understand or configure the repository-wide rules in `.archflow/constitution/`. Configure policy on the repository's policy/base branch before starting affected tasks; existing tasks remain bound to the constitution at their pinned policy-base commit.
 
@@ -76,7 +80,7 @@ From the repository you want ArchFlow to manage:
 /archflow-init
 ```
 
-In Codex, run `$archflow-init`. Review and commit the repository assets before creating a task; initialization itself creates no task and makes no commit.
+In Codex, run `$archflow-init`. The skill checks and commits the requested repository assets before a task uses them as its policy base. It preserves custom policy and unrelated changes; replacing a diverged scaffold and completing host trust steps still require your decision.
 
 ### 2. Configure Constitution Rules (optional)
 
@@ -84,7 +88,7 @@ In Codex, run `$archflow-init`. Review and commit the repository assets before c
 /archflow-constitution
 ```
 
-Explains the constitution, inspects the current numbered rule files, and helps add, revise, or deprecate repository policy. It edits Markdown configuration only: there is no constitution CLI or automatic commit. In Codex, run `$archflow-constitution`.
+Explains the constitution, inspects the current numbered rule files, and helps add, revise, or deprecate repository policy. It edits Markdown configuration: a requested policy change includes its scoped commit, while explanation and inspection remain read-only. There is no constitution CLI. In Codex, run `$archflow-constitution`.
 
 ### 3. Upgrade an In-Flight Legacy Task
 

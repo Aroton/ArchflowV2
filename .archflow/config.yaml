@@ -114,8 +114,11 @@ producers:
 # Counter-review still runs for every subject; when no rule matches and no safety
 # condition opens a gate, the authenticated workflow advances and commits without a
 # human decision. The shipped defaults gate the PRD, the architecture design, material
-# later amendments through constitution review, and SQL changes — a phase design or implementation that
-# changes only its own phase runs to commit on its own.
+# later amendments and SQL-backed database behavior through constitution review,
+# and every changed .sql file through the path rule below. Embedded queries, ORM
+# operations, and schema/data migrations are covered by the database constitution
+# trigger. Other reviewed phase work advances and commits automatically unless a
+# custom rule or unresolved blocker requires human judgment.
 approval_rules:
   subjects: [prd, design]
   content:

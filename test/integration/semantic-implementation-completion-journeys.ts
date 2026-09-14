@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -66,6 +66,8 @@ async function applied(
 type AdjudicationScript = Readonly<{
   /** Report material drift against the first approved upstream of every implementation subject. */
   materialDrift?: boolean;
+  /** Scripted human-review judgment; verifies routing, not model classification. */
+  matchedTriggerText?: string;
   /** Fail the first rule on compliance *and* match its review trigger: the repository asked for a human. */
   failingRule?: boolean;
   /** Fail the first rule on compliance only (trigger not matched): producer work, not a human gate. */
@@ -147,7 +149,15 @@ function generateOutput(envelope, countPath, findingsByReview, script) {
     const pass = () => ({ compliance: "pass",
       rationale: "The work respects this rule.", trigger: "not-matched",
       trigger_evidence: "No review trigger matched." });
+    if (implementation && script.matchedTriggerText !== undefined &&
+        !envelope.rules.some((rule) => rule.review_trigger?.includes(script.matchedTriggerText))) {
+      throw new Error("The scripted human-review trigger is absent from the pinned policy envelope.");
+    }
     const judgments = Object.fromEntries(envelope.rules.map((rule, index) => [rule.slot,
+      implementation && script.matchedTriggerText !== undefined && rule.review_trigger?.includes(script.matchedTriggerText)
+        ? { compliance: "pass", rationale: "The changed operation meets the governing requirements.",
+            trigger: "matched", trigger_evidence: "The declared implementation changes the operation named by this human-review trigger." }
+        :
       script.failingRule === true && implementation && index === 0
         ? { compliance: "fail",
             rationale: "The implementation departs from the approved plan.",
@@ -365,6 +375,111 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     const scenario = (name: string, run: () => Promise<void>): void => {
       if (name === selected) it(name, run);
     };
+
+  // These scripted judgments test durable routing under the real shipped rules. They do not
+  // establish that a live reviewer can classify arbitrary SQL or ORM behavior correctly.
+  const databaseCases = [
+    { name: "embedded-query", path: "src/query.ts", bytes: "export const query = 'select id from widgets where active = true';\n", semantic: true },
+    { name: "orm-write", path: "src/repository.ts", bytes: "export const activate = (db) => db.widget.updateMany({ data: { active: true } });\n", semantic: true },
+    { name: "schema-migration", path: "db/migrate.ts", bytes: "export const up = (schema) => schema.createTable('widgets');\n", semantic: true },
+    { name: "sql-file", path: "db/widgets.sql", bytes: "-- Document existing behavior.\n", semantic: false },
+    { name: "combined-sql", path: "db/widgets.sql", bytes: "create table widgets (id integer);\n", semantic: true },
+  ];
+  for (const testCase of databaseCases) {
+    scenario(`requires human review for ${testCase.name} under shipped defaults`, async () => {
+      const workspace = await createTaskWorkspace({ taskId: `default-${testCase.name}` });
+      workspaces.push(workspace);
+      excludeStubArtifacts(workspace);
+      restorers.push(installScriptedReviewChild(workspace.root, [[]], testCase.semantic
+        ? { matchedTriggerText: "SQL-backed database behavior" } : {}));
+      const h = semanticJourneyHarness(workspace);
+      const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1, contentRules: ["**/*.sql"] });
+      let view = await applied(h, invocation, handoff);
+      const work = writeClientImplementation(workspace, view, testCase.name);
+      const path = join(workspace.root, testCase.path);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, testCase.bytes);
+      const outputs = [...work.outputs, testCase.path].sort();
+      view = await applied(h, invocation, view, implementationSubmission(workspace, outputs));
+      view = await applied(h, invocation, view);
+      expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+      view = await applied(h, invocation, view, { kind: "gate-summary", summary: "Review the database operation and its effect." });
+      expect(view.presentation?.class).toBe("configured-approval");
+      if (testCase.semantic) {
+        expect(view.presentation?.reasons).toEqual(expect.arrayContaining([
+          expect.objectContaining({ text: expect.stringContaining("human-approval-for-database-behavior") }),
+        ]));
+      }
+      if (testCase.path.endsWith(".sql")) {
+        expect(view.presentation?.reasons).toEqual(expect.arrayContaining([
+          expect.objectContaining({ text: expect.stringContaining(testCase.path) }),
+        ]));
+      }
+      expect(view.next_action.commit).toBeUndefined();
+      // One approval covers both matching paths and constitution triggers for these exact bytes.
+      view = await applied(h, invocation, view, { kind: "decision", choice: "authorize-commit", reason: "The database change is correct." });
+      expect(view.next_action.kind).toBe("commit");
+      clientCommit(workspace, view.next_action.commit!);
+      view = await h.status(invocation);
+      expect(view.next_action.kind).toBe("finish-task");
+      view = await applied(h, invocation, view);
+      expect(view.condition).toBe("complete");
+    });
+  }
+
+  scenario("automatically commits reviewed security contracts and policy changes under shipped defaults", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "default-automatic-categories" });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1, contentRules: ["**/*.sql"] });
+    let view = await applied(h, invocation, handoff);
+    const work = writeClientImplementation(workspace, view, "automatic-categories");
+    const files = {
+      "src/access.ts": "export const authorized = (session) => session?.role === 'owner';\n",
+      "src/credentials.ts": "import { randomBytes } from 'node:crypto'; export const newToken = () => randomBytes(32);\n",
+      "src/public-api.ts": "export const apiVersion = 2;\n",
+      ".archflow/config.yaml": readFileSync(join(workspace.root, ".archflow/config.yaml"), "utf8") + "\n# Clarify repository reviewer routing.\n",
+    };
+    for (const [path, bytes] of Object.entries(files)) writeFileSync(join(workspace.root, path), bytes);
+    view = await applied(h, invocation, view, implementationSubmission(workspace, [...work.outputs, ...Object.keys(files)].sort()));
+    view = await applied(h, invocation, view);
+    expect(view.presentation).toBeUndefined();
+    expect(view.next_action.kind).toBe("commit");
+    // These rules still reach automated review despite having no human-review trigger.
+    for (const id of ["human-approval-for-access-control", "human-approval-for-public-contracts", "human-approval-for-crypto-and-secrets", "human-approval-for-workflow-control-plane"]) {
+      expect(view.review_context?.active_rules).toEqual(expect.arrayContaining([expect.objectContaining({ id, version: 2 })]));
+    }
+    clientCommit(workspace, view.next_action.commit!);
+    view = await h.status(invocation);
+    view = await applied(h, invocation, view);
+    expect(view.condition).toBe("complete");
+  });
+
+  scenario("preserves a repository custom human-review trigger alongside the shipped defaults", async () => {
+    const seed = new URL("../../assets/constitution/", import.meta.url);
+    const constitutionBytes = Object.fromEntries(readdirSync(seed).filter(path => /^\d\d-.*\.md$/u.test(path))
+      .map(path => [path, readFileSync(new URL(path, seed))]));
+    constitutionBytes["70-billing.md"] = Buffer.from("---\nid: human-review-for-billing\nversion: 1\nstatus: active\nreview_trigger: The implementation changes invoice totals.\n---\nBilling calculations must match agreed pricing.\n");
+    const workspace = await createTaskWorkspace({ taskId: "default-custom-trigger", constitutionBytes });
+    workspaces.push(workspace);
+    excludeStubArtifacts(workspace);
+    restorers.push(installScriptedReviewChild(workspace.root, [[]], { matchedTriggerText: "invoice totals" }));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1, contentRules: ["**/*.sql"] });
+    let view = await applied(h, invocation, handoff);
+    const work = writeClientImplementation(workspace, view, "custom-billing");
+    view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
+    view = await applied(h, invocation, view);
+    expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
+    view = await applied(h, invocation, view, { kind: "gate-summary", summary: "The repository requests human review of invoice totals." });
+    expect(view.presentation?.class).toBe("configured-approval");
+    expect(view.presentation?.reasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({ text: expect.stringContaining("human-review-for-billing") }),
+    ]));
+    expect(view.next_action.commit).toBeUndefined();
+  });
 
   scenario("authorizes the implementation commit, observes the client-created proof, and reports the successor without an offer", async () => {
     const workspace = await createTaskWorkspace({

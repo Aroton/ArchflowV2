@@ -5,7 +5,7 @@ description: Explain, inspect, create, revise, or deprecate ArchFlow repository 
 
 # ArchFlow Constitution
 
-Treat the constitution as repository-owned policy for human trust boundaries and durable engineering constraints. It is not a task checklist, coding-style guide, or workaround for a model limitation. During counter-review, ArchFlow judges the exact task subject against the active rules pinned from the task's immutable, human-approved policy-base commit. A rule the subject fails is the producing agent's to resolve: the workflow re-enters production with the finding named, up to the task's attempt budget, and only then does a human decide (and may waive the rule). A rule that declares a `review_trigger` is different: when that trigger is observed, the workflow asks a human at once. So `review_trigger` is how a repository opts into a human constitution gate — the shipped defaults declare three (access-control changes, cryptography and secrets handling, and control-plane file edits) — and a model verdict never changes policy by itself.
+Treat the constitution as repository-owned policy for human trust boundaries and durable engineering constraints. It is not a task checklist, coding-style guide, or workaround for a model limitation. During counter-review, ArchFlow judges the exact task subject against the active rules pinned from the task's immutable, human-approved policy-base commit. A rule the subject fails is the producing agent's to resolve: the workflow re-enters production with the finding named, up to the task's attempt budget, and only then does a human decide (and may waive the rule). Every active rule receives automated compliance review, including rules without a trigger. `review_trigger` is specifically a **human-review trigger**, not a switch for automated review: when that trigger is observed, the workflow asks a human at once. So `review_trigger` is how a repository opts into a human constitution gate — the shipped defaults declare two (material changes to approved plans and SQL-backed database behavior, including embedded queries, ORM operations, and schema/data migrations) — and a model verdict never changes policy by itself.
 
 ## Explain the model
 
@@ -23,7 +23,7 @@ review_trigger: Optional. The observable condition under which a human must deci
 State the repository-wide policy in direct, durable language.
 ```
 
-`id`, `version`, and `status` are required. `status` is `active` or `deprecated`. `review_trigger` is optional and is the rule's own human gate: omit it when a failure should simply be fixed by the agent. `enforced_by` is an optional non-empty YAML list naming real mechanical checks that already enforce the rule; omit it for aspirational or review-only enforcement.
+`id`, `version`, and `status` are required. `status` is `active` or `deprecated`. `review_trigger` is optional and adds human review to the automatic review every active rule already receives: omit it when a failure should simply be fixed by the agent. `enforced_by` is an optional non-empty YAML list naming real mechanical checks that already enforce the rule; omit it for aspirational or review-only enforcement.
 
 ## Configure rules
 
@@ -49,4 +49,4 @@ Two shipped rules, `explicit-human-authority` and `approved-design-before-code`,
 
 Prefer constitution maintenance on the repository's policy or base branch before starting affected tasks. A task branch may also carry a constitution change as an ordinary reviewed output, but the active task remains governed by its pinned policy-base commit; changing or committing worktree policy does not silently repin it. Treat that edit as policy for future tasks after it reaches their approved base. Never claim that an existing task adopted the new rule merely because the file changed.
 
-Do not create task state, resolve gates, commit, or push as part of configuration unless the user separately authorizes those actions. Before any commit, summarize the rules added, revised, or deprecated and obtain explicit approval for the exact change.
+A request to create or change constitution rules authorizes the scoped edits and their commit without another approval. An explanation or inspection request authorizes no edits. Validate the complete rule set, inspect and stage only the intended changes, preserve unrelated work, commit with a message describing the policy change, and report the diff and commit. Preserve custom rules and triggers outside the request. Do not create task state, resolve an existing human gate, repin an active task, or push as part of configuration. A policy change only affects future tasks pinned to the resulting commit.

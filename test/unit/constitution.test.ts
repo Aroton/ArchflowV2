@@ -14,7 +14,7 @@ describe("constitution Markdown", () => {
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     const files = Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, directory), "utf8")] as const)));
     const registry = parseConstitutionRuleFiles(files);
-    expect([...registry.keys()]).toEqual(["explicit-human-authority", "approved-design-before-code", "prefer-established-libraries", "task-and-evidence-isolation", "honest-human-centered-outcomes", "human-approval-for-material-plan-changes", "human-approval-for-access-control", "human-approval-for-public-contracts", "human-approval-for-crypto-and-secrets", "human-approval-for-workflow-control-plane"]);
+    expect([...registry.keys()]).toEqual(["explicit-human-authority", "approved-design-before-code", "prefer-established-libraries", "task-and-evidence-isolation", "human-approval-for-database-behavior", "honest-human-centered-outcomes", "human-approval-for-material-plan-changes", "human-approval-for-access-control", "human-approval-for-public-contracts", "human-approval-for-crypto-and-secrets", "human-approval-for-workflow-control-plane"]);
   });
 
   it("ships review triggers on the intentional human-boundary seed rules", async () => {
@@ -26,11 +26,8 @@ describe("constitution Markdown", () => {
       .map(([id]) => id)
       .sort();
     expect(triggered).toEqual([
-      "human-approval-for-access-control",
-      "human-approval-for-crypto-and-secrets",
+      "human-approval-for-database-behavior",
       "human-approval-for-material-plan-changes",
-      "human-approval-for-public-contracts",
-      "human-approval-for-workflow-control-plane",
     ]);
   });
 
@@ -58,6 +55,22 @@ describe("constitution Markdown", () => {
       };
     }).sort((left, right) => left.id.localeCompare(right.id));
     expect(normalized).toEqual(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3);
+  });
+
+  it("keeps live policy identical to the seeds and evolves the former blanket triggers", async () => {
+    const directory = new URL("../../assets/constitution/", import.meta.url);
+    const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
+    for (const path of paths) {
+      const seed = await readFile(new URL(path, directory), "utf8");
+      expect(await readFile(new URL(`../../.archflow/constitution/${path}`, import.meta.url), "utf8")).toBe(seed);
+    }
+    for (const path of ["40-authentication.md", "45-public-contracts.md", "50-cryptography.md", "60-control-plane.md"]) {
+      const current = parseConstitutionRuleMarkdown(await readFile(new URL(path, directory), "utf8"), path);
+      expect(current).toMatchObject({ version: 2, status: "active" });
+      expect(current.review_trigger).toBeUndefined();
+      const prior = { ...current, version: 1, review_trigger: "Previous category-based approval." };
+      expect(validateConstitutionEvolution(new Map([[prior.id, prior]]), [current]).get(current.id)).toEqual(current);
+    }
   });
 
   it("parses deterministic frontmatter and prose", async () => {

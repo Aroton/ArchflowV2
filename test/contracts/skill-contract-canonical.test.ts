@@ -132,7 +132,7 @@ describe("canonical skill contracts", () => {
     }
   });
 
-  it("keeps constitution configuration documentation-only and preserves policy evolution", () => {
+  it("keeps constitution maintenance within repository policy and preserves evolution", () => {
     const source = skill("archflow-constitution");
     expect(source).toContain("`.archflow/constitution/`");
     expect(source).toContain("increment");
@@ -140,6 +140,28 @@ describe("canonical skill contracts", () => {
     expect(source.toLowerCase()).toContain("never claim that an existing task adopted the new rule");
     expect(source).not.toContain("archflow-local");
     expect(source).not.toContain("archflow_");
+  });
+
+  it("completes requested maintenance without repeat approval while preserving real boundaries", () => {
+    const explore = skill("archflow-explore");
+    expect(explore).toContain("invocation authorizes routine page updates and their commit");
+    expect(explore).not.toContain("stop for confirmation");
+    expect(explore).not.toContain("until the user explicitly approves");
+    expect(explore).toContain("preserve unrelated");
+    const init = skill("archflow-init");
+    expect(init).toContain("without another approval");
+    expect(init).toContain("only when the human chooses it");
+    expect(init).toContain("host's human approval/trust boundary");
+    const constitution = skill("archflow-constitution");
+    expect(constitution).toContain("scoped edits and their commit without another approval");
+    expect(constitution).toContain("An explanation or inspection request authorizes no edits");
+    expect(constitution).toContain("Preserve custom rules and triggers");
+    for (const name of semanticProducerSkills) {
+      expect(skill(name)).toContain("material amendments to their approved decisions, and SQL/database changes");
+      expect(skill(name)).toContain("Repository-configured triggers still apply");
+      expect(skill(name)).toContain("without an authorization menu");
+      expect(skill(name)).toContain("The user's launch of that successor is the transition decision");
+    }
   });
 
   it("keeps workflow paths status-owned while preserving ordinary repository exploration", () => {

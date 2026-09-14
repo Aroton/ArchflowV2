@@ -27,23 +27,23 @@ Read `docs/` for existing caps-named pages and their stamps, then choose the mod
 - **Fresh**: no maintained pages exist. Plan the full set sized to the repository and present the plan.
 - **Refresh**: pages exist. For each page, run `git diff --name-only <stamped-commit>..HEAD` against its `Covers` paths; re-explore only pages whose covered code changed, plus anything the user's focus area names. Unchanged pages keep their stamps.
 
-Either way, state which pages will be written or refreshed and stop for confirmation before overwriting anything.
+Either way, state which pages will be written or refreshed and perform the requested documentation work. The invocation authorizes routine page updates and their commit; preserve unrelated user edits and stop only when conflicting changes cannot be reconciled safely.
 
 ## Parallel exploration
 
-Delegate exploration when its size or separable subsystems justify parallel contexts; a small refresh can stay inline. Group related pages or subsystems into as few independent briefs as the work needs rather than assigning one agent per page. A sub-agent sees none of this conversation, so include its scope, target pages, document format, stamp values, and focus area. Have it inspect actual code, write its assigned pages, and return the paths plus conclusions needed for synthesis. Review every result before the gate.
+Delegate exploration when its size or separable subsystems justify parallel contexts; a small refresh can stay inline. Group related pages or subsystems into as few independent briefs as the work needs rather than assigning one agent per page. A sub-agent sees none of this conversation, so include its scope, target pages, document format, stamp values, and focus area. Have it inspect actual code, write its assigned pages, and return the paths plus conclusions needed for synthesis. Review every result before committing.
 
 Write or update `docs/OVERVIEW.md` when the system map, glossary, subsystem relationships, or maintained page set changed. Otherwise preserve its existing bytes and stamp.
 
-All correspondence with the user, especially review and commit gates, is conversational and human-readable. Lead with what changed, why it matters, and the decision needed. Do not dump IDs, digests, JSON, internal workflow paths, or protocol codes unless the user explicitly asks for diagnostics or audit detail.
+All correspondence with the user is conversational and human-readable. Lead with what changed, why it matters, and any unresolved blocker. Do not dump IDs, digests, JSON, internal workflow paths, or protocol codes unless the user explicitly asks for diagnostics or audit detail.
 
 ## CLAUDE.md pointer
 
-The documentation set only stays current if the repository's instructions say so. Ensure the target repository's `CLAUDE.md` (or equivalent) lists the maintained pages and states the rule: *when a change alters behavior a caps-named page describes, update that page in the same change.* Draft the addition and present it at the review gate below — never edit `CLAUDE.md` without the user's approval.
+The documentation set only stays current if the repository's instructions say so. Ensure the target repository's `CLAUDE.md` (or equivalent) lists the maintained pages and states the rule: *when a change alters behavior a caps-named page describes, update that page in the same change.* Include that focused documentation-maintenance addition in the requested work, preserving existing instructions and unrelated policy.
 
 ## Review and commit
 
-Summarize the findings and present the written pages for review, together with any proposed `CLAUDE.md` addition. Ask plainly whether the user approves them or wants changes, then stop. Apply requested changes and re-present the meaningful differences until the user explicitly approves. Only then stage the documentation (and the approved `CLAUDE.md` edit) and commit with:
+Review the written pages against the code and check links, coverage stamps, and any documentation-maintenance addition. Stage only the intended documentation and instruction changes, preserve unrelated index and worktree changes, and commit without another approval with:
 
 ```text
 Archflow: Explore Codebase Docs
@@ -61,4 +61,4 @@ Claude Code: /archflow-prd <task>
 Codex: $archflow-prd <task>
 ```
 
-Never overwrite existing documentation, commit, or pass the review gate without confirmation.
+Report the findings, changed pages, and commit. Do not launch the successor skill or infer authority to bypass an existing human gate.

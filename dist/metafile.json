@@ -3601,7 +3601,7 @@
       ]
     },
     "src/contracts/constitution.ts": {
-      "bytes": 3842,
+      "bytes": 3940,
       "format": "esm",
       "imports": [
         {
@@ -5479,7 +5479,7 @@
       ]
     },
     "src/init/assets.ts": {
-      "bytes": 7041,
+      "bytes": 7117,
       "format": "esm",
       "imports": [
         {
@@ -5820,7 +5820,7 @@
       ]
     },
     "src/init/task-initialization.ts": {
-      "bytes": 9262,
+      "bytes": 9269,
       "format": "esm",
       "imports": [
         {
@@ -10369,7 +10369,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2404180,
+      "bytes": 2404256,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11560,7 +11560,7 @@
           "bytesInOutput": 2231
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 5413
+          "bytesInOutput": 5489
         },
         "src/init/diagnostics.ts": {
           "bytesInOutput": 8378
@@ -11772,7 +11772,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3660093,
+      "bytes": 3660169,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13101,7 +13101,7 @@
           "bytesInOutput": 11299
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 1955
+          "bytesInOutput": 2031
         },
         "src/init/task-initialization.ts": {
           "bytesInOutput": 6636

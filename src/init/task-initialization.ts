@@ -180,7 +180,7 @@ export async function resolveInitializationPolicyBase(
 
 /**
  * Stages the durable initialization artifact only. At this boundary both baseline commits are
- * HEAD: the human commit containing the scaffolded policy is the policy approval. No state or Git
+ * HEAD: the committed policy adopted by the requested initialization is the policy base. No state or Git
  * commit is created here.
  */
 export async function stageTaskInitialization(

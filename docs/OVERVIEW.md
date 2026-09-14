@@ -134,4 +134,4 @@ This split defines recovery honestly. A fresh clone reconstructs status, current
 
 ## Automation responsibility
 
-A producer invocation normally runs through review, remediation and its authenticated commit. The user launches the next skill at the explicit handoff. Automation v3 distinguishes that handoff from configured SQL/public-contract approvals and genuine exceptions; transient dispatch retries and five completed review rounds have separate budgets.
+A producer invocation normally runs through review, remediation and its authenticated commit. The user launches the next skill at the explicit handoff. Automation v3 distinguishes that handoff from configured plan/SQL/database approvals and custom repository triggers and genuine exceptions; transient dispatch retries and five completed review rounds have separate budgets.

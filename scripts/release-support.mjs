@@ -116,6 +116,7 @@ const DECLARED_ASSETS = Object.freeze([
   "assets/constitution/10-architecture.md",
   "assets/constitution/15-dependencies.md",
   "assets/constitution/20-data.md",
+  "assets/constitution/25-database.md",
   "assets/constitution/30-product.md",
   "assets/constitution/35-plan-changes.md",
   "assets/constitution/40-authentication.md",

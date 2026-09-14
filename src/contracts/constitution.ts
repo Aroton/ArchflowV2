@@ -8,6 +8,7 @@ export interface ConstitutionRuleV1 {
   readonly version: number;
   readonly status: "active" | "deprecated";
   readonly text: string;
+  /** Optional human-review condition; every active rule receives automated compliance review. */
   readonly review_trigger?: string;
   readonly enforced_by?: readonly string[];
 }
