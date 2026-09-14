@@ -148,6 +148,33 @@ describe("automation status pure projection", () => {
     expect(JSON.stringify(boundary)).not.toContain("adjudicator route");
   });
 
+  it("includes all unresolved reviewers in the automation summary without changing the primary boundary", () => {
+    const projected = projectAutomationStatusV3(snapshot(rawAction("run-step", { step: "counter_review" })), view("awaiting-client", "review", {
+      dispatch_failure: {
+        role: "counter-reviewer", code: "RATE_LIMITED", message: "Session limit reached.",
+        route: { model: "opus", effort: "high", provider: "zai", source: "configured" },
+        recovery: { status: "exhausted", dispatches: 3, maximum_dispatches: 3 },
+        additional_failures: [{
+          role: "adjudicator", code: "TIMEOUT", message: "CLI print timeout after 300 seconds.",
+          route: { model: "gemini-3.8-flash-high", effort: "high", source: "configured" },
+          recovery: { status: "exhausted", dispatches: 3, maximum_dispatches: 3 },
+        }],
+      },
+    }));
+    expect(projected).toMatchObject({
+      condition: "awaiting-human",
+      human_boundary: {
+        failed_role: "counter-reviewer", failure_code: "RATE_LIMITED",
+        summary: expect.stringContaining("opus via zai"),
+        reasons: [expect.objectContaining({ text: expect.stringContaining("Session limit") }), expect.objectContaining({ text: expect.stringContaining("300 seconds") })],
+      },
+    });
+    const serialized = JSON.stringify(projected);
+    expect(serialized).toContain("gemini-3.8-flash-high");
+    expect(serialized).toContain("3/3 (exhausted)");
+    expect(projected.next_action.actor).toBe("human");
+  });
+
   it("derives stable blocked categories from typed snapshot facts", () => {
     const cases = [
       ["resume-exact-intent", "resume-exact-intent"],

@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
+import semanticWorkflowSchema from "../../src/contracts/schemas/v1/semantic-workflow.schema.json" with { type: "json" };
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 import {
   REPOSITORY_NAME_PRESENCE_RULE,
   dispatchFailureObservationV1Schema,
   projectDispatchFailureObservation,
+  publicDispatchFailureV1Schema,
 } from "../../src/contracts/dispatch-failure.js";
 
 const observation = {
@@ -27,6 +30,27 @@ const observation = {
 } as const;
 
 describe("dispatch-failure contract", () => {
+  it("allows bounded non-recursive sibling failures without forensic fields", () => {
+    const detail = { role: "counter-reviewer", code: "TIMEOUT", message: "CLI print timeout expired." };
+    expect(publicDispatchFailureV1Schema.safeParse({ ...detail, additional_failures: [detail] }).success).toBe(true);
+    expect(publicDispatchFailureV1Schema.safeParse({ ...detail, additional_failures: [{ ...detail, stderr_tail: "private" }] }).success).toBe(false);
+    expect(publicDispatchFailureV1Schema.safeParse({ ...detail, additional_failures: [{ ...detail, additional_failures: [detail] }] }).success).toBe(false);
+    expect(publicDispatchFailureV1Schema.safeParse({ ...detail, additional_failures: Array(64).fill(detail) }).success).toBe(false);
+  });
+
+  it("publishes sibling failures and retry progress in the generated semantic schema", () => {
+    const defs = semanticWorkflowSchema.$defs;
+    const validator = createJsonSchemaValidator({
+      $ref: "#/$defs/publicDispatchFailure",
+      $defs: { publicDispatchFailure: defs.publicDispatchFailure, publicDispatchFailureDetail: defs.publicDispatchFailureDetail },
+    });
+    const detail = { role: "counter-reviewer", code: "TIMEOUT", message: "CLI print timeout expired.",
+      recovery: { status: "exhausted", dispatches: 3, maximum_dispatches: 3 } };
+    const value = { ...detail, additional_failures: [detail] };
+    expect(validator.assert(value)).toEqual(publicDispatchFailureV1Schema.parse(value));
+    expect(validator.validate({ ...value, additional_failures: [{ ...detail, stderr_tail: "private" }] })).toBe(false);
+    expect(validator.validate({ ...value, additional_failures: [{ ...detail, recovery: { ...detail.recovery, dispatches: 4 } }] })).toBe(false);
+  });
   it("parses the strict bounded observation and rejects forensic or unbounded additions", () => {
     expect(dispatchFailureObservationV1Schema.parse(observation)).toEqual(observation);
     expect(dispatchFailureObservationV1Schema.safeParse({ ...observation, stderr_tail: "secret" }).success).toBe(false);

@@ -28,7 +28,7 @@ import {
   workflowRepositoryNameV1Schema,
   workflowViewV1Schema,
 } from "../semantic-workflow.js";
-import { DISPATCH_FAILURE_CODES, publicDispatchFailureV1Schema } from "../dispatch-failure.js";
+import { DISPATCH_FAILURE_CODES, publicDispatchFailureDetailV1Schema, publicDispatchFailureV1Schema } from "../dispatch-failure.js";
 import { SCHEMA_IDS } from "../versions.js";
 import { PLAIN_JSON_FRAGMENT } from "./schema-generation-durable.js";
 import type { SchemaGenerationGroup } from "./schema-generation.js";
@@ -86,12 +86,23 @@ const REVIEW_MODEL_ROUTE_FRAGMENT = {
   additionalProperties: false,
 } as const;
 
-const PUBLIC_DISPATCH_FAILURE_FRAGMENT = {
+const PUBLIC_DISPATCH_FAILURE_DETAIL_FRAGMENT = {
   type: "object",
   properties: {
     role: { enum: ["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"] },
     code: { enum: DISPATCH_FAILURE_CODES },
     message: { type: "string", minLength: 1, maxLength: 256 },
+    recovery: {
+      type: "object",
+      properties: {
+        status: { enum: ["retrying", "exhausted", "repair-required"] },
+        dispatches: { type: "integer", minimum: 0, maximum: 3 },
+        maximum_dispatches: { const: 3 },
+        next_retry_at: { type: "string", format: "date-time" },
+      },
+      required: ["status", "dispatches", "maximum_dispatches"],
+      additionalProperties: false,
+    },
     repository_name: {
       anyOf: [
         { type: "string", const: "primary" },
@@ -115,6 +126,17 @@ const PUBLIC_DISPATCH_FAILURE_FRAGMENT = {
   // The `repository_name`-iff-`REPOSITORY_VIEW_UNAVAILABLE` rule is published on the leaf
   // `dispatch-failure` document (`REPOSITORY_NAME_PRESENCE_RULE`); it is left off this advertised
   // fragment to stay inside the MCP advertisement byte budget. Zod remains the runtime authority.
+} as const;
+
+const PUBLIC_DISPATCH_FAILURE_FRAGMENT = {
+  ...PUBLIC_DISPATCH_FAILURE_DETAIL_FRAGMENT,
+  properties: {
+    ...PUBLIC_DISPATCH_FAILURE_DETAIL_FRAGMENT.properties,
+    additional_failures: {
+      type: "array", minItems: 1, maxItems: 63,
+      items: { $ref: "#/$defs/publicDispatchFailureDetail" },
+    },
+  },
 } as const;
 
 /** Compact public semantic workflow contract; neither tool is advertised until Phase 2. */
@@ -144,6 +166,7 @@ export const semanticWorkflowSchemaGroup: SchemaGenerationGroup = {
       workflowView: workflowViewV1Schema,
       implementationRecommendation: implementationRecommendationV1Schema,
       publicDispatchFailure: publicDispatchFailureV1Schema,
+      publicDispatchFailureDetail: publicDispatchFailureDetailV1Schema,
       configChangeEntry: configChangeEntryV1Schema,
       plainJson: configChangeValueV1Schema,
       repositoryName: workflowRepositoryNameV1Schema,
@@ -159,6 +182,7 @@ export const semanticWorkflowSchemaGroup: SchemaGenerationGroup = {
     // own emission cannot live in a `$def` (see schema-generation-durable.ts).
     overrides: {
       publicDispatchFailure: PUBLIC_DISPATCH_FAILURE_FRAGMENT,
+      publicDispatchFailureDetail: PUBLIC_DISPATCH_FAILURE_DETAIL_FRAGMENT,
       reviewModelRoute: REVIEW_MODEL_ROUTE_FRAGMENT,
       reviewRouteSet: REVIEW_ROUTE_SET_FRAGMENT,
       workflowInvocation: WORKFLOW_INVOCATION_FRAGMENT,

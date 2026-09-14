@@ -3643,7 +3643,7 @@
       ]
     },
     "src/contracts/dispatch-failure.ts": {
-      "bytes": 6014,
+      "bytes": 6684,
       "format": "esm",
       "imports": [
         {
@@ -4200,7 +4200,7 @@
       ]
     },
     "src/contracts/errors.ts": {
-      "bytes": 24160,
+      "bytes": 24253,
       "format": "esm",
       "imports": [
         {
@@ -4730,7 +4730,7 @@
       }
     },
     "src/contracts/schemas/v1/project-error.schema.json": {
-      "bytes": 86040,
+      "bytes": 86639,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4754,7 +4754,7 @@
       }
     },
     "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-      "bytes": 117656,
+      "bytes": 121590,
       "format": "esm",
       "imports": [],
       "with": {
@@ -5080,7 +5080,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 45701,
+      "bytes": 47643,
       "format": "esm",
       "imports": [
         {
@@ -5202,7 +5202,7 @@
       ]
     },
     "src/dispatch/failure-observation.ts": {
-      "bytes": 10939,
+      "bytes": 11534,
       "format": "esm",
       "imports": [
         {
@@ -5259,7 +5259,7 @@
       ]
     },
     "src/dispatch/recovery.ts": {
-      "bytes": 13166,
+      "bytes": 13471,
       "format": "esm",
       "imports": [
         {
@@ -5922,7 +5922,7 @@
       ]
     },
     "src/local/automation-status.ts": {
-      "bytes": 15877,
+      "bytes": 16429,
       "format": "esm",
       "imports": [
         {
@@ -9774,7 +9774,7 @@
       ]
     },
     "src/state/semantic-view.ts": {
-      "bytes": 33244,
+      "bytes": 33557,
       "format": "esm",
       "imports": [
         {
@@ -10384,7 +10384,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2410740,
+      "bytes": 2413898,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11443,7 +11443,7 @@
           "bytesInOutput": 3121
         },
         "src/contracts/dispatch-failure.ts": {
-          "bytesInOutput": 3464
+          "bytesInOutput": 3835
         },
         "src/contracts/durable-document.ts": {
           "bytesInOutput": 2333
@@ -11479,7 +11479,7 @@
           "bytesInOutput": 19567
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 17401
+          "bytesInOutput": 17525
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 3776
@@ -11554,7 +11554,7 @@
           "bytesInOutput": 1687
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 29332
+          "bytesInOutput": 30846
         },
         "src/dispatch/failure-observation.ts": {
           "bytesInOutput": 2430
@@ -11563,7 +11563,7 @@
           "bytesInOutput": 7822
         },
         "src/dispatch/recovery.ts": {
-          "bytesInOutput": 3745
+          "bytesInOutput": 3949
         },
         "src/dispatch/review-feedback.ts": {
           "bytesInOutput": 1434
@@ -11599,7 +11599,7 @@
           "bytesInOutput": 3870
         },
         "src/local/automation-status.ts": {
-          "bytesInOutput": 13221
+          "bytesInOutput": 13766
         },
         "src/local/call-envelope.ts": {
           "bytesInOutput": 4343
@@ -11761,7 +11761,7 @@
           "bytesInOutput": 33342
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 29093
+          "bytesInOutput": 29493
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 31878
@@ -11787,7 +11787,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3674692,
+      "bytes": 3682282,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12921,7 +12921,7 @@
           "bytesInOutput": 3290
         },
         "src/contracts/dispatch-failure.ts": {
-          "bytesInOutput": 3397
+          "bytesInOutput": 3768
         },
         "src/contracts/durable-document.ts": {
           "bytesInOutput": 2242
@@ -12957,7 +12957,7 @@
           "bytesInOutput": 19521
         },
         "src/contracts/errors.ts": {
-          "bytesInOutput": 17416
+          "bytesInOutput": 17540
         },
         "src/contracts/evidence.ts": {
           "bytesInOutput": 3325
@@ -13035,7 +13035,7 @@
           "bytesInOutput": 1499
         },
         "src/contracts/schemas/v1/project-error.schema.json": {
-          "bytesInOutput": 81998
+          "bytesInOutput": 82571
         },
         "src/contracts/schemas/v1/rubric.schema.json": {
           "bytesInOutput": 1092
@@ -13044,7 +13044,7 @@
           "bytesInOutput": 3054
         },
         "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-          "bytesInOutput": 112752
+          "bytesInOutput": 116542
         },
         "src/contracts/schemas/v1/task-initialization.schema.json": {
           "bytesInOutput": 1432
@@ -13089,19 +13089,19 @@
           "bytesInOutput": 1586
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 33044
+          "bytesInOutput": 34558
         },
         "src/dispatch/coordinator.ts": {
           "bytesInOutput": 6939
         },
         "src/dispatch/failure-observation.ts": {
-          "bytesInOutput": 7533
+          "bytesInOutput": 8141
         },
         "src/dispatch/process.ts": {
           "bytesInOutput": 7822
         },
         "src/dispatch/recovery.ts": {
-          "bytesInOutput": 10431
+          "bytesInOutput": 10641
         },
         "src/dispatch/retained-child-output.ts": {
           "bytesInOutput": 6736
@@ -13332,7 +13332,7 @@
           "bytesInOutput": 33243
         },
         "src/state/semantic-view.ts": {
-          "bytesInOutput": 29000
+          "bytesInOutput": 29400
         },
         "src/state/snapshots.ts": {
           "bytesInOutput": 31961

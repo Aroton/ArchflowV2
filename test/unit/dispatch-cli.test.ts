@@ -591,6 +591,47 @@ describe("CLI output contracts and failure classification", () => {
     })) }))).toMatchObject({ code: "AUTH_UNAVAILABLE" });
   });
 
+  it.each([0, 1])("recognizes Claude session-limit error wrappers at exit %s", (exit_code) => {
+    const adapter = selectCliAdapter("codex");
+    expect(adapter.classifyFailure(result({ exit_code, stdout: bytes(JSON.stringify({
+      is_error: true, result: "API Error: 429 session limit reached (private account details)",
+    })) }))).toMatchObject({ code: "RATE_LIMITED", diagnostic: { parameters: { reason: "session-limit" } } });
+    expect(adapter.classifyFailure(result({ exit_code, stdout: bytes(JSON.stringify({
+      is_error: true, result: "HTTP 429",
+    })) }))).toMatchObject({ code: "RATE_LIMITED" });
+  });
+
+  it.each([0, 1])("recognizes agy's print deadline at exit %s and rejects partial output", (exit_code) => {
+    const adapter = selectCliAdapter("antigravity", {
+      adapter: "antigravity-cli", family: "gemini", model: "gemini-3.8-flash-high", effort: "high",
+    });
+    for (const structured_output of [undefined, { report: "unfinished" }]) {
+      const child = result({ exit_code,
+        stdout: bytes(JSON.stringify({ event: "result", result: { status: "SUCCESS", result: "", structured_output } })),
+        stderr: bytes("[agy] print timeout after 5m0s with turn in progress; returning partial output\n"),
+      });
+      const expected = { code: "TIMEOUT", diagnostic: { parameters: {
+        adapter: "antigravity-cli", attempt: 1, limit_ms: 300_000, origin: "cli",
+      } } };
+      expect(adapter.classifyFailure(child)).toMatchObject(expected);
+      expect(projectError(() => adapter.parseOutput(child))).toMatchObject(expected);
+    }
+  });
+
+  it("does not infer agy timeouts from ordinary stderr or reviewer prose", () => {
+    const adapter = selectCliAdapter("antigravity", {
+      adapter: "antigravity-cli", family: "gemini", model: "gemini-3.8-flash-high", effort: "high",
+    });
+    const child = result({
+      stdout: bytes(JSON.stringify({ status: "SUCCESS", result: "A command timed out after 5 minutes" })),
+      stderr: bytes("warning: command timed out after 5 minutes\n"),
+    });
+    expect(adapter.classifyFailure(child)).toBeUndefined();
+    expect(projectError(() => adapter.parseOutput(child))).toMatchObject({
+      code: "MODEL_OUTPUT_INVALID", diagnostic: { parameters: { issue_code: "structured-output-missing" } },
+    });
+  });
+
   it("extracts and canonically re-encodes Antigravity structured_output", async () => {
     const adapter = selectCliAdapter("antigravity", {
       adapter: "antigravity-cli",
@@ -645,6 +686,7 @@ describe("CLI output contracts and failure classification", () => {
     );
 
     expect(inv.command).toBe("agy");
+    expect(inv.argv[inv.argv.indexOf("--print-timeout") + 1]).toBe("900s");
     expect(inv.argv).toContain("-p");
     expect(inv.argv).toContain("--input-format");
     expect(inv.argv).toContain("stream-json");

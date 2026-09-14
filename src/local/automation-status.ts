@@ -167,15 +167,21 @@ function dispatchFailureBoundary(view: WorkflowViewV1): AutomationHumanBoundaryV
   const effortSuffix = failure.role === "effort-reviewer" && failure.route !== undefined
     ? ` The configured route is ${failure.route.model} at ${failure.route.effort} effort.`
     : "";
+  const reasons = [failure, ...(failure.additional_failures ?? [])].map((item) => {
+    const name = item.role === "effort-reviewer" ? "effort reviewer" : item.role;
+    const route = item.route === undefined ? "" : ` (${item.route.model}${item.route.provider === undefined ? "" : ` via ${item.route.provider}`})`;
+    const attempts = item.recovery === undefined ? "" : ` Dispatch attempts: ${String(item.recovery.dispatches)}/${String(item.recovery.maximum_dispatches)} (${item.recovery.status}).`;
+    return { class: "exception" as const, text: `${name}${route} dispatch failed: ${item.message}${attempts}` };
+  });
   return Object.freeze({
     source: "dispatch-failure",
     class: "exception",
     headline: failure.role === "effort-reviewer"
       ? "Effort review route needs human attention"
       : "Reviewer route needs human attention",
-    summary: `${failure.message}${effortSuffix}`,
+    summary: `${reasons.map((reason) => reason.text).join(" ")}${effortSuffix}`,
     question: `Return to the owning skill to repair the ${humanRole} route or authorize a one-dispatch substitute reviewer.`,
-    reasons: Object.freeze([{ class: "exception" as const, text: `${humanRole} dispatch failed: ${failure.message}${effortSuffix}` }]),
+    reasons: Object.freeze(reasons),
     failed_role: role,
     failure_code: failure.code,
   });

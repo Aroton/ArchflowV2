@@ -57,13 +57,18 @@ export type DispatchFailureObservationV1 = Readonly<{
 }>;
 
 /** Public semantic projection: no runtime path or canonical-state join identifiers. */
-export type PublicDispatchFailureV1 = Readonly<{
+export type PublicDispatchFailureDetailV1 = Readonly<{
   role: DispatchFailureRoleV1;
   code: DispatchFailureCodeV1;
   message: string;
   repository_name?: string;
   route?: DispatchFailureRouteV1;
   recovery?: DispatchRecoveryProgressV1;
+}>;
+
+export type PublicDispatchFailureV1 = PublicDispatchFailureDetailV1 & Readonly<{
+  /** Other unresolved reviewer failures; the primary failure still selects the recovery action. */
+  additional_failures?: readonly PublicDispatchFailureDetailV1[];
 }>;
 
 export type DispatchRecoveryProgressV1 = {
@@ -124,13 +129,20 @@ export const dispatchFailureObservationV1Schema = z.object({
   observed_at_revision: safeIntegerV1Schema,
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE }) as unknown as z.ZodType<DispatchFailureObservationV1>;
 
-export const publicDispatchFailureV1Schema = z.object({
+const publicFailureFields = {
   recovery: dispatchRecoveryProgressV1Schema.optional(),
   role: z.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   code: z.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
   repository_name: repositoryName().optional(),
   route: route.optional(),
+};
+export const publicDispatchFailureDetailV1Schema = z.object(publicFailureFields)
+  .strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE }) as unknown as z.ZodType<PublicDispatchFailureDetailV1>;
+
+export const publicDispatchFailureV1Schema = z.object({
+  ...publicFailureFields,
+  additional_failures: z.array(publicDispatchFailureDetailV1Schema).min(1).max(63).readonly().optional(),
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE }) as unknown as z.ZodType<PublicDispatchFailureV1>;
 
 export function parseDispatchFailureObservationV1(value: unknown): DispatchFailureObservationV1 {

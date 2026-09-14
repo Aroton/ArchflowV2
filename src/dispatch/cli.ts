@@ -30,6 +30,7 @@ import type {
   ReviewAssignmentV1,
 } from "../review/envelopes.js";
 import {
+  DISPATCH_TIMEOUT_MS,
   MAX_ARGV_ELEMENT_BYTES,
   runDispatchChild,
   type DispatchChildResult,
@@ -593,7 +594,10 @@ function modelFromMessage(message: string): string | undefined {
 }
 
 function classifyMessage(adapter: AdapterId, message: string): ProjectError | undefined {
-  if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b/iu.test(message)) {
+  if (/\bsession[ -](?:usage[ -])?limit(?:s|ed)?\b/iu.test(message)) {
+    return createProjectError("RATE_LIMITED", { adapter, attempt: 1, reason: "session-limit" });
+  }
+  if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b|\b(?:HTTP(?:\s+status)?|API\s+Error)\s*:?\s*429\b/iu.test(message)) {
     return createProjectError("RATE_LIMITED", { adapter, attempt: 1 });
   }
   if (/\b(?:not logged in|login required|authentication (?:failed|required)|failed to authenticate|unauthorized|invalid credentials?|oauth session expired|refresh token (?:expired|invalid)|could not be refreshed)\b/iu.test(message)) {
@@ -762,7 +766,11 @@ const claudeAdapter: CliAdapter = Object.freeze({
   },
   classifyFailure(result: DispatchChildResult) {
     const message = claudeFailureMessage(result);
-    return classifyNonzero("claude-cli", result, message === undefined ? [] : [message]);
+    // Some CLI error wrappers arrive with exit 0. The explicit error marker, not stderr
+    // warnings or ordinary reviewer prose, supplies the failure semantics.
+    if (message !== undefined) return classifyMessage("claude-cli", message)
+      ?? createProjectError("PROCESS_FAILED", { adapter: "claude-cli", exit_class: exitClass(result) });
+    return classifyNonzero("claude-cli", result, []);
   },
 });
 
@@ -902,6 +910,17 @@ function antigravityFailureMessage(result: DispatchChildResult): string | undefi
     : undefined;
 }
 
+function antigravityPrintTimeout(result: DispatchChildResult): ProjectError | undefined {
+  // agy may exit successfully with an empty/partial result when its own print deadline
+  // expires. Match only its explicit stderr diagnostic, never arbitrary timeout prose.
+  const match = /^\[agy\] print timeout after (?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)? with turn in progress; returning partial output\r?$/mu
+    .exec(result.stderr.toString("utf8"));
+  if (match === null || match.slice(1).every((part) => part === undefined)) return undefined;
+  const limitMs = Math.round((Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0)) * 1000);
+  if (!Number.isSafeInteger(limitMs) || limitMs <= 0) return undefined;
+  return createProjectError("TIMEOUT", { adapter: "antigravity-cli", attempt: 1, limit_ms: limitMs, origin: "cli" });
+}
+
 const antigravityAdapter: CliAdapter = Object.freeze({
   id: "antigravity-cli",
   family: "gemini",
@@ -948,6 +967,8 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     );
     const argv = Object.freeze([
       "-p", "",
+      // agy's five-minute default can truncate a working review before our process deadline.
+      "--print-timeout", `${String(DISPATCH_TIMEOUT_MS / 1000)}s`,
       "--input-format", "stream-json",
       "--output-format", "stream-json",
       "--json-schema", schemaPath,
@@ -966,6 +987,8 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     });
   },
   parseOutput(result: DispatchChildResult) {
+    const timeout = antigravityPrintTimeout(result);
+    if (timeout !== undefined) return fail(timeout);
     const wrapper = antigravityResultEvent(result.stdout);
     if (wrapper === undefined) {
       return fail(createProjectError("MODEL_OUTPUT_INVALID", {
@@ -988,8 +1011,12 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     }
   },
   classifyFailure(result: DispatchChildResult) {
+    const timeout = antigravityPrintTimeout(result);
+    if (timeout !== undefined) return timeout;
     const message = antigravityFailureMessage(result);
-    return classifyNonzero("antigravity-cli", result, message === undefined ? [] : [message]);
+    if (message !== undefined) return classifyMessage("antigravity-cli", message)
+      ?? createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: exitClass(result) });
+    return classifyNonzero("antigravity-cli", result, []);
   },
 });
 

@@ -34,6 +34,8 @@ Progress describes authority; it never supplies an approval token or substitutes
 
 ## Controller loop
 
+When several reviewer routes fail, the human boundary's summary and reasons list each unresolved route, its safe cause, and its dispatch count. The primary `failed_role` and `failure_code` still determine the same recovery boundary; the additional explanations do not authorize a substitute reviewer or accept partial output. Semantic status also exposes the other failures in `dispatch_failure.additional_failures`. Details come from the existing durable recovery journal, so losing ignored diagnostics does not erase them.
+
 Keep at most one live producer per task:
 
 ```text

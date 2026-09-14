@@ -524,14 +524,16 @@ export function projectSemanticStatus(
   const repositoryNotice = status.repositories === undefined
     ? ""
     : " The live repository set is listed in repositories; it is informational and grants no review or write authority.";
-  // The failure's safe facts are in dispatch_failure; the prose names the role and, when the
-  // failure is a missing repository view, the configured repository so a human can go repair it.
+  // Name every unresolved route and its cause; one primary failure still selects the action.
   const failure = status.dispatch_failure;
   const dispatchFailureNotice = failure === undefined
     ? ""
-    : failure.repository_name === undefined
-      ? ` The last ${failure.role} dispatch failed: ${failure.message}`
-      : ` The last ${failure.role} dispatch failed because repository "${failure.repository_name}" could not be provided as a read-only view: ${failure.message}`;
+    : [failure, ...(failure.additional_failures ?? [])].map((item) => {
+      const route = item.route === undefined ? "" : ` (${item.route.model}${item.route.provider === undefined ? "" : ` via ${item.route.provider}`})`;
+      const repository = item.repository_name === undefined ? "" : ` because repository "${item.repository_name}" could not be provided as a read-only view`;
+      const attempts = item.recovery === undefined ? "" : ` Dispatch attempts: ${String(item.recovery.dispatches)}/${String(item.recovery.maximum_dispatches)} (${item.recovery.status}).`;
+      return ` The last ${item.role}${route} dispatch failed${repository}: ${item.message}${attempts}`;
+    }).join("");
   const nextAction: SemanticNextActionV1 = Object.freeze({
     kind: shape.action_kind,
     instruction: shape.instruction,

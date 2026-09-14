@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { canonicalJsonBytes, canonicalJsonDigest } from "../contracts/canonical.js";
-import { publicDispatchFailureV1Schema, type PublicDispatchFailureV1, type DispatchFailureRoleV1 } from "../contracts/dispatch-failure.js";
+import { publicDispatchFailureDetailV1Schema, type PublicDispatchFailureV1, type PublicDispatchFailureDetailV1, type DispatchFailureRoleV1 } from "../contracts/dispatch-failure.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { createProjectError, parseProjectError } from "../contracts/errors.js";
 import { parseTaskPathClaim } from "../contracts/path-claims.js";
@@ -22,7 +22,7 @@ const entrySchema = z.object({
   role: z.enum(["counter-reviewer", "test-reviewer", "adjudicator", "effort-reviewer"]),
   dispatches: z.number().int().min(0).max(MAX_DISPATCHES),
   status: z.enum(["running", "retrying", "failed", "succeeded"]),
-  failure: publicDispatchFailureV1Schema.optional(),
+  failure: publicDispatchFailureDetailV1Schema.optional(),
   next_retry_at: z.iso.datetime().optional(),
 }).strict();
 const recordSchema = z.object({
@@ -30,7 +30,7 @@ const recordSchema = z.object({
   entries: z.array(entrySchema).max(64),
 }).strict();
 type Entry = { key: string; envelope_digest?: string; role: DispatchFailureRoleV1; dispatches: number;
-  status: "running" | "retrying" | "failed" | "succeeded"; failure?: PublicDispatchFailureV1; next_retry_at?: string };
+  status: "running" | "retrying" | "failed" | "succeeded"; failure?: PublicDispatchFailureDetailV1; next_retry_at?: string };
 type Record = { schema_version: "1"; binding: string; entries: Entry[] };
 export type RecoveryContext = Readonly<{
   authority: TransactionAuthority;
@@ -54,7 +54,7 @@ function key(role: DispatchFailureRoleV1, selected: SelectedRouteCandidate | und
   assertPlainJson(value, "dispatch recovery selection");
   return canonicalJsonDigest(structuredClone(value) as PlainJsonValue);
 }
-function failure(role: DispatchFailureRoleV1, selected: SelectedRouteCandidate | undefined, error: unknown): PublicDispatchFailureV1 {
+function failure(role: DispatchFailureRoleV1, selected: SelectedRouteCandidate | undefined, error: unknown): PublicDispatchFailureDetailV1 {
   const classified = classifiedDispatchFailure(error);
   const candidate = {
     role, code: classified?.code ?? "PROCESS_FAILED",
@@ -62,7 +62,7 @@ function failure(role: DispatchFailureRoleV1, selected: SelectedRouteCandidate |
     ...(classified?.repository_name === undefined ? {} : { repository_name: classified.repository_name }),
     ...(selected === undefined ? {} : { route: { ...selected.raw_route, source: selected.source.provenance } }),
   };
-  const parsed = publicDispatchFailureV1Schema.safeParse(candidate);
+  const parsed = publicDispatchFailureDetailV1Schema.safeParse(candidate);
   if (parsed.success) return parsed.data;
   // Invalid route input must still produce an actionable durable failure, without copying invalid bytes.
   return { role, code: "CONFIG_INVALID", message: "The selected reviewer route configuration is invalid." };
@@ -203,11 +203,13 @@ export async function readDispatchRecovery(context: Pick<RecoveryContext, "autho
     const pending = record.entries.filter((entry) => entry.status !== "succeeded" && entry.failure !== undefined);
     const entry = pending.find((item) => item.status === "failed") ?? pending[0];
     if (entry?.failure === undefined) return record.entries.length === 0 ? undefined : null;
-    return { ...entry.failure, recovery: {
-      status: entry.status === "failed" ? entry.dispatches >= MAX_DISPATCHES ? "exhausted" : "repair-required" : "retrying",
-      dispatches: entry.dispatches, maximum_dispatches: MAX_DISPATCHES,
-      ...(entry.next_retry_at === undefined ? {} : { next_retry_at: entry.next_retry_at }),
-    } };
+    const project = (item: Entry): PublicDispatchFailureDetailV1 => ({ ...item.failure!, recovery: {
+      status: item.status === "failed" ? item.dispatches >= MAX_DISPATCHES ? "exhausted" : "repair-required" : "retrying",
+      dispatches: item.dispatches, maximum_dispatches: MAX_DISPATCHES,
+      ...(item.next_retry_at === undefined ? {} : { next_retry_at: item.next_retry_at }),
+    } });
+    const additional = pending.filter((item) => item !== entry).map(project);
+    return { ...project(entry), ...(additional.length === 0 ? {} : { additional_failures: additional }) };
   } catch {
     return { role: "counter-reviewer", code: "RECOVERY_STATE_INVALID", message: "Durable reviewer recovery state is unreadable; repair it before retrying.",
       recovery: { status: "repair-required", dispatches: 0, maximum_dispatches: MAX_DISPATCHES } };

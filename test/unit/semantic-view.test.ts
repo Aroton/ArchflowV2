@@ -386,6 +386,28 @@ describe("semantic status projection", () => {
     expect(invalidView.dispatch_failure).toEqual(invalidAdjudication.dispatch_failure);
     expect(invalidView.detail).toContain("missing structured_output");
 
+    const multipleFailures = fullStatus(action("run-step", { step: "counter_review" }), {
+      step: "counter_review", status: "running",
+      dispatch_failure: {
+        role: "counter-reviewer", code: "RATE_LIMITED", message: "The reviewer service session limit was reached.",
+        route: { model: "opus", effort: "high", provider: "zai", source: "configured" },
+        recovery: { status: "exhausted", dispatches: 3, maximum_dispatches: 3 },
+        additional_failures: [{
+          role: "counter-reviewer", code: "TIMEOUT", message: "The Antigravity CLI print timeout expired after 300 seconds.",
+          route: { model: "gemini-3.8-flash-high", effort: "high", source: "configured" },
+          recovery: { status: "exhausted", dispatches: 3, maximum_dispatches: 3 },
+        }],
+      },
+    });
+    const multipleView = projectSemanticStatus(snapshot(multipleFailures), invocation).view;
+    expect(multipleView.dispatch_failure).toEqual(multipleFailures.dispatch_failure);
+    expect(multipleView.detail).toContain("opus via zai");
+    expect(multipleView.detail).toContain("session limit");
+    expect(multipleView.detail).toContain("gemini-3.8-flash-high");
+    expect(multipleView.detail).toContain("300 seconds");
+    expect(multipleView.detail).toContain("3/3 (exhausted)");
+    expect(multipleView.next_action.kind).toBe("review");
+
     const emptyTriage = fullStatus(action("run-step", { step: "triage" }), { step: "counter_review", status: "succeeded" });
     expect(projectSemanticStatus(snapshot(emptyTriage), invocation).view.next_action.kind).toBe("review");
 

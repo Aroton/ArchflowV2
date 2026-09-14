@@ -2953,7 +2953,24 @@
               "const": "RATE_LIMITED"
             },
             "parameters": {
-              "$ref": "#/$defs/adapterAttempt"
+              "type": "object",
+              "properties": {
+                "adapter": {
+                  "$ref": "#/$defs/adapter"
+                },
+                "attempt": {
+                  "$ref": "#/$defs/integer"
+                },
+                "reason": {
+                  "type": "string",
+                  "const": "session-limit"
+                }
+              },
+              "required": [
+                "adapter",
+                "attempt"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -3014,6 +3031,10 @@
                 },
                 "limit_ms": {
                   "$ref": "#/$defs/integer"
+                },
+                "origin": {
+                  "type": "string",
+                  "const": "cli"
                 }
               },
               "required": [

@@ -473,7 +473,11 @@ approval_rules:
           failure_code: "CONFIG_MODEL_UNSUPPORTED",
         },
       });
-      expect(JSON.stringify(failureBoundary)).not.toContain("unsupported-model");
+      // The configured route is now named so simultaneous failures are distinguishable.
+      // This is a safe selected model, not raw stderr or reviewer output.
+      expect(failureBoundary).toMatchObject({
+        human_boundary: { summary: expect.stringContaining("counter-reviewer (unsupported-model)") },
+      });
 
       const retryInvocation = { skill: "archflow-prd", intent: "resume" } as const;
       view = await harness.status(retryInvocation);

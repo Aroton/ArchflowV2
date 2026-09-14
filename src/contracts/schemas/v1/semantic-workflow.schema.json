@@ -2578,6 +2578,162 @@
           "minLength": 1,
           "maxLength": 256
         },
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "retrying",
+                "exhausted",
+                "repair-required"
+              ]
+            },
+            "dispatches": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "maximum_dispatches": {
+              "const": 3
+            },
+            "next_retry_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "status",
+            "dispatches",
+            "maximum_dispatches"
+          ],
+          "additionalProperties": false
+        },
+        "repository_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "primary"
+            },
+            {
+              "type": "string",
+              "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+            }
+          ]
+        },
+        "route": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "effort": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            "provider": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "source": {
+              "enum": [
+                "configured",
+                "invocation-declared",
+                "route-override"
+              ]
+            }
+          },
+          "required": [
+            "model",
+            "effort",
+            "source"
+          ],
+          "additionalProperties": false
+        },
+        "additional_failures": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 63,
+          "items": {
+            "$ref": "#/$defs/publicDispatchFailureDetail"
+          }
+        }
+      },
+      "required": [
+        "role",
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "publicDispatchFailureDetail": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "enum": [
+            "counter-reviewer",
+            "test-reviewer",
+            "effort-reviewer",
+            "adjudicator"
+          ]
+        },
+        "code": {
+          "enum": [
+            "CONFIG_INVALID",
+            "CONFIG_MODEL_UNSUPPORTED",
+            "CLI_MISSING",
+            "AUTH_UNAVAILABLE",
+            "RATE_LIMITED",
+            "TIMEOUT",
+            "RECOVERY_STATE_INVALID",
+            "UNSUPPORTED_MODEL",
+            "CLI_VERSION_UNSUPPORTED",
+            "PROCESS_FAILED",
+            "MODEL_OUTPUT_INVALID",
+            "REPOSITORY_VIEW_UNAVAILABLE"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "retrying",
+                "exhausted",
+                "repair-required"
+              ]
+            },
+            "dispatches": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "maximum_dispatches": {
+              "const": 3
+            },
+            "next_retry_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "status",
+            "dispatches",
+            "maximum_dispatches"
+          ],
+          "additionalProperties": false
+        },
         "repository_name": {
           "anyOf": [
             {

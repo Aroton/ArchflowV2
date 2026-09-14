@@ -50,6 +50,8 @@ The additive recovery shapes keep old state readable. New no-wait settlements ca
 
 ## How the mechanisms compose
 
+Dispatch failure projection keeps a primary failure for action selection and optionally includes a bounded, non-recursive `additional_failures` array for other unresolved reviewers. Every entry has the same safe role, route, cause, and optional retry progress; neither raw diagnostic output nor journal identity is exposed. The durable journal still stores individual failures, not the aggregate projection. Optional classified error parameters distinguish a session limit from a generic rate limit and a CLI print timeout from ArchFlow's process deadline, while older errors without those parameters remain readable.
+
 ```mermaid
 flowchart LR
     V["caller-supplied value"] --> P["assertPlainJson<br/>inert data only"]

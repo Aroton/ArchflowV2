@@ -92,6 +92,34 @@ const selected = { raw_route: { model: "gpt-5.6-sol", effort: "medium" }, source
 const limited = () => new DispatchRoutingError(createProjectError("RATE_LIMITED", { adapter: "codex-cli", attempt: 1 }));
 
 describe("durable dispatch recovery", () => {
+  it("surfaces each failed reviewer with its cause and retry count across restarts", async () => {
+    const context = await fixture();
+    const claude = { raw_route: { model: "opus", effort: "high", provider: "zai" }, source: { provenance: "configured" } } as const;
+    const gemini = { raw_route: { model: "gemini-3.8-flash-high", effort: "high" }, source: { provenance: "configured" } } as const;
+    const recovery = createDispatchRecovery({ ...context, wait: async () => {} });
+    await Promise.allSettled([
+      recovery.run("counter-reviewer", claude, async () => { throw new DispatchRoutingError(createProjectError("RATE_LIMITED", {
+        adapter: "claude-cli", attempt: 1, reason: "session-limit",
+      })); }),
+      recovery.run("counter-reviewer", gemini, async () => { throw new DispatchRoutingError(createProjectError("TIMEOUT", {
+        adapter: "antigravity-cli", attempt: 1, limit_ms: 300_000, origin: "cli",
+      })); }),
+    ]);
+    rmSync(join(context.authority.workspace_root, "diagnostics"), { recursive: true, force: true });
+    const projected = (await readDispatchRecovery({ ...context }))!;
+    const all = [projected, ...projected.additional_failures ?? []];
+    expect(all).toHaveLength(2);
+    expect(all).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "RATE_LIMITED", message: expect.stringContaining("session limit"), route: expect.objectContaining({ model: "opus", provider: "zai" }) }),
+      expect.objectContaining({ code: "TIMEOUT", message: expect.stringContaining("300 seconds"), route: expect.objectContaining({ model: gemini.raw_route.model }) }),
+    ]));
+    for (const item of all) expect(item.recovery).toEqual({ status: "exhausted", dispatches: 3, maximum_dispatches: 3 });
+    // A successful explicitly authorized retry removes only its own failure.
+    await createDispatchRecovery({ ...context, retry_authorization: "repair-claude" }).run("counter-reviewer", claude, async () => "ok");
+    expect(await readDispatchRecovery(context)).toMatchObject({ code: "TIMEOUT" });
+    expect(await readDispatchRecovery(context)).not.toHaveProperty("additional_failures");
+  });
+
   it("preserves the specific adjudicator output failure through recovery and diagnostic reads", async () => {
     const context = await fixture();
     const route = { raw_route: { model: "gemini-3.8-flash-high", effort: "high" }, source: { provenance: "configured" } } as const;

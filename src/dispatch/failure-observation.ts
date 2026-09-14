@@ -92,6 +92,12 @@ export function classifiedDispatchFailure(error: unknown): Readonly<{
   const projectError = carriedProjectError(error);
   if (projectError === undefined || !supportedCodes.has(projectError.code)) return undefined;
   const code = projectError.code as DispatchFailureCodeV1;
+  if (projectError.code === "RATE_LIMITED" && projectError.diagnostic.parameters.reason === "session-limit") {
+    return { code, message: "The reviewer service session limit was reached. Wait for the session allowance to reset or explicitly choose another reviewer route." };
+  }
+  if (projectError.code === "TIMEOUT" && projectError.diagnostic.parameters.origin === "cli") {
+    return { code, message: `The Antigravity CLI print timeout expired after ${String(projectError.diagnostic.parameters.limit_ms / 1000)} seconds and returned partial output. No completed review was accepted.` };
+  }
   const repositoryName = code === "REPOSITORY_VIEW_UNAVAILABLE"
     ? (projectError.diagnostic.parameters as Readonly<Record<string, unknown>>).repository_name
     : undefined;

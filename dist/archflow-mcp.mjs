@@ -38129,8 +38129,8 @@ var PROJECT_PARAMETER_SCHEMAS = {
   CLI_MISSING: adapterOnlyParams,
   SANDBOX_UNAVAILABLE: object2({ capability: id2 }),
   SANDBOX_PROBE_FAILED: object2({ capability: id2, failure_class: code }),
-  RATE_LIMITED: adapterAttemptParams,
-  TIMEOUT: object2({ ...adapterAttempt, limit_ms: integer2 }),
+  RATE_LIMITED: object2({ ...adapterAttempt, reason: external_exports.literal("session-limit").optional() }),
+  TIMEOUT: object2({ ...adapterAttempt, limit_ms: integer2, origin: external_exports.literal("cli").optional() }),
   CANCELLED: object2({ source: external_exports.enum(["client", "transport"]), attempt: integer2 }),
   MODEL_OUTPUT_INVALID: object2({ ...adapterAttempt, issue_code: code }),
   IO_ERROR: object2({ operation: code, attempt: integer2 }),
@@ -39202,13 +39202,18 @@ var dispatchFailureObservationV1Schema = external_exports.object({
   route: route.optional(),
   observed_at_revision: safeIntegerV1Schema
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE });
-var publicDispatchFailureV1Schema = external_exports.object({
+var publicFailureFields = {
   recovery: dispatchRecoveryProgressV1Schema.optional(),
   role: external_exports.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
   code: external_exports.enum(DISPATCH_FAILURE_CODES),
   message: boundedMessage,
   repository_name: repositoryName6().optional(),
   route: route.optional()
+};
+var publicDispatchFailureDetailV1Schema = external_exports.object(publicFailureFields).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE });
+var publicDispatchFailureV1Schema = external_exports.object({
+  ...publicFailureFields,
+  additional_failures: external_exports.array(publicDispatchFailureDetailV1Schema).min(1).max(63).readonly().optional()
 }).strict().superRefine(requireRepositoryNameOnlyForViewFailures).meta({ ...REPOSITORY_NAME_PRESENCE_RULE });
 function projectDispatchFailureObservation(observation) {
   return Object.freeze({
@@ -48770,7 +48775,24 @@ var project_error_schema_default = {
               const: "RATE_LIMITED"
             },
             parameters: {
-              $ref: "#/$defs/adapterAttempt"
+              type: "object",
+              properties: {
+                adapter: {
+                  $ref: "#/$defs/adapter"
+                },
+                attempt: {
+                  $ref: "#/$defs/integer"
+                },
+                reason: {
+                  type: "string",
+                  const: "session-limit"
+                }
+              },
+              required: [
+                "adapter",
+                "attempt"
+              ],
+              additionalProperties: false
             }
           },
           required: [
@@ -48831,6 +48853,10 @@ var project_error_schema_default = {
                 },
                 limit_ms: {
                   $ref: "#/$defs/integer"
+                },
+                origin: {
+                  type: "string",
+                  const: "cli"
                 }
               },
               required: [
@@ -54694,6 +54720,162 @@ var semantic_workflow_schema_default = {
           type: "string",
           minLength: 1,
           maxLength: 256
+        },
+        recovery: {
+          type: "object",
+          properties: {
+            status: {
+              enum: [
+                "retrying",
+                "exhausted",
+                "repair-required"
+              ]
+            },
+            dispatches: {
+              type: "integer",
+              minimum: 0,
+              maximum: 3
+            },
+            maximum_dispatches: {
+              const: 3
+            },
+            next_retry_at: {
+              type: "string",
+              format: "date-time"
+            }
+          },
+          required: [
+            "status",
+            "dispatches",
+            "maximum_dispatches"
+          ],
+          additionalProperties: false
+        },
+        repository_name: {
+          anyOf: [
+            {
+              type: "string",
+              const: "primary"
+            },
+            {
+              type: "string",
+              pattern: "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+            }
+          ]
+        },
+        route: {
+          type: "object",
+          properties: {
+            model: {
+              type: "string",
+              pattern: "\\S"
+            },
+            effort: {
+              enum: [
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra"
+              ]
+            },
+            provider: {
+              type: "string",
+              pattern: "\\S"
+            },
+            source: {
+              enum: [
+                "configured",
+                "invocation-declared",
+                "route-override"
+              ]
+            }
+          },
+          required: [
+            "model",
+            "effort",
+            "source"
+          ],
+          additionalProperties: false
+        },
+        additional_failures: {
+          type: "array",
+          minItems: 1,
+          maxItems: 63,
+          items: {
+            $ref: "#/$defs/publicDispatchFailureDetail"
+          }
+        }
+      },
+      required: [
+        "role",
+        "code",
+        "message"
+      ],
+      additionalProperties: false
+    },
+    publicDispatchFailureDetail: {
+      type: "object",
+      properties: {
+        role: {
+          enum: [
+            "counter-reviewer",
+            "test-reviewer",
+            "effort-reviewer",
+            "adjudicator"
+          ]
+        },
+        code: {
+          enum: [
+            "CONFIG_INVALID",
+            "CONFIG_MODEL_UNSUPPORTED",
+            "CLI_MISSING",
+            "AUTH_UNAVAILABLE",
+            "RATE_LIMITED",
+            "TIMEOUT",
+            "RECOVERY_STATE_INVALID",
+            "UNSUPPORTED_MODEL",
+            "CLI_VERSION_UNSUPPORTED",
+            "PROCESS_FAILED",
+            "MODEL_OUTPUT_INVALID",
+            "REPOSITORY_VIEW_UNAVAILABLE"
+          ]
+        },
+        message: {
+          type: "string",
+          minLength: 1,
+          maxLength: 256
+        },
+        recovery: {
+          type: "object",
+          properties: {
+            status: {
+              enum: [
+                "retrying",
+                "exhausted",
+                "repair-required"
+              ]
+            },
+            dispatches: {
+              type: "integer",
+              minimum: 0,
+              maximum: 3
+            },
+            maximum_dispatches: {
+              const: 3
+            },
+            next_retry_at: {
+              type: "string",
+              format: "date-time"
+            }
+          },
+          required: [
+            "status",
+            "dispatches",
+            "maximum_dispatches"
+          ],
+          additionalProperties: false
         },
         repository_name: {
           anyOf: [
@@ -74093,6 +74275,12 @@ function classifiedDispatchFailure(error51) {
   const projectError = carriedProjectError(error51);
   if (projectError === void 0 || !supportedCodes.has(projectError.code)) return void 0;
   const code2 = projectError.code;
+  if (projectError.code === "RATE_LIMITED" && projectError.diagnostic.parameters.reason === "session-limit") {
+    return { code: code2, message: "The reviewer service session limit was reached. Wait for the session allowance to reset or explicitly choose another reviewer route." };
+  }
+  if (projectError.code === "TIMEOUT" && projectError.diagnostic.parameters.origin === "cli") {
+    return { code: code2, message: `The Antigravity CLI print timeout expired after ${String(projectError.diagnostic.parameters.limit_ms / 1e3)} seconds and returned partial output. No completed review was accepted.` };
+  }
   const repositoryName7 = code2 === "REPOSITORY_VIEW_UNAVAILABLE" ? projectError.diagnostic.parameters.repository_name : void 0;
   const astraMax = code2 === "CONFIG_INVALID" && projectError.diagnostic.parameters.issue_code === "astra-max-disallowed";
   const issueCode = projectError.diagnostic.parameters.issue_code;
@@ -74360,7 +74548,7 @@ var entrySchema = external_exports.object({
   role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator", "effort-reviewer"]),
   dispatches: external_exports.number().int().min(0).max(MAX_DISPATCHES),
   status: external_exports.enum(["running", "retrying", "failed", "succeeded"]),
-  failure: publicDispatchFailureV1Schema.optional(),
+  failure: publicDispatchFailureDetailV1Schema.optional(),
   next_retry_at: external_exports.iso.datetime().optional()
 }).strict();
 var recordSchema = external_exports.object({
@@ -74391,7 +74579,7 @@ function failure2(role, selected, error51) {
     ...classified?.repository_name === void 0 ? {} : { repository_name: classified.repository_name },
     ...selected === void 0 ? {} : { route: { ...selected.raw_route, source: selected.source.provenance } }
   };
-  const parsed = publicDispatchFailureV1Schema.safeParse(candidate);
+  const parsed = publicDispatchFailureDetailV1Schema.safeParse(candidate);
   if (parsed.success) return parsed.data;
   return { role, code: "CONFIG_INVALID", message: "The selected reviewer route configuration is invalid." };
 }
@@ -74525,12 +74713,14 @@ async function readDispatchRecovery(context2) {
     const pending = record3.entries.filter((entry2) => entry2.status !== "succeeded" && entry2.failure !== void 0);
     const entry = pending.find((item) => item.status === "failed") ?? pending[0];
     if (entry?.failure === void 0) return record3.entries.length === 0 ? void 0 : null;
-    return { ...entry.failure, recovery: {
-      status: entry.status === "failed" ? entry.dispatches >= MAX_DISPATCHES ? "exhausted" : "repair-required" : "retrying",
-      dispatches: entry.dispatches,
+    const project = (item) => ({ ...item.failure, recovery: {
+      status: item.status === "failed" ? item.dispatches >= MAX_DISPATCHES ? "exhausted" : "repair-required" : "retrying",
+      dispatches: item.dispatches,
       maximum_dispatches: MAX_DISPATCHES,
-      ...entry.next_retry_at === void 0 ? {} : { next_retry_at: entry.next_retry_at }
-    } };
+      ...item.next_retry_at === void 0 ? {} : { next_retry_at: item.next_retry_at }
+    } });
+    const additional = pending.filter((item) => item !== entry).map(project);
+    return { ...project(entry), ...additional.length === 0 ? {} : { additional_failures: additional } };
   } catch {
     return {
       role: "counter-reviewer",
@@ -81703,7 +81893,12 @@ function projectSemanticStatus(snapshot, invocation) {
   const configChangeNotice = configChange === void 0 ? "" : configChange.length === 1 ? " Task config changed since the last state transaction (1 field); see config_change." : ` Task config changed since the last state transaction (${configChange.length} fields); see config_change.`;
   const repositoryNotice = status.repositories === void 0 ? "" : " The live repository set is listed in repositories; it is informational and grants no review or write authority.";
   const failure4 = status.dispatch_failure;
-  const dispatchFailureNotice = failure4 === void 0 ? "" : failure4.repository_name === void 0 ? ` The last ${failure4.role} dispatch failed: ${failure4.message}` : ` The last ${failure4.role} dispatch failed because repository "${failure4.repository_name}" could not be provided as a read-only view: ${failure4.message}`;
+  const dispatchFailureNotice = failure4 === void 0 ? "" : [failure4, ...failure4.additional_failures ?? []].map((item) => {
+    const route2 = item.route === void 0 ? "" : ` (${item.route.model}${item.route.provider === void 0 ? "" : ` via ${item.route.provider}`})`;
+    const repository = item.repository_name === void 0 ? "" : ` because repository "${item.repository_name}" could not be provided as a read-only view`;
+    const attempts = item.recovery === void 0 ? "" : ` Dispatch attempts: ${String(item.recovery.dispatches)}/${String(item.recovery.maximum_dispatches)} (${item.recovery.status}).`;
+    return ` The last ${item.role}${route2} dispatch failed${repository}: ${item.message}${attempts}`;
+  }).join("");
   const nextAction = Object.freeze({
     kind: shape.action_kind,
     instruction: shape.instruction,
@@ -82364,7 +82559,10 @@ function modelFromMessage(message) {
   return slug !== void 0 && safeIdV1Schema.safeParse(slug).success ? slug : void 0;
 }
 function classifyMessage(adapter2, message) {
-  if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b/iu.test(message)) {
+  if (/\bsession[ -](?:usage[ -])?limit(?:s|ed)?\b/iu.test(message)) {
+    return createProjectError("RATE_LIMITED", { adapter: adapter2, attempt: 1, reason: "session-limit" });
+  }
+  if (/\b(?:rate[ -]?limit(?:ed)?|too many requests|usage limit|quota (?:exceeded|reached))\b|\b(?:HTTP(?:\s+status)?|API\s+Error)\s*:?\s*429\b/iu.test(message)) {
     return createProjectError("RATE_LIMITED", { adapter: adapter2, attempt: 1 });
   }
   if (/\b(?:not logged in|login required|authentication (?:failed|required)|failed to authenticate|unauthorized|invalid credentials?|oauth session expired|refresh token (?:expired|invalid)|could not be refreshed)\b/iu.test(message)) {
@@ -82523,7 +82721,8 @@ var claudeAdapter = Object.freeze({
   },
   classifyFailure(result) {
     const message = claudeFailureMessage(result);
-    return classifyNonzero("claude-cli", result, message === void 0 ? [] : [message]);
+    if (message !== void 0) return classifyMessage("claude-cli", message) ?? createProjectError("PROCESS_FAILED", { adapter: "claude-cli", exit_class: exitClass(result) });
+    return classifyNonzero("claude-cli", result, []);
   }
 });
 var codexAdapter = Object.freeze({
@@ -82654,6 +82853,13 @@ function antigravityFailureMessage(result) {
   if (wrapper.is_error !== true && wrapper.type !== "error" && wrapper.status !== "ERROR") return void 0;
   return typeof wrapper.result === "string" ? wrapper.result : typeof wrapper.error === "string" ? wrapper.error : void 0;
 }
+function antigravityPrintTimeout(result) {
+  const match = /^\[agy\] print timeout after (?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)? with turn in progress; returning partial output\r?$/mu.exec(result.stderr.toString("utf8"));
+  if (match === null || match.slice(1).every((part) => part === void 0)) return void 0;
+  const limitMs = Math.round((Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0)) * 1e3);
+  if (!Number.isSafeInteger(limitMs) || limitMs <= 0) return void 0;
+  return createProjectError("TIMEOUT", { adapter: "antigravity-cli", attempt: 1, limit_ms: limitMs, origin: "cli" });
+}
 var antigravityAdapter = Object.freeze({
   id: "antigravity-cli",
   family: "gemini",
@@ -82692,6 +82898,9 @@ var antigravityAdapter = Object.freeze({
     const argv = Object.freeze([
       "-p",
       "",
+      // agy's five-minute default can truncate a working review before our process deadline.
+      "--print-timeout",
+      `${String(DISPATCH_TIMEOUT_MS / 1e3)}s`,
       "--input-format",
       "stream-json",
       "--output-format",
@@ -82715,6 +82924,8 @@ var antigravityAdapter = Object.freeze({
     });
   },
   parseOutput(result) {
+    const timeout = antigravityPrintTimeout(result);
+    if (timeout !== void 0) return fail22(timeout);
     const wrapper = antigravityResultEvent(result.stdout);
     if (wrapper === void 0) {
       return fail22(createProjectError("MODEL_OUTPUT_INVALID", {
@@ -82743,8 +82954,11 @@ var antigravityAdapter = Object.freeze({
     }
   },
   classifyFailure(result) {
+    const timeout = antigravityPrintTimeout(result);
+    if (timeout !== void 0) return timeout;
     const message = antigravityFailureMessage(result);
-    return classifyNonzero("antigravity-cli", result, message === void 0 ? [] : [message]);
+    if (message !== void 0) return classifyMessage("antigravity-cli", message) ?? createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: exitClass(result) });
+    return classifyNonzero("antigravity-cli", result, []);
   }
 });
 function selectCliAdapter(host, route2) {
