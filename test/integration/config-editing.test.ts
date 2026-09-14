@@ -13,6 +13,7 @@ import { createProductionServices } from "../../src/state/production.js";
 import { readTaskConfig, readTaskState } from "../../src/state/read.js";
 import { composeRequest } from "../../src/state/request-composition.js";
 import {
+  clientCommit,
   installSemanticReviewStub,
   semanticJourneyHarness,
 } from "../helpers/semantic-journeys.js";
@@ -213,6 +214,8 @@ describe("config as an editable input", { timeout: 120_000 }, () => {
     expect(settledState.last_seen_repository_bindings).toHaveLength(1);
     const afterSettlement = await h.status(invocation);
     expect(afterSettlement.config_change).toBeUndefined();
+
+    await clientCommit(workspace, afterSettlement);
 
     // The successor hand-off keeps the already-recorded paired baseline stable.
     const design = { skill: "archflow-design", intent: "resume" } as const;

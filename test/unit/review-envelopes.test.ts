@@ -576,8 +576,19 @@ describe("review dispatch envelopes", () => {
     expect(reads).toBe(0);
   });
 
+  it("binds diff file identities and rejects paths outside their generated locations", () => {
+    const full = { kind: "implementation" as const, subject_digest: subject().subject_digest,
+      patch: { path: "../review-diffs/full.patch", content_digest: digest("1"), byte_count: 4 },
+      stat: { path: "../review-diffs/full.stat", content_digest: digest("2"), byte_count: 2 },
+    };
+    const first = buildReviewEnvelope({ ...input(), diffs: { full } });
+    expect(buildReviewEnvelope({ ...input(), diffs: { full: { ...full, patch: { ...full.patch, content_digest: digest("3") } } } }).digest).not.toBe(first.digest);
+    expect(() => buildReviewEnvelope({ ...input(), diffs: { full: { ...full, patch: { ...full.patch, path: "../../outside" } } } })).toThrow(/diff path/);
+    expect(() => buildReviewEnvelope({ ...input(), diffs: { full: { ...full, subject_digest: digest("4") } } })).toThrow(/subject mismatch/);
+  });
+
   it("keeps contamination fields out of the representable and accepted shapes", () => {
-    expectTypeOf<keyof ReviewEnvelopeInput>().toEqualTypeOf<"artifact" | "rubric" | "assignment" | "context" | "subject" | "workspace">();
+    expectTypeOf<keyof ReviewEnvelopeInput>().toEqualTypeOf<"artifact" | "rubric" | "assignment" | "context" | "subject" | "workspace" | "diffs">();
     expectTypeOf<keyof Extract<ReviewWorkspaceBinding, { kind: "read-only-repository-checkout" }>>()
       .toEqualTypeOf<"kind" | "commit" | "note">();
     expectTypeOf<keyof Extract<ReviewWorkspaceBinding, { kind: "read-only-produced-repository-snapshot" }>>()

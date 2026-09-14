@@ -12,6 +12,10 @@ Review history is versioned evidence. Fresh Review V4 retains readable reports w
 
 One internal policy-facts projection keeps constitution evaluation independent of report interpretation. Review V4 consumes current Adjudication V2 constitution results and treats plan alignment as ordinary feedback. Archived cohorts retain their original alignment and gate semantics. A finish response cannot settle a failed constitution rule or a required human approval.
 
+## PRD completion milestone
+
+A fresh PRD finishes with a recoverable task-local Git commit before design begins. Its existing requirements approval includes the target, baseline, and commit message; it does not introduce a second human decision. When no human approval is required, the rule settlement pins the same milestone facts. The producing client commits the returned task paths and status verifies the exact Git proof before the hand-off can advance. The PRD, ask, task configuration, durable state, and approval evidence are therefore preserved at the end of requirements work. Archived approvals without commit facts retain their original behavior.
+
 ## The authority/runtime split
 
 ```text

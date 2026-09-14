@@ -223,7 +223,6 @@ export async function assembleReviewContext(input: {
       mechanical = [
         ...validationOverrides.value,
         ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject),
-        ...await implementationMechanicalEvidence(input.runner, input.subject, input.projection_plan),
       ];
     } else {
       const artifactText = decodeUtf8Strict(input.projection_bytes);
@@ -573,76 +572,6 @@ export async function verificationTranscriptEvidence(
     ...visibleContent(excerpt),
     total_byte_count: bytes.byteLength,
   })];
-}
-
-/**
- * Pins interface excerpts for the unchanged files the changed code imports, read as blobs at the
- * implementation's pinned `base_commit` — the same authenticated source `verifyImplementationManifest`
- * uses. Changed targets are skipped because their full bytes already travel in `changes[]`.
- */
-async function implementationMechanicalEvidence(
-  runner: RootBoundGitRunner,
-  subject: CurrentProduceSubject,
-  projectionPlan: ProjectionPlan | undefined,
-): Promise<readonly PinnedContextEntry[]> {
-  if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);
-  if (projectionPlan === undefined) {
-    return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
-  }
-  const baseCommit = subject.artifact.base_commit;
-  try {
-    const planEntries = projectionPlan.entries;
-    const changedPaths = new Set(planEntries.map((entry) => entry.path as string));
-    const wanted: { specifier: string; fromPath: string; candidates: readonly string[] }[] = [];
-    for (const entry of planEntries) {
-      if (entry.desired.state !== "present" || !/\.(?:ts|tsx|mts|js|mjs)$/u.test(entry.path)) continue;
-      const source = decodeUtf8Strict(entry.desired.bytes);
-      if (source === undefined) continue;
-      for (const specifier of relativeImportSpecifiers(source)) {
-        const candidates = importTargetCandidates(entry.path, specifier);
-        if (candidates.length === 0) continue;
-        if (candidates.some((candidate) => changedPaths.has(candidate))) continue;
-        wanted.push({ specifier, fromPath: entry.path, candidates });
-      }
-    }
-    const entries: PinnedContextEntry[] = [];
-    const pinnedTargets = new Set<string>();
-    let processed = 0;
-    for (const item of wanted) {
-      if (processed >= MECHANICAL_TARGET_LIMIT) break;
-      let resolved: { path: string; oid: string } | undefined;
-      for (const candidate of item.candidates) {
-        const blob = await readCommitTreeBlob(runner, baseCommit, candidate);
-        if (blob !== undefined) {
-          resolved = { path: candidate, oid: blob.oid };
-          break;
-        }
-      }
-      if (resolved === undefined) {
-        processed += 1;
-        entries.push(unavailableContextEntry(
-          "interface-excerpt",
-          item.specifier,
-          `import from ${item.fromPath} did not resolve at base commit ${baseCommit}`,
-        ));
-        continue;
-      }
-      if (pinnedTargets.has(resolved.path)) continue;
-      pinnedTargets.add(resolved.path);
-      processed += 1;
-      entries.push(excerptContextEntry("interface-excerpt", resolved.path, await readGitBlobBytes(runner, resolved.oid)));
-    }
-    if (processed >= MECHANICAL_TARGET_LIMIT && wanted.length > processed) {
-      entries.push(unavailableContextEntry(
-        "interface-excerpt",
-        "additional-imports",
-        `${wanted.length - processed} further import targets not pinned (mechanical evidence limit)`,
-      ));
-    }
-    return entries;
-  } catch {
-    return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
-  }
 }
 
 /**

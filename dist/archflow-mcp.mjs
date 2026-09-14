@@ -14546,13 +14546,13 @@ var error17 = () => {
           return `${sizing?.longLabel ?? "\u05D0\u05E8\u05D5\u05DA"} \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DB\u05D4 \u05DC\u05D4\u05DB\u05D9\u05DC ${issue4.maximum.toString()} ${sizing?.unit ?? ""} ${issue4.inclusive ? "\u05D0\u05D5 \u05E4\u05D7\u05D5\u05EA" : "\u05DC\u05DB\u05DC \u05D4\u05D9\u05D5\u05EA\u05E8"}`.trim();
         }
         if (issue4.origin === "number") {
-          const comparison = issue4.inclusive ? `\u05E7\u05D8\u05DF \u05D0\u05D5 \u05E9\u05D5\u05D5\u05D4 \u05DC-${issue4.maximum}` : `\u05E7\u05D8\u05DF \u05DE-${issue4.maximum}`;
-          return `\u05D2\u05D3\u05D5\u05DC \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA ${comparison}`;
+          const comparison2 = issue4.inclusive ? `\u05E7\u05D8\u05DF \u05D0\u05D5 \u05E9\u05D5\u05D5\u05D4 \u05DC-${issue4.maximum}` : `\u05E7\u05D8\u05DF \u05DE-${issue4.maximum}`;
+          return `\u05D2\u05D3\u05D5\u05DC \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA ${comparison2}`;
         }
         if (issue4.origin === "array" || issue4.origin === "set") {
           const verb = issue4.origin === "set" ? "\u05E6\u05E8\u05D9\u05DB\u05D4" : "\u05E6\u05E8\u05D9\u05DA";
-          const comparison = issue4.inclusive ? `${issue4.maximum} ${sizing?.unit ?? ""} \u05D0\u05D5 \u05E4\u05D7\u05D5\u05EA` : `\u05E4\u05D7\u05D5\u05EA \u05DE-${issue4.maximum} ${sizing?.unit ?? ""}`;
-          return `\u05D2\u05D3\u05D5\u05DC \u05DE\u05D3\u05D9: ${subject} ${verb} \u05DC\u05D4\u05DB\u05D9\u05DC ${comparison}`.trim();
+          const comparison2 = issue4.inclusive ? `${issue4.maximum} ${sizing?.unit ?? ""} \u05D0\u05D5 \u05E4\u05D7\u05D5\u05EA` : `\u05E4\u05D7\u05D5\u05EA \u05DE-${issue4.maximum} ${sizing?.unit ?? ""}`;
+          return `\u05D2\u05D3\u05D5\u05DC \u05DE\u05D3\u05D9: ${subject} ${verb} \u05DC\u05D4\u05DB\u05D9\u05DC ${comparison2}`.trim();
         }
         const adj = issue4.inclusive ? "<=" : "<";
         const be = verbFor(issue4.origin ?? "value");
@@ -14568,8 +14568,8 @@ var error17 = () => {
           return `${sizing?.shortLabel ?? "\u05E7\u05E6\u05E8"} \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DB\u05D4 \u05DC\u05D4\u05DB\u05D9\u05DC ${issue4.minimum.toString()} ${sizing?.unit ?? ""} ${issue4.inclusive ? "\u05D0\u05D5 \u05D9\u05D5\u05EA\u05E8" : "\u05DC\u05E4\u05D7\u05D5\u05EA"}`.trim();
         }
         if (issue4.origin === "number") {
-          const comparison = issue4.inclusive ? `\u05D2\u05D3\u05D5\u05DC \u05D0\u05D5 \u05E9\u05D5\u05D5\u05D4 \u05DC-${issue4.minimum}` : `\u05D2\u05D3\u05D5\u05DC \u05DE-${issue4.minimum}`;
-          return `\u05E7\u05D8\u05DF \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA ${comparison}`;
+          const comparison2 = issue4.inclusive ? `\u05D2\u05D3\u05D5\u05DC \u05D0\u05D5 \u05E9\u05D5\u05D5\u05D4 \u05DC-${issue4.minimum}` : `\u05D2\u05D3\u05D5\u05DC \u05DE-${issue4.minimum}`;
+          return `\u05E7\u05D8\u05DF \u05DE\u05D3\u05D9: ${subject} \u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA ${comparison2}`;
         }
         if (issue4.origin === "array" || issue4.origin === "set") {
           const verb = issue4.origin === "set" ? "\u05E6\u05E8\u05D9\u05DB\u05D4" : "\u05E6\u05E8\u05D9\u05DA";
@@ -14577,8 +14577,8 @@ var error17 = () => {
             const singularPhrase = issue4.origin === "set" ? "\u05DC\u05E4\u05D7\u05D5\u05EA \u05E4\u05E8\u05D9\u05D8 \u05D0\u05D7\u05D3" : "\u05DC\u05E4\u05D7\u05D5\u05EA \u05E4\u05E8\u05D9\u05D8 \u05D0\u05D7\u05D3";
             return `\u05E7\u05D8\u05DF \u05DE\u05D3\u05D9: ${subject} ${verb} \u05DC\u05D4\u05DB\u05D9\u05DC ${singularPhrase}`;
           }
-          const comparison = issue4.inclusive ? `${issue4.minimum} ${sizing?.unit ?? ""} \u05D0\u05D5 \u05D9\u05D5\u05EA\u05E8` : `\u05D9\u05D5\u05EA\u05E8 \u05DE-${issue4.minimum} ${sizing?.unit ?? ""}`;
-          return `\u05E7\u05D8\u05DF \u05DE\u05D3\u05D9: ${subject} ${verb} \u05DC\u05D4\u05DB\u05D9\u05DC ${comparison}`.trim();
+          const comparison2 = issue4.inclusive ? `${issue4.minimum} ${sizing?.unit ?? ""} \u05D0\u05D5 \u05D9\u05D5\u05EA\u05E8` : `\u05D9\u05D5\u05EA\u05E8 \u05DE-${issue4.minimum} ${sizing?.unit ?? ""}`;
+          return `\u05E7\u05D8\u05DF \u05DE\u05D3\u05D9: ${subject} ${verb} \u05DC\u05D4\u05DB\u05D9\u05DC ${comparison2}`.trim();
         }
         const adj = issue4.inclusive ? ">=" : ">";
         const be = verbFor(issue4.origin ?? "value");
@@ -22667,8 +22667,8 @@ if (typeof external_exports.lazy !== "function") {
 // src/mcp/process-runner.ts
 function deferred() {
   let resolvePromise;
-  const promise2 = new Promise((resolve2) => {
-    resolvePromise = resolve2;
+  const promise2 = new Promise((resolve3) => {
+    resolvePromise = resolve3;
   });
   return { promise: promise2, resolve: resolvePromise };
 }
@@ -27053,14 +27053,14 @@ function inputRequiredRoundsExceededMessage(method, maxRounds) {
   return `Multi-round-trip request '${method}' still required input after ${maxRounds} rounds (inputRequired.maxRounds)`;
 }
 function sleep(ms, signal) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     if (signal?.aborted) {
       reject(signal.reason instanceof SdkError ? signal.reason : new SdkError(SdkErrorCode.RequestTimeout, String(signal.reason)));
       return;
     }
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
-      resolve2();
+      resolve3();
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
@@ -27851,7 +27851,7 @@ var Protocol = class {
     const flowStartedAt = Date.now();
     let onAbort;
     let cleanupMessageId;
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const earlyReject = (error51) => {
         reject(error51);
       };
@@ -27919,7 +27919,7 @@ var Protocol = class {
         }
         if (decoded.kind === "invalid") return reject(decoded.error);
         if (decoded.kind === "input_required") {
-          if (options?.allowInputRequired === true) return resolve2(manualInputRequiredValue(decoded));
+          if (options?.allowInputRequired === true) return resolve3(manualInputRequiredValue(decoded));
           const flow = {
             codec: codec2,
             request,
@@ -27931,11 +27931,11 @@ var Protocol = class {
               params
             }, resultSchema, legOptions)
           };
-          return resolve2(this._resolveNonCompleteResult(decoded, flow));
+          return resolve3(this._resolveNonCompleteResult(decoded, flow));
         }
         const result = decoded.result;
         validateStandardSchema(resultSchema, result).then((parseResult) => {
-          if (parseResult.success) resolve2(parseResult.data);
+          if (parseResult.success) resolve3(parseResult.data);
           else reject(new SdkError(SdkErrorCode.InvalidResult, `Invalid result for ${request.method}: ${parseResult.error}`));
         }, reject);
       });
@@ -30747,7 +30747,7 @@ var require_compile = /* @__PURE__ */ __commonJSMin(((exports) => {
     ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, ref);
     const schOrFunc = root.refs[ref];
     if (schOrFunc) return schOrFunc;
-    let _sch = resolve2.call(this, root, ref);
+    let _sch = resolve3.call(this, root, ref);
     if (_sch === void 0) {
       const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
       const { schemaId } = this.opts;
@@ -30773,7 +30773,7 @@ var require_compile = /* @__PURE__ */ __commonJSMin(((exports) => {
   function sameSchemaEnv(s1, s2) {
     return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
   }
-  function resolve2(root, ref) {
+  function resolve3(root, ref) {
     let sch;
     while (typeof (sch = this.refs[ref]) == "string") ref = sch;
     return sch || this.schemas[ref] || resolveSchema.call(this, root, ref);
@@ -31223,47 +31223,47 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
     else if (typeof uri === "object") uri = parse3(serialize(uri, options), options);
     return uri;
   }
-  function resolve2(baseURI, relativeURI, options) {
+  function resolve3(baseURI, relativeURI, options) {
     const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
     const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
     schemelessOptions.skipEscape = true;
     return serialize(resolved, schemelessOptions);
   }
-  function resolveComponent(base2, relative8, options, skipNormalization) {
+  function resolveComponent(base2, relative9, options, skipNormalization) {
     const target4 = {};
     if (!skipNormalization) {
       base2 = parse3(serialize(base2, options), options);
-      relative8 = parse3(serialize(relative8, options), options);
+      relative9 = parse3(serialize(relative9, options), options);
     }
     options = options || {};
-    if (!options.tolerant && relative8.scheme) {
-      target4.scheme = relative8.scheme;
-      target4.userinfo = relative8.userinfo;
-      target4.host = relative8.host;
-      target4.port = relative8.port;
-      target4.path = removeDotSegments(relative8.path || "");
-      target4.query = relative8.query;
+    if (!options.tolerant && relative9.scheme) {
+      target4.scheme = relative9.scheme;
+      target4.userinfo = relative9.userinfo;
+      target4.host = relative9.host;
+      target4.port = relative9.port;
+      target4.path = removeDotSegments(relative9.path || "");
+      target4.query = relative9.query;
     } else {
-      if (relative8.userinfo !== void 0 || relative8.host !== void 0 || relative8.port !== void 0) {
-        target4.userinfo = relative8.userinfo;
-        target4.host = relative8.host;
-        target4.port = relative8.port;
-        target4.path = removeDotSegments(relative8.path || "");
-        target4.query = relative8.query;
+      if (relative9.userinfo !== void 0 || relative9.host !== void 0 || relative9.port !== void 0) {
+        target4.userinfo = relative9.userinfo;
+        target4.host = relative9.host;
+        target4.port = relative9.port;
+        target4.path = removeDotSegments(relative9.path || "");
+        target4.query = relative9.query;
       } else {
-        if (!relative8.path) {
+        if (!relative9.path) {
           target4.path = base2.path;
-          if (relative8.query !== void 0) target4.query = relative8.query;
+          if (relative9.query !== void 0) target4.query = relative9.query;
           else target4.query = base2.query;
         } else {
-          if (relative8.path[0] === "/") target4.path = removeDotSegments(relative8.path);
+          if (relative9.path[0] === "/") target4.path = removeDotSegments(relative9.path);
           else {
-            if ((base2.userinfo !== void 0 || base2.host !== void 0 || base2.port !== void 0) && !base2.path) target4.path = "/" + relative8.path;
-            else if (!base2.path) target4.path = relative8.path;
-            else target4.path = base2.path.slice(0, base2.path.lastIndexOf("/") + 1) + relative8.path;
+            if ((base2.userinfo !== void 0 || base2.host !== void 0 || base2.port !== void 0) && !base2.path) target4.path = "/" + relative9.path;
+            else if (!base2.path) target4.path = relative9.path;
+            else target4.path = base2.path.slice(0, base2.path.lastIndexOf("/") + 1) + relative9.path;
             target4.path = removeDotSegments(target4.path);
           }
-          target4.query = relative8.query;
+          target4.query = relative9.query;
         }
         target4.userinfo = base2.userinfo;
         target4.host = base2.host;
@@ -31271,7 +31271,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
       }
       target4.scheme = base2.scheme;
     }
-    target4.fragment = relative8.fragment;
+    target4.fragment = relative9.fragment;
     return target4;
   }
   function equal(uriA, uriB, options) {
@@ -31397,7 +31397,7 @@ var require_fast_uri = /* @__PURE__ */ __commonJSMin(((exports, module) => {
   const fastUri = {
     SCHEMES,
     normalize,
-    resolve: resolve2,
+    resolve: resolve3,
     resolveComponent,
     equal,
     serialize,
@@ -36607,7 +36607,13 @@ var reviewPushThroughAttemptsExhaustedContextSchema = external_exports.object({
   }
 });
 var contexts = {
-  "artifact-approval": external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]), ...ordinaryPolicyFields }).strict().superRefine(validateOrdinaryPolicyContext),
+  "artifact-approval": external_exports.object({
+    artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]),
+    ...ordinaryPolicyFields,
+    commit: external_exports.object({ target_ref: boundedText, baseline_commit: gitOidV1Schema, commit_message: boundedText }).strict().optional()
+  }).strict().superRefine(validateOrdinaryPolicyContext).superRefine((value, context2) => {
+    if (value.commit !== void 0 && value.artifact_kind !== "prd") context2.addIssue({ code: "custom", path: ["commit"], message: "artifact commit authority is only valid for a PRD" });
+  }),
   "design-approval": external_exports.object({
     artifact_kind: external_exports.enum(["design", "phase-design"]),
     ...ordinaryPolicyFields,
@@ -38444,8 +38450,8 @@ var MAX_BYTES = 10 * 1024 * 1024;
 function deferred2() {
   let resolvePromise;
   let rejectPromise;
-  const promise2 = new Promise((resolve2, reject) => {
-    resolvePromise = resolve2;
+  const promise2 = new Promise((resolve3, reject) => {
+    resolvePromise = resolve3;
     rejectPromise = reject;
   });
   return { promise: promise2, resolve: resolvePromise, reject: rejectPromise };
@@ -41294,6 +41300,26 @@ var gate_contract_schema_default = {
         },
         approval_trigger: {
           $ref: "#/$defs/approvalTrigger"
+        },
+        commit: {
+          type: "object",
+          properties: {
+            target_ref: {
+              $ref: "#/$defs/text"
+            },
+            baseline_commit: {
+              $ref: "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+            },
+            commit_message: {
+              $ref: "#/$defs/text"
+            }
+          },
+          required: [
+            "target_ref",
+            "baseline_commit",
+            "commit_message"
+          ],
+          additionalProperties: false
         }
       },
       required: [
@@ -56777,11 +56803,11 @@ var PROTOCOL_VERSION = "2025-11-25";
 var CONNECTION_ID = "connection-1";
 var JSON_RPC = "2.0";
 function deferred3() {
-  let resolve2;
+  let resolve3;
   const promise2 = new Promise((settle) => {
-    resolve2 = settle;
+    resolve3 = settle;
   });
-  return { promise: promise2, resolve: resolve2 };
+  return { promise: promise2, resolve: resolve3 };
 }
 function isObject3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -58338,11 +58364,11 @@ var ruleSettlementV1Schema = external_exports.object({
   if (settlement.secondary_milestones !== void 0 && (kind !== "phase-impl" || settlement.conclusion.wait)) {
     context2.addIssue({ code: "custom", path: ["secondary_milestones"], message: "secondary milestones are allowed only on a phase-implementation wait:false settlement" });
   }
-  if (settlement.milestone_baseline_commit !== void 0 && (settlement.conclusion.wait || kind !== "design" && kind !== "phase-design" && kind !== "phase-impl")) {
+  if (settlement.milestone_baseline_commit !== void 0 && (settlement.conclusion.wait || kind !== "prd" && kind !== "design" && kind !== "phase-design" && kind !== "phase-impl")) {
     context2.addIssue({
       code: "custom",
       path: ["milestone_baseline_commit"],
-      message: "milestone baseline is allowed only on a design, phase-design, or phase-implementation wait:false settlement"
+      message: "milestone baseline is allowed only on a PRD, design, phase-design, or phase-implementation wait:false settlement"
     });
   }
 });
@@ -59451,7 +59477,7 @@ var GIT_MINOR_FLOOR = 25;
 var fatalDecoder = new TextDecoder("utf-8", { fatal: true });
 var lossyDecoder = new TextDecoder("utf-8");
 function execGit(gitPath, spec, options) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const child = execFile(
       gitPath,
       [...spec.argv],
@@ -59463,7 +59489,7 @@ function execGit(gitPath, spec, options) {
         windowsHide: true
       },
       (failure4, stdout, stderr) => {
-        resolve2({
+        resolve3({
           failure: failure4 ?? void 0,
           stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
           stderr: Buffer.isBuffer(stderr) ? stderr : Buffer.from(stderr)
@@ -59746,7 +59772,7 @@ async function readCommitTreeBlob(runner, commit, path2) {
     return cache.commitTreeBlob.get(cacheKey);
   }
   const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-z", commit, "--", path2],
+    argv: ["--literal-pathspecs", "ls-tree", "-z", commit, "--", path2],
     operation: TREE_ENTRY_OPERATION
   });
   if (fields.length === 0) {
@@ -70817,7 +70843,7 @@ function approvalRuleContext(state, produceSubject, config2, changedDocumentPath
 }
 function buildRuleSettlement(state, subjectDigest, configDigest, conclusion, milestoneBaselineCommit, milestoneTarget, secondaryMilestones = []) {
   const kind = decodePhaseInstance(state.phase_instance).kind;
-  const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl");
+  const baselineAllowed = !conclusion.wait && (kind === "prd" || kind === "design" || kind === "phase-design" || kind === "phase-impl");
   if (milestoneBaselineCommit !== void 0 !== baselineAllowed) {
     throw new TypeError("a milestone baseline is required exactly for milestone-bearing wait:false settlements");
   }
@@ -71028,7 +71054,7 @@ function presentationBindings(active) {
     const option = active.kind === "artifact-approval" && decision3 === "approve" ? Object.freeze({
       token: "approve",
       label: "Approve and continue to design",
-      consequence: "Approve the exact reviewed requirements, advance to design, and include the requirements in the later design milestone commit."
+      consequence: active.context.commit === void 0 ? "Approve the exact reviewed requirements, advance to design, and include the requirements in the later design milestone commit." : "Approve the exact reviewed requirements and authorize their recoverable task-local commit before continuing to design."
     }) : active.kind === "design-approval" && decision3 === "approve" ? Object.freeze({
       token: "approve",
       label: "Approve, commit, and continue",
@@ -71219,6 +71245,7 @@ function buildHumanGatePresentation(active, authenticatedDetails = {}) {
   const reasons = presentationReasons(request, authenticatedDetails);
   const details = [
     ...policyDetails(request),
+    ...request.kind === "artifact-approval" && request.context.commit !== void 0 ? [`Approval also authorizes committing this task's requirements and recovery files before design begins: ${request.context.commit.commit_message}`] : [],
     ...request.kind === "validation-override" ? validationOverrideDetails(request) : [],
     ...request.kind === "attempts-exhausted" ? reviewPushThroughDetails(request, authenticatedDetails) : [],
     ...request.kind === "baseline-adoption" ? baselineProjectionDetails(request.context) : [],
@@ -71870,8 +71897,8 @@ function hasAuthenticatedArtifactApproval(input) {
   }
   return false;
 }
-function hasAuthenticatedCombinedDesignApproval(input) {
-  return (input.authenticated_gate_approvals ?? []).some((authenticated) => authenticated.request.kind === "design-approval" && authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.decision.envelope.payload.decision === "approve");
+function hasAuthenticatedPlanningCommitApproval(input) {
+  return (input.authenticated_gate_approvals ?? []).some((authenticated) => (authenticated.request.kind === "design-approval" || authenticated.request.kind === "artifact-approval" && "commit" in authenticated.request.context && authenticated.request.context.commit !== void 0) && authenticated.approval.gate_kind === authenticated.request.kind && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.decision.envelope.payload.decision === "approve");
 }
 function validRuleSettlementBoundary(input, settlement) {
   if (settlement.task_id !== input.current.task_id || settlement.phase_instance !== input.current.phase_instance || settlement.step !== input.target.step || settlement.settled_at_revision !== input.current.revision + 1 || input.target.phase_instance !== input.current.phase_instance || input.target.status !== "succeeded") return false;
@@ -72055,7 +72082,7 @@ function planStateTransition(value) {
   if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input) && !ruleAccepted && // An accepted migration audit is the design phase's exit authority for a legacy import: the
   // same authenticated approval legalMovement's design-jump rule settles on.
   !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))) return invalid(input, from, to);
-  if ((decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedCombinedDesignApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
+  if ((decodedCurrent.kind === "prd" || decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedPlanningCommitApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
   if (decodedCurrent.kind === "design" && crossesPhase && ruleAccepted && input.derived_planned_final_phase === void 0) return invalid(input, from, to);
   const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledDocumentProduceExitMovement(input);
   if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input) || !pendingValidationOverrideMatches(input)) {
@@ -73400,16 +73427,16 @@ async function readRetainedManifest(runner, authority, reference) {
   return ok15(Object.freeze({ manifest: read2.value, manifest_target: manifestTarget.value }));
 }
 async function beforeImageForRunner(runner, identity, path2) {
-  const symlink3 = identity.mode === "120000";
-  const bytes = symlink3 ? await readGitBlobBytes(runner, identity.oid) : await readGitBlobProjectedBytes(runner, identity.oid, path2);
+  const symlink4 = identity.mode === "120000";
+  const bytes = symlink4 ? await readGitBlobBytes(runner, identity.oid) : await readGitBlobProjectedBytes(runner, identity.oid, path2);
   const observation = Object.freeze({
     state: "present",
-    file_type: symlink3 ? "symlink" : "regular",
+    file_type: symlink4 ? "symlink" : "regular",
     mode: identity.mode,
     size_bytes: bytes.byteLength,
     content_digest: sha256Bytes(bytes)
   });
-  const desired = symlink3 ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }) : Object.freeze({ state: "present", file_type: "regular", mode: identity.mode, bytes });
+  const desired = symlink4 ? Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }) : Object.freeze({ state: "present", file_type: "regular", mode: identity.mode, bytes });
   return Object.freeze({ observation, desired });
 }
 async function readRetainedResult(runner, authority, reference, repositorySet) {
@@ -74194,17 +74221,17 @@ async function removeSupersededPhaseDocuments(dependencies, authority, targetPha
   const removed = [];
   for (const path2 of untracked) {
     if (!path2.startsWith(prefix)) continue;
-    const relative8 = path2.slice(prefix.length);
-    const document2 = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relative8);
+    const relative9 = path2.slice(prefix.length);
+    const document2 = /^phases\/([1-9][0-9]*)\/(design|impl-notes)\.md$/u.exec(relative9);
     if (document2 === null) continue;
     const phase3 = Number(document2[1]);
     const superseded = document2[2] === "impl-notes" ? phase3 >= target4 : phase3 > target4;
     if (!superseded) continue;
-    const absolute = join9(authority.task_root, ...relative8.split("/"));
+    const absolute = join9(authority.task_root, ...relative9.split("/"));
     if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
     await unlink2(absolute).catch(() => void 0);
     await removeEmptyParents(dirname6(absolute), join9(authority.task_root, "phases"));
-    removed.push(relative8);
+    removed.push(relative9);
   }
   return Object.freeze(removed.sort());
 }
@@ -74827,7 +74854,7 @@ function advanceAction(input, state) {
       gate_kind: requiredKind
     });
   }
-  if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+  if ((designPhase && !legacyDesignApproval || phase3.kind === "prd" && (input.design_commit !== void 0 || autonomous)) && input.commit_observed !== true) {
     if (autonomous && input.commit_blocked_reason === "approved-document-mismatch") {
       return action(
         "run-step",
@@ -74865,7 +74892,7 @@ function advanceAction(input, state) {
         state
       );
     }
-    return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by design approval.", false, state, {
+    return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by planning approval.", false, state, {
       commit_path: input.design_commit.path,
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,
@@ -76029,10 +76056,10 @@ function buildAutonomousImplementationCommitInput(output, targetRef) {
 }
 function buildAutonomousDesignCommitInput(state, settlement, targetRef) {
   const phase3 = decodePhaseInstance(state.phase_instance);
-  if (phase3.kind !== "design" && phase3.kind !== "phase-design" || settlement.phase_instance !== state.phase_instance || settlement.milestone_baseline_commit === void 0) {
+  if (phase3.kind !== "prd" && phase3.kind !== "design" && phase3.kind !== "phase-design" || settlement.phase_instance !== state.phase_instance || settlement.milestone_baseline_commit === void 0) {
     throw new TypeError("autonomous design commit requires a phase-bound milestone baseline");
   }
-  const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+  const phaseLabel = phase3.kind === "prd" ? "prd" : phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
   return Object.freeze({
     path: `.archflow/tasks/${state.task_id}`,
     message: `ArchFlow: Approve ${state.task_id} ${phaseLabel}`,
@@ -76416,14 +76443,15 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     }
   }
   let designCommit;
-  if (produceSubject?.artifact.artifact_kind === "document" && (decodePhaseInstance(state.phase_instance).kind === "design" || decodePhaseInstance(state.phase_instance).kind === "phase-design")) {
-    const authenticated = authenticatedApprovals.find((item) => item.request.kind === "design-approval" && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "approve");
-    if (authenticated?.request.kind === "design-approval") {
+  if (produceSubject?.artifact.artifact_kind === "document" && (state.phase_instance === "prd" || decodePhaseInstance(state.phase_instance).kind === "design" || decodePhaseInstance(state.phase_instance).kind === "phase-design")) {
+    const authenticated = authenticatedApprovals.find((item) => (item.request.kind === "design-approval" || item.request.kind === "artifact-approval" && "commit" in item.request.context && item.request.context.commit !== void 0) && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "approve");
+    const planningCommit = authenticated?.request.kind === "design-approval" ? authenticated.request.context : authenticated?.request.kind === "artifact-approval" && "commit" in authenticated.request.context ? authenticated.request.context.commit : void 0;
+    if (planningCommit !== void 0) {
       designCommit = Object.freeze({
         path: `.archflow/tasks/${state.task_id}`,
-        message: authenticated.request.context.commit_message,
-        target_ref: authenticated.request.context.target_ref,
-        baseline_commit: authenticated.request.context.baseline_commit
+        message: planningCommit.commit_message,
+        target_ref: planningCommit.target_ref,
+        baseline_commit: planningCommit.baseline_commit
       });
       try {
         const observation = await resolveDesignMilestoneProof(
@@ -76431,7 +76459,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
           state.task_id,
           produceSubject.artifact,
           produceSubject.retained.manifest.value.outputs,
-          authenticated.request.context
+          planningCommit
         );
         commitObserved = observation.kind === "proven";
         if (observation.kind === "missing-from-history") {
@@ -78191,13 +78219,14 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       digest11
     );
   }
-  if (record3.outcome === "decided" && record3.kind === "design-approval" && record3.envelope.payload.decision === "approve" && request.kind === "design-approval") {
+  const planningCommit = request.kind === "design-approval" ? request.context : request.kind === "artifact-approval" ? request.context.commit : void 0;
+  if (record3.outcome === "decided" && record3.envelope.payload.decision === "approve" && record3.kind === request.kind && planningCommit !== void 0) {
     const symbolicRef = await dependencies.runner.runText({
       argv: ["symbolic-ref", "--quiet", "HEAD"],
       operation: parseSafeCode("git-design-approval-target"),
       expectedAbsence: [{ code: 1, stderrIncludes: "" }]
     });
-    if ((request.context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== request.context.target_ref) || await resolveCommit(dependencies.runner, "HEAD") !== request.context.baseline_commit) {
+    if ((planningCommit.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== planningCommit.target_ref) || await resolveCommit(dependencies.runner, "HEAD") !== planningCommit.baseline_commit) {
       return issue2("STATE_INVALID", current.value, "design-approval-git-target-changed");
     }
   }
@@ -78987,7 +79016,7 @@ async function assessBaselineRestoreSourceFreshness(source, humanObservedDigest)
   });
 }
 function baselineAdoptionRecord(gateId, adoptedAtRevision, driftedProjections, deletedProjections = [], secondaryTargets = []) {
-  const ordinal11 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+  const ordinal12 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
   const adoptedProjections = [
     ...driftedProjections.map((drifted) => Object.freeze({ path: drifted.path, content_digest: drifted.observed_digest })),
     ...secondaryTargets.flatMap((target4) => target4.drifted_projections.map((drifted) => Object.freeze({
@@ -78999,7 +79028,7 @@ function baselineAdoptionRecord(gateId, adoptedAtRevision, driftedProjections, d
   return Object.freeze({
     gate_id: gateId,
     adopted_at_revision: adoptedAtRevision,
-    adopted_projections: Object.freeze(adoptedProjections.sort((left, right) => ordinal11(left.repository ?? "", right.repository ?? "") || ordinal11(left.path, right.path))),
+    adopted_projections: Object.freeze(adoptedProjections.sort((left, right) => ordinal12(left.repository ?? "", right.repository ?? "") || ordinal12(left.path, right.path))),
     // Absence is recorded only when the decision adopted deletions; a bytes-only archive from
     // before that decision exists must keep its exact historical shape.
     ...deletedProjections.length === 0 && secondaryTargets.every((target4) => (target4.deleted_projections ?? []).length === 0) ? {} : {
@@ -79014,7 +79043,7 @@ function baselineAdoptionRecord(gateId, adoptedAtRevision, driftedProjections, d
         const rightRepository = typeof right === "string" ? "" : right.repository ?? "";
         const leftPath = typeof left === "string" ? left : left.path;
         const rightPath = typeof right === "string" ? right : right.path;
-        return ordinal11(leftRepository, rightRepository) || ordinal11(leftPath, rightPath);
+        return ordinal12(leftRepository, rightRepository) || ordinal12(leftPath, rightPath);
       }))
     }
   });
@@ -81221,6 +81250,11 @@ async function composeGate(services, state, intentId, snapshot) {
       kind: "artifact-approval",
       context: {
         artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind2],
+        ...phaseKind2 !== "prd" ? {} : { commit: {
+          target_ref: (await currentTargetRef(services.dependencies)).value,
+          baseline_commit: await resolveCommit(services.runner, "HEAD"),
+          commit_message: `ArchFlow: Approve ${state.task_id} prd`
+        } },
         ...policyFacts,
         approval_trigger: approvalTrigger2
       }
@@ -82130,8 +82164,8 @@ async function runDispatchChild(spec) {
     stop("io");
   });
   child.stdin.end(spec.stdin === void 0 ? void 0 : Buffer.from(spec.stdin));
-  const closed = await new Promise((resolve2) => {
-    child.once("close", (code2, signal) => resolve2({ code: code2, signal }));
+  const closed = await new Promise((resolve3) => {
+    child.once("close", (code2, signal) => resolve3({ code: code2, signal }));
   });
   clearTimeout(timeout);
   if (escalation !== void 0) clearTimeout(escalation);
@@ -84331,9 +84365,202 @@ function computeSemanticStatusSnapshot(status, enrichments) {
   return Object.freeze(snapshot);
 }
 
+// src/review/diffs.ts
+import { spawn as spawn2 } from "node:child_process";
+import { createHash as createHash4 } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { chmod as chmod2, lstat as lstat10, mkdir as mkdir6, rm as rm3, symlink as symlink2, writeFile as writeFile3 } from "node:fs/promises";
+import { join as join14, relative as relative6, resolve } from "node:path";
+import { pipeline as pipeline2 } from "node:stream/promises";
+var visiblePath = (path2) => path2 !== ".archflow" && !path2.startsWith(".archflow/");
+var ordinal10 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var UNAVAILABLE = "The previous reviewed implementation could not be reconstructed. Start with the complete implementation diff and the supplied prior feedback.";
+async function writeImage(root, path2, image) {
+  if (image.state === "absent") return;
+  const target4 = resolve(root, path2);
+  const local = relative6(root, target4);
+  if (!local || local === ".." || local.startsWith("../") || local.startsWith("/")) {
+    throw new TypeError("review diff path escapes its temporary tree");
+  }
+  let parent = root;
+  for (const segment of local.split("/").slice(0, -1)) {
+    parent = join14(parent, segment);
+    try {
+      if (!(await lstat10(parent)).isDirectory()) throw new TypeError("review diff path crosses a non-directory");
+    } catch (error51) {
+      if (error51.code !== "ENOENT") throw error51;
+      await mkdir6(parent);
+    }
+  }
+  if (image.file_type === "symlink") await symlink2(new TextDecoder("utf-8", { fatal: true }).decode(image.bytes), target4);
+  else {
+    const mode = image.mode === "100755" ? 493 : 420;
+    await writeFile3(target4, image.bytes, { mode, flag: "wx" });
+    await chmod2(target4, mode);
+  }
+}
+async function gitDiffFile(cwd, output, flags, signal) {
+  const child = spawn2("git", [
+    "--no-pager",
+    "-c",
+    "core.quotePath=true",
+    "-c",
+    "core.fileMode=true",
+    "diff",
+    "--no-index",
+    "--no-prefix",
+    "--no-color",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--find-renames",
+    "--unified=3",
+    ...flags,
+    "--",
+    "a",
+    "b"
+  ], {
+    cwd,
+    env: { PATH: process.env.PATH, LC_ALL: "C", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+    stdio: ["ignore", "pipe", "pipe"],
+    signal
+  });
+  let timedOut = false;
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, 6e4);
+  deadline.unref();
+  const hash2 = createHash4("sha256");
+  let bytes = 0;
+  child.stdout.on("data", (chunk) => {
+    hash2.update(chunk);
+    bytes += chunk.byteLength;
+  });
+  child.stderr.resume();
+  const exited = new Promise((accept, reject) => {
+    child.once("error", reject);
+    child.once("close", (code2) => code2 === 0 || code2 === 1 ? accept() : reject(new Error(timedOut ? "review diff generation timed out" : "review diff generation failed")));
+  });
+  try {
+    await Promise.all([exited, pipeline2(child.stdout, createWriteStream(output, { flags: "wx", mode: 384 }))]);
+    await chmod2(output, 292);
+    return { content_digest: hash2.digest("hex"), byte_count: bytes };
+  } finally {
+    clearTimeout(deadline);
+    if (child.exitCode === null) child.kill("SIGKILL");
+  }
+}
+async function comparison(input, label, previous) {
+  const directory = join14(input.workspace.root, "review-diffs");
+  await mkdir6(directory, { recursive: true });
+  const trees = join14(directory, `${label}-trees`);
+  await mkdir6(join14(trees, "a"), { recursive: true });
+  await mkdir6(join14(trees, "b"), { recursive: true });
+  try {
+    for (const repository of input.repositories) {
+      const before = new Map(previous?.plans.get(repository.name)?.entries.map((entry) => [String(entry.path), entry.desired]));
+      const after = new Map(repository.projection_plan?.entries.map((entry) => [String(entry.path), entry.desired]));
+      const paths = [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])].filter(visiblePath).sort(ordinal10);
+      const runner = input.runners.get(repository.name);
+      if (runner === void 0) throw new TypeError("review diff repository is unavailable");
+      for (const path2 of paths) {
+        let baseline = { state: "absent" };
+        if (!before.has(path2) || !after.has(path2)) {
+          const blob = await readCommitTreeBlob(runner, repository.commit, path2);
+          if (blob !== void 0) baseline = {
+            state: "present",
+            file_type: blob.mode === "120000" ? "symlink" : "regular",
+            mode: blob.mode,
+            bytes: await readGitBlobBytes(runner, blob.oid)
+          };
+        }
+        const display = input.repositories.length === 1 ? path2 : `${repository.name}/${path2}`;
+        await writeImage(join14(trees, "a"), display, before.get(path2) ?? baseline);
+        await writeImage(join14(trees, "b"), display, after.get(path2) ?? baseline);
+      }
+    }
+    const patchPath = join14(directory, `${label}.patch`);
+    const statPath = join14(directory, `${label}.stat`);
+    const patch = await gitDiffFile(trees, patchPath, ["--patch"], input.signal);
+    const stat4 = await gitDiffFile(trees, statPath, ["--numstat", "--summary"], input.signal);
+    const childPath2 = (path2) => relative6(input.workspace.repository_view_root, path2);
+    return {
+      kind: previous === void 0 ? "implementation" : "revision",
+      subject_digest: input.subject.artifact_digest,
+      ...previous === void 0 ? {} : { base_subject_digest: previous.digest },
+      patch: { path: childPath2(patchPath), ...patch },
+      stat: { path: childPath2(statPath), ...stat4 }
+    };
+  } finally {
+    await rm3(trees, { recursive: true, force: true });
+  }
+}
+async function previousPlans(input, digest11) {
+  const { load_retained_manifest: manifest, load_retained_result: payload } = input.dependencies;
+  if (manifest === void 0 || payload === void 0) return void 0;
+  const matches = [];
+  for (const reference of retainedResultReferences(input.state)) {
+    if (reference.phase_instance !== input.state.phase_instance || reference.step !== "produce") continue;
+    const loaded2 = await manifest(reference);
+    if (loaded2.ok && loaded2.value.manifest.value.artifact_digest === digest11) matches.push(reference);
+  }
+  if (matches.length !== 1) return void 0;
+  const loaded = await payload(matches[0]);
+  if (!loaded.ok) return void 0;
+  const retained = loaded.value;
+  const artifact = retained.prepared.manifest.value.source_artifact;
+  if (artifact.artifact_kind !== "implementation-output" || artifact.task_id !== input.state.task_id || artifact.phase_instance !== input.state.phase_instance || artifact.base_commit !== input.repositories[0]?.commit) return void 0;
+  const plans = /* @__PURE__ */ new Map([["primary", retained.projection_plan]]);
+  for (const secondary of retained.secondary_projection_plans ?? []) {
+    const current = input.repositories.find((repository) => repository.name === secondary.repository);
+    if (current === void 0 || current.commit !== secondary.base_commit || current.repository_identity_digest !== secondary.repository_identity_digest) return void 0;
+    plans.set(secondary.repository, secondary.projection_plan);
+  }
+  return plans;
+}
+async function prepareImplementationDiffs(input) {
+  if (input.subject.artifact.artifact_kind !== "implementation-output") throw new TypeError("diffs require implementation output");
+  let full;
+  try {
+    full = await comparison(input, "full");
+  } catch {
+    if (input.signal.aborted) throw createProjectError("CANCELLED", { source: "client", attempt: input.state.attempt ?? 1 });
+    throw createProjectError("IO_ERROR", { operation: "review-diff-generation", attempt: input.state.attempt ?? 1 });
+  }
+  const reviewers = /* @__PURE__ */ new Map();
+  const previous = input.prior_triage?.source_review?.evidence;
+  const response = input.prior_triage?.response;
+  const reports = previous?.schema_version === "4" ? new Map([...previous.previous_reports ?? [], ...previous.reports].map((report) => [report.reviewer_id, report])) : /* @__PURE__ */ new Map();
+  const comparisons = /* @__PURE__ */ new Map();
+  if (response?.decision === "revise") for (const selected of response.reviewers) {
+    input.signal.throwIfAborted();
+    const digest11 = reports.get(selected.reviewer_id)?.subject_digest;
+    if (digest11 !== void 0 && !comparisons.has(digest11)) {
+      let plans;
+      try {
+        plans = await previousPlans(input, digest11);
+      } catch {
+        input.signal.throwIfAborted();
+      }
+      let revision2;
+      if (plans !== void 0) {
+        try {
+          revision2 = await comparison(input, `since-${digest11}`, { digest: digest11, plans });
+        } catch {
+          input.signal.throwIfAborted();
+        }
+      }
+      comparisons.set(digest11, revision2);
+    }
+    const revision = digest11 === void 0 ? void 0 : comparisons.get(digest11);
+    reviewers.set(selected.reviewer_id, revision === void 0 ? { full, revision_unavailable: UNAVAILABLE } : { full, revision });
+  }
+  return { full, reviewers };
+}
+
 // src/state/governing-document-comparison.ts
 import { readFile as readFile17, readdir as readdir4 } from "node:fs/promises";
-import { join as join14 } from "node:path";
+import { join as join15 } from "node:path";
 async function governingDocumentComparisons(dependencies, authority, state, subject) {
   const changed = await changedCoProducedDocumentPaths(dependencies, state, subject);
   if (!changed.ok) throw new Error("Cannot identify changed governing documents");
@@ -84349,7 +84576,7 @@ async function governingDocumentComparisons(dependencies, authority, state, subj
   }
   const subjects = new Set(approvals.map((approval) => approval.approval.subject_digest));
   const manifests = [];
-  for (const name of await readdir4(join14(authority.task_root, "authority", "results"))) {
+  for (const name of await readdir4(join15(authority.task_root, "authority", "results"))) {
     if (!/^[0-9a-f]{64}\.json$/u.test(name)) continue;
     const target4 = await resolveTaskPath({
       runner: dependencies.runner,
@@ -84394,18 +84621,18 @@ async function governingDocumentComparisons(dependencies, authority, state, subj
 
 // src/mcp/handlers/counter-review.ts
 import { readFile as readFile20 } from "node:fs/promises";
-import { join as join19 } from "node:path";
+import { join as join20 } from "node:path";
 
 // src/dispatch/coordinator.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { mkdir as mkdir7 } from "node:fs/promises";
-import { join as join16 } from "node:path";
+import { mkdir as mkdir8 } from "node:fs/promises";
+import { join as join17 } from "node:path";
 
 // src/dispatch/workspace.ts
-import { spawn as spawn2 } from "node:child_process";
-import { chmod as chmod2, lstat as lstat10, mkdir as mkdir6, mkdtemp as mkdtemp2, realpath as realpath4, rm as rm3, symlink as symlink2, writeFile as writeFile3 } from "node:fs/promises";
+import { spawn as spawn3 } from "node:child_process";
+import { chmod as chmod3, lstat as lstat11, mkdir as mkdir7, mkdtemp as mkdtemp2, realpath as realpath4, rm as rm4, symlink as symlink3, writeFile as writeFile4 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute5, join as join15, relative as relative6, resolve } from "node:path";
+import { isAbsolute as isAbsolute5, join as join16, relative as relative7, resolve as resolve2 } from "node:path";
 
 // src/review/envelopes.ts
 var REVIEW_ENVELOPE_BYTE_CAP = 1048576;
@@ -84423,6 +84650,7 @@ var PINNED_CONTEXT_KINDS = [
 var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. It is evidence for claims about the review subject, not a separate review subject. The artifact and pinned context take precedence on conflict.";
 var PRODUCED_REPOSITORY_VIEW_NOTE = "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. Review the declared outputs and their current post-change behavior. Unchanged files are supporting evidence only.";
 var MULTI_REPOSITORY_VIEW_NOTE = "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. An entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output; review only its declared outputs and their current post-change behavior. Every other file and every entry without `snapshot_digest` is supporting evidence only. The artifact and pinned context take precedence on conflict.";
+var DIFF_REVIEW_INSTRUCTION = "Start with the supplied changed-file statistics and complete patch. On follow-up, start with the revision patch when available; the full implementation patch remains available for context. Read large patches in sections, then inspect surrounding code, callers and tests as needed. Patches exclude .archflow/; governing documents and verification evidence are supplied separately.";
 var REVIEW_FOCUSES = ["general", "tests"];
 var REVIEW_INSTRUCTION = "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. If no supported material issue remains, say so. Prefer a JSON object with one report string; no finding taxonomy, IDs, or ordering are required.";
 var GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION = "Use the assigned criteria to focus on the changed work, design soundness, interfaces, unsafe behavior, and verification where assigned. Treat them as investigation guidance, not a checklist.";
@@ -84786,6 +85014,33 @@ function finishEnvelope(resultKind, envelope, digestKind) {
   });
   return Object.freeze({ result_kind: resultKind, bytes, digest: digest11, byte_count: bytes.byteLength });
 }
+function validateDiffs(value, subjectDigest) {
+  exactFields2(value, [
+    "full",
+    ...value.revision === void 0 ? [] : ["revision"],
+    ...value.revision_unavailable === void 0 ? [] : ["revision_unavailable"]
+  ], "review diffs");
+  for (const [kind, diff] of [["implementation", value.full], ["revision", value.revision]]) {
+    if (diff === void 0) {
+      if (kind === "implementation") throw new TypeError("full review diff is required");
+      continue;
+    }
+    exactFields2(diff, ["kind", "subject_digest", "patch", "stat", ...kind === "revision" ? ["base_subject_digest"] : []], "review diff");
+    if (diff.kind !== kind || parseSha256Digest(diff.subject_digest) !== subjectDigest) throw new TypeError("review diff subject mismatch");
+    if (kind === "revision") parseSha256Digest(diff.base_subject_digest);
+    for (const [extension, file2] of [["patch", diff.patch], ["stat", diff.stat]]) {
+      exactFields2(file2, ["path", "content_digest", "byte_count"], "review diff file");
+      const name = kind === "implementation" ? "full" : `since-${diff.base_subject_digest}`;
+      if (file2.path !== `../review-diffs/${name}.${extension}`) throw new TypeError("invalid review diff path");
+      parseSha256Digest(file2.content_digest);
+      parseSafeInteger(file2.byte_count);
+    }
+  }
+  if (value.revision_unavailable !== void 0 && (value.revision !== void 0 || typeof value.revision_unavailable !== "string" || !value.revision_unavailable.trim())) {
+    throw new TypeError("invalid revision diff availability");
+  }
+  return value;
+}
 function buildReviewEnvelope(value) {
   const snapshot = materialize4(value);
   exactFields2(
@@ -84795,6 +85050,7 @@ function buildReviewEnvelope(value) {
       "rubric",
       "context",
       "subject",
+      ...snapshot.diffs === void 0 ? [] : ["diffs"],
       ...snapshot.assignment === void 0 ? [] : ["assignment"],
       ...snapshot.workspace === void 0 ? [] : ["workspace"]
     ],
@@ -84818,6 +85074,7 @@ function buildReviewEnvelope(value) {
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
+    ...snapshot.diffs === void 0 ? {} : { diffs: validateDiffs(snapshot.diffs, snapshot.subject.subject_digest) },
     rubric,
     ...assignment === void 0 ? {} : { assignment },
     context: context2,
@@ -84825,6 +85082,7 @@ function buildReviewEnvelope(value) {
     // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
     instructions: {
+      ...snapshot.diffs === void 0 ? {} : { changes: DIFF_REVIEW_INSTRUCTION },
       review: parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
       ...assignment === void 0 ? {} : { assignment: assignment.focus === "tests" ? TEST_REVIEW_ASSIGNMENT_INSTRUCTION : GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION },
       ...context2.some((entry) => entry.kind === "prior-triage") ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION } : {}
@@ -84839,7 +85097,14 @@ function buildAdjudicationEnvelope(value) {
   const workspace = snapshot.workspace === void 0 ? void 0 : validateWorkspace(snapshot.workspace);
   exactFields2(
     snapshot,
-    workspace === void 0 ? ["artifact", "rules", "source_review_envelope_digest", "subject"] : ["artifact", "rules", "source_review_envelope_digest", "workspace", "subject"],
+    [
+      "artifact",
+      "rules",
+      "source_review_envelope_digest",
+      "subject",
+      ...workspace === void 0 ? [] : ["workspace"],
+      ...snapshot.diffs === void 0 ? [] : ["diffs"]
+    ],
     "adjudication envelope input"
   );
   if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
@@ -84852,11 +85117,13 @@ function buildAdjudicationEnvelope(value) {
   const envelope = {
     schema_version: "2",
     artifact: snapshot.artifact,
+    ...snapshot.diffs === void 0 ? {} : { diffs: validateDiffs(snapshot.diffs, subject.subject_digest) },
     rules: rules2,
     source_review_envelope_digest: sourceEvidenceSetDigest,
     ...workspace === void 0 ? {} : { workspace },
     instructions: {
       rule_coverage: "Return exactly one judgment for every supplied opaque rule slot. Use each slot exactly once as a judgments object key; do not omit, duplicate, or invent slots, and do not return rule identity or rollups.",
+      ...snapshot.diffs === void 0 ? {} : { changes: DIFF_REVIEW_INSTRUCTION },
       enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
       uncertainty: "Report uncertain compliance only when the artifact and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
       trigger: "A rule's review_trigger names a condition the repository wants a human to look at. Report trigger=matched only when that condition is directly evidenced by the artifact, its co-produced documents, or the supplied repository snapshot, and trigger=uncertain only when those genuinely leave it open. Workflow mechanics the server owns\u2014gate authority, approvals, commits, and dispatch outcomes\u2014are never evidence for a trigger; report not-matched. A rule with no review_trigger is always not-matched, with trigger_evidence stating that the rule declares no trigger.",
@@ -84878,7 +85145,7 @@ var FORWARDED_ENVIRONMENT = Object.freeze([
   "NODE_EXTRA_CA_CERTS"
 ]);
 function isInside(parent, candidate) {
-  const fromParent = relative6(parent, candidate);
+  const fromParent = relative7(parent, candidate);
   return fromParent === "" || !fromParent.startsWith("..") && !isAbsolute5(fromParent);
 }
 async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd()) {
@@ -84890,16 +85157,16 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp2(join15(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp2(join16(realTemporaryRoot, "archflow-dispatch-"));
   try {
-    const sourceHome = resolve(process.env.HOME ?? homedir());
+    const sourceHome = resolve2(process.env.HOME ?? homedir());
     const env = {
       HOME: sourceHome,
       TMPDIR: root,
       // A shared workspace serves both adapters of one review; each CLI ignores the other's
       // variable, and a single-adapter list produces exactly the env it produced before.
-      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join15(sourceHome, ".codex")) } : {},
-      ...adapters.includes("claude-cli") && process.env.CLAUDE_CONFIG_DIR !== void 0 ? { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) } : {}
+      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve2(process.env.CODEX_HOME ?? join16(sourceHome, ".codex")) } : {},
+      ...adapters.includes("claude-cli") && process.env.CLAUDE_CONFIG_DIR !== void 0 ? { CLAUDE_CONFIG_DIR: resolve2(process.env.CLAUDE_CONFIG_DIR) } : {}
     };
     for (const name of FORWARDED_ENVIRONMENT) {
       const value = process.env[name];
@@ -84907,12 +85174,12 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
     }
     let disposal;
     const dispose = () => {
-      disposal ??= rm3(root, { recursive: true, force: true });
+      disposal ??= rm4(root, { recursive: true, force: true });
       return disposal;
     };
     return Object.freeze({ root, env: Object.freeze(env), dispose });
   } catch (error51) {
-    await rm3(root, { recursive: true, force: true });
+    await rm4(root, { recursive: true, force: true });
     throw error51;
   }
 }
@@ -84926,7 +85193,7 @@ var RepositoryViewMaterializationError = class extends Error {
     this.repository_name = repositoryName7;
   }
 };
-function ordinal10(left, right) {
+function ordinal11(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 function validateDispatchRepositoryViewPlan(candidate) {
@@ -84958,7 +85225,7 @@ function validateDispatchRepositoryViewPlan(candidate) {
       if (member.member_kind !== "secondary") {
         throw new TypeError(`repository view member ${member.name} must be secondary`);
       }
-      if (index > 1 && ordinal10(previous, member.name) >= 0) {
+      if (index > 1 && ordinal11(previous, member.name) >= 0) {
         throw new TypeError("secondary repository view names must be sorted and unique");
       }
     }
@@ -84998,12 +85265,12 @@ function projectReviewedRepositories(candidate) {
   })));
 }
 async function materializeRepositoryArchive(view, member) {
-  await mkdir6(view);
+  await mkdir7(view);
   await new Promise((resolvePipeline, reject) => {
-    const archive = spawn2("git", ["-C", member.repository_root, "archive", "--format=tar", member.commit], {
+    const archive = spawn3("git", ["-C", member.repository_root, "archive", "--format=tar", member.commit], {
       stdio: ["ignore", "pipe", "pipe"]
     });
-    const extract = spawn2("tar", ["-x", "-C", view], { stdio: ["pipe", "ignore", "pipe"] });
+    const extract = spawn3("tar", ["-x", "-C", view], { stdio: ["pipe", "ignore", "pipe"] });
     extract.stdin.on("error", () => void 0);
     archive.stdout.pipe(extract.stdin);
     const stderrChunks = [];
@@ -85044,58 +85311,58 @@ async function materializeRepositoryArchive(view, member) {
     });
   });
   if (member.member_kind === "primary") {
-    await rm3(join15(view, ".archflow", "tasks"), { recursive: true, force: true });
-    await rm3(join15(view, ".archflow", "constitution"), { recursive: true, force: true });
+    await rm4(join16(view, ".archflow", "tasks"), { recursive: true, force: true });
+    await rm4(join16(view, ".archflow", "constitution"), { recursive: true, force: true });
   } else {
-    await rm3(join15(view, ".archflow"), { recursive: true, force: true });
+    await rm4(join16(view, ".archflow"), { recursive: true, force: true });
   }
   if (member.projection_plan !== void 0) await applyProducedProjection(view, member.projection_plan);
 }
 async function materializeRepositoryViews(workspace, candidate) {
   const plan = validateDispatchRepositoryViewPlan(candidate);
-  const container = plan.length === 1 ? workspace.root : join15(workspace.root, "repos");
-  if (plan.length > 1) await mkdir6(container);
+  const container = plan.length === 1 ? workspace.root : join16(workspace.root, "repos");
+  if (plan.length > 1) await mkdir7(container);
   for (const member of plan) {
-    const view = plan.length === 1 ? join15(workspace.root, "repo") : join15(container, member.name);
+    const view = plan.length === 1 ? join16(workspace.root, "repo") : join16(container, member.name);
     try {
       await materializeRepositoryArchive(view, member);
     } catch (error51) {
       throw new RepositoryViewMaterializationError(member.name, error51);
     }
   }
-  return Object.freeze({ ...workspace, repository_view_root: plan.length === 1 ? join15(workspace.root, "repo") : container });
+  return Object.freeze({ ...workspace, repository_view_root: plan.length === 1 ? join16(workspace.root, "repo") : container });
 }
 function errno3(error51) {
   return error51 !== null && typeof error51 === "object" && "code" in error51 && typeof error51.code === "string" ? error51.code : void 0;
 }
 async function ensureContainedParent(view, repositoryPath) {
-  const target4 = resolve(view, repositoryPath);
+  const target4 = resolve2(view, repositoryPath);
   if (target4 === view || !isInside(view, target4)) {
     throw new TypeError("produced repository view path escapes the checkout");
   }
   const segments = repositoryPath.split("/");
   let parent = view;
   for (const segment of segments.slice(0, -1)) {
-    parent = join15(parent, segment);
+    parent = join16(parent, segment);
     try {
-      const status = await lstat10(parent);
+      const status = await lstat11(parent);
       if (!status.isDirectory() || status.isSymbolicLink()) {
         throw new TypeError("produced repository view path traverses a non-directory");
       }
     } catch (error51) {
       if (errno3(error51) !== "ENOENT") throw error51;
-      await mkdir6(parent);
+      await mkdir7(parent);
     }
   }
   return target4;
 }
 async function removeLeaf(target4) {
   try {
-    const status = await lstat10(target4);
+    const status = await lstat11(target4);
     if (status.isDirectory() && !status.isSymbolicLink()) {
       throw new TypeError("produced repository view output collides with a directory");
     }
-    await rm3(target4, { force: true });
+    await rm4(target4, { force: true });
   } catch (error51) {
     if (errno3(error51) !== "ENOENT") throw error51;
   }
@@ -85109,11 +85376,11 @@ async function applyProducedProjection(view, projectionPlan) {
     await removeLeaf(target4);
     if (entry.desired.state === "absent") continue;
     if (entry.desired.file_type === "symlink") {
-      await symlink2(new TextDecoder().decode(entry.desired.bytes), target4);
+      await symlink3(new TextDecoder().decode(entry.desired.bytes), target4);
       continue;
     }
-    await writeFile3(target4, entry.desired.bytes, { mode: entry.desired.mode === "100755" ? 493 : 420 });
-    await chmod2(target4, entry.desired.mode === "100755" ? 493 : 420);
+    await writeFile4(target4, entry.desired.bytes, { mode: entry.desired.mode === "100755" ? 493 : 420 });
+    await chmod3(target4, entry.desired.mode === "100755" ? 493 : 420);
   }
 }
 function shareRepositoryViewWorkspace(repositoryViews, repositoryRoot) {
@@ -85250,8 +85517,8 @@ function createDispatchCoordinator(input) {
       failureStage = "cli-preflight";
       preflight2 = await memoizedCliPreflight(adapter2, workspace, input.signal, input.cancellation_source);
       failureStage = "invocation-build";
-      const childRoot = join16(workspace.root, "children", attemptId);
-      await mkdir7(childRoot, { recursive: true, mode: 448 });
+      const childRoot = join17(workspace.root, "children", attemptId);
+      await mkdir8(childRoot, { recursive: true, mode: 448 });
       const childWorkspace = Object.freeze({
         ...workspace,
         root: childRoot,
@@ -85291,7 +85558,7 @@ function createDispatchCoordinator(input) {
 
 // src/dispatch/retained-child-output.ts
 import { readdir as readdir5, readFile as readFile18 } from "node:fs/promises";
-import { join as join17 } from "node:path";
+import { join as join18 } from "node:path";
 var nonBlank5 = external_exports.string().min(1);
 var retainedRouteSchema = external_exports.object({
   adapter: external_exports.enum(ADAPTER_IDS),
@@ -85428,7 +85695,7 @@ function createRetainedChildOutputStore(context2) {
     },
     async discard(envelopeDigest) {
       try {
-        const directory = join17(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
+        const directory = join18(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
         const prefix = roundPrefix(envelopeDigest);
         for (const name of await readdir5(directory)) {
           if (!name.startsWith(prefix) || !name.endsWith(".json")) continue;
@@ -85521,7 +85788,7 @@ var effort_review_schema_default = {
 
 // src/state/transaction.ts
 import { isDeepStrictEqual as isDeepStrictEqual18 } from "node:util";
-import { isAbsolute as isAbsolute6, relative as relative7, resolve as resolvePath8 } from "node:path";
+import { isAbsolute as isAbsolute6, relative as relative8, resolve as resolvePath8 } from "node:path";
 var MAX_RECEIPT_BYTES = 1024 * 1024;
 var resultInstallations = /* @__PURE__ */ new WeakMap();
 var consumedResultInstallations = /* @__PURE__ */ new WeakSet();
@@ -85707,7 +85974,7 @@ async function resolveIntentTarget(dependencies, request) {
   if (resolved.value.path_class !== "workspace-intent") throw new TypeError("intent target has the wrong resolved path class");
   const expectedClaim = `.archflow/runtime/tasks/${request.authority.task_id}/${claim}`;
   if (resolved.value.repositoryRelative !== expectedClaim) throw new TypeError("intent target claim mismatch");
-  const rel = relative7(request.authority.workspace_root, resolved.value.absolute);
+  const rel = relative8(request.authority.workspace_root, resolved.value.absolute);
   if (rel === "" || rel === ".." || rel.startsWith("../") || isAbsolute6(rel)) {
     throw new TypeError("intent target is not contained by the authenticated task root");
   }
@@ -85935,7 +86202,7 @@ function expectedInstallationSource(call, source) {
   throw new TypeError("result installation tool and source kind do not match");
 }
 function targetIsInside(root, target4) {
-  const rel = relative7(root, target4.absolute);
+  const rel = relative8(root, target4.absolute);
   return rel !== "" && rel !== ".." && !rel.startsWith("../") && !isAbsolute6(rel);
 }
 function projectionTargetMatchesRepositoryRoot(root, entry) {
@@ -86498,7 +86765,7 @@ async function runStateTransaction(dependencies, request, prepare) {
 
 // src/review/pinned-context.ts
 import { readFile as readFile19 } from "node:fs/promises";
-import { join as join18, posix } from "node:path";
+import { join as join19, posix } from "node:path";
 
 // src/contracts/utf8.ts
 import { Buffer as Buffer3 } from "node:buffer";
@@ -86613,8 +86880,7 @@ async function assembleReviewContext(input) {
       if (!validationOverrides.ok) return validationOverrides;
       mechanical = [
         ...validationOverrides.value,
-        ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject),
-        ...await implementationMechanicalEvidence(input.runner, input.subject, input.projection_plan)
+        ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject)
       ];
     } else {
       const artifactText = decodeUtf8Strict(input.projection_bytes);
@@ -86780,35 +87046,6 @@ async function assembleUpstreamContext(input) {
   }
   return ok25(Object.freeze(entries));
 }
-var RELATIVE_IMPORT_PATTERNS = [
-  /\bfrom\s+["']([^"'\n]+)["']/gu,
-  /\bimport\s+["']([^"'\n]+)["']/gu,
-  /\bimport\s*\(\s*["']([^"'\n]+)["']\s*\)/gu,
-  /\brequire\s*\(\s*["']([^"'\n]+)["']\s*\)/gu
-];
-function relativeImportSpecifiers(source) {
-  const specifiers = /* @__PURE__ */ new Set();
-  for (const pattern of RELATIVE_IMPORT_PATTERNS) {
-    for (const match of source.matchAll(pattern)) {
-      const specifier = match[1];
-      if (specifier.startsWith("./") || specifier.startsWith("../")) specifiers.add(specifier);
-    }
-  }
-  return [...specifiers];
-}
-function importTargetCandidates(fromPath, specifier) {
-  const resolved = posix.normalize(posix.join(posix.dirname(fromPath), specifier));
-  if (resolved.startsWith("../") || resolved === "..") return Object.freeze([]);
-  const candidates = /* @__PURE__ */ new Set([resolved]);
-  if (resolved.endsWith(".js")) candidates.add(`${resolved.slice(0, -3)}.ts`);
-  if (resolved.endsWith(".mjs")) candidates.add(`${resolved.slice(0, -4)}.mts`);
-  if (!/\.[A-Za-z0-9]+$/u.test(resolved)) {
-    candidates.add(`${resolved}.ts`);
-    candidates.add(`${resolved}.js`);
-    candidates.add(`${resolved}/index.ts`);
-  }
-  return Object.freeze([...candidates]);
-}
 var DOC_PATH_MENTION = /`([A-Za-z0-9_@][A-Za-z0-9_@./:-]*)`/gu;
 function mentionedRepositoryPaths(text4) {
   const paths = /* @__PURE__ */ new Set();
@@ -86919,66 +87156,6 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
     total_byte_count: bytes.byteLength
   })];
 }
-async function implementationMechanicalEvidence(runner, subject, projectionPlan) {
-  if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);
-  if (projectionPlan === void 0) {
-    return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
-  }
-  const baseCommit = subject.artifact.base_commit;
-  try {
-    const planEntries = projectionPlan.entries;
-    const changedPaths = new Set(planEntries.map((entry) => entry.path));
-    const wanted = [];
-    for (const entry of planEntries) {
-      if (entry.desired.state !== "present" || !/\.(?:ts|tsx|mts|js|mjs)$/u.test(entry.path)) continue;
-      const source = decodeUtf8Strict(entry.desired.bytes);
-      if (source === void 0) continue;
-      for (const specifier of relativeImportSpecifiers(source)) {
-        const candidates = importTargetCandidates(entry.path, specifier);
-        if (candidates.length === 0) continue;
-        if (candidates.some((candidate) => changedPaths.has(candidate))) continue;
-        wanted.push({ specifier, fromPath: entry.path, candidates });
-      }
-    }
-    const entries = [];
-    const pinnedTargets = /* @__PURE__ */ new Set();
-    let processed = 0;
-    for (const item of wanted) {
-      if (processed >= MECHANICAL_TARGET_LIMIT) break;
-      let resolved;
-      for (const candidate of item.candidates) {
-        const blob = await readCommitTreeBlob(runner, baseCommit, candidate);
-        if (blob !== void 0) {
-          resolved = { path: candidate, oid: blob.oid };
-          break;
-        }
-      }
-      if (resolved === void 0) {
-        processed += 1;
-        entries.push(unavailableContextEntry(
-          "interface-excerpt",
-          item.specifier,
-          `import from ${item.fromPath} did not resolve at base commit ${baseCommit}`
-        ));
-        continue;
-      }
-      if (pinnedTargets.has(resolved.path)) continue;
-      pinnedTargets.add(resolved.path);
-      processed += 1;
-      entries.push(excerptContextEntry("interface-excerpt", resolved.path, await readGitBlobBytes(runner, resolved.oid)));
-    }
-    if (processed >= MECHANICAL_TARGET_LIMIT && wanted.length > processed) {
-      entries.push(unavailableContextEntry(
-        "interface-excerpt",
-        "additional-imports",
-        `${wanted.length - processed} further import targets not pinned (mechanical evidence limit)`
-      ));
-    }
-    return entries;
-  } catch {
-    return [failedMechanicalEvidence("interface-excerpt", "changed-imports")];
-  }
-}
 async function loadPriorTriageRecord(dependencies, state) {
   const triageRef = state.authoritative_results.find((candidate) => candidate.phase_instance === state.phase_instance && candidate.step === "triage");
   if (triageRef === void 0 || dependencies.load_retained_result === void 0) {
@@ -87073,7 +87250,7 @@ async function priorTriageEvidence(dependencies, state, preloaded) {
 async function conventionsEvidence(runner) {
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile19(join18(runner.location.worktreeRoot, "CLAUDE.md")));
+    bytes = new Uint8Array(await readFile19(join19(runner.location.worktreeRoot, "CLAUDE.md")));
   } catch {
     return Object.freeze([]);
   }
@@ -87331,11 +87508,18 @@ async function runCounterReview(dependencies, input) {
     return fail25(createProjectError("STATE_INVALID", { phase_instance: input.authority.context.phase_instance, issue_code: "follow-up-reviewer-unavailable" }));
   }
   const reviewRoutes = selected === void 0 ? taggedRoutes : taggedRoutes.filter((route2) => selected.some((reviewer) => reviewer.reviewer_id === route2.assignment.reviewer_id));
+  const preparedDiffs = await dependencies.prepare_diffs?.();
   const assignmentFor = (routeEntry) => routeEntry.assignment;
   const envelopeFor = (routeEntry) => {
     const assignment = assignmentFor(routeEntry);
     const context2 = input.envelope.context.map((entry) => entry.kind === "prior-triage" && priorTriage !== void 0 ? priorTriageContextEntry(priorTriage, void 0, assignment.reviewer_id) : entry);
-    return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject, context: context2 });
+    return buildReviewEnvelopeWithCap({
+      ...input.envelope,
+      assignment,
+      subject,
+      context: context2,
+      ...preparedDiffs === void 0 ? {} : { diffs: preparedDiffs.reviewers.get(assignment.reviewer_id) ?? { full: preparedDiffs.full } }
+    });
   };
   const activeAssignments = reviewRoutes.map(assignmentFor);
   const reviewEnvelopes = reviewRoutes.map(envelopeFor);
@@ -87354,6 +87538,7 @@ async function runCounterReview(dependencies, input) {
   });
   const constitutionEnvelope = constitutionSubject === void 0 || plan === void 0 ? void 0 : buildAdjudicationEnvelope({
     artifact: input.envelope.artifact,
+    ...preparedDiffs === void 0 ? {} : { diffs: { full: preparedDiffs.full } },
     rules: plan.rules,
     source_review_envelope_digest: envelope.digest,
     workspace: plan.workspace,
@@ -87789,7 +87974,7 @@ function stableId(prefix, seed) {
 }
 async function readHazardRegistryBytes(primaryRoot) {
   try {
-    return new Uint8Array(await readFile20(join19(primaryRoot, ".archflow", "hazards.yaml")));
+    return new Uint8Array(await readFile20(join20(primaryRoot, ".archflow", "hazards.yaml")));
   } catch (error51) {
     if (error51.code !== "ENOENT") throw error51;
     return void 0;
@@ -88239,6 +88424,18 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       observed_at_revision: state.value.revision
     });
     const result = await runCounterReview({
+      ...produce.value.artifact.artifact_kind !== "implementation-output" ? {} : {
+        prepare_diffs: async () => prepareImplementationDiffs({
+          workspace: await sharedWorkspace.acquire(),
+          repositories: repositoryViews,
+          runners: new Map(session.value.repository_set.members.map((member) => [member.name, member.binding.runner])),
+          subject: produce.value,
+          state: state.value,
+          dependencies: services.dependencies,
+          ...priorTriage.value === void 0 ? {} : { prior_triage: priorTriage.value },
+          signal: context2.signal
+        })
+      },
       transaction: services.dependencies,
       dispatch: coordinator,
       retry_dispatch: (role, selected, envelopeDigest, operation) => recovery.run(role, selected, operation, envelopeDigest),
@@ -88820,7 +89017,7 @@ async function settleApprovalRules(services, repositorySet, current, prospective
       ruleContext.secondaryChangedPaths
     );
     const kind = decodePhaseInstance(current.phase_instance).kind;
-    const milestoneTarget = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl") ? await currentTargetRef(services.dependencies) : void 0;
+    const milestoneTarget = !conclusion.wait && (kind === "prd" || kind === "design" || kind === "phase-design" || kind === "phase-impl") ? await currentTargetRef(services.dependencies) : void 0;
     const observedTargetHead = milestoneTarget === void 0 ? void 0 : await resolveCommit(services.runner, milestoneTarget.value);
     const milestoneBaseline = milestoneTarget === void 0 ? void 0 : produce.artifact.artifact_kind === "implementation-output" ? produce.artifact.base_commit : observedTargetHead;
     const secondaryMilestones = !conclusion.wait && produce.artifact.artifact_kind === "implementation-output" ? await buildSecondaryCommitAuthorizationFacts(produce.artifact, repositorySet) : Object.freeze([]);
@@ -89160,7 +89357,7 @@ async function handleState(call, context2) {
         if (refreshInput !== void 0) {
           const state = current.value;
           const decoded = decodePhaseInstance(state.phase_instance);
-          if (decoded.kind !== "design" && decoded.kind !== "phase-design" || refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" || state.status !== "succeeded" || state.open_gate !== void 0 || state.pending_human_revision !== void 0 || state.terminal !== void 0) {
+          if (decoded.kind !== "prd" && decoded.kind !== "design" && decoded.kind !== "phase-design" || refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" || state.status !== "succeeded" || state.open_gate !== void 0 || state.pending_human_revision !== void 0 || state.terminal !== void 0) {
             return fail28(createProjectError("TRANSITION_INVALID", {
               phase_instance: refreshInput.phase_instance,
               from: `${state.step}-${state.status}`,
@@ -89669,15 +89866,16 @@ async function handleState(call, context2) {
           ) !== void 0) {
             authenticatedRuleAcceptance = void 0;
           }
-          if (designExit && currentProduce?.artifact.artifact_kind === "document") {
+          if ((designExit || decodedCurrent.kind === "prd") && currentProduce?.artifact.artifact_kind === "document") {
             for (const authenticated of authenticatedGateApprovals2) {
-              if (authenticated.request.kind !== "design-approval") continue;
+              const planningCommit = authenticated.request.kind === "design-approval" ? authenticated.request.context : authenticated.request.kind === "artifact-approval" && "commit" in authenticated.request.context ? authenticated.request.context.commit : void 0;
+              if (planningCommit === void 0) continue;
               if ((await designArtifactCommittedAtCurrentTarget(
                 services.runner,
                 current.value.task_id,
                 currentProduce.artifact,
                 currentProduce.retained.manifest.value.outputs,
-                authenticated.request.context
+                planningCommit
               )).observed) {
                 commitObserved = true;
                 break;
@@ -89692,10 +89890,10 @@ async function handleState(call, context2) {
                 const pinnedTargetValid = legacyTarget || settlement.milestone_target_head === baseline && currentTarget.value === settlement.milestone_target_ref;
                 const targetRef = legacyTarget ? currentTarget.value : settlement.milestone_target_ref;
                 const phase3 = decodePhaseInstance(current.value.phase_instance);
-                if (phase3.kind !== "design" && phase3.kind !== "phase-design") {
+                if (phase3.kind !== "prd" && phase3.kind !== "design" && phase3.kind !== "phase-design") {
                   throw new TypeError("autonomous design commit has a non-design phase");
                 }
-                const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+                const phaseLabel = phase3.kind === "prd" ? "prd" : phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
                 const proof = pinnedTargetValid ? await resolveAutonomousDesignMilestoneProof(
                   services.runner,
                   current.value,

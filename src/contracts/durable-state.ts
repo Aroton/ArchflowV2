@@ -779,11 +779,11 @@ export const ruleSettlementV1Schema = z.object({
     context.addIssue({ code: "custom", path: ["secondary_milestones"], message: "secondary milestones are allowed only on a phase-implementation wait:false settlement" });
   }
   if (settlement.milestone_baseline_commit !== undefined &&
-      (settlement.conclusion.wait || (kind !== "design" && kind !== "phase-design" && kind !== "phase-impl"))) {
+      (settlement.conclusion.wait || (kind !== "prd" && kind !== "design" && kind !== "phase-design" && kind !== "phase-impl"))) {
     context.addIssue({
       code: "custom",
       path: ["milestone_baseline_commit"],
-      message: "milestone baseline is allowed only on a design, phase-design, or phase-implementation wait:false settlement",
+      message: "milestone baseline is allowed only on a PRD, design, phase-design, or phase-implementation wait:false settlement",
     });
   }
 }) as unknown as z.ZodType<RuleSettlementV1>;

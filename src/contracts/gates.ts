@@ -132,8 +132,14 @@ export type AuthorityLinkRef = {
   readonly changed_input_fingerprint: Sha256Digest;
 }
 
+export type PlanningCommitContext = {
+  readonly target_ref: string;
+  readonly baseline_commit: GitOid;
+  readonly commit_message: string;
+};
+
 export type GateContractByKind = {
-  readonly "artifact-approval": { readonly context: OrdinaryPolicyContext & { readonly artifact_kind: "prd" | "design" | "phase-design" | "phase-implementation" }; readonly decision: { readonly decision: "approve" | "revise" | "reject"; readonly reason: string } | WaiverRequestedDecision };
+  readonly "artifact-approval": { readonly context: OrdinaryPolicyContext & { readonly artifact_kind: "prd" | "design" | "phase-design" | "phase-implementation"; readonly commit?: PlanningCommitContext }; readonly decision: { readonly decision: "approve" | "revise" | "reject"; readonly reason: string } | WaiverRequestedDecision };
   /** One final design decision that includes any constitution findings and authorizes its milestone commit. */
   readonly "design-approval": { readonly context: {
     readonly artifact_kind: "design" | "phase-design";
@@ -433,7 +439,12 @@ export const reviewPushThroughAttemptsExhaustedContextSchema = z.object({
 });
 
 const contexts = {
-  "artifact-approval": z.object({ artifact_kind: z.enum(["prd", "design", "phase-design", "phase-implementation"]), ...ordinaryPolicyFields }).strict().superRefine(validateOrdinaryPolicyContext),
+  "artifact-approval": z.object({
+    artifact_kind: z.enum(["prd", "design", "phase-design", "phase-implementation"]), ...ordinaryPolicyFields,
+    commit: z.object({ target_ref: boundedText, baseline_commit: gitOidV1Schema, commit_message: boundedText }).strict().optional(),
+  }).strict().superRefine(validateOrdinaryPolicyContext).superRefine((value, context) => {
+    if (value.commit !== undefined && value.artifact_kind !== "prd") context.addIssue({ code: "custom", path: ["commit"], message: "artifact commit authority is only valid for a PRD" });
+  }),
   "design-approval": z.object({
     artifact_kind: z.enum(["design", "phase-design"]),
     ...ordinaryPolicyFields,

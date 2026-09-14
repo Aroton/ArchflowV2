@@ -1,3 +1,4 @@
+import { clientCommit } from "../helpers/semantic-journeys.js";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -170,7 +171,8 @@ approval_rules:
     view = await apply(h, invocation, view, { kind: "gate-summary", summary: "The reviewed PRD includes one localized clarification made without another AI review." });
     expect(view.next_action.expected_submission).toBe("decision");
     view = await apply(h, invocation, view, { kind: "decision", choice: "approve", reason: "The final wording accurately describes task status." });
-    expect(view.next_action.kind).toBe("start-next-skill");
+    expect(view.next_action.kind).toBe("commit");
+    await clientCommit(workspace, view);
     // The same option is available at overall task design, including its parent-document binding.
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     view = await h.status(designInvocation);

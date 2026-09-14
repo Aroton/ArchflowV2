@@ -1,3 +1,4 @@
+import { prepareImplementationDiffs } from "../../review/diffs.js";
 import { writeReceivedFeedback } from "../../dispatch/review-feedback.js";
 import { governingDocumentComparisons } from "../../state/governing-document-comparison.js";
 import { createDispatchRecovery } from "../../dispatch/recovery.js";
@@ -673,6 +674,14 @@ export async function handleCounterReview(
     const diagnosticObserver = createDispatchFailureObserver({ authority: services.authority, dependencies: services.dependencies,
       phase_instance: state.value.phase_instance, attempt: state.value.attempt, observed_at_revision: state.value.revision });
     const result = await runCounterReview({
+      ...(produce.value.artifact.artifact_kind !== "implementation-output" ? {} : {
+        prepare_diffs: async () => prepareImplementationDiffs({
+          workspace: await sharedWorkspace.acquire(), repositories: repositoryViews,
+          runners: new Map(session.value.repository_set.members.map(member => [member.name, member.binding.runner])),
+          subject: produce.value, state: state.value, dependencies: services.dependencies,
+          ...(priorTriage.value === undefined ? {} : { prior_triage: priorTriage.value }), signal: context.signal,
+        }),
+      }),
       transaction: services.dependencies,
       dispatch: coordinator,
       retry_dispatch: (role, selected, envelopeDigest, operation) => recovery.run(role, selected, operation, envelopeDigest),

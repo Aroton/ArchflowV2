@@ -1576,19 +1576,19 @@ async function closedStateForRecord(
       dependencies, authority, current, request, record, digest,
     );
   }
+  const planningCommit = request.kind === "design-approval" ? request.context
+    : request.kind === "artifact-approval" ? request.context.commit : undefined;
   if (
-    record.outcome === "decided" &&
-    record.kind === "design-approval" &&
-    record.envelope.payload.decision === "approve" &&
-    request.kind === "design-approval"
+    record.outcome === "decided" && record.envelope.payload.decision === "approve" &&
+    record.kind === request.kind && planningCommit !== undefined
   ) {
     const symbolicRef = await dependencies.runner.runText({
       argv: ["symbolic-ref", "--quiet", "HEAD"],
       operation: parseSafeCode("git-design-approval-target"),
       expectedAbsence: [{ code: 1, stderrIncludes: "" }],
     });
-    if ((request.context.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== request.context.target_ref) ||
-        await resolveCommit(dependencies.runner, "HEAD") !== request.context.baseline_commit) {
+    if ((planningCommit.target_ref === "HEAD" ? symbolicRef !== "" : symbolicRef !== planningCommit.target_ref) ||
+        await resolveCommit(dependencies.runner, "HEAD") !== planningCommit.baseline_commit) {
       return issue("STATE_INVALID", current.value, "design-approval-git-target-changed");
     }
   }

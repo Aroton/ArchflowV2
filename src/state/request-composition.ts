@@ -1180,6 +1180,11 @@ async function composeGate(
       kind: "artifact-approval",
       context: {
         artifact_kind: APPROVAL_ARTIFACT_KINDS[phaseKind],
+        ...(phaseKind !== "prd" ? {} : { commit: {
+          target_ref: (await currentTargetRef(services.dependencies)).value,
+          baseline_commit: await resolveCommit(services.runner, "HEAD"),
+          commit_message: `ArchFlow: Approve ${state.task_id} prd`,
+        } }),
         ...policyFacts,
         approval_trigger: approvalTrigger,
       },

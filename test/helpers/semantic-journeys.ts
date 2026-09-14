@@ -146,11 +146,26 @@ export function installSemanticReviewStub(
   writeFileSync(join(stubHome, ".codex", "auth.json"), "{}\n");
 
   const generatorScript = `
+import { resolve as resolveDiffPath } from "node:path";
+import { createHash as hashDiff } from "node:crypto";
 ${SEMANTIC_EFFORT_STUB_SOURCE}
 function generateOutput(envelope, countPath, findingsByReview, adjudicationCompliance, implementationFailingRule, phaseDesignTrigger) {
   const effort = generateEffortOutput(envelope);
   if (effort !== undefined) return { ...effort, ...${JSON.stringify(options.effortRationale === undefined ? {} : { rationale: options.effortRationale })} };
   const subject = envelope.subject;
+  if (subject.phase_instance.startsWith("phase-impl-")) {
+    if (!envelope.diffs?.full) throw new Error("implementation diff descriptors missing");
+    const viewRoot = argv.includes("-C") ? argv[argv.indexOf("-C") + 1] : process.cwd();
+    for (const diff of [envelope.diffs.full, envelope.diffs.revision].filter(Boolean)) {
+      for (const descriptor of [diff.patch, diff.stat]) {
+        const content = readFileSync(resolveDiffPath(viewRoot, descriptor.path));
+        if (content.length !== descriptor.byte_count || hashDiff("sha256").update(content).digest("hex") !== descriptor.content_digest) {
+          throw new Error("implementation diff file does not match its descriptor");
+        }
+      }
+    }
+    if (envelope.context?.some(entry => entry.kind === "interface-excerpt")) throw new Error("implementation dependencies were preloaded");
+  }
   if (subject.role === "counter-review") {
     let count = 0; try { count = Number(readFileSync(countPath, "utf8")); } catch {}
     const assignment = envelope.assignment;
@@ -274,7 +289,7 @@ function journeyApply(
   });
 }
 
-async function clientCommit(workspace: TaskWorkspace, view: WorkflowViewV1): Promise<void> {
+export async function clientCommit(workspace: TaskWorkspace, view: WorkflowViewV1): Promise<void> {
   const commit = view.next_action.commit;
   if (commit === undefined) throw new Error("authorized commit facts unavailable");
   execFileSync("git", ["add", "-A", "--", ...commit.paths], { cwd: workspace.root });
@@ -379,6 +394,7 @@ approval_rules:
   view = await journeyApply(h, prd, view);
   view = await journeyApply(h, prd, view, { kind: "gate-summary", summary: "The fixture PRD is ready." });
   view = await journeyApply(h, prd, view, { kind: "decision", choice: "approve", reason: "The fixture requirements are correct." });
+  await clientCommit(workspace, view);
 
   const design = { skill: "archflow-design", intent: "resume" } as const;
   view = await h.status(design);
@@ -435,6 +451,7 @@ approval_rules:
   view = await journeyApply(h, prd, view);
   view = await journeyApply(h, prd, view, { kind: "gate-summary", summary: "The PRD is ready for approval." });
   view = await journeyApply(h, prd, view, { kind: "decision", choice: "approve", reason: "The requirements are correct." });
+  await clientCommit(workspace, view);
 
   const design = { skill: "archflow-design", intent: "resume" } as const;
   view = await h.status(design);

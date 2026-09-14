@@ -25289,7 +25289,13 @@ var reviewPushThroughAttemptsExhaustedContextSchema = external_exports.object({
   }
 });
 var contexts = {
-  "artifact-approval": external_exports.object({ artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]), ...ordinaryPolicyFields }).strict().superRefine(validateOrdinaryPolicyContext),
+  "artifact-approval": external_exports.object({
+    artifact_kind: external_exports.enum(["prd", "design", "phase-design", "phase-implementation"]),
+    ...ordinaryPolicyFields,
+    commit: external_exports.object({ target_ref: boundedText, baseline_commit: gitOidV1Schema, commit_message: boundedText }).strict().optional()
+  }).strict().superRefine(validateOrdinaryPolicyContext).superRefine((value, context2) => {
+    if (value.commit !== void 0 && value.artifact_kind !== "prd") context2.addIssue({ code: "custom", path: ["commit"], message: "artifact commit authority is only valid for a PRD" });
+  }),
   "design-approval": external_exports.object({
     artifact_kind: external_exports.enum(["design", "phase-design"]),
     ...ordinaryPolicyFields,
@@ -28275,7 +28281,7 @@ async function readCommitTreeBlob(runner, commit, path2) {
     return cache.commitTreeBlob.get(cacheKey);
   }
   const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-z", commit, "--", path2],
+    argv: ["--literal-pathspecs", "ls-tree", "-z", commit, "--", path2],
     operation: TREE_ENTRY_OPERATION
   });
   if (fields.length === 0) {
@@ -29204,11 +29210,11 @@ var ruleSettlementV1Schema = external_exports.object({
   if (settlement.secondary_milestones !== void 0 && (kind !== "phase-impl" || settlement.conclusion.wait)) {
     context2.addIssue({ code: "custom", path: ["secondary_milestones"], message: "secondary milestones are allowed only on a phase-implementation wait:false settlement" });
   }
-  if (settlement.milestone_baseline_commit !== void 0 && (settlement.conclusion.wait || kind !== "design" && kind !== "phase-design" && kind !== "phase-impl")) {
+  if (settlement.milestone_baseline_commit !== void 0 && (settlement.conclusion.wait || kind !== "prd" && kind !== "design" && kind !== "phase-design" && kind !== "phase-impl")) {
     context2.addIssue({
       code: "custom",
       path: ["milestone_baseline_commit"],
-      message: "milestone baseline is allowed only on a design, phase-design, or phase-implementation wait:false settlement"
+      message: "milestone baseline is allowed only on a PRD, design, phase-design, or phase-implementation wait:false settlement"
     });
   }
 });
@@ -41762,7 +41768,7 @@ function approvalRuleContext(state, produceSubject, config2, changedDocumentPath
 }
 function buildRuleSettlement(state, subjectDigest, configDigest, conclusion, milestoneBaselineCommit, milestoneTarget, secondaryMilestones = []) {
   const kind = decodePhaseInstance(state.phase_instance).kind;
-  const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl");
+  const baselineAllowed = !conclusion.wait && (kind === "prd" || kind === "design" || kind === "phase-design" || kind === "phase-impl");
   if (milestoneBaselineCommit !== void 0 !== baselineAllowed) {
     throw new TypeError("a milestone baseline is required exactly for milestone-bearing wait:false settlements");
   }
@@ -41973,7 +41979,7 @@ function presentationBindings(active) {
     const option = active.kind === "artifact-approval" && decision3 === "approve" ? Object.freeze({
       token: "approve",
       label: "Approve and continue to design",
-      consequence: "Approve the exact reviewed requirements, advance to design, and include the requirements in the later design milestone commit."
+      consequence: active.context.commit === void 0 ? "Approve the exact reviewed requirements, advance to design, and include the requirements in the later design milestone commit." : "Approve the exact reviewed requirements and authorize their recoverable task-local commit before continuing to design."
     }) : active.kind === "design-approval" && decision3 === "approve" ? Object.freeze({
       token: "approve",
       label: "Approve, commit, and continue",
@@ -42164,6 +42170,7 @@ function buildHumanGatePresentation(active, authenticatedDetails = {}) {
   const reasons = presentationReasons(request, authenticatedDetails);
   const details = [
     ...policyDetails(request),
+    ...request.kind === "artifact-approval" && request.context.commit !== void 0 ? [`Approval also authorizes committing this task's requirements and recovery files before design begins: ${request.context.commit.commit_message}`] : [],
     ...request.kind === "validation-override" ? validationOverrideDetails(request) : [],
     ...request.kind === "attempts-exhausted" ? reviewPushThroughDetails(request, authenticatedDetails) : [],
     ...request.kind === "baseline-adoption" ? baselineProjectionDetails(request.context) : [],
@@ -42316,7 +42323,7 @@ function advanceAction(input, state) {
       gate_kind: requiredKind
     });
   }
-  if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+  if ((designPhase && !legacyDesignApproval || phase3.kind === "prd" && (input.design_commit !== void 0 || autonomous)) && input.commit_observed !== true) {
     if (autonomous && input.commit_blocked_reason === "approved-document-mismatch") {
       return action(
         "run-step",
@@ -42354,7 +42361,7 @@ function advanceAction(input, state) {
         state
       );
     }
-    return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by design approval.", false, state, {
+    return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by planning approval.", false, state, {
       commit_path: input.design_commit.path,
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,
@@ -44411,10 +44418,10 @@ function buildAutonomousImplementationCommitInput(output, targetRef) {
 }
 function buildAutonomousDesignCommitInput(state, settlement, targetRef) {
   const phase3 = decodePhaseInstance(state.phase_instance);
-  if (phase3.kind !== "design" && phase3.kind !== "phase-design" || settlement.phase_instance !== state.phase_instance || settlement.milestone_baseline_commit === void 0) {
+  if (phase3.kind !== "prd" && phase3.kind !== "design" && phase3.kind !== "phase-design" || settlement.phase_instance !== state.phase_instance || settlement.milestone_baseline_commit === void 0) {
     throw new TypeError("autonomous design commit requires a phase-bound milestone baseline");
   }
-  const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+  const phaseLabel = phase3.kind === "prd" ? "prd" : phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
   return Object.freeze({
     path: `.archflow/tasks/${state.task_id}`,
     message: `ArchFlow: Approve ${state.task_id} ${phaseLabel}`,
@@ -44770,14 +44777,15 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     }
   }
   let designCommit;
-  if (produceSubject?.artifact.artifact_kind === "document" && (decodePhaseInstance(state.phase_instance).kind === "design" || decodePhaseInstance(state.phase_instance).kind === "phase-design")) {
-    const authenticated = authenticatedApprovals.find((item) => item.request.kind === "design-approval" && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "approve");
-    if (authenticated?.request.kind === "design-approval") {
+  if (produceSubject?.artifact.artifact_kind === "document" && (state.phase_instance === "prd" || decodePhaseInstance(state.phase_instance).kind === "design" || decodePhaseInstance(state.phase_instance).kind === "phase-design")) {
+    const authenticated = authenticatedApprovals.find((item) => (item.request.kind === "design-approval" || item.request.kind === "artifact-approval" && "commit" in item.request.context && item.request.context.commit !== void 0) && item.request.phase_instance === state.phase_instance && item.request.subject_digest === produceSubject.artifact_digest && item.decision.envelope.payload.decision === "approve");
+    const planningCommit = authenticated?.request.kind === "design-approval" ? authenticated.request.context : authenticated?.request.kind === "artifact-approval" && "commit" in authenticated.request.context ? authenticated.request.context.commit : void 0;
+    if (planningCommit !== void 0) {
       designCommit = Object.freeze({
         path: `.archflow/tasks/${state.task_id}`,
-        message: authenticated.request.context.commit_message,
-        target_ref: authenticated.request.context.target_ref,
-        baseline_commit: authenticated.request.context.baseline_commit
+        message: planningCommit.commit_message,
+        target_ref: planningCommit.target_ref,
+        baseline_commit: planningCommit.baseline_commit
       });
       try {
         const observation = await resolveDesignMilestoneProof(
@@ -44785,7 +44793,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
           state.task_id,
           produceSubject.artifact,
           produceSubject.retained.manifest.value.outputs,
-          authenticated.request.context
+          planningCommit
         );
         commitObserved = observation.kind === "proven";
         if (observation.kind === "missing-from-history") {
@@ -51636,8 +51644,8 @@ function hasAuthenticatedArtifactApproval(input) {
   }
   return false;
 }
-function hasAuthenticatedCombinedDesignApproval(input) {
-  return (input.authenticated_gate_approvals ?? []).some((authenticated) => authenticated.request.kind === "design-approval" && authenticated.approval.gate_kind === "design-approval" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.decision.envelope.payload.decision === "approve");
+function hasAuthenticatedPlanningCommitApproval(input) {
+  return (input.authenticated_gate_approvals ?? []).some((authenticated) => (authenticated.request.kind === "design-approval" || authenticated.request.kind === "artifact-approval" && "commit" in authenticated.request.context && authenticated.request.context.commit !== void 0) && authenticated.approval.gate_kind === authenticated.request.kind && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.decision.envelope.payload.decision === "approve");
 }
 function validRuleSettlementBoundary(input, settlement) {
   if (settlement.task_id !== input.current.task_id || settlement.phase_instance !== input.current.phase_instance || settlement.step !== input.target.step || settlement.settled_at_revision !== input.current.revision + 1 || input.target.phase_instance !== input.current.phase_instance || input.target.status !== "succeeded") return false;
@@ -51808,7 +51816,7 @@ function planStateTransition(value) {
   if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input) && !ruleAccepted && // An accepted migration audit is the design phase's exit authority for a legacy import: the
   // same authenticated approval legalMovement's design-jump rule settles on.
   !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))) return invalid(input, from, to);
-  if ((decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedCombinedDesignApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
+  if ((decodedCurrent.kind === "prd" || decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedPlanningCommitApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
   if (decodedCurrent.kind === "design" && crossesPhase && ruleAccepted && input.derived_planned_final_phase === void 0) return invalid(input, from, to);
   const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledDocumentProduceExitMovement(input);
   if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input) || !pendingValidationOverrideMatches(input)) {
@@ -52711,7 +52719,7 @@ async function settleApprovalRules(services2, repositorySet, current, prospectiv
       ruleContext.secondaryChangedPaths
     );
     const kind = decodePhaseInstance(current.phase_instance).kind;
-    const milestoneTarget = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl") ? await currentTargetRef(services2.dependencies) : void 0;
+    const milestoneTarget = !conclusion.wait && (kind === "prd" || kind === "design" || kind === "phase-design" || kind === "phase-impl") ? await currentTargetRef(services2.dependencies) : void 0;
     const observedTargetHead = milestoneTarget === void 0 ? void 0 : await resolveCommit(services2.runner, milestoneTarget.value);
     const milestoneBaseline = milestoneTarget === void 0 ? void 0 : produce.artifact.artifact_kind === "implementation-output" ? produce.artifact.base_commit : observedTargetHead;
     const secondaryMilestones = !conclusion.wait && produce.artifact.artifact_kind === "implementation-output" ? await buildSecondaryCommitAuthorizationFacts(produce.artifact, repositorySet) : Object.freeze([]);
@@ -53051,7 +53059,7 @@ async function handleState(call, context2) {
         if (refreshInput !== void 0) {
           const state = current.value;
           const decoded = decodePhaseInstance(state.phase_instance);
-          if (decoded.kind !== "design" && decoded.kind !== "phase-design" || refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" || state.status !== "succeeded" || state.open_gate !== void 0 || state.pending_human_revision !== void 0 || state.terminal !== void 0) {
+          if (decoded.kind !== "prd" && decoded.kind !== "design" && decoded.kind !== "phase-design" || refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" || state.status !== "succeeded" || state.open_gate !== void 0 || state.pending_human_revision !== void 0 || state.terminal !== void 0) {
             return fail25(createProjectError("TRANSITION_INVALID", {
               phase_instance: refreshInput.phase_instance,
               from: `${state.step}-${state.status}`,
@@ -53560,15 +53568,16 @@ async function handleState(call, context2) {
           ) !== void 0) {
             authenticatedRuleAcceptance = void 0;
           }
-          if (designExit && currentProduce?.artifact.artifact_kind === "document") {
+          if ((designExit || decodedCurrent.kind === "prd") && currentProduce?.artifact.artifact_kind === "document") {
             for (const authenticated of authenticatedGateApprovals2) {
-              if (authenticated.request.kind !== "design-approval") continue;
+              const planningCommit = authenticated.request.kind === "design-approval" ? authenticated.request.context : authenticated.request.kind === "artifact-approval" && "commit" in authenticated.request.context ? authenticated.request.context.commit : void 0;
+              if (planningCommit === void 0) continue;
               if ((await designArtifactCommittedAtCurrentTarget(
                 services2.runner,
                 current.value.task_id,
                 currentProduce.artifact,
                 currentProduce.retained.manifest.value.outputs,
-                authenticated.request.context
+                planningCommit
               )).observed) {
                 commitObserved = true;
                 break;
@@ -53583,10 +53592,10 @@ async function handleState(call, context2) {
                 const pinnedTargetValid = legacyTarget || settlement.milestone_target_head === baseline && currentTarget.value === settlement.milestone_target_ref;
                 const targetRef = legacyTarget ? currentTarget.value : settlement.milestone_target_ref;
                 const phase3 = decodePhaseInstance(current.value.phase_instance);
-                if (phase3.kind !== "design" && phase3.kind !== "phase-design") {
+                if (phase3.kind !== "prd" && phase3.kind !== "design" && phase3.kind !== "phase-design") {
                   throw new TypeError("autonomous design commit has a non-design phase");
                 }
-                const phaseLabel = phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
+                const phaseLabel = phase3.kind === "prd" ? "prd" : phase3.kind === "design" ? "design" : `phase ${String(phase3.phase)} design`;
                 const proof = pinnedTargetValid ? await resolveAutonomousDesignMilestoneProof(
                   services2.runner,
                   current.value,

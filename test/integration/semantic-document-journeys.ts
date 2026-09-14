@@ -18,6 +18,7 @@ import type { DetailedTaskStatusV1 } from "../../src/state/status.js";
 import type { GateLifecycleDependencies } from "../../src/state/gate-core.js";
 import type { RetainedManifest } from "../../src/state/transaction.js";
 import {
+  clientCommit,
   installSemanticReviewStub,
   semanticJourneyHarness,
   withImplementationComponents,
@@ -120,9 +121,17 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     expect(execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" })).toBe(initialHead);
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe("1");
 
-    // The predecessor can name the successor but cannot consume its write window.
-    expect(decided.value.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
-    expect(decided.value.next_action.offer).toBeUndefined();
+    expect(decided.value.next_action.kind).toBe("commit");
+    const prdCommit = decided.value.next_action.commit;
+    if (prdCommit === undefined) throw new Error("PRD commit instructions unavailable");
+    expect(prdCommit.message).toBe(`ArchFlow: Approve ${workspace.taskId} prd`);
+    const prematureDesign = await h.status({ skill: "archflow-design", intent: "resume" });
+    expect(prematureDesign.next_action.kind).not.toBe("start-next-skill");
+    execFileSync("git", ["add", "-A", "--", ...prdCommit.paths], { cwd: workspace.root });
+    execFileSync("git", ["-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", prdCommit.message, "--", ...prdCommit.paths], { cwd: workspace.root });
+    view = await h.status(invocation);
+    expect(view.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
+    expect(view.next_action.offer).toBeUndefined();
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     view = await h.status(designInvocation);
     expect(view.next_action).toMatchObject({ kind: "start-next-skill", expected_submission: "none" });
@@ -294,8 +303,8 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     const observedPhaseDesign = await h.status(phaseDesignInvocation);
     expect(observedPhaseDesign.implementation_recommendation).toMatchObject({
       status: "ready",
-      model: "gemini-3.7-flash",
-      effort: "max",
+      model: "gpt-6-astra",
+      effort: "low",
     });
     expect(observedPhaseDesign.next_action).toMatchObject({
       kind: "start-next-skill", skill: "archflow-phase-impl", skill_args: ["1"],
@@ -641,6 +650,9 @@ roles:
       subject_digest: subjectDigest,
       conclusion: { wait: false, match: null },
       config_digest: sha256Bytes(readFileSync(workspace.services.authority.config.absolute)),
+      milestone_baseline_commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim(),
+      milestone_target_head: execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" }).trim(),
+      milestone_target_ref: "refs/heads/main",
       settled_at_revision: settled.document.value.revision,
     }]);
 
@@ -654,9 +666,11 @@ roles:
     });
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) return;
-    expect(result.value.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
+    expect(result.value.next_action).toMatchObject({ kind: "commit" });
 
     // Only the human approval authorizes the successor handoff.
+    await clientCommit(workspace, result.value);
+
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     const successor = await h.status(designInvocation);
     expect(successor.next_action).toMatchObject({ kind: "start-next-skill", expected_submission: "none" });
@@ -690,7 +704,13 @@ roles:
     if (!result.ok) throw new Error(JSON.stringify(result));
     result = await h.apply(prdInvocation, result.value);
     if (!result.ok) throw new Error(JSON.stringify(result));
-    expect(result.value.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
+    expect(result.value.next_action, JSON.stringify(result.value)).toMatchObject({ kind: "commit" });
+    const prdCommit = result.value.next_action.commit;
+    if (prdCommit === undefined) throw new Error("autonomous PRD commit unavailable");
+    expect(prdCommit.message).toBe(`ArchFlow: Approve ${workspace.taskId} prd`);
+    execFileSync("git", ["add", "-A", "--", ...prdCommit.paths], { cwd: workspace.root });
+    execFileSync("git", ["-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid", "commit", "-q", "-m", prdCommit.message, "--", ...prdCommit.paths], { cwd: workspace.root });
+    expect((await h.status(prdInvocation)).next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
     expect(result.value.presentation).toBeUndefined();
 
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
@@ -887,6 +907,8 @@ The implementation handoff is offered after exact commit proof.
       conclusion: { wait: true, match: { kind: "subject", subject: "prd" } },
     })]);
 
+    await clientCommit(workspace, result.value);
+
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     let design = await h.apply(designInvocation, await h.status(designInvocation));
     expect(design.ok, JSON.stringify(design)).toBe(true);
@@ -991,6 +1013,8 @@ The implementation handoff is offered after exact commit proof.
     result = await h.apply(invocation, result.value, { kind: "decision", choice: "approve", reason: "The requirements are correct." });
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) return;
+
+    await clientCommit(workspace, result.value);
 
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     let design = await h.apply(designInvocation, await h.status(designInvocation));
@@ -1135,6 +1159,8 @@ The committed state carries the settlement and the successor hand-off is offered
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) return;
 
+    await clientCommit(workspace, result.value);
+
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     let design = await h.apply(designInvocation, await h.status(designInvocation));
     expect(design.ok, JSON.stringify(design)).toBe(true);
@@ -1242,7 +1268,9 @@ The committed state carries the settlement and the successor hand-off is offered
     });
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) return;
-    expect(result.value.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
+    expect(result.value.next_action).toMatchObject({ kind: "commit" });
+
+    await clientCommit(workspace, result.value);
 
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     let design = await h.apply(designInvocation, await h.status(designInvocation));
@@ -1475,6 +1503,8 @@ The committed state carries the settlement and the successor hand-off is offered
     restorePassing();
     restorers.push(installSemanticReviewStub(workspace.root, [[]], { adjudicationCompliance: "fail" }));
 
+    await clientCommit(workspace, result.value);
+
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     let design = await h.apply(designInvocation, await h.status(designInvocation));
     expect(design.ok, JSON.stringify(design)).toBe(true);
@@ -1637,6 +1667,8 @@ The committed state carries the settlement and the successor hand-off is offered
     result = await h.apply(invocation, result.value, { kind: "decision", choice: "approve", reason: "The requirements are correct." });
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) return;
+
+    await clientCommit(workspace, result.value);
 
     const designInvocation = { skill: "archflow-design", intent: "resume" } as const;
     let design = await h.apply(designInvocation, await h.status(designInvocation));

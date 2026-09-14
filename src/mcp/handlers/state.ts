@@ -236,7 +236,7 @@ async function settleApprovalRules(
       ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
     );
     const kind = decodePhaseInstance(current.phase_instance).kind;
-    const milestoneTarget = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl")
+    const milestoneTarget = !conclusion.wait && (kind === "prd" || kind === "design" || kind === "phase-design" || kind === "phase-impl")
       ? await currentTargetRef(services.dependencies)
       : undefined;
     const observedTargetHead = milestoneTarget === undefined
@@ -587,7 +587,7 @@ export async function handleState(
         if (refreshInput !== undefined) {
           const state = current.value;
           const decoded = decodePhaseInstance(state.phase_instance);
-          if ((decoded.kind !== "design" && decoded.kind !== "phase-design") ||
+          if ((decoded.kind !== "prd" && decoded.kind !== "design" && decoded.kind !== "phase-design") ||
               refreshInput.phase_instance !== state.phase_instance || state.step !== "triage" ||
               state.status !== "succeeded" || state.open_gate !== undefined ||
               state.pending_human_revision !== undefined || state.terminal !== undefined) {
@@ -1110,17 +1110,19 @@ export async function handleState(
             authenticatedRuleAcceptance = undefined;
           }
           if (
-            designExit &&
+            (designExit || decodedCurrent.kind === "prd") &&
             currentProduce?.artifact.artifact_kind === "document"
           ) {
             for (const authenticated of authenticatedGateApprovals) {
-              if (authenticated.request.kind !== "design-approval") continue;
+              const planningCommit = authenticated.request.kind === "design-approval" ? authenticated.request.context
+                : authenticated.request.kind === "artifact-approval" && "commit" in authenticated.request.context ? authenticated.request.context.commit : undefined;
+              if (planningCommit === undefined) continue;
               if ((await designArtifactCommittedAtCurrentTarget(
                 services.runner,
                 current.value.task_id,
                 currentProduce.artifact,
                 currentProduce.retained.manifest.value.outputs,
-                authenticated.request.context,
+                planningCommit,
               )).observed) {
                 commitObserved = true;
                 break;
@@ -1138,10 +1140,10 @@ export async function handleState(
                 );
                 const targetRef = legacyTarget ? currentTarget.value : settlement.milestone_target_ref!;
                 const phase = decodePhaseInstance(current.value.phase_instance);
-                if (phase.kind !== "design" && phase.kind !== "phase-design") {
+                if (phase.kind !== "prd" && phase.kind !== "design" && phase.kind !== "phase-design") {
                   throw new TypeError("autonomous design commit has a non-design phase");
                 }
-                const phaseLabel = phase.kind === "design" ? "design" : `phase ${String(phase.phase)} design`;
+                const phaseLabel = phase.kind === "prd" ? "prd" : phase.kind === "design" ? "design" : `phase ${String(phase.phase)} design`;
                 const proof = pinnedTargetValid
                   ? await resolveAutonomousDesignMilestoneProof(
                       services.runner, current.value, currentProduce.artifact,

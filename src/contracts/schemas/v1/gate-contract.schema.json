@@ -403,6 +403,26 @@
         },
         "approval_trigger": {
           "$ref": "#/$defs/approvalTrigger"
+        },
+        "commit": {
+          "type": "object",
+          "properties": {
+            "target_ref": {
+              "$ref": "#/$defs/text"
+            },
+            "baseline_commit": {
+              "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+            },
+            "commit_message": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "target_ref",
+            "baseline_commit",
+            "commit_message"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

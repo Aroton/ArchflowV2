@@ -1244,12 +1244,12 @@ export function buildAutonomousDesignCommitInput(
   targetRef: string,
 ): Readonly<{ path: string; message: string; target_ref: string; baseline_commit: string }> {
   const phase = decodePhaseInstance(state.phase_instance);
-  if ((phase.kind !== "design" && phase.kind !== "phase-design") ||
+  if ((phase.kind !== "prd" && phase.kind !== "design" && phase.kind !== "phase-design") ||
       settlement.phase_instance !== state.phase_instance ||
       settlement.milestone_baseline_commit === undefined) {
     throw new TypeError("autonomous design commit requires a phase-bound milestone baseline");
   }
-  const phaseLabel = phase.kind === "design" ? "design" : `phase ${String(phase.phase)} design`;
+  const phaseLabel = phase.kind === "prd" ? "prd" : phase.kind === "design" ? "design" : `phase ${String(phase.phase)} design`;
   return Object.freeze({
     path: `.archflow/tasks/${state.task_id}`,
     message: `ArchFlow: Approve ${state.task_id} ${phaseLabel}`,
@@ -1716,19 +1716,21 @@ async function computeTaskStatusDetailedInternal(
   let designCommit: Readonly<{ path: string; message: string; target_ref: string; baseline_commit: string }> | undefined;
   if (
     produceSubject?.artifact.artifact_kind === "document" &&
-    (decodePhaseInstance(state.phase_instance).kind === "design" || decodePhaseInstance(state.phase_instance).kind === "phase-design")
+    (state.phase_instance === "prd" || decodePhaseInstance(state.phase_instance).kind === "design" || decodePhaseInstance(state.phase_instance).kind === "phase-design")
   ) {
     const authenticated = authenticatedApprovals.find((item) =>
-      item.request.kind === "design-approval" &&
+      (item.request.kind === "design-approval" || (item.request.kind === "artifact-approval" && "commit" in item.request.context && item.request.context.commit !== undefined)) &&
       item.request.phase_instance === state.phase_instance &&
       item.request.subject_digest === produceSubject!.artifact_digest &&
       item.decision.envelope.payload.decision === "approve");
-    if (authenticated?.request.kind === "design-approval") {
+    const planningCommit = authenticated?.request.kind === "design-approval" ? authenticated.request.context
+      : authenticated?.request.kind === "artifact-approval" && "commit" in authenticated.request.context ? authenticated.request.context.commit : undefined;
+    if (planningCommit !== undefined) {
       designCommit = Object.freeze({
         path: `.archflow/tasks/${state.task_id}`,
-        message: authenticated.request.context.commit_message,
-        target_ref: authenticated.request.context.target_ref,
-        baseline_commit: authenticated.request.context.baseline_commit,
+        message: planningCommit.commit_message,
+        target_ref: planningCommit.target_ref,
+        baseline_commit: planningCommit.baseline_commit,
       });
       try {
         const observation = await resolveDesignMilestoneProof(
@@ -1736,7 +1738,7 @@ async function computeTaskStatusDetailedInternal(
           state.task_id,
           produceSubject.artifact,
           produceSubject.retained.manifest.value.outputs,
-          authenticated.request.context,
+          planningCommit,
         );
         commitObserved = observation.kind === "proven";
         if (observation.kind === "missing-from-history") {

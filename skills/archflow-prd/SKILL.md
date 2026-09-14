@@ -59,6 +59,8 @@ Only when `next_action.expected_submission` is `gate-summary`, author a concise,
 
 When a `presentation` is returned, stop for explicit human judgment. Later submit only `{"kind":"decision","choice":<the selected presentation option token>,"reason":<the human's reason>}` through the current offer. Never choose, infer, or record a decision for the human. If the choice is `waiver-requested`, it is not approval: apply the separate no-submission `open-waiver` offer, present the returned waiver choices in the same way, stop again, and submit the later opaque token and human reason. A denial or cancellation grants nothing. If no presentation is returned, do not stop for a human decision; follow the fresh server-returned action directly.
 
+When fresh status returns `next_action.kind:"commit"`, execute its exact task-local commit facts: verify the target and baseline, stage only the returned paths, inspect the staged changes, and commit with the returned message. The PRD approval already authorizes this commit; do not ask again. Call `archflow_status` with the same invocation so the server verifies the commit before hand-off. Do not report PRD completion or advance to design while a commit remains pending.
+
 After a returned gate decision, or immediately after clean review when no gate is returned, use fresh `archflow_status` with the same invocation and follow only its action. Apply an offered no-submission `start-next-skill` only when it belongs to this exact invocation. Once fresh status names the successor, report it without starting it:
 
 `Claude: /<next_action.skill> <task> <next_action.skill_args...>`

@@ -523,7 +523,7 @@ export async function readCommitTreeBlob(
     return cache.commitTreeBlob.get(cacheKey);
   }
   const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-z", commit, "--", path],
+    argv: ["--literal-pathspecs", "ls-tree", "-z", commit, "--", path],
     operation: TREE_ENTRY_OPERATION,
   });
   if (fields.length === 0) {

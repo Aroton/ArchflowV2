@@ -327,7 +327,7 @@ describe("planning milestone settlement baseline", () => {
     revision: 4,
   } as unknown as TaskStateV1);
 
-  it.each(["design", "phase-design-2"])("requires and retains a baseline for %s wait:false", (phase) => {
+  it.each(["prd", "design", "phase-design-2"])("requires and retains a baseline for %s wait:false", (phase) => {
     const settlement = buildRuleSettlement(
       state(phase), digest, configDigest, { wait: false, match: null }, baseline, target,
     );

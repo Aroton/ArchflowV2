@@ -1,3 +1,4 @@
+import { clientCommit } from "../helpers/semantic-journeys.js";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -173,6 +174,7 @@ roles:
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) return;
 
+    await clientCommit(workspace, result.value);
     let designResult = await h.apply(design, await h.status(design));
     expect(designResult.ok, JSON.stringify(designResult)).toBe(true);
     if (!designResult.ok) return;

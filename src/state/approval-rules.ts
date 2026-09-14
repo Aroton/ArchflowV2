@@ -282,7 +282,7 @@ export function buildRuleSettlement(
   secondaryMilestones: readonly RepositoryCommitMilestoneV1[] = [],
 ): RuleSettlementV1 {
   const kind = decodePhaseInstance(state.phase_instance).kind;
-  const baselineAllowed = !conclusion.wait && (kind === "design" || kind === "phase-design" || kind === "phase-impl");
+  const baselineAllowed = !conclusion.wait && (kind === "prd" || kind === "design" || kind === "phase-design" || kind === "phase-impl");
   if ((milestoneBaselineCommit !== undefined) !== baselineAllowed) {
     throw new TypeError("a milestone baseline is required exactly for milestone-bearing wait:false settlements");
   }

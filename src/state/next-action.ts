@@ -316,7 +316,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
   // An artifact-approval request already recorded before design-approval existed completes under
   // its original contract. It did not authorize a commit, so only the new combined gate enters
   // the automatic commit step.
-  if (designPhase && !legacyDesignApproval && input.commit_observed !== true) {
+  if (((designPhase && !legacyDesignApproval) || (phase.kind === "prd" && (input.design_commit !== undefined || autonomous))) && input.commit_observed !== true) {
     if (autonomous && input.commit_blocked_reason === "approved-document-mismatch") {
       return action(
         "run-step",
@@ -357,7 +357,7 @@ function advanceAction(input: NextActionInput, state: TaskStateV1): NextAction {
         state,
       );
     }
-    return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by design approval.", false, state, {
+    return action("commit-artifacts", "Commit the exact recoverable task-local milestone authorized by planning approval.", false, state, {
       commit_path: input.design_commit.path,
       commit_message: input.design_commit.message,
       commit_target_ref: input.design_commit.target_ref,

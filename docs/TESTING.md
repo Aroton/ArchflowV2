@@ -4,6 +4,10 @@
 
 Report-workflow coverage exercises irregular extracted JSON, explicit producer interpretation, selective follow-up, partial-feedback visibility, sibling reuse, and independent constitution/approval boundaries. Archived structured-review tests remain for old evidence.
 
+## Diff transport and PRD completion checks
+
+Local Git fixtures exercise complete implementation patch files, large patches beyond the envelope cap, `.archflow/` exclusion, independent follow-up baselines, reverted outputs, and explicit fallback when historical context is unavailable. These checks use no model allowance. Semantic document journeys require the PRD's authorized commit before design can start, covering both human approval and autonomous rule settlement.
+
 ## The default is deliberately fast
 
 ArchFlow is an iterated-on prototype, so its everyday gate answers one question: did this edit break the typed code, focused behavior, public shape, or temporary bundle? It does not reproduce a release, simulate process crashes, traverse every schema corpus, or call an authenticated model host.

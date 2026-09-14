@@ -301,7 +301,9 @@ function presentationBindings(active: ActiveGateV1): readonly PresentationBindin
       ? Object.freeze({
           token: "approve",
           label: "Approve and continue to design",
-          consequence: "Approve the exact reviewed requirements, advance to design, and include the requirements in the later design milestone commit.",
+          consequence: active.context.commit === undefined
+            ? "Approve the exact reviewed requirements, advance to design, and include the requirements in the later design milestone commit."
+            : "Approve the exact reviewed requirements and authorize their recoverable task-local commit before continuing to design.",
         })
       : active.kind === "design-approval" && decision === "approve"
       ? Object.freeze({
@@ -535,6 +537,9 @@ export function buildHumanGatePresentation(
   const reasons = presentationReasons(request, authenticatedDetails);
   const details = [
     ...policyDetails(request),
+    ...(request.kind === "artifact-approval" && request.context.commit !== undefined
+      ? [`Approval also authorizes committing this task's requirements and recovery files before design begins: ${request.context.commit.commit_message}`]
+      : []),
     ...(request.kind === "validation-override" ? validationOverrideDetails(request) : []),
     ...(request.kind === "attempts-exhausted" ? reviewPushThroughDetails(request, authenticatedDetails) : []),
     ...(request.kind === "baseline-adoption" ? baselineProjectionDetails(request.context) : []),

@@ -366,10 +366,10 @@ function hasAuthenticatedArtifactApproval(input: TransitionPlanInput): boolean {
   return false;
 }
 
-function hasAuthenticatedCombinedDesignApproval(input: TransitionPlanInput): boolean {
+function hasAuthenticatedPlanningCommitApproval(input: TransitionPlanInput): boolean {
   return (input.authenticated_gate_approvals ?? []).some((authenticated) =>
-    authenticated.request.kind === "design-approval" &&
-    authenticated.approval.gate_kind === "design-approval" &&
+    (authenticated.request.kind === "design-approval" || (authenticated.request.kind === "artifact-approval" && "commit" in authenticated.request.context && authenticated.request.context.commit !== undefined)) &&
+    authenticated.approval.gate_kind === authenticated.request.kind &&
     authenticated.approval.subject_digest === input.completion_subject_digest &&
     authenticated.decision.envelope.payload.decision === "approve");
 }
@@ -723,9 +723,9 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))
   ) return invalid(input, from, to);
   if (
-    (decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") &&
+    (decodedCurrent.kind === "prd" || decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") &&
     crossesPhase &&
-    (hasAuthenticatedCombinedDesignApproval(input) || ruleAccepted) &&
+    (hasAuthenticatedPlanningCommitApproval(input) || ruleAccepted) &&
     input.commit_observed !== true
   ) return invalid(input, from, to);
   if (

@@ -146,7 +146,28 @@ export type ReviewWorkspaceBinding =
     }
   | MultiRepositoryWorkspaceBinding;
 
+export type ReviewDiffFile = {
+  readonly path: string;
+  readonly content_digest: Sha256Digest;
+  readonly byte_count: number;
+};
+export type ReviewDiff = {
+  readonly kind: "implementation" | "revision";
+  readonly subject_digest: Sha256Digest;
+  readonly base_subject_digest?: Sha256Digest;
+  readonly patch: ReviewDiffFile;
+  readonly stat: ReviewDiffFile;
+};
+export type ReviewDiffContext = {
+  readonly full: ReviewDiff;
+  readonly revision?: ReviewDiff;
+  readonly revision_unavailable?: string;
+};
+
+const DIFF_REVIEW_INSTRUCTION = "Start with the supplied changed-file statistics and complete patch. On follow-up, start with the revision patch when available; the full implementation patch remains available for context. Read large patches in sections, then inspect surrounding code, callers and tests as needed. Patches exclude .archflow/; governing documents and verification evidence are supplied separately.";
+
 export type ReviewEnvelopeInput = {
+  readonly diffs?: ReviewDiffContext;
   readonly artifact: string;
   readonly rubric: RubricV1;
   /** Server-owned reviewer scope. Absent only for legacy/tests that exercise the pre-assignment envelope. */
@@ -247,6 +268,7 @@ export type AdjudicationUpstreamInput = {
 };
 
 export type AdjudicationEnvelopeInput = {
+  readonly diffs?: ReviewDiffContext;
   readonly artifact: string;
   readonly rules: readonly AdjudicationRuleInput[];
   readonly source_review_envelope_digest: Sha256Digest;
@@ -647,6 +669,28 @@ function finishEnvelope(
   return Object.freeze({ result_kind: resultKind, bytes, digest, byte_count: bytes.byteLength });
 }
 
+function validateDiffs(value: ReviewDiffContext, subjectDigest: Sha256Digest): ReviewDiffContext {
+  exactFields(value, ["full", ...(value.revision === undefined ? [] : ["revision"]),
+    ...(value.revision_unavailable === undefined ? [] : ["revision_unavailable"])], "review diffs");
+  for (const [kind, diff] of [["implementation", value.full], ["revision", value.revision]] as const) {
+    if (diff === undefined) { if (kind === "implementation") throw new TypeError("full review diff is required"); continue; }
+    exactFields(diff, ["kind", "subject_digest", "patch", "stat", ...(kind === "revision" ? ["base_subject_digest"] : [])], "review diff");
+    if (diff.kind !== kind || parseSha256Digest(diff.subject_digest) !== subjectDigest) throw new TypeError("review diff subject mismatch");
+    if (kind === "revision") parseSha256Digest(diff.base_subject_digest);
+    for (const [extension, file] of [["patch", diff.patch], ["stat", diff.stat]] as const) {
+      exactFields(file, ["path", "content_digest", "byte_count"], "review diff file");
+      const name = kind === "implementation" ? "full" : `since-${diff.base_subject_digest}`;
+      if (file.path !== `../review-diffs/${name}.${extension}`) throw new TypeError("invalid review diff path");
+      parseSha256Digest(file.content_digest);
+      parseSafeInteger(file.byte_count);
+    }
+  }
+  if (value.revision_unavailable !== undefined && (value.revision !== undefined || typeof value.revision_unavailable !== "string" || !value.revision_unavailable.trim())) {
+    throw new TypeError("invalid revision diff availability");
+  }
+  return value;
+}
+
 /**
  * Builds the sole counter-review child input. The closed input and subject shells deliberately make
  * free-form producer history and agent instructions unrepresentable. `context` is the one
@@ -668,6 +712,7 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     snapshot,
     [
       "artifact", "rubric", "context", "subject",
+      ...(snapshot.diffs === undefined ? [] : ["diffs"]),
       ...(snapshot.assignment === undefined ? [] : ["assignment"]),
       ...(snapshot.workspace === undefined ? [] : ["workspace"]),
     ],
@@ -695,6 +740,7 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
+    ...(snapshot.diffs === undefined ? {} : { diffs: validateDiffs(snapshot.diffs, snapshot.subject.subject_digest) }),
     rubric,
     ...(assignment === undefined ? {} : { assignment }),
     context,
@@ -702,6 +748,7 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
     // literal appears exactly when a prior-triage record is pinned, and its presence is derived
     // from validated context, never a caller switch.
     instructions: {
+      ...(snapshot.diffs === undefined ? {} : { changes: DIFF_REVIEW_INSTRUCTION }),
       review: parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
       ...(assignment === undefined ? {} : { assignment: assignment.focus === "tests" ? TEST_REVIEW_ASSIGNMENT_INSTRUCTION : GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION }),
       ...(context.some(entry => entry.kind === "prior-triage") ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION } : {}),
@@ -725,9 +772,9 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
   const workspace = snapshot.workspace === undefined ? undefined : validateWorkspace(snapshot.workspace);
   exactFields(
     snapshot,
-    workspace === undefined
-      ? ["artifact", "rules", "source_review_envelope_digest", "subject"]
-      : ["artifact", "rules", "source_review_envelope_digest", "workspace", "subject"],
+    ["artifact", "rules", "source_review_envelope_digest", "subject",
+      ...(workspace === undefined ? [] : ["workspace"]),
+      ...(snapshot.diffs === undefined ? [] : ["diffs"])],
     "adjudication envelope input",
   );
   if (typeof snapshot.artifact !== "string") throw new TypeError("adjudication envelope artifact must be text");
@@ -740,11 +787,13 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
   const envelope = {
     schema_version: "2",
     artifact: snapshot.artifact,
+    ...(snapshot.diffs === undefined ? {} : { diffs: validateDiffs(snapshot.diffs, subject.subject_digest) }),
     rules,
     source_review_envelope_digest: sourceEvidenceSetDigest,
     ...(workspace === undefined ? {} : { workspace }),
     instructions: {
       rule_coverage: "Return exactly one judgment for every supplied opaque rule slot. Use each slot exactly once as a judgments object key; do not omit, duplicate, or invent slots, and do not return rule identity or rollups.",
+      ...(snapshot.diffs === undefined ? {} : { changes: DIFF_REVIEW_INSTRUCTION }),
       enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
       uncertainty: "Report uncertain compliance only when the artifact and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
       trigger: "A rule's review_trigger names a condition the repository wants a human to look at. Report trigger=matched only when that condition is directly evidenced by the artifact, its co-produced documents, or the supplied repository snapshot, and trigger=uncertain only when those genuinely leave it open. Workflow mechanics the server owns—gate authority, approvals, commits, and dispatch outcomes—are never evidence for a trigger; report not-matched. A rule with no review_trigger is always not-matched, with trigger_evidence stating that the rule declares no trigger.",

@@ -98,8 +98,7 @@ describe("semantic apply/status parity", { timeout: TIMEOUT }, () => {
     });
 
     expect((await expectSuccess(result)).next_action).toMatchObject({
-      kind: "start-next-skill",
-      skill: "archflow-design",
+      kind: "commit",
     });
   });
 

@@ -24,6 +24,12 @@ The canonical set contains nine portable skills:
 
 In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
 
+## When ArchFlow applies
+
+ArchFlow orchestration is required only when the current work belongs to an initialized task in `.archflow/tasks/`. Ordinary conversation, planning mode, code review, and direct implementation requests outside an initialized task proceed normally; the presence of `.archflow/`, installed skills, or this repository does not require starting a task. Initialize a task when the user requests the ArchFlow workflow, not merely because they ask for a plan or code changes.
+
+The workflow trust boundaries below apply within an initialized task. Repository engineering, documentation, and installation-safety rules apply to all work.
+
 ## How It Works
 
 All working files live in `.archflow/`. Tracked in git during development to preserve progress across sessions. Remove before PR.
@@ -115,10 +121,10 @@ Working and maintainable beats perfect. Simplicity does not override the human t
 
 ArchFlow is written for models that keep improving. Skills must encode *intent and trust boundaries*, not workarounds for model weaknesses — workarounds become ceilings as models get better. When writing or editing any skill, apply this litmus test to every rule: **is it here because the model used to be bad at something, or because the human needs it?** Only the second kind gets "never/must/exact" language.
 
-Hard rules — human trust boundaries, never soften:
+Within an initialized ArchFlow task, these human trust boundaries are hard rules:
 
 - Never choose or pass a returned human gate without explicit user approval. Never commit when returned commit facts require human confirmation without obtaining it; when they do not, execute only those authenticated facts without inventing a confirmation.
-- Never write code before the server reports durable phase-design authority, whether that authority came from a passed triggered gate or authenticated rule-based advancement after counter-review.
+- For implementation within an initialized ArchFlow task, never write code before the server reports durable phase-design authority, whether that authority came from a passed triggered gate or authenticated rule-based advancement after counter-review.
 - The server-dispatched counter-review (opposite client family by default) runs automatically before either a triggered human gate or autonomous advancement. There is no optional review at the end of a gate. A significant human revision starts a fresh automatic review cycle; a simple wording or formatting revision may reuse the prior review for one hop but still requires approval of the final bytes. (The `baseline-adoption` gate opens before any review by design: it is not approval of produced work but a human decision about which bytes are the reviewed baseline after they drifted, typically from later commits or a merge.)
 - All correspondence at a human gate is conversational and human-readable. Explain what needs attention, why it matters, and the available choices in plain language. Keep gate IDs, digests, JSON, internal paths, protocol codes, and other mechanical bindings out of the default response; show them only when the user explicitly asks for diagnostics or audit detail.
 - Follow only the server-returned semantic action. Submit a gate summary and stop only when offered, treat every returned presentation as human-required, and never invent a gate or infer autonomous authority from review evidence or conversation.

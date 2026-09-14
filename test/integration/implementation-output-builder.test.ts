@@ -474,7 +474,7 @@ describe("implementation-output builder", () => {
       ...discovered.value,
       runNulFields: async (spec: GitCommandSpec) => {
         const result = await discovered.value.runNulFields(spec);
-        if (!movedDuringTreeProof && spec.argv[0] === "ls-tree" && spec.argv.at(-1) === "added.txt") {
+        if (!movedDuringTreeProof && spec.argv.includes("ls-tree") && spec.argv.at(-1) === "added.txt") {
           execFileSync("git", ["update-ref", "refs/heads/main", baseCommit], { cwd: root, env: gitEnv });
           movedDuringTreeProof = true;
         }

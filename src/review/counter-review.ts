@@ -1,3 +1,4 @@
+import type { PreparedReviewDiffs } from "./diffs.js";
 import { reviewReportOutputSchema, readableReviewReport, type ReviewReportV1, type ServerAttestedReviewV4 } from "../contracts/review.js";
 import effortReviewOutputSchema from "../contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
 const reviewOutputSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue;
@@ -187,6 +188,7 @@ export function reviewOutputIssueCode(error: unknown): string {
 }
 
 export type RunCounterReviewDependencies = Readonly<{
+  prepare_diffs?: () => Promise<PreparedReviewDiffs>;
   transaction: TransactionDependencies;
   retry_dispatch?: <T>(role: DispatchFailureRoleV1, selected: SelectedRouteCandidate, envelopeDigest: Sha256Digest, operation: () => Promise<T>) => Promise<T>;
   dispatch: (
@@ -611,12 +613,15 @@ export async function runCounterReview(
   }
   const reviewRoutes = selected === undefined ? taggedRoutes
     : taggedRoutes.filter(route => selected.some(reviewer => reviewer.reviewer_id === route.assignment.reviewer_id));
+  const preparedDiffs = await dependencies.prepare_diffs?.();
   const assignmentFor = (routeEntry: (typeof taggedRoutes)[number]): ReviewAssignmentV1 => routeEntry.assignment;
   const envelopeFor = (routeEntry: (typeof taggedRoutes)[number]): DispatchEnvelope => {
     const assignment = assignmentFor(routeEntry);
     const context = input.envelope.context.map(entry => entry.kind === "prior-triage" && priorTriage !== undefined
       ? priorTriageContextEntry(priorTriage, undefined, assignment.reviewer_id) : entry);
-    return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject, context });
+    return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject, context,
+      ...(preparedDiffs === undefined ? {} : { diffs: preparedDiffs.reviewers.get(assignment.reviewer_id) ?? { full: preparedDiffs.full } }),
+    });
   };
   const activeAssignments = reviewRoutes.map(assignmentFor);
   const reviewEnvelopes = reviewRoutes.map(envelopeFor);
@@ -643,6 +648,7 @@ export async function runCounterReview(
     ? undefined
     : buildAdjudicationEnvelope({
       artifact: input.envelope.artifact,
+      ...(preparedDiffs === undefined ? {} : { diffs: { full: preparedDiffs.full } }),
       rules: plan.rules,
       source_review_envelope_digest: envelope.digest,
       workspace: plan.workspace,

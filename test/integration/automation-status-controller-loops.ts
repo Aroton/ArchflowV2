@@ -160,7 +160,9 @@ export function registerAutomationStatusControllerLoop(selected: string): void {
               actor: "skill", kind: "continue-skill", skill: action.skill, skill_args: action.skill_args,
             });
             view = await applyOk(harness, invocation, view);
-            expect(view.next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
+            expect(view.next_action.kind).toBe("commit");
+            commitReturnedFacts(workspace, view);
+            expect((await harness.status(invocation)).next_action).toMatchObject({ kind: "start-next-skill", skill: "archflow-design" });
             break;
           }
           case "archflow-design": {
@@ -407,6 +409,8 @@ approval_rules:
         choice: "approve",
         reason: "The configured PRD is approved.",
       });
+      expect(observe(workspace).next_action).toMatchObject({ actor: "skill", skill: "archflow-prd" });
+      commitReturnedFacts(workspace, view);
       expect(observe(workspace)).toMatchObject({
         condition: "awaiting-transition",
         next_action: { actor: "human", kind: "launch-skill", skill: "archflow-design", skill_args: [] },
@@ -483,6 +487,7 @@ approval_rules:
       view = await harness.status(retryInvocation);
       view = await applyOk(harness, retryInvocation, view);
       expect(view.dispatch_failure).toBeUndefined();
+      commitReturnedFacts(workspace, view);
       const advanced = observe(workspace);
       expect(advanced).toMatchObject({
         condition: "awaiting-transition",

@@ -94,6 +94,15 @@ const reconciliationCases: readonly [ReconciliationFinding, string][] = [
 ];
 
 describe("deriveNextAction", () => {
+  it("requires the authorized PRD milestone before handing off to design", () => {
+    const pending = input({ state: state({ phase_instance: "prd" as never }), assessment: assessment("advance"),
+      authenticated_approvals: [{ gate_kind: "artifact-approval", subject_digest: D("a") }],
+      design_commit: { ...designCommit, message: "ArchFlow: Approve task-1 prd" },
+    });
+    expect(deriveNextAction(pending)).toMatchObject({ code: "commit-artifacts", human_required: false, commit_message: "ArchFlow: Approve task-1 prd" });
+    expect(deriveNextAction({ ...pending, commit_observed: true }).code).toBe("advance-phase");
+  });
+
   it("uses an authenticated no-wait status fact only at the ordinary approval arm", () => {
     const phase = implementation(2);
     const receipt = {

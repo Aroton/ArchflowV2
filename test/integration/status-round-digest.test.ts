@@ -89,14 +89,14 @@ describe("status round digest and approval scoping integration", { timeout: TIME
     expect(decided1.ok).toBe(true);
     if (!decided1.ok) return;
 
-    // Status now sees round 1 approval with matching round 1 evidence digest -> code: "advance-phase"
+    // Status now sees round 1 approval with matching round 1 evidence digest -> code: "commit-artifacts"
     const detailedAfterApproval1 = await computeTaskStatusDetailed(
       workspace.services.dependencies,
       workspace.services.authority,
     );
     expect(detailedAfterApproval1.ok).toBe(true);
     if (!detailedAfterApproval1.ok) return;
-    expect(detailedAfterApproval1.value.status.next_action.code).toBe("advance-phase");
+    expect(detailedAfterApproval1.value.status.next_action.code).toBe("commit-artifacts");
 
     const statusAfterApproval1 = await computeTaskStatus(
       workspace.services.dependencies,
@@ -104,7 +104,7 @@ describe("status round digest and approval scoping integration", { timeout: TIME
     );
     expect(statusAfterApproval1.ok).toBe(true);
     if (!statusAfterApproval1.ok) return;
-    expect(statusAfterApproval1.value.next_action.code).toBe("advance-phase");
+    expect(statusAfterApproval1.value.next_action.code).toBe("commit-artifacts");
 
     // Verify that the approval in state records round 1 evidence set digest
     expect(detailedAfterApproval1.value.state?.approvals).toHaveLength(1);
