@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  EFFORT_SELECTOR_INSTRUCTIONS,
-  IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
+  ARCHIVED_SELECTOR_INSTRUCTIONS as EFFORT_SELECTOR_INSTRUCTIONS,
+  ARCHIVED_AGENT_SELECTOR_POLICY_ID as IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
   createDefaultEffortSelectionV2,
   createEffortSelectionV2,
   deriveBoundImplementationEffortV1,

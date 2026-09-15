@@ -1,36 +1,41 @@
 # Model and effort recommendations
 
-Updated 2026-09-12. Fresh selector policy `implementation-agent-selector-v4` favors economical implementation after strong architecture and phase design. Model recommendations are engineering judgments, not capability guarantees or instructions to switch the session.
+Updated 2026-09-15. Fresh policy `implementation-agent-selector-v5` separates remaining implementation difficulty from deterministic subscription-cost selection. Benchmark data comes from the user-supplied Artificial Analysis Terminal-Bench v4.0 chart, retained in `assets/implementation-models.yaml`.
 
-## Implementation ladder
+## Remaining reasoning
 
-Architecture and phase design recommend GPT-6 Astra high. Their job includes settling material decisions, identifying existing guarantees, and providing meaningful verification so implementation usually suits Sol medium or Astra low.
+Reviewed designs should settle architecture and consequential decisions. Following specified steps, copying and validating many files, ordinary wiring, and established patterns are routine work. A small function can still be difficult when it requires novel derivation or unresolved synchronization. Neither file counts nor long verification runs increase difficulty. Credit mechanisms and guarantees that existing APIs already supply.
 
-| Remaining implementation work | Starting recommendation |
+| Category | Default required score | Default selected model |
+|---|---:|---|
+| Routine instructions and established patterns | 19% | Muse Spark 1.3 max |
+| Bounded local reasoning within a settled approach | 30% | Muse Spark 1.3 max |
+| Hard unresolved algorithms or interacting correctness | 40% | GPT-6 Astra low |
+| Exceptional derivation or deep interacting reasoning | 50% | GPT-6 Astra high |
+
+These thresholds are calibration choices, not a mathematical interpretation of benchmark scores. A 19% benchmark score is the configured eligibility floor, not a guarantee that every task can be completed. Preserve the chart's exact effort variants and qualifications; GLM Flash has no specified effort, and Fable's scores include fallback.
+
+## Subscription cost preferences
+
+The default cheapest-first priority is Muse, Z.ai, Google, GPT, Claude. This is the user's subscription preference, not an API price table. The server chooses the cheapest enabled cost group meeting the threshold, then the first eligible profile in that group's configured allowlist order. Extra benchmark points alone do not outweigh cost. Thus Muse dominates Gemini while both are enabled under these preferences; disabling Muse makes Gemini useful for routine work. Z.ai and Claude profiles remain listed but disabled by default.
+
+When nothing reaches the threshold, use the best enabled score above the minimum and explain the shortfall. An empty allowlist or no profile above the minimum produces unavailable advice. On reviewer failure, use bounded reasoning with the captured settings. No fallback implicitly enables a model or chooses an unbenchmarked effort variant.
+
+## Calibration examples
+
+Use these as behavioral calibration inputs for the actual effort reviewer, with expected categories withheld during evaluation:
+
+| Example | Expected category and reason |
 |---|---|
-| Narrow, well-understood, short task with a cheap reliable check | Gemini 3.7 Flash high |
-| Settled patterns, ordinary migrations, CRUD, UI composition, API/dependency wiring, ordinary tests | GPT-5.6 Sol medium (default) |
-| Substantive reasoning within a settled approach: bounded parsing, state transitions, artifact handling, tricky integration | GPT-6 Astra low |
-| Identifiable difficult algorithmic derivation or interacting correctness mechanisms still requiring deep reasoning after design | GPT-6 Astra high |
+| Copy 120 approved design files to specified destinations, verify hashes and validate known schemas | Routine: volume adds work, no unresolved mechanism |
+| Perform the same copy for two files | Routine: identical reasoning despite lower file count |
+| Wire 40 modules through an existing tested transaction API with fully specified calls | Routine: use existing ownership guarantees |
+| Adapt a known parser to specified optional fields and locally choose an existing error helper | Bounded reasoning: local choices in an established approach |
+| Implement a 30-line asynchronous cache with unresolved synchronization and eviction interactions | Hard: correctness mechanisms still need reasoning |
+| Derive a novel scheduler while preserving cancellation, recovery, and fairness across partial failures | Exceptional: deep interacting derivation |
 
-There are no additive axis scores, automatic risk floors, or highest-component aggregation. Distinguish calling an established ownership transaction from inventing ownership. Timers, shared state, security labels, file counts, document length, and lengthy tests or tool loops alone do not justify escalation. A hard mechanism that is essential to the current implementation still counts: do not average it away or assume an unspecified stronger subagent will solve it. Never select Astra max; existing explicit-route restrictions remain.
+Unit tests validate deterministic selection and contract boundaries. Scripted integration tests validate dispatch and persistence. Neither proves that a live model classifies real work correctly or measures implementation quality. Recalibrate using actual implementations, outcomes, and review/rework cost; existing notes are sufficient, with no extra telemetry subsystem.
 
-## Phase boundaries and feedback
+## Authority and persistence
 
-Assess material decisions remaining, new mechanisms versus tested predecessor APIs, relevant examples, credible verification, and coupling. Typically plan one coherent mechanism plus routine wiring. A tested internal prerequisite is a useful increment even when the full feature comes later. Isolate an independently difficult component when the reduction in implementation and rework cost justifies the extra design/review cycle; a bounded implementation assignment can sometimes suffice. Avoid fragmenting routine work merely to obtain a cheaper label. Keep required safety behavior with the capability it protects.
-
-The selector recommends for the plan as written. Its optional free-form `rationale` explains remaining difficulty and can identify a decision to settle or a component to isolate. High-effort recommendations should identify the concrete hard problem. Missing rationale does not invalidate a valid profile. The producer assesses useful feedback through existing review/triage or server-returned reopen actions. No scoring worksheet, automatic plan rewrite, extra model call, new gate, or model quota is introduced.
-
-## Cost and calibration
-
-The objective is total useful work per resource spent, including architecture, phase design, implementation, verification, and review/rework. Model and effort are separate choices: lower effort does not change the model's per-token price. Consult current official [Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol) and [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) pricing when estimating API cost; CLI/account billing and actual token consumption need separate evidence.
-
-The earlier seven-case V3 calibration tested whether a selector followed that policy. It did not benchmark implementation capability or justify the old thresholds. Calibrate V4 with a small sample of actual implementations and existing notes/usage evidence: chosen and actual model/effort, total work including review/rework, and consequential defects. Include routine wiring that calls concurrency primitives, broad mechanical edits, bounded new mechanisms, and genuinely difficult algorithms. A simulated selector or scripted CLI test cannot establish model quality or cost savings. No new telemetry or benchmark framework is needed.
-
-## Reviewer roles and authority
-
-The effort selector remains Luna xhigh, the test reviewer Luna xhigh, and constitution adjudication Gemini 3.7 Flash high. Configured counter-reviewer rosters and explicit routes retain their meaning. This policy does not rewrite task configuration or switch implementation sessions. Any selector failure defaults to Sol medium without retry or a human boundary. Advice, including its rationale, cannot grant edits, bypass review, change offers, or approve work.
-
-## Retained evidence
-
-The payload remains schema version 2 with an optional rationale; fresh policy identity is V4. V1 assessments and V2/V3-policy selections remain readable with their original profiles. Their private judgments are not reinterpreted. A policy change alone does not rerun completed reviews; changed phase-design bytes require fresh selection. Contract tests validate profile membership, binding, archival readability, and explanation projection, not the quality of the model's judgment.
+Advice never switches sessions, changes reviewer routes, creates gates, or authorizes implementation. Fresh schema-version-3 evidence captures the assessment, settings, scores, result, and provenance. Config/catalog edits affect future assessments only; archived evidence retains its original meaning. Missing selection data produces unavailable advice and ordinary review continues. See `../review/COUNTER-REVIEW.md` for the maintained system account.

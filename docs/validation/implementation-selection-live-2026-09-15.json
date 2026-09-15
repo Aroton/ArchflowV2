@@ -1,0 +1,512 @@
+{
+  "observed_at": "2026-09-15T19:07:32.441Z",
+  "route": {
+    "adapter": "codex-cli",
+    "family": "codex",
+    "model": "gpt-5.6-luna",
+    "effort": "xhigh"
+  },
+  "instructions_digest": "3d6082e93e7fd97936c1a168cd1012cc6c3f92e7c141bb67ee9a84aa3b77c037",
+  "output_schema_digest": "b86dda008c772abb833da8699d1aa9cb79f1e42404a26bd8beb34dc62ef272d2",
+  "observations": [
+    {
+      "name": "many-file-copy",
+      "artifact": "# Import approved designs\nCopy 120 Markdown design files using the supplied exact source-to-destination manifest. Create destination directories, preserve file bytes, and fail on collisions. The design specifies using the existing copy helper and manifest schema validator. Verify source/destination SHA-256 equality and run the existing link and schema checks. No transformations, new schemas, new recovery mechanisms, or undefined product behavior are required. The architecture and design decisions have already been reviewed.",
+      "duration_ms": 15462,
+      "evidence": {
+        "schema_version": "3",
+        "task_id": "live-implementation-selection",
+        "phase_instance": "phase-design-1",
+        "attempt": 1,
+        "subject_digest": "812861d57b889894657f96705b29671dcfbe26cf37c937f17e6c0f70cdd565fa",
+        "input_fingerprint": "d4a0086413a559bdf502c2ddba25d996dbb26ddf072ea45e34202b8a5b815561",
+        "policy_id": "implementation-agent-selector-v5",
+        "rationale": "Routine implementation: follow the exact supplied manifest, use the established copy helper and validator, create required directories, preserve bytes, reject collisions, verify hashes, and run existing checks. No algorithm, schema, recovery behavior, or product decision remains to be derived.",
+        "source": {
+          "kind": "reviewer",
+          "reviewer": {
+            "adapter": "codex-cli",
+            "cli_version": "0.154.0",
+            "model_family": "codex",
+            "model": "gpt-5.6-luna",
+            "effort": "xhigh",
+            "invocation_id": "live-many-file-copy",
+            "result_id": "result-many-file-copy",
+            "envelope_input_digest": "a4e0b7e7bc04966fcf92ed47e2835870b8cc166ac4ba4a884789fe9b4e8059c0",
+            "observed_output_digest": "a9bdbc2cdc2644405e4e507f6fbb90d0098c4eb5ae39b93a88bea31170b028fe",
+            "route_source": {
+              "provenance": "configured"
+            },
+            "repositories": [
+              {
+                "name": "primary",
+                "repository_identity_digest": "5ac8889331c76ca0a53dec69d85b4f8461b58a388ce5e99790f78f5247786278",
+                "commit": "a5bae9ef1bd886bdc6901aa73e73f4d852b97711"
+              }
+            ]
+          }
+        },
+        "difficulty": "routine",
+        "selection_input": {
+          "status": "ready",
+          "catalog": {
+            "schema_version": "1",
+            "benchmark": "Terminal-Bench v4.0",
+            "source": "User-supplied Artificial Analysis chart (12 of 159 models)",
+            "captured_on": "2026-09-15",
+            "profiles": [
+              {
+                "profile_id": "gpt-6-astra-high",
+                "model": "gpt-6-astra",
+                "effort": "high",
+                "cost_group": "gpt",
+                "score": 54
+              },
+              {
+                "profile_id": "claude-fable-5-1-high",
+                "model": "claude-fable-5-1",
+                "effort": "high",
+                "cost_group": "claude",
+                "score": 52,
+                "qualifier": "with fallback"
+              },
+              {
+                "profile_id": "claude-opus-5-xhigh",
+                "model": "claude-opus-5",
+                "effort": "xhigh",
+                "cost_group": "claude",
+                "score": 46.5
+              },
+              {
+                "profile_id": "claude-opus-5-high",
+                "model": "claude-opus-5",
+                "effort": "high",
+                "cost_group": "claude",
+                "score": 46
+              },
+              {
+                "profile_id": "claude-fable-5-1-medium",
+                "model": "claude-fable-5-1",
+                "effort": "medium",
+                "cost_group": "claude",
+                "score": 44.9,
+                "qualifier": "with fallback"
+              },
+              {
+                "profile_id": "gpt-6-astra-low",
+                "model": "gpt-6-astra",
+                "effort": "low",
+                "cost_group": "gpt",
+                "score": 41.9
+              },
+              {
+                "profile_id": "glm-5-3-max",
+                "model": "glm-5.3",
+                "effort": "max",
+                "cost_group": "zai",
+                "score": 41.9
+              },
+              {
+                "profile_id": "muse-spark-1-3-max",
+                "model": "muse-spark-1.3",
+                "effort": "max",
+                "cost_group": "muse",
+                "score": 33.3
+              },
+              {
+                "profile_id": "glm-5-3-flash",
+                "model": "glm-5.3-flash",
+                "cost_group": "zai",
+                "score": 32.8
+              },
+              {
+                "profile_id": "gpt-5-6-sol-xhigh",
+                "model": "gpt-5.6-sol",
+                "effort": "xhigh",
+                "cost_group": "gpt",
+                "score": 24.7
+              },
+              {
+                "profile_id": "gpt-5-6-sol-high",
+                "model": "gpt-5.6-sol",
+                "effort": "high",
+                "cost_group": "gpt",
+                "score": 20.7
+              },
+              {
+                "profile_id": "gemini-3-8-flash-high",
+                "model": "gemini-3.8-flash-high",
+                "effort": "high",
+                "cost_group": "google",
+                "score": 19.7
+              }
+            ]
+          },
+          "settings": {
+            "enabled_profiles": [
+              "muse-spark-1-3-max",
+              "gemini-3-8-flash-high",
+              "gpt-5-6-sol-high",
+              "gpt-5-6-sol-xhigh",
+              "gpt-6-astra-low",
+              "gpt-6-astra-high"
+            ],
+            "cost_priority": [
+              "muse",
+              "zai",
+              "google",
+              "gpt",
+              "claude"
+            ],
+            "minimum_score": 19,
+            "difficulty_thresholds": {
+              "routine": 19,
+              "bounded-reasoning": 30,
+              "hard": 40,
+              "exceptional": 50
+            }
+          }
+        },
+        "recommendation": {
+          "status": "ready",
+          "model": "muse-spark-1.3",
+          "effort": "max",
+          "rationale": "Routine implementation: follow the exact supplied manifest, use the established copy helper and validator, create required directories, preserve bytes, reject collisions, verify hashes, and run existing checks. No algorithm, schema, recovery behavior, or product decision remains to be derived. Difficulty: routine; required score: 19%. Terminal-Bench v4.0: 33.3%. Cheapest eligible cost group; configured profile order breaks ties within the group."
+        }
+      }
+    },
+    {
+      "name": "concurrent-cache",
+      "artifact": "# Implement asynchronous cache consistency\nImplement a cache shared by concurrent readers, refresh operations, and invalidations. The design specifies that invalidate(key) prevents every older in-flight refresh from becoming visible, concurrent reads share one refresh, cancellation by one reader must not cancel another reader's work, and refresh failure must not poison a later read. Architecture and observable semantics are settled, but the implementation must derive the synchronization and ownership mechanism across these races; no existing helper provides it. Deterministic scheduler tests will exercise all relevant interleavings. The production code may fit in one small module.",
+      "duration_ms": 14114,
+      "evidence": {
+        "schema_version": "3",
+        "task_id": "live-implementation-selection",
+        "phase_instance": "phase-design-1",
+        "attempt": 1,
+        "subject_digest": "2ff3a9a0eeb4779aa638b2600fd010a5881b7a0bc0c4fc4a8ff2c156f2bf87d2",
+        "input_fingerprint": "3a1ea55f90cc75b52dd33b0e033a5ea7a8d6518469af4fba506f7d4cf549b72b",
+        "policy_id": "implementation-agent-selector-v5",
+        "rationale": "The settled behavior still leaves a substantial synchronization and ownership mechanism to derive. Correctness depends on coordinating refresh coalescing, per-reader cancellation, invalidation of older in-flight results, and recovery after failure across arbitrary interleavings. These mechanisms interact, and no existing helper or predecessor guarantee supplies the implementation structure, so getting the code correct requires nontrivial algorithmic reasoning. A concrete generation/ownership state model could reduce the remaining uncertainty.",
+        "source": {
+          "kind": "reviewer",
+          "reviewer": {
+            "adapter": "codex-cli",
+            "cli_version": "0.154.0",
+            "model_family": "codex",
+            "model": "gpt-5.6-luna",
+            "effort": "xhigh",
+            "invocation_id": "live-concurrent-cache",
+            "result_id": "result-concurrent-cache",
+            "envelope_input_digest": "9faab0e05c8674b48fcb1f0f620fa60d956f786f6f89c4ecc3a718d89fd5bb65",
+            "observed_output_digest": "8dfde2998cf6db2a3b33b84350f3aff457408e789f4ec8fc0495458887e1d93a",
+            "route_source": {
+              "provenance": "configured"
+            },
+            "repositories": [
+              {
+                "name": "primary",
+                "repository_identity_digest": "5ac8889331c76ca0a53dec69d85b4f8461b58a388ce5e99790f78f5247786278",
+                "commit": "a5bae9ef1bd886bdc6901aa73e73f4d852b97711"
+              }
+            ]
+          }
+        },
+        "difficulty": "hard",
+        "selection_input": {
+          "status": "ready",
+          "catalog": {
+            "schema_version": "1",
+            "benchmark": "Terminal-Bench v4.0",
+            "source": "User-supplied Artificial Analysis chart (12 of 159 models)",
+            "captured_on": "2026-09-15",
+            "profiles": [
+              {
+                "profile_id": "gpt-6-astra-high",
+                "model": "gpt-6-astra",
+                "effort": "high",
+                "cost_group": "gpt",
+                "score": 54
+              },
+              {
+                "profile_id": "claude-fable-5-1-high",
+                "model": "claude-fable-5-1",
+                "effort": "high",
+                "cost_group": "claude",
+                "score": 52,
+                "qualifier": "with fallback"
+              },
+              {
+                "profile_id": "claude-opus-5-xhigh",
+                "model": "claude-opus-5",
+                "effort": "xhigh",
+                "cost_group": "claude",
+                "score": 46.5
+              },
+              {
+                "profile_id": "claude-opus-5-high",
+                "model": "claude-opus-5",
+                "effort": "high",
+                "cost_group": "claude",
+                "score": 46
+              },
+              {
+                "profile_id": "claude-fable-5-1-medium",
+                "model": "claude-fable-5-1",
+                "effort": "medium",
+                "cost_group": "claude",
+                "score": 44.9,
+                "qualifier": "with fallback"
+              },
+              {
+                "profile_id": "gpt-6-astra-low",
+                "model": "gpt-6-astra",
+                "effort": "low",
+                "cost_group": "gpt",
+                "score": 41.9
+              },
+              {
+                "profile_id": "glm-5-3-max",
+                "model": "glm-5.3",
+                "effort": "max",
+                "cost_group": "zai",
+                "score": 41.9
+              },
+              {
+                "profile_id": "muse-spark-1-3-max",
+                "model": "muse-spark-1.3",
+                "effort": "max",
+                "cost_group": "muse",
+                "score": 33.3
+              },
+              {
+                "profile_id": "glm-5-3-flash",
+                "model": "glm-5.3-flash",
+                "cost_group": "zai",
+                "score": 32.8
+              },
+              {
+                "profile_id": "gpt-5-6-sol-xhigh",
+                "model": "gpt-5.6-sol",
+                "effort": "xhigh",
+                "cost_group": "gpt",
+                "score": 24.7
+              },
+              {
+                "profile_id": "gpt-5-6-sol-high",
+                "model": "gpt-5.6-sol",
+                "effort": "high",
+                "cost_group": "gpt",
+                "score": 20.7
+              },
+              {
+                "profile_id": "gemini-3-8-flash-high",
+                "model": "gemini-3.8-flash-high",
+                "effort": "high",
+                "cost_group": "google",
+                "score": 19.7
+              }
+            ]
+          },
+          "settings": {
+            "enabled_profiles": [
+              "muse-spark-1-3-max",
+              "gemini-3-8-flash-high",
+              "gpt-5-6-sol-high",
+              "gpt-5-6-sol-xhigh",
+              "gpt-6-astra-low",
+              "gpt-6-astra-high"
+            ],
+            "cost_priority": [
+              "muse",
+              "zai",
+              "google",
+              "gpt",
+              "claude"
+            ],
+            "minimum_score": 19,
+            "difficulty_thresholds": {
+              "routine": 19,
+              "bounded-reasoning": 30,
+              "hard": 40,
+              "exceptional": 50
+            }
+          }
+        },
+        "recommendation": {
+          "status": "ready",
+          "model": "gpt-6-astra",
+          "effort": "low",
+          "rationale": "The settled behavior still leaves a substantial synchronization and ownership mechanism to derive. Correctness depends on coordinating refresh coalescing, per-reader cancellation, invalidation of older in-flight results, and recovery after failure across arbitrary interleavings. These mechanisms interact, and no existing helper or predecessor guarantee supplies the implementation structure, so getting the code correct requires nontrivial algorithmic reasoning. A concrete generation/ownership state model could reduce the remaining uncertainty. Difficulty: hard; required score: 40%. Terminal-Bench v4.0: 41.9%. Cheapest eligible cost group; configured profile order breaks ties within the group."
+        }
+      }
+    },
+    {
+      "name": "scheduler-derivation",
+      "artifact": "# Derive a scheduling and recovery algorithm\nImplement a new scheduler for jobs with precedence constraints, shared resource reservations, and cancellation. Architecture fixes durable job records, leases, and the queue APIs. No known algorithm or existing helper satisfies the combined requirements: derive the allocation and reallocation procedure so weighted fairness among continuously eligible jobs coexists with deadlock freedom, reservations are reclaimed exactly once after partial worker failure, and cancellation remains correct while lease expiry and recovery interleave. Storage transactions are provided, but the cross-worker algorithm and its correctness argument remain to be derived. An executable simulator and property-based checks are required by the design.",
+      "duration_ms": 15297,
+      "evidence": {
+        "schema_version": "3",
+        "task_id": "live-implementation-selection",
+        "phase_instance": "phase-design-1",
+        "attempt": 1,
+        "subject_digest": "f3fcbf530816e569e2123be15a8a40f4095a77b3c447d75ffc2781cec949611f",
+        "input_fingerprint": "51b9367438a67b7dae7bbe3d826e2062e273e866d720e21b03e710c5df3e30e6",
+        "policy_id": "implementation-agent-selector-v5",
+        "rationale": "The core algorithm remains undefined and must be derived: weighted fairness, deadlock-free precedence/resource allocation, exactly-once reservation reclamation after partial failure, and cancellation must remain correct under interleaved lease expiry and recovery. These interacting invariants also require a correctness argument and adversarial simulator/property checks, constituting deep cross-mechanism reasoning.",
+        "source": {
+          "kind": "reviewer",
+          "reviewer": {
+            "adapter": "codex-cli",
+            "cli_version": "0.154.0",
+            "model_family": "codex",
+            "model": "gpt-5.6-luna",
+            "effort": "xhigh",
+            "invocation_id": "live-scheduler-derivation",
+            "result_id": "result-scheduler-derivation",
+            "envelope_input_digest": "6db3c078bc31582ba61167c5bed5d57562173d5ca67365ec39594238071b94bd",
+            "observed_output_digest": "9aa432c6ac09c94c01b97730b1396b9fb1abd9d69ca2e793e476ddedb52f0c2e",
+            "route_source": {
+              "provenance": "configured"
+            },
+            "repositories": [
+              {
+                "name": "primary",
+                "repository_identity_digest": "5ac8889331c76ca0a53dec69d85b4f8461b58a388ce5e99790f78f5247786278",
+                "commit": "a5bae9ef1bd886bdc6901aa73e73f4d852b97711"
+              }
+            ]
+          }
+        },
+        "difficulty": "exceptional",
+        "selection_input": {
+          "status": "ready",
+          "catalog": {
+            "schema_version": "1",
+            "benchmark": "Terminal-Bench v4.0",
+            "source": "User-supplied Artificial Analysis chart (12 of 159 models)",
+            "captured_on": "2026-09-15",
+            "profiles": [
+              {
+                "profile_id": "gpt-6-astra-high",
+                "model": "gpt-6-astra",
+                "effort": "high",
+                "cost_group": "gpt",
+                "score": 54
+              },
+              {
+                "profile_id": "claude-fable-5-1-high",
+                "model": "claude-fable-5-1",
+                "effort": "high",
+                "cost_group": "claude",
+                "score": 52,
+                "qualifier": "with fallback"
+              },
+              {
+                "profile_id": "claude-opus-5-xhigh",
+                "model": "claude-opus-5",
+                "effort": "xhigh",
+                "cost_group": "claude",
+                "score": 46.5
+              },
+              {
+                "profile_id": "claude-opus-5-high",
+                "model": "claude-opus-5",
+                "effort": "high",
+                "cost_group": "claude",
+                "score": 46
+              },
+              {
+                "profile_id": "claude-fable-5-1-medium",
+                "model": "claude-fable-5-1",
+                "effort": "medium",
+                "cost_group": "claude",
+                "score": 44.9,
+                "qualifier": "with fallback"
+              },
+              {
+                "profile_id": "gpt-6-astra-low",
+                "model": "gpt-6-astra",
+                "effort": "low",
+                "cost_group": "gpt",
+                "score": 41.9
+              },
+              {
+                "profile_id": "glm-5-3-max",
+                "model": "glm-5.3",
+                "effort": "max",
+                "cost_group": "zai",
+                "score": 41.9
+              },
+              {
+                "profile_id": "muse-spark-1-3-max",
+                "model": "muse-spark-1.3",
+                "effort": "max",
+                "cost_group": "muse",
+                "score": 33.3
+              },
+              {
+                "profile_id": "glm-5-3-flash",
+                "model": "glm-5.3-flash",
+                "cost_group": "zai",
+                "score": 32.8
+              },
+              {
+                "profile_id": "gpt-5-6-sol-xhigh",
+                "model": "gpt-5.6-sol",
+                "effort": "xhigh",
+                "cost_group": "gpt",
+                "score": 24.7
+              },
+              {
+                "profile_id": "gpt-5-6-sol-high",
+                "model": "gpt-5.6-sol",
+                "effort": "high",
+                "cost_group": "gpt",
+                "score": 20.7
+              },
+              {
+                "profile_id": "gemini-3-8-flash-high",
+                "model": "gemini-3.8-flash-high",
+                "effort": "high",
+                "cost_group": "google",
+                "score": 19.7
+              }
+            ]
+          },
+          "settings": {
+            "enabled_profiles": [
+              "muse-spark-1-3-max",
+              "gemini-3-8-flash-high",
+              "gpt-5-6-sol-high",
+              "gpt-5-6-sol-xhigh",
+              "gpt-6-astra-low",
+              "gpt-6-astra-high"
+            ],
+            "cost_priority": [
+              "muse",
+              "zai",
+              "google",
+              "gpt",
+              "claude"
+            ],
+            "minimum_score": 19,
+            "difficulty_thresholds": {
+              "routine": 19,
+              "bounded-reasoning": 30,
+              "hard": 40,
+              "exceptional": 50
+            }
+          }
+        },
+        "recommendation": {
+          "status": "ready",
+          "model": "gpt-6-astra",
+          "effort": "high",
+          "rationale": "The core algorithm remains undefined and must be derived: weighted fairness, deadlock-free precedence/resource allocation, exactly-once reservation reclamation after partial failure, and cancellation must remain correct under interleaved lease expiry and recovery. These interacting invariants also require a correctness argument and adversarial simulator/property checks, constituting deep cross-mechanism reasoning. Difficulty: exceptional; required score: 50%. Terminal-Bench v4.0: 54%. Cheapest eligible cost group; configured profile order breaks ties within the group."
+        }
+      }
+    }
+  ],
+  "limitation": "Three live assessments of synthetic phase designs, not an implementation capability benchmark or a complete multi-reviewer workflow."
+}

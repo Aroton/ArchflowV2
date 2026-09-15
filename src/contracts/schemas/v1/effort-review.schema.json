@@ -19,7 +19,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "2"
+      "const": "3"
     },
     "task_id": {
       "$ref": "#/$defs/taskSlug"
@@ -43,19 +43,21 @@
     },
     "policy_id": {
       "type": "string",
-      "const": "implementation-agent-selector-v4"
-    },
-    "profile_id": {
-      "type": "string",
-      "enum": [
-        "gemini-3-7-flash-high",
-        "gpt-5-6-sol-medium",
-        "gpt-6-astra-low",
-        "gpt-6-astra-high"
-      ]
+      "const": "implementation-agent-selector-v5"
     },
     "rationale": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": [
+        "routine",
+        "bounded-reasoning",
+        "hard",
+        "exceptional"
+      ]
     }
   },
   "required": [
@@ -67,7 +69,8 @@
     "subject_digest",
     "input_fingerprint",
     "policy_id",
-    "profile_id"
+    "rationale",
+    "difficulty"
   ],
   "additionalProperties": false
 }

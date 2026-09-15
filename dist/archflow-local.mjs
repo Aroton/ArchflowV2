@@ -15338,6 +15338,98 @@ var init_canonical = __esm({
   }
 });
 
+// src/contracts/implementation-selection.ts
+function selectImplementationModel(value, difficulty, reasoning, fallback = false) {
+  assertPlainJson(value, "implementation selection input");
+  const input = implementationSelectionInputSchema.parse(structuredClone(value));
+  const unavailable = (explanation2) => ({ status: "unavailable", reason: "selection-unavailable", explanation: explanation2 });
+  if (input.status === "unavailable") return unavailable(input.explanation);
+  const { catalog, settings } = input;
+  const enabled = settings.enabled_profiles.map((id6) => catalog.profiles.find((profile) => profile.profile_id === id6)).filter((profile) => profile.score >= settings.minimum_score);
+  if (enabled.length === 0) return unavailable(`No enabled implementation profile meets the ${settings.minimum_score}% minimum score.`);
+  const threshold = Math.max(settings.minimum_score, settings.difficulty_thresholds[difficulty]);
+  const qualified = enabled.filter((profile) => profile.score >= threshold);
+  const compareCost = (a, b) => settings.cost_priority.indexOf(a.cost_group) - settings.cost_priority.indexOf(b.cost_group) || settings.enabled_profiles.indexOf(a.profile_id) - settings.enabled_profiles.indexOf(b.profile_id);
+  const selected = qualified.length > 0 ? qualified.sort(compareCost)[0] : enabled.sort((a, b) => b.score - a.score || compareCost(a, b))[0];
+  const explanation = qualified.length > 0 ? "Cheapest eligible cost group; configured profile order breaks ties within the group." : `No enabled profile meets the threshold; the best available score is ${Number((threshold - selected.score).toFixed(1))} percentage points short.`;
+  return {
+    status: "ready",
+    model: selected.model,
+    ...selected.effort === void 0 ? {} : { effort: selected.effort },
+    rationale: `${fallback ? "Difficulty assessment failed; using the bounded-reasoning fallback. " : ""}${reasoning} Difficulty: ${difficulty}; required score: ${threshold}%. ${catalog.benchmark}: ${selected.score}%${selected.qualifier === void 0 ? "" : ` (${selected.qualifier})`}. ${explanation}`
+  };
+}
+var IMPLEMENTATION_DIFFICULTIES, identifier, nonBlank, score, uniqueIds, difficultyThresholdsSchema, implementationConfigSchema, DEFAULT_IMPLEMENTATION_SETTINGS, implementationSettingsSchema, benchmarkProfileSchema, implementationCatalogSchema, implementationSelectionInputSchema, benchmarkRecommendationSchema;
+var init_implementation_selection = __esm({
+  "src/contracts/implementation-selection.ts"() {
+    init_zod();
+    init_plain_json();
+    IMPLEMENTATION_DIFFICULTIES = ["routine", "bounded-reasoning", "hard", "exceptional"];
+    identifier = external_exports.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u);
+    nonBlank = external_exports.string().min(1).regex(/\S/u);
+    score = external_exports.number().finite().min(0).max(100);
+    uniqueIds = external_exports.array(identifier).refine((values) => new Set(values).size === values.length, "entries must not repeat");
+    difficultyThresholdsSchema = external_exports.object({
+      routine: score,
+      "bounded-reasoning": score,
+      hard: score,
+      exceptional: score
+    }).strict().refine((value) => IMPLEMENTATION_DIFFICULTIES.every((key, index) => index === 0 || value[key] >= value[IMPLEMENTATION_DIFFICULTIES[index - 1]]), "difficulty thresholds must not decrease");
+    implementationConfigSchema = external_exports.object({
+      enabled_profiles: uniqueIds.optional(),
+      cost_priority: uniqueIds.min(1).optional(),
+      minimum_score: score.optional(),
+      difficulty_thresholds: difficultyThresholdsSchema.optional()
+    }).strict();
+    DEFAULT_IMPLEMENTATION_SETTINGS = Object.freeze({
+      enabled_profiles: Object.freeze([
+        "muse-spark-1-3-max",
+        "gemini-3-8-flash-high",
+        "gpt-5-6-sol-high",
+        "gpt-5-6-sol-xhigh",
+        "gpt-6-astra-low",
+        "gpt-6-astra-high"
+      ]),
+      cost_priority: Object.freeze(["muse", "zai", "google", "gpt", "claude"]),
+      minimum_score: 19,
+      difficulty_thresholds: Object.freeze({ routine: 19, "bounded-reasoning": 30, hard: 40, exceptional: 50 })
+    });
+    implementationSettingsSchema = implementationConfigSchema.required();
+    benchmarkProfileSchema = external_exports.object({
+      profile_id: identifier,
+      model: identifier,
+      effort: identifier.optional(),
+      cost_group: identifier,
+      score,
+      qualifier: nonBlank.optional()
+    }).strict();
+    implementationCatalogSchema = external_exports.object({
+      schema_version: external_exports.literal("1"),
+      benchmark: nonBlank,
+      source: nonBlank,
+      captured_on: external_exports.iso.date(),
+      profiles: external_exports.array(benchmarkProfileSchema).min(1).refine((profiles) => new Set(profiles.map((profile) => profile.profile_id)).size === profiles.length, "profile IDs must not repeat")
+    }).strict();
+    implementationSelectionInputSchema = external_exports.discriminatedUnion("status", [
+      external_exports.object({ status: external_exports.literal("ready"), catalog: implementationCatalogSchema, settings: implementationSettingsSchema }).strict(),
+      external_exports.object({ status: external_exports.literal("unavailable"), explanation: nonBlank }).strict()
+    ]).superRefine((input, context2) => {
+      if (input.status !== "ready") return;
+      for (const id6 of input.settings.enabled_profiles) {
+        const profile = input.catalog.profiles.find((entry) => entry.profile_id === id6);
+        if (profile === void 0) context2.addIssue({ code: "custom", message: `Unknown implementation profile: ${id6}` });
+        else if (!input.settings.cost_priority.includes(profile.cost_group)) {
+          context2.addIssue({ code: "custom", message: `Missing cost priority for ${profile.cost_group}` });
+        }
+      }
+    });
+    benchmarkRecommendationSchema = external_exports.discriminatedUnion("status", [
+      external_exports.object({ status: external_exports.literal("ready"), model: identifier, effort: identifier.optional(), rationale: nonBlank }).strict(),
+      external_exports.object({ status: external_exports.literal("unavailable"), reason: external_exports.literal("selection-unavailable"), explanation: nonBlank }).strict()
+    ]);
+  }
+});
+
 // node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS({
   "node_modules/yaml/dist/nodes/identity.js"(exports) {
@@ -22723,6 +22815,7 @@ var REASONING_EFFORTS, WORKFLOW_SUBJECTS, workflowSubjectV1Schema, configRouteSc
 var init_config = __esm({
   "src/contracts/config.ts"() {
     init_zod();
+    init_implementation_selection();
     init_plain_json();
     init_yaml();
     REASONING_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"];
@@ -22784,7 +22877,8 @@ var init_config = __esm({
       overrides: configOverridesSchema.optional(),
       max_attempts: external_exports.number().int().positive().safe().optional(),
       approval_rules: approvalRulesSchema.optional(),
-      repositories: repositoriesV1Schema.optional()
+      repositories: repositoriesV1Schema.optional(),
+      implementation: implementationConfigSchema.optional()
     }).strict();
   }
 });
@@ -23117,10 +23211,11 @@ var init_effort_policy = __esm({
 });
 
 // src/contracts/effort-review.ts
-var EFFORT_CLASSIFICATIONS, EFFORT_REVIEW_INSTRUCTIONS, nonblank2, componentId, ADAPTER_IDS_LOCAL, MODEL_FAMILIES_LOCAL, EFFORT_VALUES_LOCAL, routeOverrideRecordSchema, displacedEffortRouteRecordSchema, effortRouteSourceRecordSchema, repositoryName3, reviewedRepositorySchema, reviewedRepositoriesV1Schema, score, effortAxisJudgmentV1Schema, effortClassificationV1Schema, axes, componentEffortJudgmentV1Schema, decomposition, digest2, taskSlug, phaseInstance, rawEffortReviewV1Schema, effortEnvelopeV1Schema, effortProfileV1Schema, caveat, componentProfile, blocker, recommendation, effortReviewerProvenanceV1Schema, effortAssessmentV1Schema, IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID, EFFORT_SELECTOR_INSTRUCTIONS, selectorHazardInputSchema, rawEffortSelectionV2Schema, effortEnvelopeV2Schema, selectorProfileSchema, selectionSchema, effortSelectionV2Schema, archivedEffortSelectionV2Schema, archivedEffortSelectionV3Schema, effortEvidenceSchema;
+var EFFORT_CLASSIFICATIONS, EFFORT_REVIEW_INSTRUCTIONS, nonblank2, componentId, ADAPTER_IDS_LOCAL, MODEL_FAMILIES_LOCAL, EFFORT_VALUES_LOCAL, routeOverrideRecordSchema, displacedEffortRouteRecordSchema, effortRouteSourceRecordSchema, repositoryName3, reviewedRepositorySchema, reviewedRepositoriesV1Schema, score2, effortAxisJudgmentV1Schema, effortClassificationV1Schema, axes, componentEffortJudgmentV1Schema, decomposition, digest2, taskSlug, phaseInstance, rawEffortReviewV1Schema, effortEnvelopeV1Schema, effortProfileV1Schema, caveat, componentProfile, blocker, recommendation, effortReviewerProvenanceV1Schema, effortAssessmentV1Schema, ARCHIVED_AGENT_SELECTOR_POLICY_ID, ARCHIVED_SELECTOR_INSTRUCTIONS, selectorHazardInputSchema, rawSelectionSchema, archivedEnvelopeSchema, selectorProfileSchema, selectionSchema, effortSelectionV2Schema, archivedEffortSelectionV2Schema, archivedEffortSelectionV3Schema, effortEvidenceSchema, IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID, EFFORT_SELECTOR_INSTRUCTIONS, rawEffortSelectionV3Schema, effortEnvelopeV3Schema, effortSelectionV3Schema;
 var init_effort_review = __esm({
   "src/contracts/effort-review.ts"() {
     init_zod();
+    init_implementation_selection();
     init_component_manifest();
     init_canonical();
     init_config();
@@ -23170,8 +23265,8 @@ var init_effort_review = __esm({
         context2.addIssue({ code: "custom", message: "reviewed repositories must contain unique names sorted after primary" });
       }
     });
-    score = external_exports.union([external_exports.literal(0), external_exports.literal(1), external_exports.literal(2), external_exports.literal(3)]);
-    effortAxisJudgmentV1Schema = external_exports.object({ score, rationale: nonblank2 }).strict();
+    score2 = external_exports.union([external_exports.literal(0), external_exports.literal(1), external_exports.literal(2), external_exports.literal(3)]);
+    effortAxisJudgmentV1Schema = external_exports.object({ score: score2, rationale: nonblank2 }).strict();
     effortClassificationV1Schema = external_exports.object({
       value: external_exports.enum(EFFORT_CLASSIFICATIONS),
       rationale: nonblank2
@@ -23303,15 +23398,15 @@ var init_effort_review = __esm({
       reviewer: effortReviewerProvenanceV1Schema,
       recommendation
     }).strict();
-    IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v4";
-    EFFORT_SELECTOR_INSTRUCTIONS = "Recommend an economical implementation profile for the phase as written, assessing the reasoning remaining after architecture and phase design. Default to gpt-5-6-sol-medium for settled patterns, ordinary migrations, CRUD, UI composition, API/dependency wiring, and tests. Use gemini-3-7-flash-high for narrow, well-understood, short work with a cheap reliable check; otherwise prefer Sol medium. Use gpt-6-astra-low when implementation still needs substantive reasoning within a settled approach, such as bounded parsing, nontrivial state transitions, artifact handling, or tricky integration. Reserve gpt-6-astra-high for identifiable difficult algorithmic derivation or interacting correctness mechanisms that still require deep reasoning after design. Never select Astra max. Assess material decisions remaining, mechanisms to implement versus established APIs to call, available examples, credible verification, and coupling. Credit specified mechanisms and tested predecessor guarantees; using an ownership transaction does not inherit the difficulty of inventing it. Repository hazards are context for the changed work, not automatic model floors. File counts, document length, security labels, timers, shared state, lengthy tool loops, and expensive tests alone do not justify escalation. Do not add axis scores or automatically take the strongest component's profile. Consider the actual work and integration burden, without averaging away an essential difficult mechanism or assuming unplanned delegation. In a short free-form rationale, explain the remaining implementation difficulty; for high effort identify the concrete hard problem. If a material unanswered design question or a separable hard component drives cost, mention what could be settled or isolated to make implementation cheaper. Recommend for the current plan, not a hypothetical revised one. This is advisory feedback, never a blocker, revision command, or authority. Return the bound profile_id and a rationale when available; no scoring worksheet or additional review call is needed.";
+    ARCHIVED_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v4";
+    ARCHIVED_SELECTOR_INSTRUCTIONS = "Recommend an economical implementation profile for the phase as written, assessing the reasoning remaining after architecture and phase design. Default to gpt-5-6-sol-medium for settled patterns, ordinary migrations, CRUD, UI composition, API/dependency wiring, and tests. Use gemini-3-7-flash-high for narrow, well-understood, short work with a cheap reliable check; otherwise prefer Sol medium. Use gpt-6-astra-low when implementation still needs substantive reasoning within a settled approach, such as bounded parsing, nontrivial state transitions, artifact handling, or tricky integration. Reserve gpt-6-astra-high for identifiable difficult algorithmic derivation or interacting correctness mechanisms that still require deep reasoning after design. Never select Astra max. Assess material decisions remaining, mechanisms to implement versus established APIs to call, available examples, credible verification, and coupling. Credit specified mechanisms and tested predecessor guarantees; using an ownership transaction does not inherit the difficulty of inventing it. Repository hazards are context for the changed work, not automatic model floors. File counts, document length, security labels, timers, shared state, lengthy tool loops, and expensive tests alone do not justify escalation. Do not add axis scores or automatically take the strongest component's profile. Consider the actual work and integration burden, without averaging away an essential difficult mechanism or assuming unplanned delegation. In a short free-form rationale, explain the remaining implementation difficulty; for high effort identify the concrete hard problem. If a material unanswered design question or a separable hard component drives cost, mention what could be settled or isolated to make implementation cheaper. Recommend for the current plan, not a hypothetical revised one. This is advisory feedback, never a blocker, revision command, or authority. Return the bound profile_id and a rationale when available; no scoring worksheet or additional review call is needed.";
     selectorHazardInputSchema = external_exports.object({
       schema_version: external_exports.literal("1"),
       state: external_exports.enum(["absent", "present"]),
       registry_digest: sha256DigestV1Schema,
       hazards: external_exports.array(hazardRegistryEntryV1Schema)
     }).strict();
-    rawEffortSelectionV2Schema = external_exports.object({
+    rawSelectionSchema = external_exports.object({
       schema_version: external_exports.literal("2"),
       task_id: taskSlug,
       phase_instance: phaseInstance.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
@@ -23319,13 +23414,13 @@ var init_effort_review = __esm({
       role: external_exports.literal("effort-reviewer"),
       subject_digest: digest2,
       input_fingerprint: digest2,
-      policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+      policy_id: external_exports.literal(ARCHIVED_AGENT_SELECTOR_POLICY_ID),
       profile_id: external_exports.enum(SELECTOR_PROFILE_IDS),
       rationale: external_exports.string().optional()
     }).strict();
-    effortEnvelopeV2Schema = external_exports.object({
+    archivedEnvelopeSchema = external_exports.object({
       schema_version: external_exports.literal("2"),
-      instructions: external_exports.literal(EFFORT_SELECTOR_INSTRUCTIONS),
+      instructions: external_exports.literal(ARCHIVED_SELECTOR_INSTRUCTIONS),
       artifact: external_exports.string(),
       task_id: taskSlugV1Schema,
       phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
@@ -23334,7 +23429,7 @@ var init_effort_review = __esm({
       input_fingerprint: sha256DigestV1Schema,
       invocation_id: safeIdV1Schema,
       result_id: safeIdV1Schema,
-      policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+      policy_id: external_exports.literal(ARCHIVED_AGENT_SELECTOR_POLICY_ID),
       hazard_registry: selectorHazardInputSchema,
       repositories: reviewedRepositoriesV1Schema
     }).strict();
@@ -23351,7 +23446,7 @@ var init_effort_review = __esm({
       attempt: safeIntegerV1Schema.refine((value) => value >= 1, "attempt must be at least 1"),
       subject_digest: sha256DigestV1Schema,
       input_fingerprint: sha256DigestV1Schema,
-      policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+      policy_id: external_exports.literal(ARCHIVED_AGENT_SELECTOR_POLICY_ID),
       profile: selectorProfileSchema,
       rationale: external_exports.string().optional(),
       source: external_exports.discriminatedUnion("kind", [
@@ -23371,8 +23466,41 @@ var init_effort_review = __esm({
       effortAssessmentV1Schema,
       archivedEffortSelectionV2Schema,
       archivedEffortSelectionV3Schema,
-      effortSelectionV2Schema
+      effortSelectionV2Schema,
+      external_exports.lazy(() => effortSelectionV3Schema)
     ]);
+    IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v5";
+    EFFORT_SELECTOR_INSTRUCTIONS = "Assess only the implementation reasoning remaining after architecture and counter-reviewed phase design. Return one difficulty category and a concrete rationale; do not choose a model or use benchmark scores or costs to judge difficulty. Routine: follow specified steps, copy or validate files, wire established APIs, adapt known patterns, ordinary CRUD and UI composition. Bounded-reasoning: make local implementation decisions within a settled approach. Hard: substantial unresolved algorithmic reasoning or interacting correctness mechanisms remain to implement. Exceptional: deep derivation or difficult reasoning across multiple interacting mechanisms. Escalation must identify the concrete unresolved problem, not name a technical topic. Credit supplied algorithms, settled decisions, examples, and tested predecessor guarantees: calling a transaction API does not inherit the difficulty of inventing it. File counts, document length, copying volume, tool-loop duration, and test runtime do not increase difficulty. Security labels, timers, and shared state alone are not escalation reasons. Judge whether code is hard to get correct, how much is genuinely undefined, and what critical thought implementation still requires. Assess the phase as written, without assuming unplanned delegation or averaging away an essential difficult mechanism. If settling an unanswered design question or isolating hard work could reduce cost, explain it as advisory feedback. Return the bound difficulty and rationale only; never findings, blockers, model profiles, routes, or authority.";
+    rawEffortSelectionV3Schema = rawSelectionSchema.omit({ profile_id: true }).extend({
+      schema_version: external_exports.literal("3"),
+      policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+      difficulty: external_exports.enum(IMPLEMENTATION_DIFFICULTIES),
+      rationale: nonblank2
+    });
+    effortEnvelopeV3Schema = archivedEnvelopeSchema.extend({
+      schema_version: external_exports.literal("3"),
+      policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+      instructions: external_exports.literal(EFFORT_SELECTOR_INSTRUCTIONS),
+      selection_input: implementationSelectionInputSchema
+    });
+    effortSelectionV3Schema = selectionSchema.omit({ profile: true }).extend({
+      schema_version: external_exports.literal("3"),
+      policy_id: external_exports.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+      difficulty: external_exports.enum(IMPLEMENTATION_DIFFICULTIES),
+      rationale: nonblank2,
+      selection_input: implementationSelectionInputSchema,
+      recommendation: benchmarkRecommendationSchema
+    }).superRefine((value, context2) => {
+      if (value.source.kind === "default" && value.difficulty !== "bounded-reasoning") {
+        context2.addIssue({ code: "custom", message: "default assessment must use bounded-reasoning" });
+      }
+      const captured = implementationSelectionInputSchema.safeParse(value.selection_input);
+      if (!captured.success) return;
+      const derived = selectImplementationModel(captured.data, value.difficulty, value.rationale, value.source.kind === "default");
+      if (canonicalJsonDigest(derived) !== canonicalJsonDigest(value.recommendation)) {
+        context2.addIssue({ code: "custom", message: "recommendation does not match the captured selection inputs" });
+      }
+    });
   }
 });
 
@@ -23399,9 +23527,9 @@ function generalFindingSchemaFor(criteria) {
     claim_type: external_exports.enum(CLAIM_TYPES),
     confidence: external_exports.enum(CONFIDENCE_LEVELS),
     falsifier: boundedNonBlank,
-    summary: nonBlank,
-    evidence: nonBlank,
-    suggested_resolution: nonBlank
+    summary: nonBlank2,
+    evidence: nonBlank2,
+    suggested_resolution: nonBlank2
   }).strict();
 }
 function testFindingSchemaFor(criteria) {
@@ -23411,10 +23539,10 @@ function testFindingSchemaFor(criteria) {
     claim_type: external_exports.enum(CLAIM_TYPES),
     confidence: external_exports.enum(CONFIDENCE_LEVELS),
     falsifier: boundedNonBlank,
-    required_behavior_or_risk_boundary: nonBlank,
-    coverage_or_oracle_problem: nonBlank,
-    consequence: nonBlank,
-    proposed_verification_change: nonBlank
+    required_behavior_or_risk_boundary: nonBlank2,
+    coverage_or_oracle_problem: nonBlank2,
+    consequence: nonBlank2,
+    proposed_verification_change: nonBlank2
   }).strict();
 }
 function validateOutputSchemaOptions(options) {
@@ -23443,7 +23571,7 @@ function generalLegacyConfirmationSchema(options) {
   const findingIds = assignments.map((entry) => entry.finding_id);
   const criterionIds = [...new Set(assignments.flatMap((entry) => [...entry.criterion_ids]))];
   const findingIdSchema = external_exports.enum(findingIds);
-  const resolved = external_exports.object({ finding_id: findingIdSchema, status: external_exports.literal("resolved"), evidence: nonBlank }).strict();
+  const resolved = external_exports.object({ finding_id: findingIdSchema, status: external_exports.literal("resolved"), evidence: nonBlank2 }).strict();
   const unresolved = generalFindingSchemaFor(exactCriterionSchema(criterionIds)).safeExtend({ finding_id: findingIdSchema, status: external_exports.literal("unresolved") }).strict();
   return external_exports.discriminatedUnion("status", [resolved, unresolved]);
 }
@@ -23453,7 +23581,7 @@ function testLegacyConfirmationSchema(options) {
   const findingIds = assignments.map((entry) => entry.finding_id);
   const criterionIds = [...new Set(assignments.flatMap((entry) => [...entry.criterion_ids]))];
   const findingIdSchema = external_exports.enum(findingIds);
-  const resolved = external_exports.object({ finding_id: findingIdSchema, status: external_exports.literal("resolved"), evidence: nonBlank }).strict();
+  const resolved = external_exports.object({ finding_id: findingIdSchema, status: external_exports.literal("resolved"), evidence: nonBlank2 }).strict();
   const unresolved = testFindingSchemaFor(exactCriterionSchema(criterionIds)).safeExtend({ finding_id: findingIdSchema, status: external_exports.literal("unresolved") }).strict();
   return external_exports.discriminatedUnion("status", [resolved, unresolved]);
 }
@@ -23663,7 +23791,7 @@ function parseReviewEvidence(value) {
   const parsed = reviewEvidenceSchema.parse(structuredClone(value));
   return parsed;
 }
-var CLAIM_TYPES, CONFIDENCE_LEVELS, REVIEW_VERDICTS, LEGACY_REVIEW_VERDICTS, REVIEW_ROLES, LEGACY_REVIEW_FINDING_SEVERITIES, REVIEW_FINDING_SEVERITIES, MODEL_FAMILIES, ADAPTER_IDS, EFFORT_VALUES, nonBlank, boundedNonBlank, id, digest3, taskSlug2, phaseInstance2, safePositive, safeCount, repositoryName4, reviewedRepositoryV1Schema, reviewedRepositoriesV1Schema2, ruleVersionRefSchema, legacyReviewFindingV1Schema, reviewFindingV2Schema, rawGeneralReviewFindingV3Schema, rawTestReviewFindingV3Schema, upstreamAlignmentV1StructuralSchema, upstreamAlignmentV1Schema, legacyConfirmationAssignmentV1Schema, findingPartitionShape, findingPartitionCountsSchema, rawReviewCommonShape, rawReviewV3CommonShape, resolvedLegacyConfirmationV1Schema, unresolvedGeneralLegacyConfirmationV1Schema, unresolvedTestLegacyConfirmationV1Schema, generalLegacyConfirmationV1Schema, testLegacyConfirmationV1Schema, rawGeneralReviewOutputV3Schema, rawTestReviewOutputV3Schema, rawReviewOutputV3Schema, rawReviewV1StructuralSchema, rawReviewV1Schema, rawReviewV2StructuralSchema, rawReviewV2Schema, childReviewOutputV2Schema, rawReviewSchema, ROUTE_SOURCE_PROVENANCES, DISPLACED_ROUTE_SOURCES, REVIEW_RUN_FOCUSES, REVIEW_RUN_ROLES, routeOverrideRecordSchema2, displacedRouteRecordSchema, routeSourceRecordSchema, reviewerRunV1Schema, reviewerRunV2Schema, generalReviewFindingV3Schema, testReviewFindingV3Schema, reviewFindingV3Schema, provenanceFields, serverAttestedFields, degradedFields, serverAttestedReviewV1Schema, serverAttestedReviewV2Schema, serverAttestedReviewV3StructuralSchema, serverAttestedReviewV3Schema, reviewReportV1Schema, serverAttestedReviewV4Schema, reviewReportOutputSchema, degradedReviewV1Schema, degradedReviewV2Schema, v1EvidenceSchema, v2EvidenceSchema, reviewEvidenceSchema, referencedReviewWrapperSchema;
+var CLAIM_TYPES, CONFIDENCE_LEVELS, REVIEW_VERDICTS, LEGACY_REVIEW_VERDICTS, REVIEW_ROLES, LEGACY_REVIEW_FINDING_SEVERITIES, REVIEW_FINDING_SEVERITIES, MODEL_FAMILIES, ADAPTER_IDS, EFFORT_VALUES, nonBlank2, boundedNonBlank, id, digest3, taskSlug2, phaseInstance2, safePositive, safeCount, repositoryName4, reviewedRepositoryV1Schema, reviewedRepositoriesV1Schema2, ruleVersionRefSchema, legacyReviewFindingV1Schema, reviewFindingV2Schema, rawGeneralReviewFindingV3Schema, rawTestReviewFindingV3Schema, upstreamAlignmentV1StructuralSchema, upstreamAlignmentV1Schema, legacyConfirmationAssignmentV1Schema, findingPartitionShape, findingPartitionCountsSchema, rawReviewCommonShape, rawReviewV3CommonShape, resolvedLegacyConfirmationV1Schema, unresolvedGeneralLegacyConfirmationV1Schema, unresolvedTestLegacyConfirmationV1Schema, generalLegacyConfirmationV1Schema, testLegacyConfirmationV1Schema, rawGeneralReviewOutputV3Schema, rawTestReviewOutputV3Schema, rawReviewOutputV3Schema, rawReviewV1StructuralSchema, rawReviewV1Schema, rawReviewV2StructuralSchema, rawReviewV2Schema, childReviewOutputV2Schema, rawReviewSchema, ROUTE_SOURCE_PROVENANCES, DISPLACED_ROUTE_SOURCES, REVIEW_RUN_FOCUSES, REVIEW_RUN_ROLES, routeOverrideRecordSchema2, displacedRouteRecordSchema, routeSourceRecordSchema, reviewerRunV1Schema, reviewerRunV2Schema, generalReviewFindingV3Schema, testReviewFindingV3Schema, reviewFindingV3Schema, provenanceFields, serverAttestedFields, degradedFields, serverAttestedReviewV1Schema, serverAttestedReviewV2Schema, serverAttestedReviewV3StructuralSchema, serverAttestedReviewV3Schema, reviewReportV1Schema, serverAttestedReviewV4Schema, reviewReportOutputSchema, degradedReviewV1Schema, degradedReviewV2Schema, v1EvidenceSchema, v2EvidenceSchema, reviewEvidenceSchema, referencedReviewWrapperSchema;
 var init_review = __esm({
   "src/contracts/review.ts"() {
     init_zod();
@@ -23682,7 +23810,7 @@ var init_review = __esm({
     MODEL_FAMILIES = ["claude", "codex", "gemini"];
     ADAPTER_IDS = ["claude-cli", "codex-cli", "antigravity-cli"];
     EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max", "ultra"];
-    nonBlank = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+    nonBlank2 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
     boundedNonBlank = external_exports.string().min(1).max(4096).regex(/\S/, "must contain a non-whitespace character");
     id = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
     digest3 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
@@ -23711,9 +23839,9 @@ var init_review = __esm({
       finding_id: id,
       severity: external_exports.enum(LEGACY_REVIEW_FINDING_SEVERITIES),
       blocking: external_exports.boolean(),
-      summary: nonBlank,
-      evidence: nonBlank,
-      suggested_resolution: nonBlank
+      summary: nonBlank2,
+      evidence: nonBlank2,
+      suggested_resolution: nonBlank2
     }).strict().superRefine((finding, context2) => {
       if (finding.blocking !== (finding.severity === "blocker")) {
         context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
@@ -23724,9 +23852,9 @@ var init_review = __esm({
       claim_type: external_exports.enum(CLAIM_TYPES),
       confidence: external_exports.enum(CONFIDENCE_LEVELS),
       falsifier: boundedNonBlank,
-      summary: nonBlank,
-      evidence: nonBlank,
-      suggested_resolution: nonBlank
+      summary: nonBlank2,
+      evidence: nonBlank2,
+      suggested_resolution: nonBlank2
     }).strict();
     rawGeneralReviewFindingV3Schema = reviewFindingV2Schema.safeExtend({
       criterion_id: id
@@ -23737,16 +23865,16 @@ var init_review = __esm({
       claim_type: external_exports.enum(CLAIM_TYPES),
       confidence: external_exports.enum(CONFIDENCE_LEVELS),
       falsifier: boundedNonBlank,
-      required_behavior_or_risk_boundary: nonBlank,
-      coverage_or_oracle_problem: nonBlank,
-      consequence: nonBlank,
-      proposed_verification_change: nonBlank
+      required_behavior_or_risk_boundary: nonBlank2,
+      coverage_or_oracle_problem: nonBlank2,
+      consequence: nonBlank2,
+      proposed_verification_change: nonBlank2
     }).strict();
     upstreamAlignmentV1StructuralSchema = external_exports.object({
       upstream_digest: digest3,
       drift: external_exports.enum(["aligned", "incidental", "material"]),
       affected_claim_ids: external_exports.array(id),
-      rationale: nonBlank
+      rationale: nonBlank2
     }).strict();
     upstreamAlignmentV1Schema = upstreamAlignmentV1StructuralSchema.superRefine((entry, context2) => {
       if (entry.drift === "aligned" !== (entry.affected_claim_ids.length === 0)) {
@@ -23789,7 +23917,7 @@ var init_review = __esm({
       rubric_digest: digest3,
       producer_family: external_exports.enum(MODEL_FAMILIES)
     };
-    resolvedLegacyConfirmationV1Schema = external_exports.object({ finding_id: id, status: external_exports.literal("resolved"), evidence: nonBlank }).strict();
+    resolvedLegacyConfirmationV1Schema = external_exports.object({ finding_id: id, status: external_exports.literal("resolved"), evidence: nonBlank2 }).strict();
     unresolvedGeneralLegacyConfirmationV1Schema = rawGeneralReviewFindingV3Schema.safeExtend({ status: external_exports.literal("unresolved") }).strict();
     unresolvedTestLegacyConfirmationV1Schema = rawTestReviewFindingV3Schema.safeExtend({ status: external_exports.literal("unresolved") }).strict();
     generalLegacyConfirmationV1Schema = external_exports.discriminatedUnion("status", [resolvedLegacyConfirmationV1Schema, unresolvedGeneralLegacyConfirmationV1Schema]);
@@ -23849,16 +23977,16 @@ var init_review = __esm({
     REVIEW_RUN_FOCUSES = ["general", "tests"];
     REVIEW_RUN_ROLES = ["counter-reviewer", "test-reviewer"];
     routeOverrideRecordSchema2 = external_exports.object({
-      reason: nonBlank,
-      pinned_model: nonBlank.optional(),
+      reason: nonBlank2,
+      pinned_model: nonBlank2.optional(),
       pinned_effort: external_exports.enum(EFFORT_VALUES).optional(),
-      pinned_provider: nonBlank.optional()
+      pinned_provider: nonBlank2.optional()
     }).strict();
     displacedRouteRecordSchema = external_exports.object({
       source: external_exports.enum(DISPLACED_ROUTE_SOURCES),
-      model: nonBlank,
+      model: nonBlank2,
       effort: external_exports.enum(EFFORT_VALUES),
-      provider: nonBlank.optional()
+      provider: nonBlank2.optional()
     }).strict();
     routeSourceRecordSchema = external_exports.object({
       provenance: external_exports.enum(ROUTE_SOURCE_PROVENANCES),
@@ -23871,15 +23999,15 @@ var init_review = __esm({
       criterion_ids: external_exports.array(id).min(1),
       rubric_digest: digest3,
       model_family: external_exports.enum(MODEL_FAMILIES),
-      model: nonBlank,
+      model: nonBlank2,
       effort: external_exports.enum(EFFORT_VALUES),
       adapter: external_exports.enum(ADAPTER_IDS),
-      cli_version: nonBlank,
+      cli_version: nonBlank2,
       invocation_id: id,
       envelope_input_digest: digest3,
       observed_output_digest: digest3,
       finding_ids: external_exports.array(id),
-      provider: nonBlank.optional(),
+      provider: nonBlank2.optional(),
       route_source: routeSourceRecordSchema,
       route_override: routeOverrideRecordSchema2.optional()
     }).strict().superRefine((run, context2) => {
@@ -23899,15 +24027,15 @@ var init_review = __esm({
       legacy_confirmations: external_exports.array(legacyConfirmationAssignmentV1Schema).min(1).optional(),
       rubric_digest: digest3,
       model_family: external_exports.enum(MODEL_FAMILIES),
-      model: nonBlank,
+      model: nonBlank2,
       effort: external_exports.enum(EFFORT_VALUES),
       adapter: external_exports.enum(ADAPTER_IDS),
-      cli_version: nonBlank,
+      cli_version: nonBlank2,
       invocation_id: id,
       envelope_input_digest: digest3,
       observed_output_digest: digest3,
       finding_ids: external_exports.array(id),
-      provider: nonBlank.optional(),
+      provider: nonBlank2.optional(),
       route_source: routeSourceRecordSchema,
       route_override: routeOverrideRecordSchema2.optional()
     }).strict().superRefine((run, context2) => {
@@ -23953,20 +24081,20 @@ var init_review = __esm({
     ]);
     provenanceFields = {
       model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]),
-      model: nonBlank,
+      model: nonBlank2,
       effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")])
     };
     serverAttestedFields = {
       assurance: external_exports.literal("server-attested"),
       adapter: external_exports.enum(ADAPTER_IDS),
-      cli_version: nonBlank,
+      cli_version: nonBlank2,
       model_family: external_exports.enum(MODEL_FAMILIES),
       effort: external_exports.enum(EFFORT_VALUES),
       invocation_id: id,
       envelope_input_digest: digest3,
       observed_output_digest: digest3,
       result_id: id,
-      provider: nonBlank.optional(),
+      provider: nonBlank2.optional(),
       route_source: routeSourceRecordSchema.optional(),
       route_override: routeOverrideRecordSchema2.optional(),
       repositories: reviewedRepositoriesV1Schema2.optional(),
@@ -23976,7 +24104,7 @@ var init_review = __esm({
     degradedFields = {
       ...provenanceFields,
       assurance: external_exports.literal("degraded"),
-      reason: nonBlank
+      reason: nonBlank2
     };
     serverAttestedReviewV1Schema = rawReviewV1StructuralSchema.safeExtend({
       ...provenanceFields,
@@ -24006,15 +24134,15 @@ var init_review = __esm({
       drift: external_exports.enum(["aligned", "incidental", "material"]).optional(),
       assurance: external_exports.literal("server-attested"),
       adapter: external_exports.enum(ADAPTER_IDS),
-      cli_version: nonBlank,
+      cli_version: nonBlank2,
       model_family: external_exports.enum(MODEL_FAMILIES),
-      model: nonBlank,
+      model: nonBlank2,
       effort: external_exports.enum(EFFORT_VALUES),
       invocation_id: id,
       envelope_input_digest: digest3,
       observed_output_digest: digest3,
       result_id: id,
-      provider: nonBlank.optional(),
+      provider: nonBlank2.optional(),
       route_source: routeSourceRecordSchema,
       route_override: routeOverrideRecordSchema2.optional(),
       repositories: reviewedRepositoriesV1Schema2,
@@ -25884,7 +26012,7 @@ var CONSTITUTION_RESULTS = ["pass", "fail", "uncertain"];
 var DRIFT_RESULTS = ["aligned", "incidental", "material"];
 var COMPLIANCE_RESULTS = ["pass", "fail", "uncertain"];
 var TRIGGER_RESULTS = ["not-matched", "matched", "uncertain"];
-var nonBlank2 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+var nonBlank3 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 var id3 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 var digest5 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
 var taskSlug4 = createTaskSlugV1Schema();
@@ -25892,15 +26020,15 @@ var opaqueSlot = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,
 var ruleVersionSchema = external_exports.object({ rule_id: id3, rule_version: external_exports.number().int().positive().safe() }).strict();
 var constitutionRuleFindingSchema = ruleVersionSchema.extend({
   compliance: external_exports.enum(COMPLIANCE_RESULTS),
-  rationale: nonBlank2,
+  rationale: nonBlank3,
   trigger: external_exports.enum(TRIGGER_RESULTS),
-  trigger_evidence: nonBlank2
+  trigger_evidence: nonBlank3
 }).strict();
 var adjudicationJudgmentV2Schema = external_exports.object({
   compliance: external_exports.enum(COMPLIANCE_RESULTS),
-  rationale: nonBlank2,
+  rationale: nonBlank3,
   trigger: external_exports.enum(TRIGGER_RESULTS),
-  trigger_evidence: nonBlank2
+  trigger_evidence: nonBlank3
 }).strict();
 var rawAdjudicationV2Schema = external_exports.object({
   schema_version: external_exports.literal("2"),
@@ -25946,7 +26074,7 @@ var driftFindingSchema = external_exports.object({
   upstream_digest: digest5,
   drift: external_exports.enum(DRIFT_RESULTS),
   affected_claim_ids: external_exports.array(id3),
-  rationale: nonBlank2
+  rationale: nonBlank3
 }).strict().superRefine((finding, context2) => {
   if (finding.drift === "aligned" !== (finding.affected_claim_ids.length === 0)) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "aligned drift has no affected claims; other drift must identify claims" });
   if (new Set(finding.affected_claim_ids).size !== finding.affected_claim_ids.length) context2.addIssue({ code: "custom", path: ["affected_claim_ids"], message: "duplicate affected claim" });
@@ -26040,10 +26168,10 @@ function parseAndDeriveAdjudication(value) {
   validateAdjudicationFindings(parsed);
   return { ...parsed, ...deriveAdjudicationSummaries(parsed) };
 }
-var provenanceBase = derivedAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank2, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
+var provenanceBase = derivedAdjudicationSchema.safeExtend({ model_family: external_exports.union([external_exports.enum(MODEL_FAMILIES), external_exports.literal("unknown")]), model: nonBlank3, effort: external_exports.union([external_exports.enum(EFFORT_VALUES), external_exports.literal("unknown")]) });
 var agentSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("agent-declared") }).strict();
-var serverSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank2, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id3, envelope_input_digest: digest5, observed_output_digest: digest5, result_id: id3, provider: nonBlank2.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema2.optional(), repositories: reviewedRepositoriesV1Schema2.optional() }).strict();
-var degradedSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank2 }).strict();
+var serverSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("server-attested"), adapter: external_exports.enum(ADAPTER_IDS), cli_version: nonBlank3, model_family: external_exports.enum(MODEL_FAMILIES), effort: external_exports.enum(EFFORT_VALUES), invocation_id: id3, envelope_input_digest: digest5, observed_output_digest: digest5, result_id: id3, provider: nonBlank3.optional(), route_source: routeSourceRecordSchema.optional(), route_override: routeOverrideRecordSchema2.optional(), repositories: reviewedRepositoriesV1Schema2.optional() }).strict();
+var degradedSchema = provenanceBase.safeExtend({ assurance: external_exports.literal("degraded"), reason: nonBlank3 }).strict();
 var adjudicationEvidenceV1Schema = external_exports.discriminatedUnion("assurance", [agentSchema, serverSchema, degradedSchema]);
 var serverAttestedAdjudicationV2Schema = derivedAdjudicationV2Schema.safeExtend({
   task_id: taskSlug4,
@@ -26055,15 +26183,15 @@ var serverAttestedAdjudicationV2Schema = derivedAdjudicationV2Schema.safeExtend(
   source_review_envelope_digest: digest5,
   assurance: external_exports.literal("server-attested"),
   adapter: external_exports.enum(ADAPTER_IDS),
-  cli_version: nonBlank2,
+  cli_version: nonBlank3,
   model_family: external_exports.enum(MODEL_FAMILIES),
-  model: nonBlank2,
+  model: nonBlank3,
   effort: external_exports.enum(EFFORT_VALUES),
   invocation_id: id3,
   envelope_input_digest: digest5,
   observed_output_digest: digest5,
   result_id: id3,
-  provider: nonBlank2.optional(),
+  provider: nonBlank3.optional(),
   route_source: routeSourceRecordSchema,
   route_override: routeOverrideRecordSchema2.optional(),
   repositories: reviewedRepositoriesV1Schema2
@@ -27058,13 +27186,13 @@ var reviewResponseSchema = external_exports.discriminatedUnion("decision", [
 ]);
 var id4 = external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 var digest7 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var nonBlank3 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
+var nonBlank4 = external_exports.string().min(1).regex(/\S/, "must contain a non-whitespace character");
 var findingRefShape = { review_evidence_digest: digest7, finding_id: id4 };
-var acceptedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted"), rationale: nonBlank3, revision_intent: nonBlank3 }).strict();
-var acceptedEditorialDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted-editorial"), rationale: nonBlank3, revision_intent: nonBlank3 }).strict();
-var rejectedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("rejected"), rationale: nonBlank3, evidence: nonBlank3 }).strict();
-var escalatedHumanDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("escalated-human"), rationale: nonBlank3 }).strict();
-var deferredDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("deferred"), rationale: nonBlank3, evidence: nonBlank3.optional() }).strict();
+var acceptedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted"), rationale: nonBlank4, revision_intent: nonBlank4 }).strict();
+var acceptedEditorialDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("accepted-editorial"), rationale: nonBlank4, revision_intent: nonBlank4 }).strict();
+var rejectedDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("rejected"), rationale: nonBlank4, evidence: nonBlank4 }).strict();
+var escalatedHumanDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("escalated-human"), rationale: nonBlank4 }).strict();
+var deferredDispositionSchema = external_exports.object({ ...findingRefShape, disposition: external_exports.literal("deferred"), rationale: nonBlank4, evidence: nonBlank4.optional() }).strict();
 var triageDispositionSchema = external_exports.discriminatedUnion("disposition", [
   acceptedDispositionSchema,
   acceptedEditorialDispositionSchema,
@@ -27076,22 +27204,22 @@ var ledgerEntryBaseShape = {
   ...findingRefShape,
   disposition: external_exports.enum(TRIAGE_DISPOSITIONS),
   attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
-  rationale: nonBlank3.optional(),
-  revision_intent: nonBlank3.optional(),
-  evidence: nonBlank3.optional(),
-  summary: nonBlank3.optional(),
-  suggested_resolution: nonBlank3.optional()
+  rationale: nonBlank4.optional(),
+  revision_intent: nonBlank4.optional(),
+  evidence: nonBlank4.optional(),
+  summary: nonBlank4.optional(),
+  suggested_resolution: nonBlank4.optional()
 };
 var triageDispositionLedgerEntryV2Schema = external_exports.object({
   ...ledgerEntryBaseShape,
   claim_type: external_exports.enum(CLAIM_TYPES),
   confidence: external_exports.enum(CONFIDENCE_LEVELS),
-  falsifier: nonBlank3
+  falsifier: nonBlank4
 }).strict();
 var ledgerEntryV3AttributionShape = {
   claim_type: external_exports.enum(CLAIM_TYPES),
   confidence: external_exports.enum(CONFIDENCE_LEVELS),
-  falsifier: nonBlank3,
+  falsifier: nonBlank4,
   reviewer_id: id4,
   criterion_id: id4
 };
@@ -27100,21 +27228,21 @@ var generalTriageDispositionLedgerEntryV3Schema = external_exports.object({
   ...ledgerEntryV3AttributionShape,
   reviewer_focus: external_exports.literal("general"),
   routing_role: external_exports.literal("counter-reviewer"),
-  summary: nonBlank3,
-  evidence: nonBlank3,
-  disposition_evidence: nonBlank3.optional(),
-  suggested_resolution: nonBlank3
+  summary: nonBlank4,
+  evidence: nonBlank4,
+  disposition_evidence: nonBlank4.optional(),
+  suggested_resolution: nonBlank4
 }).strict();
 var testTriageDispositionLedgerEntryV3Schema = external_exports.object({
   ...ledgerEntryBaseShape,
   ...ledgerEntryV3AttributionShape,
   reviewer_focus: external_exports.literal("tests"),
   routing_role: external_exports.literal("test-reviewer"),
-  required_behavior_or_risk_boundary: nonBlank3,
-  coverage_or_oracle_problem: nonBlank3,
-  consequence: nonBlank3,
-  proposed_verification_change: nonBlank3,
-  disposition_evidence: nonBlank3.optional()
+  required_behavior_or_risk_boundary: nonBlank4,
+  coverage_or_oracle_problem: nonBlank4,
+  consequence: nonBlank4,
+  proposed_verification_change: nonBlank4,
+  disposition_evidence: nonBlank4.optional()
 }).strict();
 var triageDispositionLedgerEntryV3Schema = external_exports.discriminatedUnion("reviewer_focus", [
   generalTriageDispositionLedgerEntryV3Schema,
@@ -38926,6 +39054,7 @@ init_phase_instance();
 init_plain_json();
 
 // src/contracts/semantic-workflow.ts
+init_implementation_selection();
 init_review();
 
 // src/contracts/workflow-progress.ts
@@ -39034,8 +39163,8 @@ init_plain_json();
 init_phase_instance();
 init_review();
 init_effort_policy();
-var nonBlank4 = external_exports.string().min(1).regex(/\S/u);
-var boundedText2 = nonBlank4.max(4096);
+var nonBlank5 = external_exports.string().min(1).regex(/\S/u);
+var boundedText2 = nonBlank5.max(4096);
 var digest10 = sha256DigestV1Schema;
 var semanticDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1].localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates");
 var semanticOrdinalDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1] < item), "displaced validations must be ordinal-sorted with no duplicates");
@@ -39056,7 +39185,8 @@ var IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
   "not-applicable",
   "not-produced",
   "subject-stale",
-  "legacy-evidence"
+  "legacy-evidence",
+  "selection-unavailable"
 ];
 var readyImplementationRecommendationSchema = external_exports.discriminatedUnion("model", [
   external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash-high"), effort: external_exports.literal("high"), rationale: external_exports.string().optional() }).strict(),
@@ -39067,11 +39197,12 @@ var readyImplementationRecommendationSchema = external_exports.discriminatedUnio
 ]);
 var implementationRecommendationV1Schema = external_exports.union([
   readyImplementationRecommendationSchema,
+  benchmarkRecommendationSchema,
   external_exports.object({
     status: external_exports.literal("unavailable"),
     phase: positiveSafePhaseNumberV1Schema.optional(),
     reason: external_exports.enum(IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS),
-    explanation: nonBlank4
+    explanation: nonBlank5
   }).strict()
 ]);
 function unavailableImplementationRecommendation(reason2, explanation, phase3) {
@@ -39094,6 +39225,7 @@ function implementationRecommendationFromAssessment(value, phase3) {
   if (assessment.phase_instance !== `phase-design-${String(phase3)}`) {
     throw new TypeError("effort evidence does not match the governing phase design");
   }
+  if (assessment.schema_version === "3") return Object.freeze(implementationRecommendationV1Schema.parse(assessment.recommendation));
   const profile = assessment.schema_version === "2" ? assessment.profile : assessment.recommendation.status === "ready" ? assessment.recommendation.phase_profile : DEFAULT_IMPLEMENTATION_PROFILE;
   return Object.freeze(implementationRecommendationV1Schema.parse({
     status: "ready",
@@ -39122,7 +39254,7 @@ var SEMANTIC_ACTION_KINDS = [
   "none"
 ];
 var APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate-summary", "reopening-request", "decision", "review-dispatch"];
-var workflowResourceV1Schema = external_exports.object({ role: nonBlank4, path: nonBlank4, access: external_exports.enum(["read", "write", "read-write"]) }).strict();
+var workflowResourceV1Schema = external_exports.object({ role: nonBlank5, path: nonBlank5, access: external_exports.enum(["read", "write", "read-write"]) }).strict();
 var findingDispositionV1Schema = external_exports.discriminatedUnion("disposition", [
   external_exports.object({ disposition: external_exports.enum(["accepted", "accepted-editorial"]), rationale: boundedText2, revision_intent: boundedText2 }).strict(),
   external_exports.object({ disposition: external_exports.literal("rejected"), rationale: boundedText2, evidence: boundedText2 }).strict(),
@@ -39130,59 +39262,59 @@ var findingDispositionV1Schema = external_exports.discriminatedUnion("dispositio
   external_exports.object({ disposition: external_exports.literal("deferred"), rationale: boundedText2, evidence: boundedText2.optional() }).strict()
 ]);
 var triageDispositionV1Schema = external_exports.discriminatedUnion("disposition", [
-  external_exports.object({ finding_id: nonBlank4, disposition: external_exports.enum(["accepted", "accepted-editorial"]), rationale: boundedText2, revision_intent: boundedText2 }).strict(),
-  external_exports.object({ finding_id: nonBlank4, disposition: external_exports.literal("rejected"), rationale: boundedText2, evidence: boundedText2 }).strict(),
-  external_exports.object({ finding_id: nonBlank4, disposition: external_exports.literal("escalated-human"), rationale: boundedText2 }).strict(),
-  external_exports.object({ finding_id: nonBlank4, disposition: external_exports.literal("deferred"), rationale: boundedText2, evidence: boundedText2.optional() }).strict()
+  external_exports.object({ finding_id: nonBlank5, disposition: external_exports.enum(["accepted", "accepted-editorial"]), rationale: boundedText2, revision_intent: boundedText2 }).strict(),
+  external_exports.object({ finding_id: nonBlank5, disposition: external_exports.literal("rejected"), rationale: boundedText2, evidence: boundedText2 }).strict(),
+  external_exports.object({ finding_id: nonBlank5, disposition: external_exports.literal("escalated-human"), rationale: boundedText2 }).strict(),
+  external_exports.object({ finding_id: nonBlank5, disposition: external_exports.literal("deferred"), rationale: boundedText2, evidence: boundedText2.optional() }).strict()
 ]);
 var publicFindingV2Schema = external_exports.object({
-  finding_id: nonBlank4,
+  finding_id: nonBlank5,
   claim_type: external_exports.enum(CLAIM_TYPES),
   confidence: external_exports.enum(CONFIDENCE_LEVELS),
   falsifier: boundedText2,
-  summary: nonBlank4,
-  evidence: nonBlank4,
-  suggested_resolution: nonBlank4,
+  summary: nonBlank5,
+  evidence: nonBlank5,
+  suggested_resolution: nonBlank5,
   current_disposition: findingDispositionV1Schema.optional()
 }).strict();
 var publicFindingAttributionV3Shape = {
-  reviewer_id: nonBlank4,
-  criterion_id: nonBlank4
+  reviewer_id: nonBlank5,
+  criterion_id: nonBlank5
 };
 var publicGeneralFindingV3Schema = external_exports.object({
-  finding_id: nonBlank4,
+  finding_id: nonBlank5,
   claim_type: external_exports.enum(CLAIM_TYPES),
   confidence: external_exports.enum(CONFIDENCE_LEVELS),
   falsifier: boundedText2,
-  summary: nonBlank4,
-  evidence: nonBlank4,
-  suggested_resolution: nonBlank4,
+  summary: nonBlank5,
+  evidence: nonBlank5,
+  suggested_resolution: nonBlank5,
   ...publicFindingAttributionV3Shape,
   reviewer_focus: external_exports.literal("general"),
   routing_role: external_exports.literal("counter-reviewer"),
   current_disposition: findingDispositionV1Schema.optional()
 }).strict();
 var publicTestFindingV3Schema = external_exports.object({
-  finding_id: nonBlank4,
+  finding_id: nonBlank5,
   claim_type: external_exports.enum(CLAIM_TYPES),
   confidence: external_exports.enum(CONFIDENCE_LEVELS),
   falsifier: boundedText2,
-  required_behavior_or_risk_boundary: nonBlank4,
-  coverage_or_oracle_problem: nonBlank4,
-  consequence: nonBlank4,
-  proposed_verification_change: nonBlank4,
+  required_behavior_or_risk_boundary: nonBlank5,
+  coverage_or_oracle_problem: nonBlank5,
+  consequence: nonBlank5,
+  proposed_verification_change: nonBlank5,
   ...publicFindingAttributionV3Shape,
   reviewer_focus: external_exports.literal("tests"),
   routing_role: external_exports.literal("test-reviewer"),
   current_disposition: findingDispositionV1Schema.optional()
 }).strict();
 var legacyPublicFindingV1Schema = external_exports.object({
-  finding_id: nonBlank4,
+  finding_id: nonBlank5,
   severity: external_exports.enum(REVIEW_FINDING_SEVERITIES),
   blocking: external_exports.boolean(),
-  summary: nonBlank4,
-  evidence: nonBlank4,
-  suggested_resolution: nonBlank4,
+  summary: nonBlank5,
+  evidence: nonBlank5,
+  suggested_resolution: nonBlank5,
   current_disposition: findingDispositionV1Schema.optional()
 }).strict().superRefine((finding, context2) => {
   if (finding.blocking !== (finding.severity === "blocker")) context2.addIssue({ code: "custom", path: ["blocking"], message: "only blocker findings are blocking" });
@@ -39193,15 +39325,15 @@ var publicFindingV1Schema = external_exports.union([
   publicFindingV2Schema,
   legacyPublicFindingV1Schema
 ]);
-var publicConstitutionRuleV1Schema = external_exports.object({ id: nonBlank4, version: positiveSafePhaseNumberV1Schema, text: nonBlank4, review_trigger: nonBlank4.optional(), enforced_by: external_exports.array(nonBlank4).min(1).optional() }).strict();
-var rubricCriterionV1Schema = external_exports.object({ id: nonBlank4, text: nonBlank4, blocking: external_exports.boolean() }).strict();
+var publicConstitutionRuleV1Schema = external_exports.object({ id: nonBlank5, version: positiveSafePhaseNumberV1Schema, text: nonBlank5, review_trigger: nonBlank5.optional(), enforced_by: external_exports.array(nonBlank5).min(1).optional() }).strict();
+var rubricCriterionV1Schema = external_exports.object({ id: nonBlank5, text: nonBlank5, blocking: external_exports.boolean() }).strict();
 var publicRubricV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), kind: external_exports.enum(["artifact", "implementation"]), mode: external_exports.literal("adversarial"), criteria: external_exports.array(rubricCriterionV1Schema).min(1) }).strict();
 var publicReviewAssignmentV1Schema = external_exports.object({
-  reviewer_id: nonBlank4,
+  reviewer_id: nonBlank5,
   focus: external_exports.enum(["general", "tests"]),
-  criterion_ids: external_exports.array(nonBlank4),
+  criterion_ids: external_exports.array(nonBlank5),
   expected_upstream_digests: external_exports.array(digest10).optional(),
-  legacy_confirmation_finding_ids: external_exports.array(nonBlank4).min(1).optional()
+  legacy_confirmation_finding_ids: external_exports.array(nonBlank5).min(1).optional()
 }).strict().superRefine((assignment, context2) => {
   if (assignment.criterion_ids.length === 0 && assignment.expected_upstream_digests === void 0 && assignment.legacy_confirmation_finding_ids === void 0) {
     context2.addIssue({ code: "custom", path: ["criterion_ids"], message: "empty assignment criteria require an explicit responsibility" });
@@ -39214,14 +39346,14 @@ var publicReviewRoundV2Schema = external_exports.object({
   findings: roundCount,
   partition_counts: findingPartitionCountsSchema,
   accepted: roundCount,
-  matched_rules: external_exports.array(nonBlank4).optional()
+  matched_rules: external_exports.array(nonBlank5).optional()
 }).strict();
 var legacyPublicReviewRoundV1Schema = external_exports.object({
   attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   findings: roundCount,
   blocking: roundCount,
   accepted: roundCount,
-  matched_rules: external_exports.array(nonBlank4).optional()
+  matched_rules: external_exports.array(nonBlank5).optional()
 }).strict();
 var publicReviewRoundV1Schema = external_exports.union([
   publicReviewRoundV2Schema,
@@ -39242,10 +39374,10 @@ var taxonomyDenialRatesV1Schema = external_exports.object({
   "preference:likely": denialRate,
   "preference:suspicion": denialRate
 }).strict();
-var publicReviewerStrengthV1Schema = external_exports.object({ reviewer_id: nonBlank4, focus: external_exports.enum(["general", "tests"]), model: nonBlank4, effort: nonBlank4, reviewer_family: nonBlank4, same_family: external_exports.boolean(), finding_count: roundCount }).strict();
-var publicReviewStrengthV1Schema = external_exports.object({ reviewer_model: nonBlank4, reviewer_effort: nonBlank4, reviewer_family: nonBlank4, producer_family: nonBlank4, same_family: external_exports.boolean(), attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: external_exports.boolean(), rounds: external_exports.array(publicReviewRoundV1Schema), reviewers: external_exports.array(publicReviewerStrengthV1Schema).min(1).optional() }).strict();
+var publicReviewerStrengthV1Schema = external_exports.object({ reviewer_id: nonBlank5, focus: external_exports.enum(["general", "tests"]), model: nonBlank5, effort: nonBlank5, reviewer_family: nonBlank5, same_family: external_exports.boolean(), finding_count: roundCount }).strict();
+var publicReviewStrengthV1Schema = external_exports.object({ reviewer_model: nonBlank5, reviewer_effort: nonBlank5, reviewer_family: nonBlank5, producer_family: nonBlank5, same_family: external_exports.boolean(), attempt: external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER), remediation_round: external_exports.boolean(), rounds: external_exports.array(publicReviewRoundV1Schema), reviewers: external_exports.array(publicReviewerStrengthV1Schema).min(1).optional() }).strict();
 var presentationClass = external_exports.enum(["configured-approval", "exception"]);
-var humanPresentationV1Schema = external_exports.object({ class: presentationClass, title: nonBlank4, summary: nonBlank4, details: external_exports.array(nonBlank4).optional(), question: nonBlank4, reasons: external_exports.array(external_exports.object({ class: presentationClass, text: nonBlank4 }).strict()).min(1), options: external_exports.array(external_exports.object({ token: nonBlank4, label: nonBlank4, consequence: nonBlank4 }).strict()).min(1) }).strict().superRefine((presentation, context2) => {
+var humanPresentationV1Schema = external_exports.object({ class: presentationClass, title: nonBlank5, summary: nonBlank5, details: external_exports.array(nonBlank5).optional(), question: nonBlank5, reasons: external_exports.array(external_exports.object({ class: presentationClass, text: nonBlank5 }).strict()).min(1), options: external_exports.array(external_exports.object({ token: nonBlank5, label: nonBlank5, consequence: nonBlank5 }).strict()).min(1) }).strict().superRefine((presentation, context2) => {
   const expected = presentation.reasons.some((reason2) => reason2.class === "exception") ? "exception" : "configured-approval";
   if (presentation.class !== expected) context2.addIssue({ code: "custom", path: ["class"], message: `presentation class must be ${expected}` });
 });
@@ -39298,12 +39430,12 @@ var reopenImpactV1Schema = external_exports.object({
   appends_prd_ask_history: external_exports.boolean(),
   requires_fresh_review_and_approval: external_exports.literal(true)
 }).strict();
-var commitInstructionV1Schema = external_exports.object({ paths: external_exports.array(nonBlank4).min(1), message: nonBlank4, target_ref: nonBlank4, baseline: nonBlank4, repository: external_exports.object({ name: workflowRepositoryNameV1Schema, location: nonBlank4 }).strict().optional() }).strict().superRefine((commit, context2) => {
+var commitInstructionV1Schema = external_exports.object({ paths: external_exports.array(nonBlank5).min(1), message: nonBlank5, target_ref: nonBlank5, baseline: nonBlank5, repository: external_exports.object({ name: workflowRepositoryNameV1Schema, location: nonBlank5 }).strict().optional() }).strict().superRefine((commit, context2) => {
   if (commit.paths.some((path2, index) => index > 0 && commit.paths[index - 1] > path2)) {
     context2.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
   }
 });
-var semanticNextActionV1Schema = external_exports.object({ kind: external_exports.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank4, offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: external_exports.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank4.optional(), skill_args: external_exports.array(external_exports.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
+var semanticNextActionV1Schema = external_exports.object({ kind: external_exports.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank5, offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: external_exports.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank5.optional(), skill_args: external_exports.array(external_exports.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
 var configChangeValueV1Schema = external_exports.json();
 var configChangeEntryV1Schema = external_exports.object({
   path: external_exports.string(),
@@ -39311,16 +39443,16 @@ var configChangeEntryV1Schema = external_exports.object({
   after: configChangeValueV1Schema.optional()
 }).strict();
 var repositoryStatusV1Schema = external_exports.object({
-  name: nonBlank4,
+  name: nonBlank5,
   mode: external_exports.enum(["context-only", "writable"]),
-  location: nonBlank4,
+  location: nonBlank5,
   head: gitOidV1Schema.optional(),
   last_reviewed_commit: gitOidV1Schema.optional()
 }).strict();
 var publicValidationOverrideAuditV1Schema = external_exports.discriminatedUnion("status", [
   external_exports.object({
     phase_instance: external_exports.string().regex(/^phase-impl-[1-9][0-9]*$/u),
-    gate_id: nonBlank4,
+    gate_id: nonBlank5,
     status: external_exports.literal("granted"),
     current: external_exports.boolean(),
     reason: boundedText2,
@@ -39331,14 +39463,14 @@ var publicValidationOverrideAuditV1Schema = external_exports.discriminatedUnion(
   }).strict(),
   external_exports.object({
     phase_instance: external_exports.string().regex(/^phase-impl-[1-9][0-9]*$/u),
-    gate_id: nonBlank4,
+    gate_id: nonBlank5,
     status: external_exports.enum(["invalid", "unavailable"])
   }).strict()
 ]);
 var publicReviewPushThroughAuditV1Schema = external_exports.discriminatedUnion("status", [
   external_exports.object({
     phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
-    gate_id: nonBlank4,
+    gate_id: nonBlank5,
     attempt: positiveSafePhaseNumberV1Schema,
     status: external_exports.enum(["current", "historical"]),
     reason: boundedText2,
@@ -39347,7 +39479,7 @@ var publicReviewPushThroughAuditV1Schema = external_exports.discriminatedUnion("
   }).strict(),
   external_exports.object({
     phase_instance: external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u),
-    gate_id: nonBlank4,
+    gate_id: nonBlank5,
     attempt: positiveSafePhaseNumberV1Schema,
     status: external_exports.enum(["invalid", "unavailable"])
   }).strict()
@@ -39357,8 +39489,8 @@ var workflowViewV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
   condition: external_exports.enum(WORKFLOW_CONDITIONS),
-  headline: nonBlank4,
-  detail: nonBlank4,
+  headline: nonBlank5,
+  detail: nonBlank5,
   position: workflowPositionV1Schema.optional(),
   resources: external_exports.array(workflowResourceV1Schema),
   next_action: semanticNextActionV1Schema,
@@ -39381,8 +39513,8 @@ var workflowViewV1Schema = external_exports.object({
   review_push_throughs: external_exports.array(publicReviewPushThroughAuditV1Schema).optional()
 }).strict();
 var semanticErrorSummaryV1Schema = external_exports.object({
-  code: nonBlank4.max(128),
-  message: nonBlank4.max(4096),
+  code: nonBlank5.max(128),
+  message: nonBlank5.max(4096),
   retryable: external_exports.boolean()
 }).strict();
 var semanticSuccessV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(true), value: workflowViewV1Schema }).strict();
@@ -39391,18 +39523,18 @@ var semanticResultV1Schema = external_exports.union([semanticSuccessV1Schema, se
 var humanRevisionDeclarationV1Schema = external_exports.object({ classification: external_exports.enum(["simple", "significant"]), rationale: boundedText2, user_override: external_exports.object({ agent_classification: external_exports.enum(["simple", "significant"]), rationale: boundedText2 }).strict().optional() }).strict().superRefine((revision2, context2) => {
   if (revision2.user_override?.agent_classification === revision2.classification) context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
 });
-var implementationDeclaredInputV1Schema = external_exports.object({ input_id: nonBlank4, path: nonBlank4 }).strict();
+var implementationDeclaredInputV1Schema = external_exports.object({ input_id: nonBlank5, path: nonBlank5 }).strict();
 var implementationRepositoryFactsV1Schema = external_exports.object({
   name: workflowRepositoryNameV1Schema,
-  base_commit: nonBlank4,
-  outputs: external_exports.array(nonBlank4),
-  restore_targets: external_exports.array(nonBlank4),
+  base_commit: nonBlank5,
+  outputs: external_exports.array(nonBlank5),
+  restore_targets: external_exports.array(nonBlank5),
   declared_inputs: external_exports.array(implementationDeclaredInputV1Schema)
 }).strict();
 var implementationFactsV1Schema = external_exports.object({
-  base_commit: nonBlank4,
-  outputs: external_exports.array(nonBlank4).min(1),
-  restore_targets: external_exports.array(nonBlank4),
+  base_commit: nonBlank5,
+  outputs: external_exports.array(nonBlank5).min(1),
+  restore_targets: external_exports.array(nonBlank5),
   declared_inputs: external_exports.array(implementationDeclaredInputV1Schema),
   repositories: external_exports.array(implementationRepositoryFactsV1Schema).optional()
 }).strict();
@@ -39424,7 +39556,7 @@ var applySubmissionV1Schema = external_exports.union([
   external_exports.object({ kind: external_exports.literal("work-result"), outcome: external_exports.literal("failed"), reason: boundedText2, validation_override_request: semanticValidationOverrideRequestV1Schema.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("triage"), dispositions: external_exports.array(triageDispositionV1Schema).optional(), response: reviewResponseSchema.optional() }).strict().refine((value) => value.dispositions === void 0 !== (value.response === void 0), "supply either response or archived dispositions"),
   external_exports.object({ kind: external_exports.literal("gate-summary"), summary: boundedText2 }).strict(),
-  external_exports.object({ kind: external_exports.literal("decision"), choice: nonBlank4, reason: boundedText2, option_rationale: boundedText2.optional() }).strict(),
+  external_exports.object({ kind: external_exports.literal("decision"), choice: nonBlank5, reason: boundedText2, option_rationale: boundedText2.optional() }).strict(),
   external_exports.object({ kind: external_exports.literal("review-dispatch"), route_override: routeOverrideDeclarationV1Schema }).strict()
 ]);
 var archFlowApplyInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema, action: external_exports.object({ offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u), submission: applySubmissionV1Schema.optional() }).strict() }).strict().superRefine((input, context2) => {
@@ -49619,8 +49751,8 @@ init_zod();
 init_canonical();
 init_evidence();
 init_plain_json();
-var nonBlank5 = external_exports.string().min(1).regex(/\S/u);
-var boundedText3 = nonBlank5.max(4096);
+var nonBlank6 = external_exports.string().min(1).regex(/\S/u);
+var boundedText3 = nonBlank6.max(4096);
 var digest11 = sha256DigestV1Schema;
 var revision = safeIntegerV1Schema;
 var AUTOMATION_SKILLS = [
@@ -49711,7 +49843,7 @@ var dispatchBoundaryV1Schema = external_exports.object({
   question: boundedText3,
   reasons: external_exports.array(humanBoundaryReasonV1Schema).min(1),
   failed_role: external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]),
-  failure_code: nonBlank5.max(128)
+  failure_code: nonBlank6.max(128)
 }).strict().superRefine((boundary, context2) => {
   if (!boundary.reasons.some((reason2) => reason2.class === "exception")) {
     context2.addIssue({ code: "custom", path: ["reasons"], message: "dispatch failure requires an exceptional reason" });
@@ -49725,7 +49857,7 @@ var dispatchBoundaryV2Schema = external_exports.object({
   question: boundedText3,
   reasons: external_exports.array(humanBoundaryReasonV1Schema).min(1),
   failed_role: external_exports.enum(["counter-reviewer", "test-reviewer", "effort-reviewer", "adjudicator"]),
-  failure_code: nonBlank5.max(128)
+  failure_code: nonBlank6.max(128)
 }).strict().superRefine((boundary, context2) => {
   if (!boundary.reasons.some((reason2) => reason2.class === "exception")) {
     context2.addIssue({ code: "custom", path: ["reasons"], message: "dispatch failure requires an exceptional reason" });

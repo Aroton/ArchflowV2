@@ -2348,6 +2348,550 @@
         "source"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "3"
+        },
+        "task_id": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/taskSlug"
+        },
+        "phase_instance": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/phaseInstanceId"
+        },
+        "attempt": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeInteger"
+        },
+        "subject_digest": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "input_fingerprint": {
+          "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+        },
+        "policy_id": {
+          "type": "string",
+          "const": "implementation-agent-selector-v5"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "source": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "reviewer"
+                },
+                "reviewer": {
+                  "type": "object",
+                  "properties": {
+                    "adapter": {
+                      "type": "string",
+                      "enum": [
+                        "claude-cli",
+                        "codex-cli",
+                        "antigravity-cli"
+                      ]
+                    },
+                    "cli_version": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "model_family": {
+                      "type": "string",
+                      "enum": [
+                        "claude",
+                        "codex",
+                        "gemini"
+                      ]
+                    },
+                    "model": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "effort": {
+                      "type": "string",
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh",
+                        "max",
+                        "ultra"
+                      ]
+                    },
+                    "invocation_id": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+                    },
+                    "result_id": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/safeId"
+                    },
+                    "envelope_input_digest": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    },
+                    "observed_output_digest": {
+                      "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "route_source": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "provenance": {
+                              "type": "string",
+                              "const": "configured"
+                            }
+                          },
+                          "required": [
+                            "provenance"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "provenance": {
+                              "type": "string",
+                              "const": "invocation-declared"
+                            }
+                          },
+                          "required": [
+                            "provenance"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "provenance": {
+                              "type": "string",
+                              "const": "route-override"
+                            },
+                            "displaced": {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "configured",
+                                    "invocation-declared"
+                                  ]
+                                },
+                                "model": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "pattern": "\\S"
+                                },
+                                "effort": {
+                                  "type": "string",
+                                  "enum": [
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh",
+                                    "max",
+                                    "ultra"
+                                  ]
+                                },
+                                "provider": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "pattern": "\\S"
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "model",
+                                "effort"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "provenance",
+                            "displaced"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "route_override": {
+                      "type": "object",
+                      "properties": {
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
+                        },
+                        "pinned_model": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
+                        },
+                        "pinned_effort": {
+                          "type": "string",
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high",
+                            "xhigh",
+                            "max",
+                            "ultra"
+                          ]
+                        },
+                        "pinned_provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "\\S"
+                        }
+                      },
+                      "required": [
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "repositories": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "const": "primary"
+                              },
+                              {
+                                "type": "string",
+                                "pattern": "^(?!primary$)(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?$)(?!.*[. ]$)[a-z0-9][a-z0-9._-]{0,63}$"
+                              }
+                            ]
+                          },
+                          "repository_identity_digest": {
+                            "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                          },
+                          "commit": {
+                            "$ref": "urn:archflow:schema:v1:primitives#/$defs/gitOid"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "repository_identity_digest",
+                          "commit"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "adapter",
+                    "cli_version",
+                    "model_family",
+                    "model",
+                    "effort",
+                    "invocation_id",
+                    "result_id",
+                    "envelope_input_digest",
+                    "observed_output_digest",
+                    "route_source",
+                    "repositories"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "reviewer"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "default"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": [
+            "routine",
+            "bounded-reasoning",
+            "hard",
+            "exceptional"
+          ]
+        },
+        "selection_input": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "ready"
+                },
+                "catalog": {
+                  "type": "object",
+                  "properties": {
+                    "schema_version": {
+                      "type": "string",
+                      "const": "1"
+                    },
+                    "benchmark": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "source": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "captured_on": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "profiles": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "profile_id": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                          },
+                          "model": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                          },
+                          "effort": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                          },
+                          "cost_group": {
+                            "type": "string",
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                          },
+                          "score": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "qualifier": {
+                            "type": "string",
+                            "minLength": 1,
+                            "pattern": "\\S"
+                          }
+                        },
+                        "required": [
+                          "profile_id",
+                          "model",
+                          "cost_group",
+                          "score"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "schema_version",
+                    "benchmark",
+                    "source",
+                    "captured_on",
+                    "profiles"
+                  ],
+                  "additionalProperties": false
+                },
+                "settings": {
+                  "type": "object",
+                  "properties": {
+                    "enabled_profiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                      }
+                    },
+                    "cost_priority": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                      }
+                    },
+                    "minimum_score": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "difficulty_thresholds": {
+                      "type": "object",
+                      "properties": {
+                        "routine": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "bounded-reasoning": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "hard": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "exceptional": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      },
+                      "required": [
+                        "routine",
+                        "bounded-reasoning",
+                        "hard",
+                        "exceptional"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "enabled_profiles",
+                    "cost_priority",
+                    "minimum_score",
+                    "difficulty_thresholds"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "status",
+                "catalog",
+                "settings"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "unavailable"
+                },
+                "explanation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "status",
+                "explanation"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "recommendation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "ready"
+                },
+                "model": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                },
+                "effort": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "status",
+                "model",
+                "rationale"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "unavailable"
+                },
+                "reason": {
+                  "type": "string",
+                  "const": "selection-unavailable"
+                },
+                "explanation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "status",
+                "reason",
+                "explanation"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "task_id",
+        "phase_instance",
+        "attempt",
+        "subject_digest",
+        "input_fingerprint",
+        "policy_id",
+        "rationale",
+        "source",
+        "difficulty",
+        "selection_input",
+        "recommendation"
+      ],
+      "additionalProperties": false
     }
   ]
 }

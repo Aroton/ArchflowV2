@@ -112,6 +112,7 @@ const DECLARED_ASSETS = Object.freeze([
   "assets/archflow.gitignore",
   "assets/config.template.yaml",
   "assets/hazards.yaml",
+  "assets/implementation-models.yaml",
   "assets/constitution/00-process.md",
   "assets/constitution/10-architecture.md",
   "assets/constitution/15-dependencies.md",

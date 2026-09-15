@@ -9,7 +9,7 @@ import {
   reviewEvidenceSchema,
   type ChildReviewOutputV2,
 } from "../../src/contracts/review.js";
-import { rawEffortSelectionV2Schema } from "../../src/contracts/effort-review.js";
+import { rawEffortSelectionV3Schema } from "../../src/contracts/effort-review.js";
 import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 const json = async (url: URL) => JSON.parse(await readFile(url, "utf8")) as unknown;
@@ -34,15 +34,15 @@ describe("review and adjudication schema agreement", () => {
     expect(assertZodAgreement(value, await validator("review"), rawReviewOutputV3Schema)).toEqual(value);
     expect(value).toEqual(before);
   });
-  it("accepts the same strict profile-only effort-selector corpus without mutation", async () => {
+  it("accepts the same strict difficulty-only effort-assessment corpus without mutation", async () => {
     const value = {
-      schema_version: "2", task_id: "demo", phase_instance: "phase-design-1",
+      schema_version: "3", task_id: "demo", phase_instance: "phase-design-1",
       step: "effort_review", role: "effort-reviewer", subject_digest: "1".repeat(64),
-      input_fingerprint: "2".repeat(64), policy_id: "implementation-agent-selector-v4",
-      profile_id: "gpt-6-astra-low",
+      input_fingerprint: "2".repeat(64), policy_id: "implementation-agent-selector-v5",
+      difficulty: "hard", rationale: "Unresolved synchronization mechanisms.",
     };
     const before = structuredClone(value);
-    expect(assertZodAgreement(value, await validator("effort-review"), rawEffortSelectionV2Schema)).toEqual(value);
+    expect(assertZodAgreement(value, await validator("effort-review"), rawEffortSelectionV3Schema)).toEqual(value);
     expect(value).toEqual(before);
   });
   it("accepts the judgments-only adjudication output without mutation", async () => {

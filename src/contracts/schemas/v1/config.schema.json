@@ -207,6 +207,64 @@
     },
     "repositories": {
       "$ref": "#/$defs/repositories"
+    },
+    "implementation": {
+      "type": "object",
+      "properties": {
+        "enabled_profiles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+          }
+        },
+        "cost_priority": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+          }
+        },
+        "minimum_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "difficulty_thresholds": {
+          "type": "object",
+          "properties": {
+            "routine": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "bounded-reasoning": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "hard": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "exceptional": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          },
+          "required": [
+            "routine",
+            "bounded-reasoning",
+            "hard",
+            "exceptional"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": [

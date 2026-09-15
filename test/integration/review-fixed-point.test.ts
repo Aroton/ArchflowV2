@@ -1,3 +1,4 @@
+import { loadImplementationSelectionInput } from "../../src/review/implementation-models.js";
 import { reviewFindings } from "../../src/contracts/review.js";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -34,7 +35,7 @@ import {
 import {
   EFFORT_SELECTOR_INSTRUCTIONS,
   IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
-  type EffortEnvelopeV2,
+  type EffortEnvelopeV3,
 } from "../../src/contracts/effort-review.js";
 import { computeGateContextDigest } from "../../src/contracts/fingerprints.js";
 import {
@@ -1519,8 +1520,9 @@ describe("partial review round retry", () => {
     });
     const designRubricDigest = canonicalJsonDigest(designRubric);
     const registry = { schema_version: "1" as const, hazards: [] };
-    const effortEnvelope: EffortEnvelopeV2 = {
-      schema_version: "2",
+    const effortEnvelope: EffortEnvelopeV3 = {
+      schema_version: "3",
+      selection_input: await loadImplementationSelectionInput(undefined),
       instructions: EFFORT_SELECTOR_INSTRUCTIONS,
       artifact: "# Phase design\n",
       task_id: task,
@@ -1620,8 +1622,8 @@ describe("partial review round retry", () => {
       expect(result.value.evidence.assurance).toBe("server-attested");
       if (result.value.evidence.assurance !== "server-attested") throw new Error("expected server-attested evidence");
       expect(result.value.evidence.effort_review).toMatchObject({
-        schema_version: "2",
-        profile: { model: "gpt-5.6-sol", effort: "medium" },
+        schema_version: "3",
+        recommendation: { model: "muse-spark-1.3", effort: "max" },
         source: { kind: "default" },
       });
       return models.sort();

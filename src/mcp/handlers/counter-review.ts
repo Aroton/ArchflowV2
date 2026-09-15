@@ -1,3 +1,4 @@
+import { captureImplementationSelectionInput, loadImplementationSelectionInput } from "../../review/implementation-models.js";
 import { prepareImplementationDiffs } from "../../review/diffs.js";
 import { writeReceivedFeedback } from "../../dispatch/review-feedback.js";
 import { governingDocumentComparisons } from "../../state/governing-document-comparison.js";
@@ -23,7 +24,7 @@ import type { TaskStateV1 } from "../../contracts/durable-state.js";
 import {
   EFFORT_SELECTOR_INSTRUCTIONS,
   IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
-  type EffortEnvelopeV2,
+  type EffortEnvelopeV3,
 } from "../../contracts/effort-review.js";
 import {
   captureHazardRegistrySnapshot,
@@ -578,8 +579,8 @@ export async function handleCounterReview(
     let effortPlan: EffortReviewPlan | undefined;
     if (phaseDesignArtifact !== undefined && hazardRegistry !== undefined) {
       const effortResultId = stableId("effort-result", call.input.intent_id);
-      const effortEnvelope: EffortEnvelopeV2 = Object.freeze({
-        schema_version: "2",
+      const effortEnvelope: EffortEnvelopeV3 = Object.freeze({
+        schema_version: "3",
         artifact: phaseDesignArtifact,
         instructions: EFFORT_SELECTOR_INSTRUCTIONS,
         task_id: services.authority.task_id,
@@ -590,6 +591,15 @@ export async function handleCounterReview(
         invocation_id: stableId("effort-invocation", call.input.intent_id),
         result_id: effortResultId,
         policy_id: IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID,
+        selection_input: await captureImplementationSelectionInput({
+          authority: services.authority, dependencies: services.dependencies,
+          phase_instance: state.value.phase_instance, attempt: state.value.attempt,
+        }, canonicalJsonDigest({
+          policy_id: IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID, task_id: services.authority.task_id,
+          phase_instance: state.value.phase_instance, attempt: state.value.attempt,
+          intent_id: call.input.intent_id, subject_digest: produce.value.artifact_digest,
+          input_fingerprint: call.input.input_fingerprint,
+        }), () => loadImplementationSelectionInput(session.value.config.implementation)),
         hazard_registry: hazardRegistry,
         repositories: reviewedRepositories,
       });

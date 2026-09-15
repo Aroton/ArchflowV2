@@ -236,7 +236,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Not provided:** Model selection does not predict elapsed time, token use, cost, or a universal ranking. A detailed design can still leave hard implementation reasoning, and the hazard registry can be incomplete. An unmatched path does not prove the code safe or easy.
 
-**Existing mitigation:** V4 selection assesses remaining implementation reasoning, credits tested predecessors, defaults to Sol medium, and can explain why a stronger profile or a better boundary would help. It uses no additive scores or risk floors. Missing rationale is tolerated. Bindings and profile membership are validated, but the selector's judgment can still be wrong. Its explanation is advisory text, not authority.
+**Existing mitigation:** V5 assessment credits tested predecessors and requires a concrete explanation of remaining difficulty. Deterministic selection uses configured benchmark thresholds and subscription-cost priorities; file volume is excluded from difficulty. Defaults of 19/30/40/50% are calibration choices, not benchmark-derived task success guarantees. The reviewer can still misclassify work, and benchmark ranking does not guarantee quality on a particular implementation. Model scores retain their effort and fallback qualifications; cost order represents user preferences, not measured billing. Evidence validates the selected result against its captured inputs, and the explanation remains advisory rather than authority.
 
 **Why accepted:** A small sample of real implementation outcomes can guide calibration without a telemetry subsystem. The recommendation cannot switch the producing session, rewrite the plan, or bypass approval. Earlier scored assessments remain historical evidence only.
 
@@ -244,7 +244,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Not provided:** The strict automation-status v1 `failed_role` vocabulary cannot represent historical `effort-reviewer` failures without breaking existing consumers.
 
-**Existing mitigation:** Fresh effort-selector failures no longer reach automation at all: the server uses the fixed Sol-medium default and continues ordinary review. V2 retains the historical enum for archived projections; V1 remains a separate strict compatibility contract.
+**Existing mitigation:** Fresh effort-selector failures no longer reach automation at all: the server uses bounded reasoning with the captured model preferences and continues ordinary review. V2 retains the historical enum for archived projections; V1 remains a separate strict compatibility contract.
 
 **Why accepted:** Widening v1 would break strict readers. A deliberate v2 lets updated controllers consume the real role and advice while old consumers can continue parsing exactly the contract they adopted.
 

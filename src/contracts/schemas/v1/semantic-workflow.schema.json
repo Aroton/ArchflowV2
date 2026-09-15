@@ -2513,6 +2513,62 @@
           ]
         },
         {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "ready"
+                },
+                "model": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                },
+                "effort": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "status",
+                "model",
+                "rationale"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "unavailable"
+                },
+                "reason": {
+                  "type": "string",
+                  "const": "selection-unavailable"
+                },
+                "explanation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "required": [
+                "status",
+                "reason",
+                "explanation"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "status": {
@@ -2528,7 +2584,8 @@
                 "not-applicable",
                 "not-produced",
                 "subject-stale",
-                "legacy-evidence"
+                "legacy-evidence",
+                "selection-unavailable"
               ]
             },
             "explanation": {

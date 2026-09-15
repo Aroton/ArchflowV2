@@ -1,3 +1,4 @@
+import { captureImplementationSelectionInput, loadImplementationSelectionInput } from "../../src/review/implementation-models.js";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -182,5 +183,21 @@ describe("retained child outputs", () => {
     expect(remaining).toContain("dispatch-counter-review-1.json");
     expect(remaining.some((name) => name.startsWith(`round-${otherEnvelopeDigest.slice(0, 16)}-`))).toBe(true);
     expect(await f.store.read(binding({ envelope_digest: otherEnvelopeDigest }))).toBeDefined();
+  });
+});
+
+
+describe("implementation selection retry snapshots", () => {
+  it("retains original settings on retry and reads updates for a new assessment", async () => {
+    const f = await fixture();
+    const context = { authority: f.authority, dependencies: f.dependencies, phase_instance: phase, attempt: parseSafeInteger(1) };
+    const initial = await loadImplementationSelectionInput(undefined);
+    const changed = await loadImplementationSelectionInput({ enabled_profiles: ["gemini-3-8-flash-high"] });
+    expect(await captureImplementationSelectionInput(context, envelopeDigest, async () => initial)).toEqual(initial);
+    expect(await captureImplementationSelectionInput(context, envelopeDigest, async () => changed)).toEqual(initial);
+    expect(await captureImplementationSelectionInput(context, otherEnvelopeDigest, async () => changed)).toEqual(changed);
+    const path = join(f.attemptsDirectory, `implementation-selection-${envelopeDigest}.json`);
+    writeFileSync(path, "{broken");
+    expect(await captureImplementationSelectionInput(context, envelopeDigest, async () => changed)).toEqual(changed);
   });
 });

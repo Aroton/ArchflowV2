@@ -451,20 +451,20 @@ describe("CLI invocation construction", () => {
 
     const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
     const sampleOutput = {
-      schema_version: "2",
+      schema_version: "3",
       task_id: "test-task",
       phase_instance: "phase-design-1",
       step: "effort_review",
       role: "effort-reviewer",
       subject_digest: "a".repeat(64),
       input_fingerprint: "b".repeat(64),
-      policy_id: "implementation-agent-selector-v4",
-      profile_id: "gpt-6-astra-high",
+      policy_id: "implementation-agent-selector-v5",
+      difficulty: "exceptional",
       rationale: "The coupled cancellation mechanism still requires deep implementation reasoning.",
     };
     expect(() => validateProjected.assert(sampleOutput, "sample effort review")).not.toThrow();
 
-    expect(() => validateProjected.assert({ ...sampleOutput, rationale: "" }, "unavailable explanation")).not.toThrow();
+    expect(() => validateProjected.assert({ ...sampleOutput, rationale: "" }, "missing explanation")).toThrow();
     expect(() => validateProjected.assert({ ...sampleOutput, scores: [] }, "extra selector work")).toThrow();
   });
 

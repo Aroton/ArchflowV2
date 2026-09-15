@@ -68,7 +68,7 @@ export const IMPLEMENTATION_PROFILES: Readonly<Record<ImplementationProfileIdV1,
   "gpt-5-6-sol-xhigh": Object.freeze({ profile_id: "gpt-5-6-sol-xhigh", model: "gpt-5.6-sol", effort: "xhigh" }),
 });
 
-// Fresh selector profiles are separate from the immutable historical V1/V2 ladder.
+// Archived V3/V4 selector profiles retain their exact meanings; fresh V5 uses the benchmark catalog.
 export const SELECTOR_PROFILE_IDS = [
   "gemini-3-7-flash-high",
   "gpt-5-6-sol-medium",

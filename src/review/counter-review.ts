@@ -14,11 +14,11 @@ import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { ConfigV1 } from "../contracts/config.js";
 import type { DispatchFailureRoleV1 } from "../contracts/dispatch-failure.js";
 import {
-  createDefaultEffortSelectionV2,
-  createEffortSelectionV2,
-  parseEffortEnvelopeV2,
-  type EffortEnvelopeV2,
-  type EffortSelectionV2,
+  createDefaultEffortSelectionV3,
+  createEffortSelectionV3,
+  parseEffortEnvelopeV3,
+  type EffortEnvelopeV3,
+  type EffortSelectionV3,
 } from "../contracts/effort-review.js";
 import type { ConstitutionRegistry } from "../contracts/constitution.js";
 import { createProjectError, type ProjectError, type ProjectResult } from "../contracts/errors.js";
@@ -220,10 +220,10 @@ export type RunCounterReviewDependencies = Readonly<{
   ) => void | Promise<void>;
 }>;
 
-/** Phase-design-only selector plan; configuration/invocation chooses the selector, never the implementation agent. */
+/** Phase-design-only assessment plan; reviewer routing is separate from implementation preferences. */
 export type EffortReviewPlan = Readonly<{
-  envelope: EffortEnvelopeV2;
-  /** Selector setup failed before dispatch; emit the fixed default without retrying. */
+  envelope: EffortEnvelopeV3;
+  /** Assessment setup failed before dispatch; use bounded reasoning without retrying. */
   force_default?: true;
 }>;
 
@@ -554,7 +554,7 @@ export async function runCounterReview(
   if ((input.phase_kind === "phase-design") !== (effortPlan !== undefined)) {
     throw new TypeError("fresh phase-design review requires exactly one effort plan");
   }
-  const parsedEffortEnvelope = effortPlan === undefined ? undefined : parseEffortEnvelopeV2(effortPlan.envelope);
+  const parsedEffortEnvelope = effortPlan === undefined ? undefined : parseEffortEnvelopeV3(effortPlan.envelope);
   if (parsedEffortEnvelope !== undefined && (
     parsedEffortEnvelope.task_id !== subject.task_id ||
     parsedEffortEnvelope.phase_instance !== subject.phase_instance ||
@@ -663,7 +663,7 @@ export async function runCounterReview(
   type ReviewObservation = ReturnType<typeof mintReviewObservation>;
   type ChildValue =
     | Readonly<{ kind: "review"; observation: ReviewObservation }>
-    | Readonly<{ kind: "effort"; assessment: EffortSelectionV2 }>
+    | Readonly<{ kind: "effort"; assessment: EffortSelectionV3 }>
     | Readonly<{ kind: "adjudication"; evidence: AdjudicationEvidence }>;
   type ChildOutcome =
     | Readonly<{ ok: true; value: ChildValue }>
@@ -738,7 +738,7 @@ export async function runCounterReview(
     reviewOp(routeEntry, reviewEnvelopes[index]!, activeAssignments[index]!));
   if (effortPlan !== undefined && parsedEffortEnvelope !== undefined && effortEnvelope !== undefined && effortRoute !== undefined) {
     const route = effortRoute.selection.route;
-    const mint = (dispatched: CounterReviewDispatchResult): EffortSelectionV2 => createEffortSelectionV2(
+    const mint = (dispatched: CounterReviewDispatchResult): EffortSelectionV3 => createEffortSelectionV3(
       JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(dispatched.extracted_output_bytes)),
       parsedEffortEnvelope,
       {
@@ -770,13 +770,13 @@ export async function runCounterReview(
       try {
         dispatched = await dependencies.dispatch(route, effortEnvelope, effortReviewOutputSchema as PlainJsonValue);
       } catch {
-        return { ok: true, value: { kind: "effort", assessment: createDefaultEffortSelectionV2(parsedEffortEnvelope) } };
+        return { ok: true, value: { kind: "effort", assessment: createDefaultEffortSelectionV3(parsedEffortEnvelope) } };
       }
-      let assessment: EffortSelectionV2;
+      let assessment: EffortSelectionV3;
       try {
         assessment = mint(dispatched);
       } catch {
-        return { ok: true, value: { kind: "effort", assessment: createDefaultEffortSelectionV2(parsedEffortEnvelope) } };
+        return { ok: true, value: { kind: "effort", assessment: createDefaultEffortSelectionV3(parsedEffortEnvelope) } };
       }
       await retained?.write(binding, dispatched);
       return { ok: true, value: { kind: "effort", assessment } };
@@ -866,9 +866,9 @@ export async function runCounterReview(
   }
   const singleObservations: ReviewObservation[] = [];
   let constitutionEvidence: AdjudicationEvidence | undefined;
-  let effortAssessment: EffortSelectionV2 | undefined = parsedEffortEnvelope === undefined
+  let effortAssessment: EffortSelectionV3 | undefined = parsedEffortEnvelope === undefined
     ? undefined
-    : createDefaultEffortSelectionV2(parsedEffortEnvelope);
+    : createDefaultEffortSelectionV3(parsedEffortEnvelope);
   for (const outcome of settled) {
     if (!outcome.ok) continue;
     if (outcome.value.kind === "review") singleObservations.push(outcome.value.observation);

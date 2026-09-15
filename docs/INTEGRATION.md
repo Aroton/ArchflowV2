@@ -177,18 +177,11 @@ Use `next_action.instruction` for operator guidance. Do not convert category nam
 
 ### Advice and optional audit data
 
-A ready implementation recommendation has `status:"ready"`, `model`, and `effort`, with an optional free-form `rationale` on the current profiles. The current selector recommends these exact model/effort pairs:
+A ready implementation recommendation has `status:"ready"`, a catalog-defined `model`, optional `effort`, and an explanatory `rationale` for fresh assessments. Do not maintain a fixed model allowlist in consumers or invent an effort when omitted. The strict contract also retains historical advice shapes. Profile names are advisory identifiers, not a guarantee that a host supports them.
 
-| `model` | `effort` | Intended remaining implementation work |
-|---|---|---|
-| `gemini-3.7-flash-high` | `high` | Narrow, well-understood work with a cheap reliable check. |
-| `gpt-5.6-sol` | `medium` | Default for settled patterns and ordinary integration. |
-| `gpt-6-astra` | `low` | Substantive reasoning within a settled approach. |
-| `gpt-6-astra` | `high` | Identifiable difficult derivation or interacting correctness mechanisms. |
+The V5 reviewer classifies remaining difficulty; server code selects against captured Terminal-Bench v4.0 scores, enabled profiles, and cost priorities. Defaults select Muse Spark 1.3 max for routine/bounded reasoning, Astra low for hard work, and Astra high for exceptional work. The rationale explains the reasoning, score, cost preference, and any fallback or shortfall. Existing recommendations remain fixed after settings or catalog edits. See `review/COUNTER-REVIEW.md` for configuration and selection details.
 
-These are ArchFlow contract values, not a guarantee of a host's available model catalog. Preserve the exact value, including the `-high` suffix in the Gemini model, when applying an explicit host mapping. The strict contract also accepts historical advice for `gemini-3.7-flash/max`, `glm-5.3-flash/max`, and `gpt-5.6-sol/xhigh`; the two historical Flash shapes do not accept `rationale`. Do not reject valid retained advice solely because the current selector no longer produces it.
-
-An unavailable recommendation has `status:"unavailable"`, `reason`, `explanation`, and an optional positive integer `phase`. Reasons are `not-applicable`, `not-produced`, `subject-stale`, and `legacy-evidence`.
+An unavailable recommendation has `status:"unavailable"`, `reason`, `explanation`, and an optional positive integer `phase`. Reasons are `not-applicable`, `not-produced`, `subject-stale`, `legacy-evidence`, and `selection-unavailable`. The last covers no enabled profile above the minimum or unusable selection data; it does not block the workflow.
 
 The application may display advice or map it to a supported host launch profile. Advice never determines whether a launch is authorized or which skill is next. If the host cannot supply the suggested profile, use an explicitly configured application policy; do not invent model identifiers or interpret missing advice as workflow failure.
 

@@ -17,7 +17,7 @@ import {
   type ModelFamily,
 } from "../contracts/review.js";
 import { parseRubricV1, type RubricV1 } from "../contracts/rubric.js";
-import { parseEffortEnvelopeV2, type EffortEnvelopeV2 } from "../contracts/effort-review.js";
+import { parseEffortEnvelopeV3, type EffortEnvelopeV3 } from "../contracts/effort-review.js";
 
 export const REVIEW_ENVELOPE_BYTE_CAP = 1_048_576;
 
@@ -235,8 +235,8 @@ export type DispatchEnvelope = Readonly<{
 }>;
 
 /** Seals the already server-derived, phase-design-only effort input for dispatch. */
-export function buildEffortEnvelope(value: EffortEnvelopeV2): DispatchEnvelope {
-  const envelope = parseEffortEnvelopeV2(value);
+export function buildEffortEnvelope(value: EffortEnvelopeV3): DispatchEnvelope {
+  const envelope = parseEffortEnvelopeV3(value);
   return finishEnvelope("effort-review", envelope as PlainJsonValue, "dispatch-envelope");
 }
 

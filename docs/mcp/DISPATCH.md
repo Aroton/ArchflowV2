@@ -56,7 +56,7 @@ Other properties worth knowing:
 
 ## Fragility to watch
 
-Public recommendation output reports the selected implementation model and effort plus optional advisory rationale. Dispatch never copies advice into invocation routing; a suggestion to settle or isolate costly work grants no authority.
+Public recommendation output reports the selected implementation model, effort when specified, and advisory rationale. Dispatch never copies advice into invocation routing; a suggestion to settle or isolate costly work grants no authority.
 
 Two parts of this subsystem are version-coupled to the external CLIs and will drift over time: the lockdown argv (flag sets written out literally per CLI release) and the failure classifier, which parses free-text CLI error messages with regexes to detect rate limits and extract model names. When a host CLI updates, look here first.
 
@@ -70,7 +70,7 @@ For implementation review, a changed writable secondary now receives its authent
 
 Phase-design review also dispatches an effort selector using the configured `effort-reviewer` route (shipped default `gpt-5.6-luna` at `xhigh`). The server captures the phase plan and hazard registry once, while ordinary reviewer routes retain their existing prevalidation. Rubric, dedicated test, selector, and constitution children share the byte-identical repository workspace.
 
-The selector schema accepts exact subject bindings, one allowed profile ID, and an optional free-form rationale about remaining implementation difficulty. Missing rationale is tolerated locally; Codex strict projection requires the field and accepts an empty string. The explanation is informational and cannot select a workflow action. Any selector input, route, process, schema, or binding failure produces the server-owned `gpt-5.6-sol`/`medium` default; it is excluded from the round's failure list, creates no retry or substitution boundary, and cannot discard or delay ordinary review evidence.
+The V5 assessment schema accepts exact subject bindings, one difficulty category, and a required nonempty rationale about remaining implementation reasoning. It rejects model choices and workload scores. The server captures effective implementation settings and benchmark data alongside the plan and deterministically selects the model. Route, process, output-schema, or binding failures use the bounded-reasoning threshold and captured preferences. Missing/invalid catalog references or no model above the minimum produces unavailable advice. These outcomes are excluded from the round's failure list, create no retry or substitution boundary, and cannot discard ordinary review evidence.
 
 
 ## Automation responsibility
@@ -87,6 +87,6 @@ Every Gemini dispatch through `agy`—including counter-review and constitution 
 
 Shipped counter-review defaults use Astra low (`gpt-6-astra`) for Claude producers and Fable 5.1 medium (`claude-fable-5-1`) for Codex producers; Antigravity producers receive both. The fallback counter-review route is also Astra low. Test reviewers use Sol medium, effort reviewers use Luna/xhigh, and adjudicators use `gemini-3.8-flash-high` at high effort. Existing explicit task/repository routes are not rewritten by a template update.
 
-Route validation rejects `gpt-6-astra` at `max` effort before dispatch, including configured, invocation-declared, and substitution routes. The error explains that Astra max is disabled; no silent downgrade occurs. An invalid effort-selector route still takes its existing Sol-medium advice fallback. Astra low/high are valid Codex routes. Implementation recommendations remain separate from these dispatch routes.
+Route validation rejects `gpt-6-astra` at `max` effort before dispatch, including configured, invocation-declared, and substitution routes. The error explains that Astra max is disabled; no silent downgrade occurs. An invalid effort-selector route still takes its bounded-reasoning advice fallback. Astra low/high are valid Codex routes. Implementation recommendations remain separate from these dispatch routes.
 
 Structured-output failures preserve specific safe explanations in both recovery records and status: missing CLI structured output, invalid JSON, unexpected fields, incomplete rule judgments, or an invalid response schema. These messages are selected from server-defined issue codes; raw model output and arbitrary exception text are never copied. An unknown issue receives a neutral validation-failure message. This identifies what failed without claiming that the model is incompatible or that the contract must change. Existing records keep the message recorded at the time of failure.

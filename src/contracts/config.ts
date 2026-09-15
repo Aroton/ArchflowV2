@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { implementationConfigSchema } from "./implementation-selection.js";
 
 import { assertPlainJson } from "./plain-json.js";
 import { parseSingleYamlDocument } from "./yaml.js";
@@ -90,6 +91,7 @@ export const configV1Schema = z.object({
   max_attempts: z.number().int().positive().safe().optional(),
   approval_rules: approvalRulesSchema.optional(),
   repositories: repositoriesV1Schema.optional(),
+  implementation: implementationConfigSchema.optional(),
 }).strict();
 
 export type ModelRouteV1 = z.infer<typeof configRouteSchema>;

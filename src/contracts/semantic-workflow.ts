@@ -1,3 +1,4 @@
+import { benchmarkRecommendationSchema, type BenchmarkRecommendation } from "./implementation-selection.js";
 import { reviewResponseSchema, type ReviewResponse } from "./triage.js";
 import { reviewRevisionDeclarationSchema, type ReviewRevisionDeclaration } from "./durable-document.js";
 import { reviewReportV1Schema, type ReviewReportV1 } from "./review.js";
@@ -195,9 +196,10 @@ export type PublicReviewerStrengthV1 = {
 };
 
 export const IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
-  "not-applicable", "not-produced", "subject-stale", "legacy-evidence",
+  "not-applicable", "not-produced", "subject-stale", "legacy-evidence", "selection-unavailable",
 ] as const;
 export type ImplementationRecommendationV1 =
+  | BenchmarkRecommendation
   | {
       readonly status: "ready";
       readonly model: ImplementationProfileV1["model"] | SelectorProfile["model"];
@@ -219,6 +221,7 @@ const readyImplementationRecommendationSchema = z.discriminatedUnion("model", [
 ]);
 export const implementationRecommendationV1Schema = z.union([
   readyImplementationRecommendationSchema,
+  benchmarkRecommendationSchema,
   z.object({
     status: z.literal("unavailable"),
     phase: positiveSafePhaseNumberV1Schema.optional(),
@@ -257,6 +260,7 @@ export function implementationRecommendationFromAssessment(
   if (assessment.phase_instance !== `phase-design-${String(phase)}`) {
     throw new TypeError("effort evidence does not match the governing phase design");
   }
+  if (assessment.schema_version === "3") return Object.freeze(implementationRecommendationV1Schema.parse(assessment.recommendation));
   const profile = assessment.schema_version === "2"
     ? assessment.profile
     : assessment.recommendation.status === "ready"

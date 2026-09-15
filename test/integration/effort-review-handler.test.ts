@@ -1,4 +1,5 @@
-import { writeFileSync } from "node:fs";
+import { parse, stringify } from "yaml";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -57,12 +58,12 @@ describe("phase-design effort review handler", { timeout: 180_000 }, () => {
     const result = await h.apply(boundary.invocation, boundary.view);
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
-    expect(result.value.implementation_recommendation).toEqual({ status: "ready", model: "gpt-6-astra", effort: "low", rationale });
+    expect(result.value.implementation_recommendation).toMatchObject({ status: "ready", model: "gpt-6-astra", effort: "low", rationale: expect.stringContaining(rationale) });
     expect((await h.status(boundary.invocation)).implementation_recommendation).toEqual(result.value.implementation_recommendation);
     expect((await retainedReview(workspace)).effort_review).toMatchObject({
-      schema_version: "2",
-      policy_id: "implementation-agent-selector-v4",
-      profile: { model: "gpt-6-astra", effort: "low" },
+      schema_version: "3",
+      policy_id: "implementation-agent-selector-v5",
+      recommendation: { model: "gpt-6-astra", effort: "low" },
       rationale,
     });
   });
@@ -79,12 +80,12 @@ describe("phase-design effort review handler", { timeout: 180_000 }, () => {
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     const evidence = await retainedReview(workspace);
     expect(evidence.effort_review).toMatchObject({
-      schema_version: "2",
+      schema_version: "3",
       source: { kind: "reviewer" },
     });
   });
 
-  it("defaults to Sol medium when the effort selector route fails", async () => {
+  it("defaults to bounded reasoning when the effort selector route fails", async () => {
     const workspace = await createTaskWorkspace({ taskId: "effort-route-override", label: "effort-route-override" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[], [], []], { failFixedEffortRoute: true }));
@@ -93,9 +94,41 @@ describe("phase-design effort review handler", { timeout: 180_000 }, () => {
     const reviewed = await h.apply(boundary.invocation, boundary.view);
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     expect((await retainedReview(workspace)).effort_review).toMatchObject({
-      schema_version: "2",
-      profile: { model: "gpt-5.6-sol", effort: "medium" },
+      schema_version: "3",
+      difficulty: "bounded-reasoning",
+      recommendation: { model: "muse-spark-1.3", effort: "max" },
       source: { kind: "default" },
     });
+  });
+});
+
+
+describe("configured implementation advice", { timeout: 180_000 }, () => {
+  it.each([
+    { name: "gemini", enabled: ["gemini-3-8-flash-high"], expected: { status: "ready", model: "gemini-3.8-flash-high", effort: "high" } },
+    { name: "glm-flash", enabled: ["glm-5-3-flash"], expected: { status: "ready", model: "glm-5.3-flash" } },
+    { name: "disabled", enabled: [], expected: { status: "unavailable", reason: "selection-unavailable" } },
+    { name: "unknown", enabled: ["unknown-profile"], expected: { status: "unavailable", reason: "selection-unavailable" } },
+  ])("honors $name settings without changing authority and keeps recorded advice fixed", async ({ name, enabled, expected }) => {
+    const workspace = await createTaskWorkspace({ taskId: `effort-config-${name}`, label: `effort-config-${name}` });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[], []], { effortDifficulty: "routine" }));
+    const h = semanticJourneyHarness(workspace);
+    const boundary = await reachPhaseDesignReviewOffer(workspace, h, "# Copy approved designs\nCopy 120 files to specified destinations and validate their supplied schemas.\n");
+    const path = join(workspace.root, ".archflow", "tasks", workspace.taskId, "config.yaml");
+    const config = parse(readFileSync(path, "utf8"));
+    config.implementation = { enabled_profiles: enabled };
+    writeFileSync(path, stringify(config));
+    const result = await h.apply(boundary.invocation, boundary.view);
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) throw new Error(result.error.code);
+    expect(result.value.implementation_recommendation).toMatchObject(expected);
+    if (name === "glm-flash") expect(result.value.implementation_recommendation).not.toHaveProperty("effort");
+    expect(result.value.next_action.kind).toBe("commit");
+    config.implementation = { enabled_profiles: ["gpt-6-astra-high"] };
+    writeFileSync(path, stringify(config));
+    const later = await h.status(boundary.invocation);
+    expect(later.implementation_recommendation).toEqual(result.value.implementation_recommendation);
+    expect(later.next_action).toEqual(result.value.next_action);
   });
 });

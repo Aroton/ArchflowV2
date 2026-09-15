@@ -1,8 +1,12 @@
 import { z } from "zod";
+import {
+  IMPLEMENTATION_DIFFICULTIES, benchmarkRecommendationSchema, implementationSelectionInputSchema,
+  selectImplementationModel, type BenchmarkRecommendation, type ImplementationDifficulty, type ImplementationSelectionInput,
+} from "./implementation-selection.js";
 
 import type { PhaseDesignComponentManifestV1 } from "./component-manifest.js";
 import { phaseDesignComponentManifestV1Schema } from "./component-manifest.js";
-import { gitOidV1Schema } from "./canonical.js";
+import { canonicalJsonDigest, gitOidV1Schema } from "./canonical.js";
 import { REPOSITORY_NAME_MESSAGE, REPOSITORY_NAME_PATTERN } from "./config.js";
 import type { HazardRegistryInputV1 } from "./hazard-registry.js";
 import {
@@ -431,9 +435,9 @@ export function createEffortAssessmentV1(
   });
 }
 
-export const IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v4" as const;
+export const ARCHIVED_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v4" as const;
 
-export const EFFORT_SELECTOR_INSTRUCTIONS =
+export const ARCHIVED_SELECTOR_INSTRUCTIONS =
   "Recommend an economical implementation profile for the phase as written, assessing the reasoning remaining after architecture and phase design. Default to gpt-5-6-sol-medium for settled patterns, ordinary migrations, CRUD, UI composition, API/dependency wiring, and tests. Use gemini-3-7-flash-high for narrow, well-understood, short work with a cheap reliable check; otherwise prefer Sol medium. Use gpt-6-astra-low when implementation still needs substantive reasoning within a settled approach, such as bounded parsing, nontrivial state transitions, artifact handling, or tricky integration. Reserve gpt-6-astra-high for identifiable difficult algorithmic derivation or interacting correctness mechanisms that still require deep reasoning after design. Never select Astra max. Assess material decisions remaining, mechanisms to implement versus established APIs to call, available examples, credible verification, and coupling. Credit specified mechanisms and tested predecessor guarantees; using an ownership transaction does not inherit the difficulty of inventing it. Repository hazards are context for the changed work, not automatic model floors. File counts, document length, security labels, timers, shared state, lengthy tool loops, and expensive tests alone do not justify escalation. Do not add axis scores or automatically take the strongest component's profile. Consider the actual work and integration burden, without averaging away an essential difficult mechanism or assuming unplanned delegation. In a short free-form rationale, explain the remaining implementation difficulty; for high effort identify the concrete hard problem. If a material unanswered design question or a separable hard component drives cost, mention what could be settled or isolated to make implementation cheaper. Recommend for the current plan, not a hypothetical revised one. This is advisory feedback, never a blocker, revision command, or authority. Return the bound profile_id and a rationale when available; no scoring worksheet or additional review call is needed." as const;
 
 export type RawEffortSelectionV2 = {
@@ -444,14 +448,14 @@ export type RawEffortSelectionV2 = {
   readonly role: "effort-reviewer";
   readonly subject_digest: Sha256Digest;
   readonly input_fingerprint: Sha256Digest;
-  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly policy_id: typeof ARCHIVED_AGENT_SELECTOR_POLICY_ID;
   readonly profile_id: (typeof SELECTOR_PROFILE_IDS)[number];
   readonly rationale?: string;
 };
 
 export type EffortEnvelopeV2 = {
   readonly schema_version: "2";
-  readonly instructions: typeof EFFORT_SELECTOR_INSTRUCTIONS;
+  readonly instructions: typeof ARCHIVED_SELECTOR_INSTRUCTIONS;
   readonly artifact: string;
   readonly task_id: TaskSlug;
   readonly phase_instance: PhaseInstanceId;
@@ -460,7 +464,7 @@ export type EffortEnvelopeV2 = {
   readonly input_fingerprint: Sha256Digest;
   readonly invocation_id: string;
   readonly result_id: string;
-  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly policy_id: typeof ARCHIVED_AGENT_SELECTOR_POLICY_ID;
   readonly hazard_registry: Omit<HazardRegistryInputV1, "components">;
   readonly repositories: readonly ReviewedRepositoryV1[];
 };
@@ -472,7 +476,7 @@ export type EffortSelectionV2 = {
   readonly attempt: SafeInteger;
   readonly subject_digest: Sha256Digest;
   readonly input_fingerprint: Sha256Digest;
-  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly policy_id: typeof ARCHIVED_AGENT_SELECTOR_POLICY_ID;
   readonly profile: SelectorProfile;
   readonly rationale?: string;
   readonly source:
@@ -489,7 +493,7 @@ type ArchivedEffortSelectionV3 = Omit<EffortSelectionV2, "policy_id" | "rational
   readonly policy_id: "implementation-agent-selector-v3";
 };
 
-export type EffortEvidence = EffortAssessmentV1 | ArchivedEffortSelectionV2 | ArchivedEffortSelectionV3 | EffortSelectionV2;
+export type EffortEvidence = EffortAssessmentV1 | ArchivedEffortSelectionV2 | ArchivedEffortSelectionV3 | EffortSelectionV2 | EffortSelectionV3;
 
 const selectorHazardInputSchema = z.object({
   schema_version: z.literal("1"),
@@ -498,7 +502,7 @@ const selectorHazardInputSchema = z.object({
   hazards: z.array(hazardRegistryEntryV1Schema),
 }).strict();
 
-export const rawEffortSelectionV2Schema = z.object({
+const rawSelectionSchema = z.object({
   schema_version: z.literal("2"),
   task_id: taskSlug,
   phase_instance: phaseInstance.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only") as unknown as z.ZodType<PhaseInstanceId>,
@@ -506,14 +510,15 @@ export const rawEffortSelectionV2Schema = z.object({
   role: z.literal("effort-reviewer"),
   subject_digest: digest,
   input_fingerprint: digest,
-  policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  policy_id: z.literal(ARCHIVED_AGENT_SELECTOR_POLICY_ID),
   profile_id: z.enum(SELECTOR_PROFILE_IDS),
   rationale: z.string().optional(),
-}).strict() as unknown as z.ZodType<RawEffortSelectionV2>;
+}).strict();
+export const rawEffortSelectionV2Schema = rawSelectionSchema as unknown as z.ZodType<RawEffortSelectionV2>;
 
-export const effortEnvelopeV2Schema = z.object({
+const archivedEnvelopeSchema = z.object({
   schema_version: z.literal("2"),
-  instructions: z.literal(EFFORT_SELECTOR_INSTRUCTIONS),
+  instructions: z.literal(ARCHIVED_SELECTOR_INSTRUCTIONS),
   artifact: z.string(),
   task_id: taskSlugV1Schema,
   phase_instance: phaseInstanceIdV1Schema.refine((value) => value.startsWith("phase-design-"), "effort selection is phase-design-only"),
@@ -522,10 +527,11 @@ export const effortEnvelopeV2Schema = z.object({
   input_fingerprint: sha256DigestV1Schema,
   invocation_id: safeIdV1Schema,
   result_id: safeIdV1Schema,
-  policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  policy_id: z.literal(ARCHIVED_AGENT_SELECTOR_POLICY_ID),
   hazard_registry: selectorHazardInputSchema,
   repositories: reviewedRepositoriesV1Schema,
-}).strict() as unknown as z.ZodType<EffortEnvelopeV2>;
+}).strict();
+export const effortEnvelopeV2Schema = archivedEnvelopeSchema as unknown as z.ZodType<EffortEnvelopeV2>;
 
 const selectorProfileSchema = z.discriminatedUnion("profile_id", [
   z.object({ profile_id: z.literal("gemini-3-7-flash-high"), model: z.literal("gemini-3.7-flash-high"), effort: z.literal("high") }).strict(),
@@ -541,7 +547,7 @@ const selectionSchema = z.object({
   attempt: safeIntegerV1Schema.refine((value) => value >= 1, "attempt must be at least 1"),
   subject_digest: sha256DigestV1Schema,
   input_fingerprint: sha256DigestV1Schema,
-  policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  policy_id: z.literal(ARCHIVED_AGENT_SELECTOR_POLICY_ID),
   profile: selectorProfileSchema,
   rationale: z.string().optional(),
   source: z.discriminatedUnion("kind", [
@@ -566,6 +572,7 @@ export const effortEvidenceSchema = z.union([
   archivedEffortSelectionV2Schema,
   archivedEffortSelectionV3Schema,
   effortSelectionV2Schema,
+  z.lazy(() => effortSelectionV3Schema),
 ]) as unknown as z.ZodType<EffortEvidence>;
 
 export function parseEffortEnvelopeV2(value: unknown): EffortEnvelopeV2 {
@@ -619,4 +626,99 @@ export function createDefaultEffortSelectionV2(envelope: EffortEnvelopeV2): Effo
     profile: DEFAULT_IMPLEMENTATION_PROFILE,
     source: { kind: "default" },
   });
+}
+
+export const IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID = "implementation-agent-selector-v5" as const;
+export const EFFORT_SELECTOR_INSTRUCTIONS =
+  "Assess only the implementation reasoning remaining after architecture and counter-reviewed phase design. Return one difficulty category and a concrete rationale; do not choose a model or use benchmark scores or costs to judge difficulty. Routine: follow specified steps, copy or validate files, wire established APIs, adapt known patterns, ordinary CRUD and UI composition. Bounded-reasoning: make local implementation decisions within a settled approach. Hard: substantial unresolved algorithmic reasoning or interacting correctness mechanisms remain to implement. Exceptional: deep derivation or difficult reasoning across multiple interacting mechanisms. Escalation must identify the concrete unresolved problem, not name a technical topic. Credit supplied algorithms, settled decisions, examples, and tested predecessor guarantees: calling a transaction API does not inherit the difficulty of inventing it. File counts, document length, copying volume, tool-loop duration, and test runtime do not increase difficulty. Security labels, timers, and shared state alone are not escalation reasons. Judge whether code is hard to get correct, how much is genuinely undefined, and what critical thought implementation still requires. Assess the phase as written, without assuming unplanned delegation or averaging away an essential difficult mechanism. If settling an unanswered design question or isolating hard work could reduce cost, explain it as advisory feedback. Return the bound difficulty and rationale only; never findings, blockers, model profiles, routes, or authority." as const;
+
+export type RawEffortSelectionV3 = Omit<RawEffortSelectionV2, "schema_version" | "policy_id" | "profile_id" | "rationale"> & {
+  readonly schema_version: "3";
+  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly difficulty: ImplementationDifficulty;
+  readonly rationale: string;
+};
+export type EffortEnvelopeV3 = Omit<EffortEnvelopeV2, "schema_version" | "policy_id" | "instructions"> & {
+  readonly schema_version: "3";
+  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly instructions: typeof EFFORT_SELECTOR_INSTRUCTIONS;
+  readonly selection_input: ImplementationSelectionInput;
+};
+export type EffortSelectionV3 = Omit<EffortSelectionV2, "schema_version" | "policy_id" | "profile" | "rationale"> & {
+  readonly schema_version: "3";
+  readonly policy_id: typeof IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID;
+  readonly difficulty: ImplementationDifficulty;
+  readonly rationale: string;
+  readonly selection_input: ImplementationSelectionInput;
+  readonly recommendation: BenchmarkRecommendation;
+};
+
+export const rawEffortSelectionV3Schema = rawSelectionSchema.omit({ profile_id: true }).extend({
+  schema_version: z.literal("3"), policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  difficulty: z.enum(IMPLEMENTATION_DIFFICULTIES), rationale: nonblank,
+});
+export const effortEnvelopeV3Schema = archivedEnvelopeSchema.extend({
+  schema_version: z.literal("3"), policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  instructions: z.literal(EFFORT_SELECTOR_INSTRUCTIONS), selection_input: implementationSelectionInputSchema,
+});
+export const effortSelectionV3Schema = selectionSchema.omit({ profile: true }).extend({
+  schema_version: z.literal("3"), policy_id: z.literal(IMPLEMENTATION_AGENT_SELECTOR_POLICY_ID),
+  difficulty: z.enum(IMPLEMENTATION_DIFFICULTIES), rationale: nonblank,
+  selection_input: implementationSelectionInputSchema, recommendation: benchmarkRecommendationSchema,
+}).superRefine((value, context) => {
+  if (value.source.kind === "default" && value.difficulty !== "bounded-reasoning") {
+    context.addIssue({ code: "custom", message: "default assessment must use bounded-reasoning" });
+  }
+  // Nested refinement failures already carry their own issues. Do not throw out of safeParse
+  // by attempting selection on an invalid captured catalog or configuration.
+  const captured = implementationSelectionInputSchema.safeParse(value.selection_input);
+  if (!captured.success) return;
+  const derived = selectImplementationModel(captured.data as ImplementationSelectionInput, value.difficulty, value.rationale, value.source.kind === "default");
+  if (canonicalJsonDigest(derived) !== canonicalJsonDigest(value.recommendation as BenchmarkRecommendation)) {
+    context.addIssue({ code: "custom", message: "recommendation does not match the captured selection inputs" });
+  }
+});
+
+export function parseEffortEnvelopeV3(value: unknown): EffortEnvelopeV3 {
+  assertPlainJson(value, "effort assessment envelope");
+  return effortEnvelopeV3Schema.parse(structuredClone(value)) as unknown as EffortEnvelopeV3;
+}
+
+function createSelection(
+  envelope: EffortEnvelopeV3,
+  difficulty: ImplementationDifficulty,
+  rationale: string,
+  source: EffortSelectionV3["source"],
+): EffortSelectionV3 {
+  return effortSelectionV3Schema.parse({
+    schema_version: "3", task_id: envelope.task_id, phase_instance: envelope.phase_instance,
+    attempt: envelope.attempt, subject_digest: envelope.subject_digest, input_fingerprint: envelope.input_fingerprint,
+    policy_id: envelope.policy_id, selection_input: envelope.selection_input,
+    difficulty, rationale, source,
+    recommendation: selectImplementationModel(envelope.selection_input, difficulty, rationale, source.kind === "default"),
+  }) as EffortSelectionV3;
+}
+
+export function createEffortSelectionV3(
+  value: unknown,
+  envelopeValue: EffortEnvelopeV3,
+  reviewerValue: EffortReviewerProvenanceV1,
+): EffortSelectionV3 {
+  assertPlainJson(value, "raw effort assessment");
+  const raw = rawEffortSelectionV3Schema.parse(structuredClone(value));
+  const envelope = parseEffortEnvelopeV3(envelopeValue);
+  assertPlainJson(reviewerValue, "effort reviewer provenance");
+  const reviewer = effortReviewerProvenanceV1Schema.parse(structuredClone(reviewerValue)) as unknown as EffortReviewerProvenanceV1;
+  for (const key of ["task_id", "phase_instance", "subject_digest", "input_fingerprint", "policy_id"] as const) {
+    if (raw[key] !== envelope[key]) throw new TypeError(`effort assessment ${key} does not match its envelope`);
+  }
+  if (reviewer.invocation_id !== envelope.invocation_id || reviewer.result_id !== envelope.result_id ||
+      canonicalJsonDigest(reviewer.repositories) !== canonicalJsonDigest(envelope.repositories)) {
+    throw new TypeError("effort reviewer provenance does not match its envelope");
+  }
+  return createSelection(envelope, raw.difficulty, raw.rationale, { kind: "reviewer", reviewer });
+}
+
+export function createDefaultEffortSelectionV3(value: EffortEnvelopeV3): EffortSelectionV3 {
+  return createSelection(parseEffortEnvelopeV3(value), "bounded-reasoning", "No valid difficulty assessment was available.", { kind: "default" });
 }

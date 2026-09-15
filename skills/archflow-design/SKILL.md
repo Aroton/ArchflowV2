@@ -29,7 +29,7 @@ If entry status returns `start-next-skill` with `next_action.offer`, apply that 
 
 For a finite plan, make phase outcomes, boundaries, dependencies, and verification observable in the artifact. The default phase is one coherent repository-ready increment: it has one primary behavioral or enabling outcome, leaves the repository in a valid completion state, consumes named approved predecessors or stable inputs, and has one understandable verification story. Repository-ready does not require separate deployment or user visibility, and a phase may cross technical layers when they jointly deliver that outcome. Work chunks may divide or parallelize implementation inside one governed phase without becoming phase authority.
 
-Design for economical implementation after strong architecture and phase design: most phases should be executable by GPT-5.6 Sol medium or GPT-6 Astra low. This is a planning objective, not a model quota or authority condition. Reserve stronger implementation effort for identifiable reasoning that remains difficult after design.
+Design for economical implementation after strong architecture and phase design: most phases should leave routine or bounded reasoning for the configured economical implementation models. This is a planning objective, not a model quota or authority condition. Reserve stronger implementation effort for identifiable reasoning that remains difficult after design.
 
 Assess the work remaining, rather than adding file/test counts or targeting a token budget:
 

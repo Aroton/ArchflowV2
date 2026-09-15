@@ -1,0 +1,68 @@
+# Benchmark snapshot supplied by the user. Scores are percentages, not task success guarantees.
+# Keep profiles separate for each measured effort; do not infer missing effort settings.
+schema_version: "1"
+benchmark: Terminal-Bench v4.0
+source: User-supplied Artificial Analysis chart (12 of 159 models)
+captured_on: "2026-09-15"
+profiles:
+  - profile_id: gpt-6-astra-high
+    model: gpt-6-astra
+    effort: high
+    cost_group: gpt
+    score: 54.0
+  - profile_id: claude-fable-5-1-high
+    model: claude-fable-5-1
+    effort: high
+    cost_group: claude
+    score: 52.0
+    qualifier: with fallback
+  - profile_id: claude-opus-5-xhigh
+    model: claude-opus-5
+    effort: xhigh
+    cost_group: claude
+    score: 46.5
+  - profile_id: claude-opus-5-high
+    model: claude-opus-5
+    effort: high
+    cost_group: claude
+    score: 46.0
+  - profile_id: claude-fable-5-1-medium
+    model: claude-fable-5-1
+    effort: medium
+    cost_group: claude
+    score: 44.9
+    qualifier: with fallback
+  - profile_id: gpt-6-astra-low
+    model: gpt-6-astra
+    effort: low
+    cost_group: gpt
+    score: 41.9
+  - profile_id: glm-5-3-max
+    model: glm-5.3
+    effort: max
+    cost_group: zai
+    score: 41.9
+  - profile_id: muse-spark-1-3-max
+    model: muse-spark-1.3
+    effort: max
+    cost_group: muse
+    score: 33.3
+  - profile_id: glm-5-3-flash
+    model: glm-5.3-flash
+    cost_group: zai
+    score: 32.8
+  - profile_id: gpt-5-6-sol-xhigh
+    model: gpt-5.6-sol
+    effort: xhigh
+    cost_group: gpt
+    score: 24.7
+  - profile_id: gpt-5-6-sol-high
+    model: gpt-5.6-sol
+    effort: high
+    cost_group: gpt
+    score: 20.7
+  - profile_id: gemini-3-8-flash-high
+    model: gemini-3.8-flash-high
+    effort: high
+    cost_group: google
+    score: 19.7

@@ -4,7 +4,8 @@
 # Status reports field-level changes since the last state transaction — nothing blocks.
 #
 # The producer is whatever client session connects to the server — it needs no
-# config. These roles describe only the children the server dispatches.
+# routing config. Roles describe the children the server dispatches; implementation
+# preferences below affect advice only.
 schema_version: "1"
 # Fallback roles used only when a connected client is not listed under `producers` below:
 roles:
@@ -17,7 +18,7 @@ roles:
   test-reviewer:
     model: gpt-5.6-sol
     effort: medium
-  # Used only for phase-design. Assigns implementation model + effort per component.
+  # Used only for phase-design. Assesses reasoning remaining after the reviewed design.
   effort-reviewer:
     model: gpt-5.6-luna
     effort: xhigh
@@ -124,3 +125,44 @@ approval_rules:
   subjects: [prd, design]
   content:
     - paths: ["**/*.sql"]
+
+# Advisory implementation selection. Changes apply to future assessments only;
+# recorded recommendations stay fixed. Scores live in assets/implementation-models.yaml
+# in the ArchFlow bundle. There is no automatic model/session switch.
+# Cost priority is cheapest first. Within a cost group, enabled_profiles order wins.
+# An empty enabled_profiles list disables advice. Omitted fields use shipped defaults.
+# Every available profile (uncomment/add an ID below to enable it):
+#   - gpt-6-astra-high # 54.0%
+#   - claude-fable-5-1-high # 52.0%, with fallback
+#   - claude-opus-5-xhigh # 46.5%
+#   - claude-opus-5-high # 46.0%
+#   - claude-fable-5-1-medium # 44.9%, with fallback
+#   - gpt-6-astra-low # 41.9%
+#   - glm-5-3-max # 41.9%
+#   - muse-spark-1-3-max # 33.3%
+#   - glm-5-3-flash # 32.8%
+#   - gpt-5-6-sol-xhigh # 24.7%
+#   - gpt-5-6-sol-high # 20.7%
+#   - gemini-3-8-flash-high # 19.7%
+implementation:
+  enabled_profiles:
+    - muse-spark-1-3-max
+    - gemini-3-8-flash-high
+    - gpt-5-6-sol-high
+    - gpt-5-6-sol-xhigh
+    - gpt-6-astra-low
+    - gpt-6-astra-high
+    # - glm-5-3-flash
+    # - glm-5-3-max
+    # - claude-fable-5-1-medium
+    # - claude-fable-5-1-high
+    # - claude-opus-5-high
+    # - claude-opus-5-xhigh
+  cost_priority: [muse, zai, google, gpt, claude]
+  minimum_score: 19
+  # Calibration choices for remaining reasoning, not workload or file counts.
+  difficulty_thresholds:
+    routine: 19
+    bounded-reasoning: 30
+    hard: 40
+    exceptional: 50

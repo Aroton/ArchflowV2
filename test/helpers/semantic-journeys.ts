@@ -23,12 +23,12 @@ import type { TaskWorkspace } from "./task-workspace.js";
 /** Shared child-process source so specialized semantic stubs answer phase-design effort dispatches identically. */
 export const SEMANTIC_EFFORT_STUB_SOURCE = `
 function generateEffortOutput(envelope) {
-  if (envelope.policy_id !== "implementation-agent-selector-v4") return undefined;
-  return { schema_version: "2", task_id: envelope.task_id, phase_instance: envelope.phase_instance,
+  if (envelope.policy_id !== "implementation-agent-selector-v5") return undefined;
+  return { schema_version: "3", task_id: envelope.task_id, phase_instance: envelope.phase_instance,
     step: "effort_review", role: "effort-reviewer", subject_digest: envelope.subject_digest,
     input_fingerprint: envelope.input_fingerprint,
     policy_id: envelope.policy_id,
-    profile_id: "gpt-6-astra-low" };
+    difficulty: "hard", rationale: "Synchronization details remain unspecified and require substantial reasoning about interacting correctness mechanisms." };
 }
 `;
 
@@ -133,6 +133,7 @@ export function installSemanticReviewStub(
     /** Fail only the fixed Luna effort route so the server-owned default can be observed. */
     failFixedEffortRoute?: boolean;
     effortRationale?: string;
+    effortDifficulty?: "routine" | "bounded-reasoning" | "hard" | "exceptional";
   }> = {},
 ): () => void {
   const adjudicationCompliance = options.adjudicationCompliance ?? "pass";
@@ -151,7 +152,7 @@ import { createHash as hashDiff } from "node:crypto";
 ${SEMANTIC_EFFORT_STUB_SOURCE}
 function generateOutput(envelope, countPath, findingsByReview, adjudicationCompliance, implementationFailingRule, phaseDesignTrigger) {
   const effort = generateEffortOutput(envelope);
-  if (effort !== undefined) return { ...effort, ...${JSON.stringify(options.effortRationale === undefined ? {} : { rationale: options.effortRationale })} };
+  if (effort !== undefined) return { ...effort, ...${JSON.stringify({ ...(options.effortRationale === undefined ? {} : { rationale: options.effortRationale }), ...(options.effortDifficulty === undefined ? {} : { difficulty: options.effortDifficulty }) })} };
   const subject = envelope.subject;
   if (subject.phase_instance.startsWith("phase-impl-")) {
     if (!envelope.diffs?.full) throw new Error("implementation diff descriptors missing");
@@ -231,7 +232,7 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-agent-selector-v4" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
+  if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-agent-selector-v5" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)}, ${JSON.stringify(options.phaseDesignTrigger ?? "")});
   writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');

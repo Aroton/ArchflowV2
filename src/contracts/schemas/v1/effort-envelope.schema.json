@@ -5,11 +5,11 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "2"
+      "const": "3"
     },
     "instructions": {
       "type": "string",
-      "const": "Recommend an economical implementation profile for the phase as written, assessing the reasoning remaining after architecture and phase design. Default to gpt-5-6-sol-medium for settled patterns, ordinary migrations, CRUD, UI composition, API/dependency wiring, and tests. Use gemini-3-7-flash-high for narrow, well-understood, short work with a cheap reliable check; otherwise prefer Sol medium. Use gpt-6-astra-low when implementation still needs substantive reasoning within a settled approach, such as bounded parsing, nontrivial state transitions, artifact handling, or tricky integration. Reserve gpt-6-astra-high for identifiable difficult algorithmic derivation or interacting correctness mechanisms that still require deep reasoning after design. Never select Astra max. Assess material decisions remaining, mechanisms to implement versus established APIs to call, available examples, credible verification, and coupling. Credit specified mechanisms and tested predecessor guarantees; using an ownership transaction does not inherit the difficulty of inventing it. Repository hazards are context for the changed work, not automatic model floors. File counts, document length, security labels, timers, shared state, lengthy tool loops, and expensive tests alone do not justify escalation. Do not add axis scores or automatically take the strongest component's profile. Consider the actual work and integration burden, without averaging away an essential difficult mechanism or assuming unplanned delegation. In a short free-form rationale, explain the remaining implementation difficulty; for high effort identify the concrete hard problem. If a material unanswered design question or a separable hard component drives cost, mention what could be settled or isolated to make implementation cheaper. Recommend for the current plan, not a hypothetical revised one. This is advisory feedback, never a blocker, revision command, or authority. Return the bound profile_id and a rationale when available; no scoring worksheet or additional review call is needed."
+      "const": "Assess only the implementation reasoning remaining after architecture and counter-reviewed phase design. Return one difficulty category and a concrete rationale; do not choose a model or use benchmark scores or costs to judge difficulty. Routine: follow specified steps, copy or validate files, wire established APIs, adapt known patterns, ordinary CRUD and UI composition. Bounded-reasoning: make local implementation decisions within a settled approach. Hard: substantial unresolved algorithmic reasoning or interacting correctness mechanisms remain to implement. Exceptional: deep derivation or difficult reasoning across multiple interacting mechanisms. Escalation must identify the concrete unresolved problem, not name a technical topic. Credit supplied algorithms, settled decisions, examples, and tested predecessor guarantees: calling a transaction API does not inherit the difficulty of inventing it. File counts, document length, copying volume, tool-loop duration, and test runtime do not increase difficulty. Security labels, timers, and shared state alone are not escalation reasons. Judge whether code is hard to get correct, how much is genuinely undefined, and what critical thought implementation still requires. Assess the phase as written, without assuming unplanned delegation or averaging away an essential difficult mechanism. If settling an unanswered design question or isolating hard work could reduce cost, explain it as advisory feedback. Return the bound difficulty and rationale only; never findings, blockers, model profiles, routes, or authority."
     },
     "artifact": {
       "type": "string"
@@ -37,7 +37,7 @@
     },
     "policy_id": {
       "type": "string",
-      "const": "implementation-agent-selector-v4"
+      "const": "implementation-agent-selector-v5"
     },
     "hazard_registry": {
       "type": "object",
@@ -151,6 +151,182 @@
         ],
         "additionalProperties": false
       }
+    },
+    "selection_input": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "ready"
+            },
+            "catalog": {
+              "type": "object",
+              "properties": {
+                "schema_version": {
+                  "type": "string",
+                  "const": "1"
+                },
+                "benchmark": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "captured_on": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                },
+                "profiles": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "profile_id": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                      },
+                      "model": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                      },
+                      "cost_group": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                      },
+                      "score": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "qualifier": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "profile_id",
+                      "model",
+                      "cost_group",
+                      "score"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "schema_version",
+                "benchmark",
+                "source",
+                "captured_on",
+                "profiles"
+              ],
+              "additionalProperties": false
+            },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "enabled_profiles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                  }
+                },
+                "cost_priority": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+                  }
+                },
+                "minimum_score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "difficulty_thresholds": {
+                  "type": "object",
+                  "properties": {
+                    "routine": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "bounded-reasoning": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "hard": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "exceptional": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    }
+                  },
+                  "required": [
+                    "routine",
+                    "bounded-reasoning",
+                    "hard",
+                    "exceptional"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "enabled_profiles",
+                "cost_priority",
+                "minimum_score",
+                "difficulty_thresholds"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "status",
+            "catalog",
+            "settings"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "unavailable"
+            },
+            "explanation": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "status",
+            "explanation"
+          ],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "required": [
@@ -166,7 +342,8 @@
     "result_id",
     "policy_id",
     "hazard_registry",
-    "repositories"
+    "repositories",
+    "selection_input"
   ],
   "additionalProperties": false
 }

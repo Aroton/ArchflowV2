@@ -1,3 +1,4 @@
+import { parseDocument } from "yaml";
 import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -41,11 +42,19 @@ type Mutation = Readonly<{
 
 const MODEL_CHANGE: Mutation = {
   name: "model change",
-  apply: (source) => source.replace("model: gpt-5.6-sol", "model: glm-5.4"),
+  apply: (source) => {
+    const document = parseDocument(source);
+    document.setIn(["roles", "counter-reviewer", "model"], "glm-5.4");
+    return document.toString();
+  },
 };
 const EFFORT_CHANGE: Mutation = {
   name: "effort change",
-  apply: (source) => source.replace("effort: medium", "effort: max"),
+  apply: (source) => {
+    const document = parseDocument(source);
+    document.setIn(["roles", "counter-reviewer", "effort"], "max");
+    return document.toString();
+  },
 };
 const SEMANTIC_REWRITE: Mutation = {
   name: "semantically equivalent rewrite",
@@ -333,7 +342,7 @@ describe("config as an editable input", () => {
     expect(status).toMatchObject({ ok: true, value: { config: { verified: true } } });
     if (!status.ok) return;
     expect(status.value.config_change).toEqual([
-      { path: "roles.counter-reviewer.model", before: "gpt-5.6-sol", after: "glm-5.4" },
+      { path: "roles.counter-reviewer.model", before: "gpt-6-astra", after: "glm-5.4" },
     ]);
     expect(status.value.next_action.code).toBe("run-step");
   });
