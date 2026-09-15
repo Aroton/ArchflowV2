@@ -26,6 +26,9 @@ import { canonicalDocument } from "../../src/contracts/canonical.js";
 import { createTaskLock } from "../../src/state/lock.js";
 import { createDispatchRecovery, readDispatchRecovery, isTransientDispatchFailure } from "../../src/dispatch/recovery.js";
 import { readFileSync } from "node:fs";
+import { CliAdapterError, selectCliAdapter } from "../../src/dispatch/cli.js";
+import { parseRawAdjudicationV2 } from "../../src/contracts/adjudication.js";
+import { judgmentSlots, nativeStream, recoveredCapacityEvents, syntheticJudgments } from "../helpers/antigravity-output.js";
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
@@ -92,6 +95,39 @@ const selected = { raw_route: { model: "gpt-5.6-sol", effort: "medium" }, source
 const limited = () => new DispatchRoutingError(createProjectError("RATE_LIMITED", { adapter: "codex-cli", attempt: 1 }));
 
 describe("durable dispatch recovery", () => {
+  it.each([false, true])("validates recovered Gemini judgments before accounting success (invalid=%s)", async invalid => {
+    const context = await fixture();
+    const route = { raw_route: { model: "gemini-3.8-flash-high", effort: "high" }, source: { provenance: "configured" } } as const;
+    const adapter = selectCliAdapter("claude", { adapter: "antigravity-cli", family: "gemini", ...route.raw_route });
+    const events = recoveredCapacityEvents();
+    if (invalid) {
+      const output = syntheticJudgments();
+      delete output.judgments["slot-10"];
+      events.at(-1)!.result!.structured_output = output;
+    }
+    let calls = 0;
+    const run = createDispatchRecovery({ ...context, wait: async () => {} }).run("adjudicator", route, async () => {
+      calls++;
+      const result = { exit_code: 0, signal: null, stdout: nativeStream(events), stderr: Buffer.alloc(0) };
+      const failure = adapter.classifyFailure(result);
+      if (failure !== undefined) throw new CliAdapterError(failure);
+      const output: unknown = JSON.parse(Buffer.from(adapter.parseOutput(result)).toString());
+      try { return parseRawAdjudicationV2(output, judgmentSlots); }
+      catch { throw new CliAdapterError(createProjectError("MODEL_OUTPUT_INVALID", {
+        adapter: "antigravity-cli", attempt: 1, issue_code: "adjudication-rule-slot-coverage",
+      })); }
+    });
+    if (invalid) {
+      await expect(run).rejects.toMatchObject({ project_error: { code: "MODEL_OUTPUT_INVALID" } });
+      expect(await readDispatchRecovery(context)).toMatchObject({ code: "MODEL_OUTPUT_INVALID", recovery: { status: "repair-required" } });
+    } else {
+      await expect(run).resolves.toEqual(syntheticJudgments());
+      expect(await readDispatchRecovery(context)).toBeNull();
+    }
+    expect(calls).toBe(1);
+    const ledger = JSON.parse(readFileSync(join(context.authority.task_root, "authority/dispatch-recovery.json"), "utf8")) as { entries: { status: string }[] };
+    expect(ledger.entries.map(entry => entry.status)).toEqual([invalid ? "failed" : "succeeded"]);
+  });
   it("surfaces each failed reviewer with its cause and retry count across restarts", async () => {
     const context = await fixture();
     const claude = { raw_route: { model: "opus", effort: "high", provider: "zai" }, source: { provenance: "configured" } } as const;

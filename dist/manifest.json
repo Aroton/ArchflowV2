@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "f5c9818777a7ec7857b56082fa88466d5098e89f68d789535420987c9b3a9699",
+      "digest": "b0282e9f4f8d992b6666ee63ad38b71dd08d2943b36e586210081b6c7bdc750d",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 2416465
+      "size": 2418746
     },
     {
-      "digest": "959df11b40bbd267c4ca7678f717bd3c6a4de00e43a8bfc41b47f18d4398e73e",
+      "digest": "15997fcbe572242d5af767c73426b7b3c79ec9a9b0785ef610051133a9be44d9",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3694370
+      "size": 3698221
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,10 +210,10 @@
       "role": "manifest"
     },
     {
-      "digest": "c2a808174b16c235c5b2f2f3a956bb50f36b394308327ab853aef9a6de109b98",
+      "digest": "b178eb1b8e0cd0d30260f89f8b2cf2abe0087929e18caceb96ac35ea41628161",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 383772
+      "size": 384560
     }
   ],
   "build_entries": [
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "959df11b40bbd267c4ca7678f717bd3c6a4de00e43a8bfc41b47f18d4398e73e",
+  "bundle_digest": "15997fcbe572242d5af767c73426b7b3c79ec9a9b0785ef610051133a9be44d9",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -3121,34 +3121,44 @@
       "size": 1721
     },
     {
-      "bytes_in_output": 66649,
-      "digest": "6dd42d1514ce797582314c8bff6a2b9cc5a2cefc6a6fb311a6b43226c3efe2e8",
+      "bytes_in_output": 7019,
+      "digest": "48dfdd787caf421ccdbbcf0c9e6d822c2d6bf567bba1be4d5d76e2124ce87cdd",
+      "key": "src/dispatch/antigravity-output.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/dispatch/antigravity-output.ts"
+      },
+      "size": 5077
+    },
+    {
+      "bytes_in_output": 64811,
+      "digest": "c0425f7febb5db3bc58e700aa06675c94453b29a35bb6f541b6cd419db1be887",
       "key": "src/dispatch/cli.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/cli.ts"
       },
-      "size": 48569
+      "size": 47337
     },
     {
-      "bytes_in_output": 6939,
-      "digest": "b9b829c388595d32fc98a9c94e005cb1f74b9ad02e9dc643c110b7cde334e70b",
+      "bytes_in_output": 7561,
+      "digest": "09a281dd24190a060366f87ad493a3270c42490cdf2b9c68368857450eca2b73",
       "key": "src/dispatch/coordinator.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/coordinator.ts"
       },
-      "size": 10948
+      "size": 11691
     },
     {
-      "bytes_in_output": 10571,
-      "digest": "21605119776dd670a86290898056341c8979d4371ebe497d1b1a410b0bf2aef9",
+      "bytes_in_output": 10822,
+      "digest": "75762b47ee3c19d72fd2794039b4406fe6a31dec4e1818238b6ed33d0b5a9530",
       "key": "src/dispatch/failure-observation.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/failure-observation.ts"
       },
-      "size": 11534
+      "size": 11778
     },
     {
       "bytes_in_output": 15644,
@@ -4368,6 +4378,7 @@
     "src/contracts/workflow-progress.ts",
     "src/contracts/workflow.ts",
     "src/contracts/yaml.ts",
+    "src/dispatch/antigravity-output.ts",
     "src/dispatch/cli.ts",
     "src/dispatch/coordinator.ts",
     "src/dispatch/failure-observation.ts",
@@ -5018,6 +5029,7 @@
         "src/contracts/workflow-progress.ts",
         "src/contracts/workflow.ts",
         "src/contracts/yaml.ts",
+        "src/dispatch/antigravity-output.ts",
         "src/dispatch/cli.ts",
         "src/dispatch/coordinator.ts",
         "src/dispatch/failure-observation.ts",
@@ -5111,7 +5123,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "959df11b40bbd267c4ca7678f717bd3c6a4de00e43a8bfc41b47f18d4398e73e",
+      "output_digest": "15997fcbe572242d5af767c73426b7b3c79ec9a9b0785ef610051133a9be44d9",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5356,6 +5368,7 @@
         "src/contracts/workflow-progress.ts",
         "src/contracts/workflow.ts",
         "src/contracts/yaml.ts",
+        "src/dispatch/antigravity-output.ts",
         "src/dispatch/cli.ts",
         "src/dispatch/failure-observation.ts",
         "src/dispatch/process.ts",
@@ -5436,7 +5449,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "f5c9818777a7ec7857b56082fa88466d5098e89f68d789535420987c9b3a9699",
+      "output_digest": "b0282e9f4f8d992b6666ee63ad38b71dd08d2943b36e586210081b6c7bdc750d",
       "output_path": "archflow-local.mjs"
     }
   ],

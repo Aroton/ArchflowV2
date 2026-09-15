@@ -92,6 +92,9 @@ export function classifiedDispatchFailure(error: unknown): Readonly<{
   const projectError = carriedProjectError(error);
   if (projectError === undefined || !supportedCodes.has(projectError.code)) return undefined;
   const code = projectError.code as DispatchFailureCodeV1;
+  if (projectError.code === "PROCESS_FAILED" && projectError.diagnostic.parameters.exit_class === "transient-transport") {
+    return { code, message: "The reviewer service was temporarily unavailable or its connection was interrupted." };
+  }
   if (projectError.code === "RATE_LIMITED" && projectError.diagnostic.parameters.reason === "session-limit") {
     return { code, message: "The reviewer service session limit was reached. Wait for the session allowance to reset or explicitly choose another reviewer route." };
   }

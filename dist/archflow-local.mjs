@@ -250,9 +250,9 @@ function floatSafeRemainder(val, step) {
     return 0;
   return ratio - roundedRatio;
 }
-function defineLazy(object3, key, getter) {
+function defineLazy(object4, key, getter) {
   let value = void 0;
-  Object.defineProperty(object3, key, {
+  Object.defineProperty(object4, key, {
     get() {
       if (value === EVALUATING) {
         return void 0;
@@ -264,7 +264,7 @@ function defineLazy(object3, key, getter) {
       return value;
     },
     set(v) {
-      Object.defineProperty(object3, key, {
+      Object.defineProperty(object4, key, {
         value: v
         // configurable: true,
       });
@@ -15135,8 +15135,8 @@ function childPath(path2, key) {
 function fail(message, path2) {
   throw new PlainJsonError(message, path2);
 }
-function assertDescriptorStable(object3, key, before, path2) {
-  const after = Object.getOwnPropertyDescriptor(object3, key);
+function assertDescriptorStable(object4, key, before, path2) {
+  const after = Object.getOwnPropertyDescriptor(object4, key);
   if (after === void 0 || after.configurable !== before.configurable || after.enumerable !== before.enumerable || after.writable !== before.writable || after.value !== before.value || after.get !== before.get || after.set !== before.set) {
     fail("value mutated while it was being inspected", path2);
   }
@@ -15148,19 +15148,19 @@ function inspect(value, path2, ancestors) {
     return;
   }
   if (typeof value !== "object") fail(`unsupported ${typeof value} value`, path2);
-  const object3 = value;
-  if (ancestors.has(object3)) fail("cyclic references are not JSON values", path2);
-  const isArray = Array.isArray(object3);
-  const prototype = Object.getPrototypeOf(object3);
+  const object4 = value;
+  if (ancestors.has(object4)) fail("cyclic references are not JSON values", path2);
+  const isArray = Array.isArray(object4);
+  const prototype = Object.getPrototypeOf(object4);
   if (isArray ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) {
     fail("objects must have a plain prototype", path2);
   }
-  const keys = Reflect.ownKeys(object3);
+  const keys = Reflect.ownKeys(object4);
   if (keys.some((key) => typeof key === "symbol")) fail("symbol keys are not JSON object keys", path2);
-  ancestors.add(object3);
+  ancestors.add(object4);
   try {
     if (isArray) {
-      const array2 = object3;
+      const array2 = object4;
       const len = array2.length;
       for (const key of keys) {
         if (typeof key !== "string") fail("arrays may only contain indexed elements", path2);
@@ -15182,19 +15182,19 @@ function inspect(value, path2, ancestors) {
       for (const key of keys) {
         const propertyPath = childPath(path2, key);
         if (DANGEROUS_KEYS.has(key)) fail(`dangerous own key ${JSON.stringify(key)} is forbidden`, propertyPath);
-        const descriptor = Object.getOwnPropertyDescriptor(object3, key);
+        const descriptor = Object.getOwnPropertyDescriptor(object4, key);
         if (descriptor === void 0 || !("value" in descriptor)) fail("accessor properties are not JSON values", propertyPath);
         if (!descriptor.enumerable) fail("non-enumerable properties are not JSON values", propertyPath);
         inspect(descriptor.value, propertyPath, ancestors);
-        assertDescriptorStable(object3, key, descriptor, propertyPath);
+        assertDescriptorStable(object4, key, descriptor, propertyPath);
       }
     }
-    const afterKeys = Reflect.ownKeys(object3);
+    const afterKeys = Reflect.ownKeys(object4);
     if (keys.length !== afterKeys.length || keys.some((key, index) => key !== afterKeys[index])) {
       fail("value mutated while it was being inspected", path2);
     }
   } finally {
-    ancestors.delete(object3);
+    ancestors.delete(object4);
   }
 }
 function assertPlainJson(value, label = "value") {
@@ -31880,17 +31880,17 @@ var filterByAllowMessageIds = (messages2, allowMessageIds) => {
 };
 
 // node_modules/@secretlint/core/module/messages/filter-mask-secrets.js
-var deepMask = (object3, handler) => {
-  for (const key of Object.keys(object3)) {
-    if (typeof object3[key] === "object") {
-      object3[key] = deepMask(object3[key], handler);
-    } else if (Array.isArray(object3[key])) {
-      object3[key] = object3[key].map((item) => deepMask(item, handler));
-    } else if (typeof object3[key] === "string") {
-      object3[key] = handler(object3[key]);
+var deepMask = (object4, handler) => {
+  for (const key of Object.keys(object4)) {
+    if (typeof object4[key] === "object") {
+      object4[key] = deepMask(object4[key], handler);
+    } else if (Array.isArray(object4[key])) {
+      object4[key] = object4[key].map((item) => deepMask(item, handler));
+    } else if (typeof object4[key] === "string") {
+      object4[key] = handler(object4[key]);
     }
   }
-  return object3;
+  return object4;
 };
 var createMaskValue = (value) => {
   return "*".repeat(value.length);
@@ -32105,8 +32105,8 @@ function requireLodash_uniq() {
   function cacheHas(cache, key) {
     return cache.has(key);
   }
-  function getValue(object3, key) {
-    return object3 == null ? void 0 : object3[key];
+  function getValue(object4, key) {
+    return object4 == null ? void 0 : object4[key];
   }
   function isHostObject(value) {
     var result = false;
@@ -32326,8 +32326,8 @@ function requireLodash_uniq() {
     var data = map2.__data__;
     return isKeyable(key) ? data[typeof key == "string" ? "string" : "hash"] : data.map;
   }
-  function getNative(object3, key) {
-    var value = getValue(object3, key);
+  function getNative(object4, key) {
+    var value = getValue(object4, key);
     return baseIsNative(value) ? value : void 0;
   }
   function isKeyable(value) {
@@ -32423,8 +32423,8 @@ function requireLodash_uniqwith() {
   function cacheHas(cache, key) {
     return cache.has(key);
   }
-  function getValue(object3, key) {
-    return object3 == null ? void 0 : object3[key];
+  function getValue(object4, key) {
+    return object4 == null ? void 0 : object4[key];
   }
   function isHostObject(value) {
     var result = false;
@@ -32647,8 +32647,8 @@ function requireLodash_uniqwith() {
     var data = map2.__data__;
     return isKeyable(key) ? data[typeof key == "string" ? "string" : "hash"] : data.map;
   }
-  function getNative(object3, key) {
-    var value = getValue(object3, key);
+  function getNative(object4, key) {
+    var value = getValue(object4, key);
     return baseIsNative(value) ? value : void 0;
   }
   function isKeyable(value) {
@@ -32763,8 +32763,8 @@ function requireLodash_sortby() {
       return false;
     }
     function baseProperty(key) {
-      return function(object3) {
-        return object3 == null ? void 0 : object3[key];
+      return function(object4) {
+        return object4 == null ? void 0 : object4[key];
       };
     }
     function baseSortBy(array2, comparer) {
@@ -32787,8 +32787,8 @@ function requireLodash_sortby() {
         return func(value);
       };
     }
-    function getValue(object3, key) {
-      return object3 == null ? void 0 : object3[key];
+    function getValue(object4, key) {
+      return object4 == null ? void 0 : object4[key];
     }
     function isHostObject(value) {
       var result = false;
@@ -33036,22 +33036,22 @@ function requireLodash_sortby() {
       return result;
     }
     var baseFor = createBaseFor();
-    function baseForOwn(object3, iteratee) {
-      return object3 && baseFor(object3, iteratee, keys);
+    function baseForOwn(object4, iteratee) {
+      return object4 && baseFor(object4, iteratee, keys);
     }
-    function baseGet(object3, path2) {
-      path2 = isKey(path2, object3) ? [path2] : castPath(path2);
+    function baseGet(object4, path2) {
+      path2 = isKey(path2, object4) ? [path2] : castPath(path2);
       var index = 0, length = path2.length;
-      while (object3 != null && index < length) {
-        object3 = object3[toKey(path2[index++])];
+      while (object4 != null && index < length) {
+        object4 = object4[toKey(path2[index++])];
       }
-      return index && index == length ? object3 : void 0;
+      return index && index == length ? object4 : void 0;
     }
     function baseGetTag(value) {
       return objectToString.call(value);
     }
-    function baseHasIn(object3, key) {
-      return object3 != null && key in Object(object3);
+    function baseHasIn(object4, key) {
+      return object4 != null && key in Object(object4);
     }
     function baseIsEqual(value, other, customizer, bitmask, stack) {
       if (value === other) {
@@ -33062,25 +33062,25 @@ function requireLodash_sortby() {
       }
       return baseIsEqualDeep(value, other, baseIsEqual, customizer, bitmask, stack);
     }
-    function baseIsEqualDeep(object3, other, equalFunc, customizer, bitmask, stack) {
-      var objIsArr = isArray(object3), othIsArr = isArray(other), objTag = arrayTag, othTag = arrayTag;
+    function baseIsEqualDeep(object4, other, equalFunc, customizer, bitmask, stack) {
+      var objIsArr = isArray(object4), othIsArr = isArray(other), objTag = arrayTag, othTag = arrayTag;
       if (!objIsArr) {
-        objTag = getTag(object3);
+        objTag = getTag(object4);
         objTag = objTag == argsTag ? objectTag : objTag;
       }
       if (!othIsArr) {
         othTag = getTag(other);
         othTag = othTag == argsTag ? objectTag : othTag;
       }
-      var objIsObj = objTag == objectTag && !isHostObject(object3), othIsObj = othTag == objectTag && !isHostObject(other), isSameTag = objTag == othTag;
+      var objIsObj = objTag == objectTag && !isHostObject(object4), othIsObj = othTag == objectTag && !isHostObject(other), isSameTag = objTag == othTag;
       if (isSameTag && !objIsObj) {
         stack || (stack = new Stack());
-        return objIsArr || isTypedArray(object3) ? equalArrays(object3, other, equalFunc, customizer, bitmask, stack) : equalByTag(object3, other, objTag, equalFunc, customizer, bitmask, stack);
+        return objIsArr || isTypedArray(object4) ? equalArrays(object4, other, equalFunc, customizer, bitmask, stack) : equalByTag(object4, other, objTag, equalFunc, customizer, bitmask, stack);
       }
       if (!(bitmask & PARTIAL_COMPARE_FLAG)) {
-        var objIsWrapped = objIsObj && hasOwnProperty.call(object3, "__wrapped__"), othIsWrapped = othIsObj && hasOwnProperty.call(other, "__wrapped__");
+        var objIsWrapped = objIsObj && hasOwnProperty.call(object4, "__wrapped__"), othIsWrapped = othIsObj && hasOwnProperty.call(other, "__wrapped__");
         if (objIsWrapped || othIsWrapped) {
-          var objUnwrapped = objIsWrapped ? object3.value() : object3, othUnwrapped = othIsWrapped ? other.value() : other;
+          var objUnwrapped = objIsWrapped ? object4.value() : object4, othUnwrapped = othIsWrapped ? other.value() : other;
           stack || (stack = new Stack());
           return equalFunc(objUnwrapped, othUnwrapped, customizer, bitmask, stack);
         }
@@ -33089,25 +33089,25 @@ function requireLodash_sortby() {
         return false;
       }
       stack || (stack = new Stack());
-      return equalObjects(object3, other, equalFunc, customizer, bitmask, stack);
+      return equalObjects(object4, other, equalFunc, customizer, bitmask, stack);
     }
-    function baseIsMatch(object3, source, matchData, customizer) {
+    function baseIsMatch(object4, source, matchData, customizer) {
       var index = matchData.length, length = index;
-      if (object3 == null) {
+      if (object4 == null) {
         return !length;
       }
-      object3 = Object(object3);
+      object4 = Object(object4);
       while (index--) {
         var data = matchData[index];
-        if (data[2] ? data[1] !== object3[data[0]] : !(data[0] in object3)) {
+        if (data[2] ? data[1] !== object4[data[0]] : !(data[0] in object4)) {
           return false;
         }
       }
       while (++index < length) {
         data = matchData[index];
-        var key = data[0], objValue = object3[key], srcValue = data[1];
+        var key = data[0], objValue = object4[key], srcValue = data[1];
         if (data[2]) {
-          if (objValue === void 0 && !(key in object3)) {
+          if (objValue === void 0 && !(key in object4)) {
             return false;
           }
         } else {
@@ -33142,13 +33142,13 @@ function requireLodash_sortby() {
       }
       return property(value);
     }
-    function baseKeys(object3) {
-      if (!isPrototype(object3)) {
-        return nativeKeys(object3);
+    function baseKeys(object4) {
+      if (!isPrototype(object4)) {
+        return nativeKeys(object4);
       }
       var result = [];
-      for (var key in Object(object3)) {
-        if (hasOwnProperty.call(object3, key) && key != "constructor") {
+      for (var key in Object(object4)) {
+        if (hasOwnProperty.call(object4, key) && key != "constructor") {
           result.push(key);
         }
       }
@@ -33166,17 +33166,17 @@ function requireLodash_sortby() {
       if (matchData.length == 1 && matchData[0][2]) {
         return matchesStrictComparable(matchData[0][0], matchData[0][1]);
       }
-      return function(object3) {
-        return object3 === source || baseIsMatch(object3, source, matchData);
+      return function(object4) {
+        return object4 === source || baseIsMatch(object4, source, matchData);
       };
     }
     function baseMatchesProperty(path2, srcValue) {
       if (isKey(path2) && isStrictComparable(srcValue)) {
         return matchesStrictComparable(toKey(path2), srcValue);
       }
-      return function(object3) {
-        var objValue = get(object3, path2);
-        return objValue === void 0 && objValue === srcValue ? hasIn(object3, path2) : baseIsEqual(srcValue, objValue, void 0, UNORDERED_COMPARE_FLAG | PARTIAL_COMPARE_FLAG);
+      return function(object4) {
+        var objValue = get(object4, path2);
+        return objValue === void 0 && objValue === srcValue ? hasIn(object4, path2) : baseIsEqual(srcValue, objValue, void 0, UNORDERED_COMPARE_FLAG | PARTIAL_COMPARE_FLAG);
       };
     }
     function baseOrderBy(collection, iteratees, orders) {
@@ -33188,13 +33188,13 @@ function requireLodash_sortby() {
         });
         return { "criteria": criteria, "index": ++index, "value": value };
       });
-      return baseSortBy(result, function(object3, other) {
-        return compareMultiple(object3, other, orders);
+      return baseSortBy(result, function(object4, other) {
+        return compareMultiple(object4, other, orders);
       });
     }
     function basePropertyDeep(path2) {
-      return function(object3) {
-        return baseGet(object3, path2);
+      return function(object4) {
+        return baseGet(object4, path2);
       };
     }
     function baseRest(func, start) {
@@ -33239,8 +33239,8 @@ function requireLodash_sortby() {
       }
       return 0;
     }
-    function compareMultiple(object3, other, orders) {
-      var index = -1, objCriteria = object3.criteria, othCriteria = other.criteria, length = objCriteria.length, ordersLength = orders.length;
+    function compareMultiple(object4, other, orders) {
+      var index = -1, objCriteria = object4.criteria, othCriteria = other.criteria, length = objCriteria.length, ordersLength = orders.length;
       while (++index < length) {
         var result = compareAscending(objCriteria[index], othCriteria[index]);
         if (result) {
@@ -33251,7 +33251,7 @@ function requireLodash_sortby() {
           return result * (order == "desc" ? -1 : 1);
         }
       }
-      return object3.index - other.index;
+      return object4.index - other.index;
     }
     function createBaseEach(eachFunc, fromRight) {
       return function(collection, iteratee) {
@@ -33271,15 +33271,15 @@ function requireLodash_sortby() {
       };
     }
     function createBaseFor(fromRight) {
-      return function(object3, iteratee, keysFunc) {
-        var index = -1, iterable = Object(object3), props = keysFunc(object3), length = props.length;
+      return function(object4, iteratee, keysFunc) {
+        var index = -1, iterable = Object(object4), props = keysFunc(object4), length = props.length;
         while (length--) {
           var key = props[++index];
           if (iteratee(iterable[key], key, iterable) === false) {
             break;
           }
         }
-        return object3;
+        return object4;
       };
     }
     function equalArrays(array2, other, equalFunc, customizer, bitmask, stack) {
@@ -33324,54 +33324,54 @@ function requireLodash_sortby() {
       stack["delete"](other);
       return result;
     }
-    function equalByTag(object3, other, tag, equalFunc, customizer, bitmask, stack) {
+    function equalByTag(object4, other, tag, equalFunc, customizer, bitmask, stack) {
       switch (tag) {
         case dataViewTag:
-          if (object3.byteLength != other.byteLength || object3.byteOffset != other.byteOffset) {
+          if (object4.byteLength != other.byteLength || object4.byteOffset != other.byteOffset) {
             return false;
           }
-          object3 = object3.buffer;
+          object4 = object4.buffer;
           other = other.buffer;
         case arrayBufferTag:
-          if (object3.byteLength != other.byteLength || !equalFunc(new Uint8Array2(object3), new Uint8Array2(other))) {
+          if (object4.byteLength != other.byteLength || !equalFunc(new Uint8Array2(object4), new Uint8Array2(other))) {
             return false;
           }
           return true;
         case boolTag:
         case dateTag:
         case numberTag:
-          return eq(+object3, +other);
+          return eq(+object4, +other);
         case errorTag:
-          return object3.name == other.name && object3.message == other.message;
+          return object4.name == other.name && object4.message == other.message;
         case regexpTag:
         case stringTag:
-          return object3 == other + "";
+          return object4 == other + "";
         case mapTag:
           var convert = mapToArray;
         case setTag:
           var isPartial = bitmask & PARTIAL_COMPARE_FLAG;
           convert || (convert = setToArray);
-          if (object3.size != other.size && !isPartial) {
+          if (object4.size != other.size && !isPartial) {
             return false;
           }
-          var stacked = stack.get(object3);
+          var stacked = stack.get(object4);
           if (stacked) {
             return stacked == other;
           }
           bitmask |= UNORDERED_COMPARE_FLAG;
-          stack.set(object3, other);
-          var result = equalArrays(convert(object3), convert(other), equalFunc, customizer, bitmask, stack);
-          stack["delete"](object3);
+          stack.set(object4, other);
+          var result = equalArrays(convert(object4), convert(other), equalFunc, customizer, bitmask, stack);
+          stack["delete"](object4);
           return result;
         case symbolTag:
           if (symbolValueOf) {
-            return symbolValueOf.call(object3) == symbolValueOf.call(other);
+            return symbolValueOf.call(object4) == symbolValueOf.call(other);
           }
       }
       return false;
     }
-    function equalObjects(object3, other, equalFunc, customizer, bitmask, stack) {
-      var isPartial = bitmask & PARTIAL_COMPARE_FLAG, objProps = keys(object3), objLength = objProps.length, othProps = keys(other), othLength = othProps.length;
+    function equalObjects(object4, other, equalFunc, customizer, bitmask, stack) {
+      var isPartial = bitmask & PARTIAL_COMPARE_FLAG, objProps = keys(object4), objLength = objProps.length, othProps = keys(other), othLength = othProps.length;
       if (objLength != othLength && !isPartial) {
         return false;
       }
@@ -33382,19 +33382,19 @@ function requireLodash_sortby() {
           return false;
         }
       }
-      var stacked = stack.get(object3);
+      var stacked = stack.get(object4);
       if (stacked && stack.get(other)) {
         return stacked == other;
       }
       var result = true;
-      stack.set(object3, other);
-      stack.set(other, object3);
+      stack.set(object4, other);
+      stack.set(other, object4);
       var skipCtor = isPartial;
       while (++index < objLength) {
         key = objProps[index];
-        var objValue = object3[key], othValue = other[key];
+        var objValue = object4[key], othValue = other[key];
         if (customizer) {
-          var compared = isPartial ? customizer(othValue, objValue, key, other, object3, stack) : customizer(objValue, othValue, key, object3, other, stack);
+          var compared = isPartial ? customizer(othValue, objValue, key, other, object4, stack) : customizer(objValue, othValue, key, object4, other, stack);
         }
         if (!(compared === void 0 ? objValue === othValue || equalFunc(objValue, othValue, customizer, bitmask, stack) : compared)) {
           result = false;
@@ -33403,12 +33403,12 @@ function requireLodash_sortby() {
         skipCtor || (skipCtor = key == "constructor");
       }
       if (result && !skipCtor) {
-        var objCtor = object3.constructor, othCtor = other.constructor;
-        if (objCtor != othCtor && ("constructor" in object3 && "constructor" in other) && !(typeof objCtor == "function" && objCtor instanceof objCtor && typeof othCtor == "function" && othCtor instanceof othCtor)) {
+        var objCtor = object4.constructor, othCtor = other.constructor;
+        if (objCtor != othCtor && ("constructor" in object4 && "constructor" in other) && !(typeof objCtor == "function" && objCtor instanceof objCtor && typeof othCtor == "function" && othCtor instanceof othCtor)) {
           result = false;
         }
       }
-      stack["delete"](object3);
+      stack["delete"](object4);
       stack["delete"](other);
       return result;
     }
@@ -33416,16 +33416,16 @@ function requireLodash_sortby() {
       var data = map2.__data__;
       return isKeyable(key) ? data[typeof key == "string" ? "string" : "hash"] : data.map;
     }
-    function getMatchData(object3) {
-      var result = keys(object3), length = result.length;
+    function getMatchData(object4) {
+      var result = keys(object4), length = result.length;
       while (length--) {
-        var key = result[length], value = object3[key];
+        var key = result[length], value = object4[key];
         result[length] = [key, value, isStrictComparable(value)];
       }
       return result;
     }
-    function getNative(object3, key) {
-      var value = getValue(object3, key);
+    function getNative(object4, key) {
+      var value = getValue(object4, key);
       return baseIsNative(value) ? value : void 0;
     }
     var getTag = baseGetTag;
@@ -33449,21 +33449,21 @@ function requireLodash_sortby() {
         return result;
       };
     }
-    function hasPath(object3, path2, hasFunc) {
-      path2 = isKey(path2, object3) ? [path2] : castPath(path2);
+    function hasPath(object4, path2, hasFunc) {
+      path2 = isKey(path2, object4) ? [path2] : castPath(path2);
       var result, index = -1, length = path2.length;
       while (++index < length) {
         var key = toKey(path2[index]);
-        if (!(result = object3 != null && hasFunc(object3, key))) {
+        if (!(result = object4 != null && hasFunc(object4, key))) {
           break;
         }
-        object3 = object3[key];
+        object4 = object4[key];
       }
       if (result) {
         return result;
       }
-      var length = object3 ? object3.length : 0;
-      return !!length && isLength(length) && isIndex(key, length) && (isArray(object3) || isArguments(object3));
+      var length = object4 ? object4.length : 0;
+      return !!length && isLength(length) && isIndex(key, length) && (isArray(object4) || isArguments(object4));
     }
     function isFlattenable(value) {
       return isArray(value) || isArguments(value) || !!(spreadableSymbol && value && value[spreadableSymbol]);
@@ -33472,17 +33472,17 @@ function requireLodash_sortby() {
       length = length == null ? MAX_SAFE_INTEGER : length;
       return !!length && (typeof value == "number" || reIsUint.test(value)) && (value > -1 && value % 1 == 0 && value < length);
     }
-    function isIterateeCall(value, index, object3) {
-      if (!isObject2(object3)) {
+    function isIterateeCall(value, index, object4) {
+      if (!isObject2(object4)) {
         return false;
       }
       var type = typeof index;
-      if (type == "number" ? isArrayLike(object3) && isIndex(index, object3.length) : type == "string" && index in object3) {
-        return eq(object3[index], value);
+      if (type == "number" ? isArrayLike(object4) && isIndex(index, object4.length) : type == "string" && index in object4) {
+        return eq(object4[index], value);
       }
       return false;
     }
-    function isKey(value, object3) {
+    function isKey(value, object4) {
       if (isArray(value)) {
         return false;
       }
@@ -33490,7 +33490,7 @@ function requireLodash_sortby() {
       if (type == "number" || type == "symbol" || type == "boolean" || value == null || isSymbol(value)) {
         return true;
       }
-      return reIsPlainProp.test(value) || !reIsDeepProp.test(value) || object3 != null && value in Object(object3);
+      return reIsPlainProp.test(value) || !reIsDeepProp.test(value) || object4 != null && value in Object(object4);
     }
     function isKeyable(value) {
       var type = typeof value;
@@ -33507,11 +33507,11 @@ function requireLodash_sortby() {
       return value === value && !isObject2(value);
     }
     function matchesStrictComparable(key, srcValue) {
-      return function(object3) {
-        if (object3 == null) {
+      return function(object4) {
+        if (object4 == null) {
           return false;
         }
-        return object3[key] === srcValue && (srcValue !== void 0 || key in Object(object3));
+        return object4[key] === srcValue && (srcValue !== void 0 || key in Object(object4));
       };
     }
     var stringToPath = memoize(function(string4) {
@@ -33608,15 +33608,15 @@ function requireLodash_sortby() {
     function toString(value) {
       return value == null ? "" : baseToString(value);
     }
-    function get(object3, path2, defaultValue) {
-      var result = object3 == null ? void 0 : baseGet(object3, path2);
+    function get(object4, path2, defaultValue) {
+      var result = object4 == null ? void 0 : baseGet(object4, path2);
       return result === void 0 ? defaultValue : result;
     }
-    function hasIn(object3, path2) {
-      return object3 != null && hasPath(object3, path2, baseHasIn);
+    function hasIn(object4, path2) {
+      return object4 != null && hasPath(object4, path2, baseHasIn);
     }
-    function keys(object3) {
-      return isArrayLike(object3) ? arrayLikeKeys(object3) : baseKeys(object3);
+    function keys(object4) {
+      return isArrayLike(object4) ? arrayLikeKeys(object4) : baseKeys(object4);
     }
     function identity(value) {
       return value;
@@ -46890,6 +46890,78 @@ async function runDispatchChild(spec) {
   });
 }
 
+// src/dispatch/antigravity-output.ts
+init_plain_json();
+var object3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var isAntigravityCapacityError = (message) => /^(?:API error \(attempt [1-9]\d*\): )?UNAVAILABLE \(code 503\): No capacity available for model gemini-[A-Za-z0-9._-]+ on the server$/u.test(message.trim());
+function readAntigravityOutput(stdout) {
+  let text4;
+  try {
+    text4 = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
+  } catch {
+    return { recovered_capacity_error: false };
+  }
+  let wrapper;
+  let coherent = true;
+  let results = 0;
+  const steps = /* @__PURE__ */ new Map();
+  for (const line of text4.split("\n")) {
+    if (line.trim() === "") continue;
+    let value;
+    try {
+      const parsed = JSON.parse(line);
+      assertPlainJson(parsed, "Antigravity event");
+      value = parsed;
+    } catch {
+      coherent = false;
+      continue;
+    }
+    if (!object3(value)) {
+      coherent = false;
+      continue;
+    }
+    if (results !== 0) coherent = false;
+    if (value.event === void 0) {
+      wrapper = value;
+      coherent = false;
+    } else if (value.event === "result") {
+      results++;
+      wrapper = object3(value.result) ? value.result : void 0;
+    } else if (value.event === "error") {
+      coherent = false;
+    } else if (value.event === "step_update") {
+      const step = value.step_update;
+      if (!object3(step) || typeof step.step_index !== "number" || !Number.isSafeInteger(step.step_index) || step.step_index < 0) {
+        coherent = false;
+        continue;
+      }
+      const prior = steps.get(step.step_index);
+      if (prior !== void 0 && (prior.conversation_id !== step.conversation_id || prior.step_type !== step.step_type)) {
+        coherent = false;
+      }
+      steps.set(step.step_index, step);
+    }
+  }
+  const failed = wrapper?.status === "ERROR" || wrapper?.is_error === true || wrapper?.type === "error";
+  const errorMessage = failed ? typeof wrapper?.error === "string" ? wrapper.error : typeof wrapper?.result === "string" ? wrapper.result : void 0 : void 0;
+  let lastError;
+  let finish;
+  let lastStep = -1;
+  for (const [index, step] of steps) {
+    lastStep = Math.max(lastStep, index);
+    if (typeof step.conversation_id !== "string" || step.conversation_id === "" || step.conversation_id !== wrapper?.conversation_id || step.state !== "DONE") coherent = false;
+    if (step.step_type === "error_message") lastError = Math.max(lastError ?? -1, index);
+    if (step.step_type === "finish" && step.state === "DONE") finish = Math.max(finish ?? -1, index);
+  }
+  return {
+    ...wrapper === void 0 ? {} : { wrapper },
+    ...errorMessage === void 0 ? {} : { error_message: errorMessage },
+    ...lastError === void 0 ? {} : { last_error_step_index: lastError },
+    ...finish === void 0 ? {} : { completed_finish_step_index: finish },
+    recovered_capacity_error: coherent && results === 1 && wrapper?.num_turns === 1 && wrapper.status === "ERROR" && errorMessage !== void 0 && isAntigravityCapacityError(errorMessage) && object3(wrapper.structured_output) && lastError !== void 0 && finish !== void 0 && finish > lastError && finish === lastStep
+  };
+}
+
 // src/dispatch/cli.ts
 var CLAUDE_MINIMUM_VERSION = "2.1.205";
 var CODEX_MINIMUM_VERSION = "0.122.0";
@@ -47512,56 +47584,29 @@ var codexAdapter = Object.freeze({
     return classifyNonzero("codex-cli", result, codexFailureMessages(result.stdout));
   }
 });
-function antigravityResultEvent(stdout) {
-  let text4;
-  try {
-    text4 = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
-  } catch {
-    return void 0;
-  }
-  let wrapper;
-  for (const line of text4.split("\n")) {
-    if (line.trim() === "") continue;
-    let value;
-    try {
-      value = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
-    const record2 = value;
-    const eventDescriptor = Object.getOwnPropertyDescriptor(record2, "event");
-    if (eventDescriptor === void 0) {
-      wrapper = record2;
-      continue;
-    }
-    if (eventDescriptor.enumerable !== true || eventDescriptor.value !== "result") continue;
-    const resultDescriptor = Object.getOwnPropertyDescriptor(record2, "result");
-    if (resultDescriptor?.enumerable !== true || !("value" in resultDescriptor)) continue;
-    const inner = resultDescriptor.value;
-    if (inner === null || typeof inner !== "object" || Array.isArray(inner)) continue;
-    wrapper = inner;
-  }
-  if (wrapper === void 0) return void 0;
-  try {
-    assertPlainJson(wrapper, "Antigravity result event");
-  } catch {
-    return void 0;
-  }
-  return wrapper;
-}
-function antigravityFailureMessage(result) {
-  const wrapper = antigravityResultEvent(result.stdout);
-  if (wrapper === void 0) return void 0;
-  if (wrapper.is_error !== true && wrapper.type !== "error" && wrapper.status !== "ERROR") return void 0;
-  return typeof wrapper.result === "string" ? wrapper.result : typeof wrapper.error === "string" ? wrapper.error : void 0;
-}
 function antigravityPrintTimeout(result) {
   const match = /^\[agy\] print timeout after (?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)? with turn in progress; returning partial output\r?$/mu.exec(result.stderr.toString("utf8"));
   if (match === null || match.slice(1).every((part) => part === void 0)) return void 0;
   const limitMs = Math.round((Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0)) * 1e3);
   if (!Number.isSafeInteger(limitMs) || limitMs <= 0) return void 0;
   return createProjectError("TIMEOUT", { adapter: "antigravity-cli", attempt: 1, limit_ms: limitMs, origin: "cli" });
+}
+function classifyAntigravityFailure(result) {
+  const timeout = antigravityPrintTimeout(result);
+  if (timeout !== void 0) return timeout;
+  const output = readAntigravityOutput(result.stdout);
+  if (result.exit_code === 0 && result.signal === null && output.recovered_capacity_error) return void 0;
+  if (output.error_message !== void 0) {
+    if (isAntigravityCapacityError(output.error_message)) {
+      return createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: "transient-transport" });
+    }
+    return classifyMessage("antigravity-cli", output.error_message) ?? createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: exitClass(result) });
+  }
+  const wrapper = output.wrapper;
+  if (wrapper?.status !== void 0 && wrapper.status !== "SUCCESS" || wrapper?.is_error === true || wrapper?.type === "error") {
+    return createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: exitClass(result) });
+  }
+  return classifyNonzero("antigravity-cli", result, []);
 }
 var antigravityAdapter = Object.freeze({
   id: "antigravity-cli",
@@ -47627,9 +47672,9 @@ var antigravityAdapter = Object.freeze({
     });
   },
   parseOutput(result) {
-    const timeout = antigravityPrintTimeout(result);
-    if (timeout !== void 0) return fail17(timeout);
-    const wrapper = antigravityResultEvent(result.stdout);
+    const failure2 = classifyAntigravityFailure(result);
+    if (failure2 !== void 0) return fail17(failure2);
+    const wrapper = readAntigravityOutput(result.stdout).wrapper;
     if (wrapper === void 0) {
       return fail17(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "antigravity-cli",
@@ -47656,13 +47701,7 @@ var antigravityAdapter = Object.freeze({
       }));
     }
   },
-  classifyFailure(result) {
-    const timeout = antigravityPrintTimeout(result);
-    if (timeout !== void 0) return timeout;
-    const message = antigravityFailureMessage(result);
-    if (message !== void 0) return classifyMessage("antigravity-cli", message) ?? createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: exitClass(result) });
-    return classifyNonzero("antigravity-cli", result, []);
-  }
+  classifyFailure: classifyAntigravityFailure
 });
 function preflightAdapter(adapterId, workspace) {
   if (adapterId === "claude-cli") return claudeAdapter.preflight(workspace);

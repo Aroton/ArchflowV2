@@ -663,8 +663,7 @@ describe("CLI output contracts and failure classification", () => {
     expect(projectError(() => adapter.parseOutput(result({
       stdout: bytes(`${JSON.stringify({ event: "result", result: { status: "ERROR" } })}\n`),
     })))).toMatchObject({
-      code: "MODEL_OUTPUT_INVALID",
-      diagnostic: { parameters: { issue_code: "structured-output-missing" } },
+      code: "PROCESS_FAILED",
     });
     expect(projectError(() => adapter.parseOutput(result({
       stdout: bytes(`${JSON.stringify({ event: "init", init: {} })}\n`),

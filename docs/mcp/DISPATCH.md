@@ -54,6 +54,16 @@ Other properties worth knowing:
 - **Mid-dispatch drift is caught.** After all required children return, the server re-authenticates the artifact and projection, re-resolves set identity, and rechecks every HEAD-pinned repository. Membership, mode, identity, or commit drift aborts with `counter-review-subject-not-current`; no partial evidence lands. A declared secondary that cannot be opened, identified, or resolved to a HEAD surfaces as the named, location-free `REPOSITORY_VIEW_UNAVAILABLE` failure whether the loss happens before dispatch or at this post-dispatch recheck, and the review offer is preserved for repair and retry; aliased or nested declarations stay `CONFIG_INVALID`.
 - **Reviews can legitimately take up to fifteen minutes** — the child is doing a real exploration of the pinned checkout.
 
+## Completed Gemini output after a temporary service error
+
+Antigravity CLI 1.2.3 can mark its final JSON wrapper `ERROR` because an earlier Gemini capacity error remains in the conversation, even after the model recovers and completes its native `finish`. A longer review with source and diff reads has more opportunities to encounter those temporary errors; the wrapper alone does not establish whether the model finished.
+
+The adapter recognizes this one case from the same invocation's stream: a clean exit, one terminal result for one turn, a native `finish` in state `DONE` after the error and as the last step, matching conversation identities, and final structured output. Every recorded step must have completed, and the terminal error must match Gemini's native 503 capacity-error format. Damaged streams, fatal stream events, unknown errors, later steps, timeouts, and cancellation cannot use this path. Older bare wrappers remain readable but carry no recovery proof.
+
+Recovery only forwards the terminal `structured_output` bytes to normal validation. It never extracts answers from intermediate responses or stored conversations. Constitution judgments still pass exact slot coverage and provenance checks before dispatch recovery records success or retains the result. An unrecovered native capacity error uses the existing bounded transport retry policy; it does not change the selected route or retry budget.
+
+Failed-attempt diagnostics retain terminal status, a bounded native error message, output presence, and error/finish step positions separately from the stdout tail. They also distinguish the process exit from the classified failure reason. Large schema metadata therefore cannot hide the reason for failure. These details stay in ignored local diagnostics; public failure messages remain fixed, safe summaries.
+
 ## Fragility to watch
 
 Public recommendation output reports the selected implementation model and effort plus optional advisory rationale. Dispatch never copies advice into invocation routing; a suggestion to settle or isolate costly work grants no authority.
