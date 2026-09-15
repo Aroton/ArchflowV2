@@ -16,6 +16,9 @@ After entering the returned revision window, the producer runs applicable checks
 
 Successful sibling feedback remains visible as `partial_review_reports` after a failed group settles. The review stays incomplete and retries reuse successful outputs. Follow-up calls run only the selected reviewers plus required constitution/effort work. Unselected reports remain `previous_review_reports`, with their original reviewed subject. There is no additional interpretation-model call.
 
+Gemini's CLI can retain an earlier capacity error in its terminal wrapper after a completed native finish. The [dispatch adapter](../mcp/DISPATCH.md#completed-gemini-output-after-a-temporary-service-error) accepts only the narrowly proven recovered case and forwards the final structured bytes through normal validation. This does not grant review authority to partial responses or conversation history, and does not relax constitution slot coverage or human gates.
+
+
 ## The dispatch envelope
 
 The control envelope is a single JSON document — serialized, hashed, and byte-capped at 1 MiB. It arrives on stdin with nothing prepended. Source bytes are not transported through that JSON: the server separately materializes the configured repository set as sealed, read-only snapshots. One repository preserves the historical `repo` cwd and binding arm; multiple repositories appear beneath `repos/<name>`, and citations use `<name>/<path>`. The envelope declares and binds every snapshot.

@@ -138,6 +138,14 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Why accepted:** A per-size or per-effort budget would be a guess dressed as policy, and an unbounded child is worse than a visible failure. The honest control for now is the visible failure plus the human's substitute route; the design skills' guidance to keep artifacts to what a reviewer can recompute also keeps them inside the budget.
 
+## Gemini recovery depends on native completion events
+
+**Not provided:** A successful exit or a filled-in object in a conversation is not sufficient proof that a review completed. Antigravity CLI 1.2.3 can also retain a recovered Gemini capacity error in its terminal status, so that status alone can incorrectly reject a completed review.
+
+**Existing mitigation:** The adapter recognizes only the native 503 capacity-error format paired with a clean exit, a coherent single-turn stream ending in a completed `finish`, and terminal structured output. Ordinary schema and provenance checks still run before any success is recorded. Missing or changed event shapes disable this exception; unknown errors, partial output, timeouts, and cancellations still fail. Unrecovered capacity errors use the existing bounded retry policy. Private diagnostic summaries preserve the terminal error separately from schema-heavy stdout tails, while public messages remain server-authored.
+
+**Why accepted:** This is a narrow compatibility repair for an observed CLI behavior, not a claim that failed processes generally produce trustworthy reviews. Synthetic stream fixtures protect the failure boundary, and a live ten-rule adjudication test checks the current CLI interface and diff access.
+
 ## A reviewer route override is not proof a human chose it
 
 **Not provided:** Nothing in the request pipeline distinguishes a substitute reviewer the human asked for from one the agent picked to get past a failed dispatch. `route_override` carries a free-text `reason`, and the server validates the *route* it names exactly as it validates a pinned one — but it never validates the *authorization*. The skills instruct the agent to report an outage and ask rather than substitute on its own, and that instruction is the only thing enforcing it.

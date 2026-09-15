@@ -38,6 +38,7 @@ import {
 } from "./process.js";
 import type { DispatchRoute } from "./routing.js";
 import type { DispatchWorkspace } from "./workspace.js";
+import { isAntigravityCapacityError, readAntigravityOutput } from "./antigravity-output.js";
 
 const CLAUDE_MINIMUM_VERSION = "2.1.205";
 const CODEX_MINIMUM_VERSION = "0.122.0";
@@ -870,60 +871,6 @@ const codexAdapter: CliAdapter = Object.freeze({
   },
 });
 
-/**
- * Antigravity stream-json output is NDJSON; the final `result` event wraps the same object that
- * `--output-format json` prints. Returns that wrapper, or undefined when no complete result event
- * decoded as a plain JSON object. A bare JSON object (no `event` field) is accepted as the wrapper
- * itself so an older single-object print stays readable.
- */
-function antigravityResultEvent(stdout: Uint8Array): Readonly<Record<string, unknown>> | undefined {
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
-  } catch {
-    return undefined;
-  }
-  let wrapper: Readonly<Record<string, unknown>> | undefined;
-  for (const line of text.split("\n")) {
-    if (line.trim() === "") continue;
-    let value: unknown;
-    try {
-      value = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
-    const record = value as Record<string, unknown>;
-    const eventDescriptor = Object.getOwnPropertyDescriptor(record, "event");
-    if (eventDescriptor === undefined) {
-      wrapper = record;
-      continue;
-    }
-    if (eventDescriptor.enumerable !== true || eventDescriptor.value !== "result") continue;
-    const resultDescriptor = Object.getOwnPropertyDescriptor(record, "result");
-    if (resultDescriptor?.enumerable !== true || !("value" in resultDescriptor)) continue;
-    const inner = resultDescriptor.value;
-    if (inner === null || typeof inner !== "object" || Array.isArray(inner)) continue;
-    wrapper = inner as Record<string, unknown>;
-  }
-  if (wrapper === undefined) return undefined;
-  try {
-    assertPlainJson(wrapper, "Antigravity result event");
-  } catch {
-    return undefined;
-  }
-  return wrapper;
-}
-
-function antigravityFailureMessage(result: DispatchChildResult): string | undefined {
-  const wrapper = antigravityResultEvent(result.stdout);
-  if (wrapper === undefined) return undefined;
-  if (wrapper.is_error !== true && wrapper.type !== "error" && wrapper.status !== "ERROR") return undefined;
-  return typeof wrapper.result === "string" ? wrapper.result
-    : typeof wrapper.error === "string" ? wrapper.error
-    : undefined;
-}
-
 function antigravityPrintTimeout(result: DispatchChildResult): ProjectError | undefined {
   // agy may exit successfully with an empty/partial result when its own print deadline
   // expires. Match only its explicit stderr diagnostic, never arbitrary timeout prose.
@@ -933,6 +880,27 @@ function antigravityPrintTimeout(result: DispatchChildResult): ProjectError | un
   const limitMs = Math.round((Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0)) * 1000);
   if (!Number.isSafeInteger(limitMs) || limitMs <= 0) return undefined;
   return createProjectError("TIMEOUT", { adapter: "antigravity-cli", attempt: 1, limit_ms: limitMs, origin: "cli" });
+}
+
+function classifyAntigravityFailure(result: DispatchChildResult): ProjectError | undefined {
+  const timeout = antigravityPrintTimeout(result);
+  if (timeout !== undefined) return timeout;
+  const output = readAntigravityOutput(result.stdout);
+  // This only admits the terminal bytes to normal validation. The review service still
+  // validates exact slots and mints provenance before recovery can record success.
+  if (result.exit_code === 0 && result.signal === null && output.recovered_capacity_error) return undefined;
+  if (output.error_message !== undefined) {
+    if (isAntigravityCapacityError(output.error_message)) {
+      return createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: "transient-transport" });
+    }
+    return classifyMessage("antigravity-cli", output.error_message)
+      ?? createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: exitClass(result) });
+  }
+  const wrapper = output.wrapper;
+  if ((wrapper?.status !== undefined && wrapper.status !== "SUCCESS") || wrapper?.is_error === true || wrapper?.type === "error") {
+    return createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: exitClass(result) });
+  }
+  return classifyNonzero("antigravity-cli", result, []);
 }
 
 const antigravityAdapter: CliAdapter = Object.freeze({
@@ -1001,9 +969,9 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     });
   },
   parseOutput(result: DispatchChildResult) {
-    const timeout = antigravityPrintTimeout(result);
-    if (timeout !== undefined) return fail(timeout);
-    const wrapper = antigravityResultEvent(result.stdout);
+    const failure = classifyAntigravityFailure(result);
+    if (failure !== undefined) return fail(failure);
+    const wrapper = readAntigravityOutput(result.stdout).wrapper;
     if (wrapper === undefined) {
       return fail(createProjectError("MODEL_OUTPUT_INVALID", {
         adapter: "antigravity-cli", attempt: 1, issue_code: "antigravity-wrapper-invalid",
@@ -1024,14 +992,7 @@ const antigravityAdapter: CliAdapter = Object.freeze({
       }));
     }
   },
-  classifyFailure(result: DispatchChildResult) {
-    const timeout = antigravityPrintTimeout(result);
-    if (timeout !== undefined) return timeout;
-    const message = antigravityFailureMessage(result);
-    if (message !== undefined) return classifyMessage("antigravity-cli", message)
-      ?? createProjectError("PROCESS_FAILED", { adapter: "antigravity-cli", exit_class: exitClass(result) });
-    return classifyNonzero("antigravity-cli", result, []);
-  },
+  classifyFailure: classifyAntigravityFailure,
 });
 
 /** Runs the exact dispatch version/auth/policy preflight for one named adapter. */

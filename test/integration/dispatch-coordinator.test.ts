@@ -15,6 +15,7 @@ import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/con
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
 import { resetMemoizedCliPreflight } from "../../src/dispatch/cli.js";
+import { capacityError, nativeStream, recoveredCapacityEvents } from "../helpers/antigravity-output.js";
 import {
   shareRepositoryViewWorkspace,
   type DispatchRepositoryViewPlan,
@@ -202,6 +203,34 @@ function primaryViews(repository: string, commit: ReturnType<typeof parseGitOid>
 
 describe("createDispatchCoordinator", () => {
   beforeEach(() => resetMemoizedCliPreflight());
+
+  it("persists the native terminal error separately from a schema-heavy stdout tail", async () => {
+    const h = await harness("success");
+    const events = recoveredCapacityEvents();
+    events.splice(3, 1); // No completed finish: this capacity error must remain a failure.
+    const executable = join(h.bin, "agy");
+    await writeFile(executable, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === "--version") process.stdout.write("antigravity-cli 1.2.3\\n");
+else if (args[0] === "models") process.stdout.write("gemini-3.8-flash-high\\n");
+else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.write(${JSON.stringify(nativeStream(events).toString())})); }
+`);
+    await chmod(executable, 0o755);
+    const coordinator = createDispatchCoordinator({
+      authority: h.authority, dependencies: h.dependencies, host: "claude",
+      repository_root: h.repository, phase_instance: PHASE,
+      signal: new AbortController().signal, cancellation_source: "client",
+    });
+    await expect(withDispatchEnvironment(h, () => coordinator({
+      adapter: "antigravity-cli", family: "gemini", model: "gemini-3.8-flash-high", effort: "high",
+    }, ENVELOPE, reviewSchema as PlainJsonValue))).rejects.toMatchObject({ project_error: { code: "PROCESS_FAILED" } });
+    const record = await attemptRecord(h.repository);
+    expect(record).toMatchObject({
+      exit_class: "exit-0", failure_exit_class: "transient-transport", failure_stage: "child-failure-classification",
+      adapter_result: { terminal_status: "ERROR", error_message: capacityError, has_structured_output: true, last_error_step_index: 1 },
+    });
+    expect(record.stdout_tail).not.toContain(capacityError);
+  });
 
   it("runs preflight and dispatch, disposes its workspace, and writes no attempt telemetry on success", async () => {
     const h = await harness("success");

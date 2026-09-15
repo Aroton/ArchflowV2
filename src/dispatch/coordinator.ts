@@ -25,6 +25,7 @@ import {
   type DispatchFailureChannels,
 } from "./process.js";
 import type { DispatchRoute } from "./routing.js";
+import { antigravityOutputDiagnostics } from "./antigravity-output.js";
 import {
   createDispatchWorkspace,
   materializeRepositoryViews,
@@ -107,7 +108,7 @@ type DispatchFailureStage =
  * Persists the forensic record of one FAILED dispatch. Successful dispatches write nothing:
  * their evidence is the retained result itself, and per-success telemetry was pure
  * write-only ceremony that grew without bound. The failure record is what canary/leak
- * forensics reads (see docs/LIMITATIONS.md), so its shape is unchanged.
+ * forensics reads (see docs/LIMITATIONS.md); adapter details are optional diagnostic fields.
  */
 async function writeAttemptRecord(
   input: DispatchCoordinatorInput,
@@ -131,6 +132,8 @@ async function writeAttemptRecord(
   if (!target.ok) return;
 
   const code = failureCode(error);
+  const parameters = error instanceof CliAdapterError || error instanceof DispatchProcessError
+    ? error.project_error.diagnostic.parameters : undefined;
   const unclassified = code === undefined && error instanceof Error;
   const systemCode = unclassified && "code" in error && typeof error.code === "string"
     ? error.code
@@ -159,6 +162,13 @@ async function writeAttemptRecord(
       managed_policy_paths: [...preflight.managed_policy_paths],
     }),
     ...(code === undefined ? {} : { failure_code: code }),
+    ...(parameters !== undefined && "issue_code" in parameters && typeof parameters.issue_code === "string"
+      ? { failure_issue_code: parameters.issue_code } : {}),
+    ...(parameters !== undefined && "exit_class" in parameters && typeof parameters.exit_class === "string"
+      ? { failure_exit_class: parameters.exit_class } : {}),
+    ...(route.adapter !== "antigravity-cli" || channels === undefined ? {} : {
+      adapter_result: antigravityOutputDiagnostics(channels.stdout),
+    }),
     ...(unclassified ? { error_name: error.name, error_message: error.message } : {}),
     ...(systemCode === undefined ? {} : { system_code: systemCode }),
     ...(code === "CANCELLED" ? { cancellation_source: input.cancellation_source } : {}),

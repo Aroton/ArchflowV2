@@ -5110,8 +5110,19 @@
         }
       ]
     },
+    "src/dispatch/antigravity-output.ts": {
+      "bytes": 5077,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        }
+      ]
+    },
     "src/dispatch/cli.ts": {
-      "bytes": 48569,
+      "bytes": 47337,
       "format": "esm",
       "imports": [
         {
@@ -5168,11 +5179,16 @@
           "kind": "import-statement",
           "original": "./process.js",
           "path": "src/dispatch/process.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./antigravity-output.js",
+          "path": "src/dispatch/antigravity-output.ts"
         }
       ]
     },
     "src/dispatch/coordinator.ts": {
-      "bytes": 10948,
+      "bytes": 11691,
       "format": "esm",
       "imports": [
         {
@@ -5217,6 +5233,11 @@
         },
         {
           "kind": "import-statement",
+          "original": "./antigravity-output.js",
+          "path": "src/dispatch/antigravity-output.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "./workspace.js",
           "path": "src/dispatch/workspace.ts"
         },
@@ -5233,7 +5254,7 @@
       ]
     },
     "src/dispatch/failure-observation.ts": {
-      "bytes": 11534,
+      "bytes": 11778,
       "format": "esm",
       "imports": [
         {
@@ -10532,7 +10553,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2426816,
+      "bytes": 2429097,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11704,8 +11725,11 @@
         "src/contracts/yaml.ts": {
           "bytesInOutput": 1687
         },
+        "src/dispatch/antigravity-output.ts": {
+          "bytesInOutput": 3161
+        },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 31468
+          "bytesInOutput": 30549
         },
         "src/dispatch/failure-observation.ts": {
           "bytesInOutput": 2430
@@ -11938,7 +11962,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3709720,
+      "bytes": 3713571,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13282,14 +13306,17 @@
         "src/contracts/yaml.ts": {
           "bytesInOutput": 1586
         },
+        "src/dispatch/antigravity-output.ts": {
+          "bytesInOutput": 3858
+        },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 35181
+          "bytesInOutput": 34262
         },
         "src/dispatch/coordinator.ts": {
-          "bytesInOutput": 6939
+          "bytesInOutput": 7561
         },
         "src/dispatch/failure-observation.ts": {
-          "bytesInOutput": 8141
+          "bytesInOutput": 8392
         },
         "src/dispatch/process.ts": {
           "bytesInOutput": 7822
