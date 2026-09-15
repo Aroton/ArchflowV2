@@ -74,11 +74,11 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 **Why accepted:** Managed configuration is part of the developer's administratively controlled machine, not an untrusted multi-tenant boundary in the prototype's operating envelope. Its presence remains visible for diagnosis, while validated outputs and durable workflow gates prevent managed context alone from becoming approval authority.
 
-## Codex tool-surface emptiness
+## Codex tool-surface control
 
-**Not protected:** ArchFlow cannot prove that a dispatched Codex process has an empty model-visible tool surface. Codex has no disable-all-tools flag or command that reports the effective `tools[]` for an invocation; its prompt-input debugger shows messages only. The current suppression list is a denylist against a tool and feature registry that can change between CLI versions, and `-s read-only` constrains generated shell commands rather than the Codex parent process's read access.
+**Not protected:** Repository-backed Codex reviews intentionally expose shell execution so reviewers can read source and patches. ArchFlow cannot prove that an envelope-only Codex process has an empty model-visible tool surface. Codex has no disable-all-tools flag or command that reports the effective `tools[]` for an invocation; its prompt-input debugger shows messages only. The current suppression list is a denylist against a tool and feature registry that can change between CLI versions, and `-s read-only` constrains generated shell commands rather than the Codex parent process's read access.
 
-**Existing mitigation:** ArchFlow requires a minimum tested CLI version, uses strict configuration, disables every known relevant feature, supplies the canonical `CODEX_HOME` for authentication, ignores user configuration and rules, disables project instructions and skill content, skips repository discovery, and requests read-only command behavior. The exact invocation is covered by fixtures, and model output must satisfy the strict result schema before it can become evidence.
+**Existing mitigation:** ArchFlow requires a minimum tested CLI version, uses strict configuration, disables unrelated features and enables shell execution only for repository-backed reads under the read-only sandbox, supplies the canonical `CODEX_HOME` for authentication, ignores user configuration and rules, disables project instructions and skill content, skips repository discovery, and requests read-only command behavior. The exact invocation is covered by fixtures, and model output must satisfy the strict result schema before it can become evidence.
 
 **Why accepted:** The prototype prioritizes useful opposite-family review on a trusted developer machine and accepts that suppression can reduce unwanted context without proving an empty capability set. It makes no stronger tool-isolation claim; a future support claim would require an inspectable allowlist or OS containment.
 

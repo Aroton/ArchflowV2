@@ -10,6 +10,12 @@ Local Git fixtures exercise complete implementation patch files, large patches b
 
 `review-diffs.test.ts` also carries generated patches larger than 1 MiB through the Claude, provider-wrapped Claude, Codex, and Antigravity invocation builders. It resolves the transmitted patch/stat paths from the configured child directory, verifies their digests and complete bytes, checks source availability, and pins Claude read tools and Codex read-only sandboxing. `review-fixed-point.test.ts` checks that general, test, and constitution children receive full diffs, with revision diffs scoped to the assigned reviewer. These are deterministic transport checks; they do not prove that an installed host actually exposes its advertised tools or that a model reads the files.
 
+### Real reviewer file access
+
+Run `ARCHFLOW_REAL_HOSTS=1 npm run test:real-host -- test/real-host/reviewer-file-access.test.ts` to require real Claude and Codex reviewers to return two random values omitted from the prompt: one in unchanged source and another in a deleted patch line. This exercises generated diff files, the shared repository workspace, and production dispatch. Unlike the older multi-repository citation check, missing file access fails the test.
+
+The initial run on 2026-09-14 failed on both routes. Claude (`claude-fable-5`, CLI `2.1.272`) returned the source value but reported permission denials for `../review-diffs/full.patch` and `full.stat`. Codex (`gpt-5.6-sol`, CLI `0.154.0`) reported no text-reading tool and returned neither value. The old Codex adapter disabled both `shell_tool` and `unified_exec`; Claude's invocation did not grant the sibling diff directory. After enabling Codex text-reading tools under its read-only sandbox and granting Claude the diff directory relative to the shared repository view, both routes passed: each returned both exact random values. These checks use the checkout's production dispatch code with the installed host CLIs; they do not update or validate a separately installed ArchFlow bundle.
+
 ## The default is deliberately fast
 
 ArchFlow is an iterated-on prototype, so its everyday gate answers one question: did this edit break the typed code, focused behavior, public shape, or temporary bundle? It does not reproduce a release, simulate process crashes, traverse every schema corpus, or call an authenticated model host.

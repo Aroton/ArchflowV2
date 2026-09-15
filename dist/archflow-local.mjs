@@ -47336,6 +47336,11 @@ var claudeAdapter = Object.freeze({
     }
     const mcpConfigPath = join9(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
+    const diffDirectory = workspace.repository_view_root === void 0 ? void 0 : join9(workspace.repository_view_root, "..", "review-diffs");
+    const hasDiffs = diffDirectory !== void 0 && await stat3(diffDirectory).then((value) => value.isDirectory(), (error51) => {
+      if (error51.code === "ENOENT") return false;
+      throw error51;
+    });
     const serializedSchema = JSON.stringify(schema);
     if (Buffer.byteLength(serializedSchema, "utf8") >= MAX_ARGV_ELEMENT_BYTES) {
       return fail17(createProjectError("PROCESS_FAILED", {
@@ -47348,6 +47353,7 @@ var claudeAdapter = Object.freeze({
       "--safe-mode",
       "--tools",
       workspace.repository_view_root === void 0 ? "" : "Read,Grep,Glob",
+      ...hasDiffs ? ["--add-dir", diffDirectory] : [],
       "--disable-slash-commands",
       "--strict-mcp-config",
       "--mcp-config",
@@ -47448,7 +47454,8 @@ var codexAdapter = Object.freeze({
     const outputPath = join9(workspace.root, `${envelope.result_kind}-final-output.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
-    const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
+    const readTools = workspace.repository_view_root === void 0 ? [] : ["shell_tool", "unified_exec"];
+    const disabled = CODEX_DISABLED_FEATURES.filter((feature) => !readTools.includes(feature)).flatMap((feature) => ["--disable", feature]);
     return Object.freeze({
       adapter: "codex-cli",
       command: "codex",
@@ -47478,7 +47485,8 @@ var codexAdapter = Object.freeze({
         "project_doc_max_bytes=0",
         "-c",
         `model_reasoning_effort=${JSON.stringify(route2.effort)}`,
-        ...disabled
+        ...disabled,
+        ...readTools.flatMap((feature) => ["--enable", feature])
       ]),
       cwd: workspace.root,
       env: workspace.env,

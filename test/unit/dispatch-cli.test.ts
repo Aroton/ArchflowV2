@@ -187,10 +187,12 @@ describe("CLI invocation construction", () => {
 
     const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
     expect(bare.cwd).toBe(target.root);
+    expect(bare.argv).not.toContain("--add-dir");
     expect(bare.argv[bare.argv.indexOf("--tools") + 1]).toBe("");
 
     const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewSchema);
     expect(invocation.cwd).toBe(viewed.repository_view_root);
+    expect(invocation.argv).not.toContain("--add-dir");
     expect(invocation.argv[invocation.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
     for (const pinned of ["--safe-mode", "--disable-slash-commands", "--strict-mcp-config", "--no-session-persistence"]) {
       expect(invocation.argv).toContain(pinned);
@@ -207,9 +209,15 @@ describe("CLI invocation construction", () => {
 
     const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
     expect(bare.argv[bare.argv.indexOf("-C") + 1]).toBe(target.root);
+    for (const feature of ["shell_tool", "unified_exec"]) {
+      expect(bare.argv[bare.argv.indexOf(feature) - 1]).toBe("--disable");
+    }
 
     const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewSchema);
     expect(invocation.argv[invocation.argv.indexOf("-C") + 1]).toBe(viewed.repository_view_root);
+    for (const feature of ["shell_tool", "unified_exec"]) {
+      expect(invocation.argv[invocation.argv.indexOf(feature) - 1]).toBe("--enable");
+    }
     expect(invocation.argv).toContain("-s");
     expect(invocation.argv[invocation.argv.indexOf("-s") + 1]).toBe("read-only");
     expect(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]).toBe(join(target.root, "review.schema.json"));

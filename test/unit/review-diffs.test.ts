@@ -1,4 +1,4 @@
-import { readFile, lstat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, lstat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { sha256Bytes } from "../../src/contracts/canonical.js";
@@ -96,8 +96,12 @@ describe("implementation review diff files", () => {
     expect(envelope.byte_count).toBeLessThan(10_000);
     expect(new TextDecoder().decode(envelope.bytes)).not.toContain("FINAL PATCH LINE");
 
+    // The coordinator puts per-child output files below children/<attempt>, while the
+    // shared source view and diff directory keep their original locations.
+    const childRootForOutputs = join(h.input.workspace.root, "children", "attempt");
+    await mkdir(childRootForOutputs, { recursive: true });
     const invocation = await selectCliAdapter("codex", route).buildInvocation(
-      envelope, route, h.input.workspace, reviewSchema,
+      envelope, route, { ...h.input.workspace, root: childRootForOutputs }, reviewSchema,
     );
     const stdin = new TextDecoder().decode(invocation.stdin);
     const delivered = JSON.parse(route.adapter === "antigravity-cli" ? JSON.parse(stdin).message.content : stdin);
@@ -119,10 +123,14 @@ describe("implementation review diff files", () => {
     expect(await readFile(join(childRoot, "large.txt"), "utf8")).toBe(text);
     if (route.adapter === "claude-cli") {
       expect(invocation.argv[invocation.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
+      expect(invocation.argv[invocation.argv.indexOf("--add-dir") + 1]).toBe(join(h.input.workspace.root, "review-diffs"));
       if (route.provider !== undefined) expect(invocation.command).toBe("cc-switch");
     }
     if (route.adapter === "codex-cli") {
       expect(invocation.argv[invocation.argv.indexOf("-s") + 1]).toBe("read-only");
+      for (const feature of ["shell_tool", "unified_exec"]) {
+        expect(invocation.argv[invocation.argv.indexOf(feature) - 1]).toBe("--enable");
+      }
     }
   });
 

@@ -700,6 +700,14 @@ const claudeAdapter: CliAdapter = Object.freeze({
     // exactly the read-only tools (no write, bash, or network tools). `--setting-sources ""`,
     // `--disable-slash-commands`, and the empty strict MCP config stay pinned so the view's own
     // CLAUDE.md and settings never become instructions. Without a view, every tool stays disabled.
+    // Patches are siblings of the repository view, outside Claude's default read boundary.
+    const diffDirectory = workspace.repository_view_root === undefined ? undefined
+      : join(workspace.repository_view_root, "..", "review-diffs");
+    const hasDiffs = diffDirectory !== undefined &&
+      await stat(diffDirectory).then(value => value.isDirectory(), (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      });
     const serializedSchema = JSON.stringify(schema);
     if (Buffer.byteLength(serializedSchema, "utf8") >= MAX_ARGV_ELEMENT_BYTES) {
       return fail(createProjectError("PROCESS_FAILED", {
@@ -710,6 +718,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
       "-p",
       "--safe-mode",
       "--tools", workspace.repository_view_root === undefined ? "" : "Read,Grep,Glob",
+      ...(hasDiffs ? ["--add-dir", diffDirectory!] : []),
       "--disable-slash-commands",
       "--strict-mcp-config",
       "--mcp-config", mcpConfigPath,
@@ -812,7 +821,11 @@ const codexAdapter: CliAdapter = Object.freeze({
     // without colliding on the codex final-output file.
     const outputPath = join(workspace.root, `${envelope.result_kind}-final-output.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    const disabled = CODEX_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
+    // Codex reads text through shell tools. A repository-backed reviewer needs them;
+    // the read-only sandbox remains the authority for filesystem mutations.
+    const readTools = workspace.repository_view_root === undefined ? [] : ["shell_tool", "unified_exec"];
+    const disabled = CODEX_DISABLED_FEATURES.filter(feature => !readTools.includes(feature))
+      .flatMap((feature) => ["--disable", feature]);
     return Object.freeze({
       adapter: "codex-cli",
       command: "codex",
@@ -835,6 +848,7 @@ const codexAdapter: CliAdapter = Object.freeze({
         "-c", "project_doc_max_bytes=0",
         "-c", `model_reasoning_effort=${JSON.stringify(route.effort)}`,
         ...disabled,
+        ...readTools.flatMap(feature => ["--enable", feature]),
       ]),
       cwd: workspace.root,
       env: workspace.env,
