@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "b96b1619a6591a8398f8fa0d3f22d0605ec92600b467a5e67f38d0601028d49a",
+      "digest": "f5c9818777a7ec7857b56082fa88466d5098e89f68d789535420987c9b3a9699",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 2416386
+      "size": 2416465
     },
     {
-      "digest": "424b1fcdc42ed0270bbfc258b47b6813dbf8c8cab96f543b1ff29211621d73a7",
+      "digest": "959df11b40bbd267c4ca7678f717bd3c6a4de00e43a8bfc41b47f18d4398e73e",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3694306
+      "size": 3694370
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,7 +210,7 @@
       "role": "manifest"
     },
     {
-      "digest": "e35ce5c083e9dbf9a525d1657959589d126b1292ed0e4fb8fc3ba079bccf332e",
+      "digest": "c2a808174b16c235c5b2f2f3a956bb50f36b394308327ab853aef9a6de109b98",
       "path": "metafile.json",
       "role": "metafile",
       "size": 383772
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "424b1fcdc42ed0270bbfc258b47b6813dbf8c8cab96f543b1ff29211621d73a7",
+  "bundle_digest": "959df11b40bbd267c4ca7678f717bd3c6a4de00e43a8bfc41b47f18d4398e73e",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -3761,24 +3761,24 @@
       "size": 14576
     },
     {
-      "bytes_in_output": 54501,
-      "digest": "5414cd2097fb84d644f7bb0a52ba27f85c7bbedad3ea4f7f5101f4b91f61b641",
+      "bytes_in_output": 54659,
+      "digest": "3f04e14a6c65e3a9a47255766d8be64bb8bac78606fa3ee15039b355df372da8",
       "key": "src/state/gate-decision-interface.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/gate-decision-interface.ts"
       },
-      "size": 36133
+      "size": 36369
     },
     {
-      "bytes_in_output": 145207,
-      "digest": "aa5c07b02be00f40aaf049a1531ff1c345b1f985371ddcb8dd7a2e0baf5c4f6a",
+      "bytes_in_output": 145192,
+      "digest": "db02b8fb22afb3401799f66142b0abc5e4a0b9a702130f88f5356ee9514c60b9",
       "key": "src/state/gates.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/gates.ts"
       },
-      "size": 163622
+      "size": 163600
     },
     {
       "bytes_in_output": 4363,
@@ -5111,7 +5111,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "424b1fcdc42ed0270bbfc258b47b6813dbf8c8cab96f543b1ff29211621d73a7",
+      "output_digest": "959df11b40bbd267c4ca7678f717bd3c6a4de00e43a8bfc41b47f18d4398e73e",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5436,7 +5436,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "b96b1619a6591a8398f8fa0d3f22d0605ec92600b467a5e67f38d0601028d49a",
+      "output_digest": "f5c9818777a7ec7857b56082fa88466d5098e89f68d789535420987c9b3a9699",
       "output_path": "archflow-local.mjs"
     }
   ],

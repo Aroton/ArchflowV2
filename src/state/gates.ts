@@ -72,7 +72,7 @@ import {
   type GateOpenResult,
   type GateResolution,
 } from "./gate-core.js";
-import { buildHumanGatePresentation, selectGateDecisionTemplate } from "./gate-decision-interface.js";
+import { gateDecisionOptions, selectGateDecisionTemplate } from "./gate-decision-interface.js";
 import { ensureDecisionDirectory, ensureIntentDirectory, ensureWorkspaceProjectionParent } from "./layout.js";
 import { loadLegacyImportInitialization, loadLegacyImportResumePhase } from "./legacy-import-resume.js";
 import { TaskLockError } from "./lock.js";
@@ -2011,7 +2011,7 @@ export async function archiveDirectSemanticGateDecision(
       let selected: PlainJsonValue;
       try {
         const active = activeProjection(request.value);
-        if (!buildHumanGatePresentation(active).options.some((option) => option.token === input.choice)) {
+        if (!gateDecisionOptions(active).some((option) => option.token === input.choice)) {
           throw new TypeError("semantic decisions require a server-issued choice token");
         }
         selected = selectGateDecisionTemplate(active, {

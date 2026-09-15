@@ -1,3 +1,4 @@
+import { gateDecisionOptions } from "../../src/state/gate-decision-interface.js";
 import { describe, expect, it } from "vitest";
 
 import { parseGitOid } from "../../src/contracts/canonical.js";
@@ -105,6 +106,34 @@ function withProvenance(template: PlainJsonValue): PlainJsonValue {
 // resolved through: the conversational options, their server-issued tokens, and the templates the
 // direct semantic decision archive derives its records from.
 describe("gate decision presentation", () => {
+  it("accepts presented commit choices when only escalated findings explain the human boundary", () => {
+    const original = activeGate(CASES[6], "escalation-only");
+    const context = {
+      ...original.context,
+      constitution: "pass",
+      policy_findings: [],
+      eligible_waivers: [],
+      approval_trigger: {
+        ...trigger({ kind: "subject", subject: "phase-impl" }),
+        conclusion: { wait: false, match: null },
+      },
+    };
+    const active = parseActiveGate({ ...original, context,
+      context_digest: computeGateContextDigest("commit-authorization", context as never),
+    });
+    const presentation = buildHumanGatePresentation(active, {
+      escalated_findings: ["The implementation needs a proper review."],
+    });
+    expect(() => buildHumanGatePresentation(active)).toThrow("no authenticated human-boundary reason");
+    expect(gateDecisionOptions(active)).toEqual(presentation.options);
+    expect(gateDecisionOptions(active).map((option) => option.token)).toEqual([
+      "authorize-commit", "request-changes", "stop-work", "cancel",
+    ]);
+    expect(selectGateDecisionTemplate(active, {
+      choice: "request-changes", reason: "We need to go back and run a proper review.",
+    })).toMatchObject({ payload: { decision: "revise" } });
+  });
+
   it("offers live-byte choices for a secondary-only baseline adoption", () => {
     const context = {
         drifted_projections: [], deleted_projections: [],

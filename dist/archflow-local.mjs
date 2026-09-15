@@ -41988,6 +41988,9 @@ function presentationBindings(active) {
     return [Object.freeze({ token: option.token, decision: decision3, template, option })];
   }));
 }
+function gateDecisionOptions(active) {
+  return Object.freeze(presentationBindings(active).map((binding2) => binding2.option));
+}
 function policyFindingReasons(findings) {
   return findings.flatMap((finding) => {
     const identity = `Constitution rule ${finding.rule_id} version ${finding.rule_version}`;
@@ -42186,7 +42189,7 @@ function buildHumanGatePresentation(active, authenticatedDetails = {}) {
     ...details.length === 0 ? {} : { details: Object.freeze(details) },
     question: hasEscalations ? `${copy2.question} Escalated review findings require your decision. Choose an option and briefly explain why.` : `${copy2.question} Choose an option and briefly explain why.`,
     reasons,
-    options: Object.freeze(presentationBindings(request).map((binding2) => binding2.option))
+    options: gateDecisionOptions(request)
   });
 }
 

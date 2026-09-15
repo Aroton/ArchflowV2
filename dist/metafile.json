@@ -8253,7 +8253,7 @@
       ]
     },
     "src/state/gate-decision-interface.ts": {
-      "bytes": 36133,
+      "bytes": 36369,
       "format": "esm",
       "imports": [
         {
@@ -8289,7 +8289,7 @@
       ]
     },
     "src/state/gates.ts": {
-      "bytes": 163622,
+      "bytes": 163600,
       "format": "esm",
       "imports": [
         {
@@ -10440,7 +10440,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2416386,
+      "bytes": 2416465,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11745,7 +11745,7 @@
           "bytesInOutput": 4016
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 25163
+          "bytesInOutput": 25242
         },
         "src/state/gates.ts": {
           "bytesInOutput": 6109
@@ -11843,7 +11843,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3694306,
+      "bytes": 3694370,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13337,10 +13337,10 @@
           "bytesInOutput": 8296
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 29338
+          "bytesInOutput": 29417
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 139098
+          "bytesInOutput": 139083
         },
         "src/state/governing-document-comparison.ts": {
           "bytesInOutput": 4363

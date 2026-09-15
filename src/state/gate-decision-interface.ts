@@ -318,6 +318,11 @@ function presentationBindings(active: ActiveGateV1): readonly PresentationBindin
   }));
 }
 
+/** Choice validation depends on authenticated templates, not presentation-only review details. */
+export function gateDecisionOptions(active: ActiveGateV1): readonly HumanGateDecisionOption[] {
+  return Object.freeze(presentationBindings(active).map((binding) => binding.option));
+}
+
 function policyFindingReasons(findings: readonly DesignPolicyFinding[]): HumanPresentationReasonV1[] {
   return findings.flatMap((finding): HumanPresentationReasonV1[] => {
     const identity = `Constitution rule ${finding.rule_id} version ${finding.rule_version}`;
@@ -561,7 +566,7 @@ export function buildHumanGatePresentation(
       ? `${copy.question} Escalated review findings require your decision. Choose an option and briefly explain why.`
       : `${copy.question} Choose an option and briefly explain why.`,
     reasons,
-    options: Object.freeze(presentationBindings(request).map((binding) => binding.option)),
+    options: gateDecisionOptions(request),
   });
 }
 
