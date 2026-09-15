@@ -1,6 +1,7 @@
 export const SCHEMA_VERSION = "1" as const;
 
 export const SCHEMA_IDS = {
+  implementationProfiles: "urn:archflow:schema:v1:implementation-profiles",
   primitives: "urn:archflow:schema:v1:primitives",
   phaseInstance: "urn:archflow:schema:v1:phase-instance",
   workflow: "urn:archflow:schema:v1:workflow",

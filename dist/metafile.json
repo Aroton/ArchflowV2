@@ -4400,7 +4400,7 @@
       "imports": []
     },
     "src/contracts/implementation-selection.ts": {
-      "bytes": 6984,
+      "bytes": 7950,
       "format": "esm",
       "imports": [
         {
@@ -6061,9 +6061,24 @@
       ]
     },
     "src/local/commands.ts": {
-      "bytes": 22854,
+      "bytes": 23927,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/config.js",
+          "path": "src/contracts/config.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../review/implementation-models.js",
+          "path": "src/review/implementation-models.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/implementation-selection.js",
+          "path": "src/contracts/implementation-selection.ts"
+        },
         {
           "kind": "import-statement",
           "original": "../contracts/canonical.js",
@@ -10553,7 +10568,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2429115,
+      "bytes": 2431932,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10625,11 +10640,6 @@
         {
           "external": true,
           "kind": "import-statement",
-          "path": "node:crypto"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
           "path": "node:fs"
         },
         {
@@ -10685,6 +10695,41 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:url"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:crypto"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:util"
         },
         {
@@ -10721,26 +10766,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:url"
         },
         {
           "external": true,
@@ -11666,7 +11691,7 @@
           "bytesInOutput": 636
         },
         "src/contracts/implementation-selection.ts": {
-          "bytesInOutput": 6220
+          "bytesInOutput": 7067
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 2018
@@ -11729,7 +11754,7 @@
           "bytesInOutput": 3161
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 30549
+          "bytesInOutput": 30556
         },
         "src/dispatch/failure-observation.ts": {
           "bytesInOutput": 2430
@@ -11738,7 +11763,7 @@
           "bytesInOutput": 7822
         },
         "src/dispatch/recovery.ts": {
-          "bytesInOutput": 3949
+          "bytesInOutput": 3951
         },
         "src/dispatch/review-feedback.ts": {
           "bytesInOutput": 1434
@@ -11780,7 +11805,7 @@
           "bytesInOutput": 4343
         },
         "src/local/commands.ts": {
-          "bytesInOutput": 17310
+          "bytesInOutput": 18108
         },
         "src/local/main.ts": {
           "bytesInOutput": 5110
@@ -11829,6 +11854,9 @@
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 27087
+        },
+        "src/review/implementation-models.ts": {
+          "bytesInOutput": 1043
         },
         "src/review/rubrics.ts": {
           "bytesInOutput": 3285
@@ -11962,7 +11990,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3713585,
+      "bytes": 3713933,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13190,7 +13218,7 @@
           "bytesInOutput": 1033
         },
         "src/contracts/implementation-selection.ts": {
-          "bytesInOutput": 5565
+          "bytesInOutput": 5913
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 1894

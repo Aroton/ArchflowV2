@@ -1096,9 +1096,20 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     view = await applied(h, invocation, view, { kind: "gate-summary", summary: "Reviewed and verified; one disproportionate recommendation remains." });
     expect(view.presentation?.options.map(option => option.token)).toContain("authorize-commit");
     expect(view.review_push_throughs).toBeUndefined();
+    const beforeDecision = readFileSync(workspace.services.authority.state.absolute);
     view = await applied(h, invocation, view, { kind: "decision", choice: "authorize-commit", reason: "Approve the reviewed implementation with the explained residual concern." });
     expect(view.next_action.kind).toBe("commit");
     expect(reviewCountAt(workspace)).toBe(count);
+    const settled = JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8"));
+    // The receipt survives while the durable state still names the open gate.
+    // Recovery must install that exact decision once without another approval.
+    writeFileSync(workspace.services.authority.state.absolute, beforeDecision);
+    const partial = await h.status(invocation);
+    expect(partial.next_action).toMatchObject({ kind: "decide", expected_submission: "none" });
+    view = await applied(h, invocation, partial);
+    expect(view.next_action.kind).toBe("commit");
+    expect(reviewCountAt(workspace)).toBe(count);
+    expect(JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8")).approvals).toEqual(settled.approvals);
   });
 
   scenario("re-enters production without a human gate on material upstream drift and commits autonomously once the phase design is co-produced", async () => {

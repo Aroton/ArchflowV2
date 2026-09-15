@@ -123,3 +123,23 @@ export function selectImplementationModel(
     rationale: `${fallback ? "Difficulty assessment failed; using the bounded-reasoning fallback. " : ""}${reasoning} Difficulty: ${difficulty}; required score: ${threshold}%. ${catalog.benchmark}: ${selected.score}%${selected.qualifier === undefined ? "" : ` (${selected.qualifier})`}. ${explanation}`,
   };
 }
+
+/** Read-only public catalog for launch configuration; never workflow authority. */
+export const implementationProfilesSchema = z.object({
+  schema_version: z.literal("1"), task_id: identifier,
+  profiles: z.array(z.object({
+    profile_id: identifier, model: identifier, effort: identifier.optional(), enabled: z.boolean(),
+  }).strict()),
+}).strict();
+export type ImplementationProfiles = z.infer<typeof implementationProfilesSchema>;
+
+export function projectImplementationProfiles(taskId: string, input: Extract<ImplementationSelectionInput, { status: "ready" }>): ImplementationProfiles {
+  return implementationProfilesSchema.parse({
+    schema_version: "1", task_id: taskId,
+    profiles: input.catalog.profiles.map(profile => ({
+      profile_id: profile.profile_id, model: profile.model,
+      ...(profile.effort === undefined ? {} : { effort: profile.effort }),
+      enabled: input.settings.enabled_profiles.includes(profile.profile_id),
+    })),
+  });
+}

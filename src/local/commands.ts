@@ -1,3 +1,6 @@
+import { configV1Schema } from "../contracts/config.js";
+import { loadImplementationSelectionInput } from "../review/implementation-models.js";
+import { projectImplementationProfiles } from "../contracts/implementation-selection.js";
 import { canonicalDocument, canonicalJsonDigest, sha256Bytes } from "../contracts/canonical.js";
 import { parseGateDecisionRecord, parseGateRequest } from "../contracts/durable-gate.js";
 import { parseResultManifest } from "../contracts/durable-result-manifest.js";
@@ -46,7 +49,7 @@ import { handleState } from "../mcp/handlers/state.js";
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "clean", "reconcile",
   "init", "manual-status", "automation-status", "upgrade", "upgrade-adopt",
-  "set-commit-authority",
+  "set-commit-authority", "implementation-profiles",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
 
@@ -66,6 +69,7 @@ export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommand
   init: { payload: null, task: "ignored" },
   "manual-status": { payload: null, task: "required" },
   "automation-status": { payload: null, task: "required" },
+  "implementation-profiles": { payload: null, task: "required" },
   upgrade: { payload: '{"operation":"preview"|"stage"|"discard-stage",...legacy import facts}', task: "optional" },
   "upgrade-adopt": { payload: null, task: "required" },
   "set-commit-authority": { payload: '{"target_commit":"<ref>","reason":"<text>","scope":["milestone"|"policy"]}', task: "required" },
@@ -350,6 +354,16 @@ async function reconcile(input: CommandInput): Promise<PlainJsonValue | ProjectR
   return structuredClone(result) as unknown as PlainJsonValue;
 }
 
+async function implementationProfiles(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
+  const created = await services(input);
+  if (!created.ok) return created;
+  const config = await created.value.dependencies.read_config(created.value.authority.config);
+  if (config.kind !== "valid") throw new TypeError("task configuration is unreadable");
+  const selection = await loadImplementationSelectionInput(configV1Schema.parse(config.snapshot.parsed).implementation);
+  if (selection.status === "unavailable") throw new TypeError(selection.explanation);
+  return projectImplementationProfiles(created.value.authority.task_id, selection) as unknown as PlainJsonValue;
+}
+
 async function setCommitAuthority(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {
   const created = await services(input);
   if (!created.ok) return created;
@@ -424,6 +438,7 @@ const LOCAL_COMMAND_HANDLERS: Readonly<Record<LocalCommand, (input: CommandInput
   init, "manual-status": manualStatus, "automation-status": automationStatus,
   upgrade, "upgrade-adopt": upgradeAdopt,
   "set-commit-authority": setCommitAuthority,
+  "implementation-profiles": implementationProfiles,
 });
 
 export async function runLocalCommand(input: CommandInput): Promise<PlainJsonValue | ProjectResult<unknown>> {

@@ -57,21 +57,27 @@ try {
     }
     const taskId = target.split("/").at(-1);
     const repository = target.slice(0, -(`/.archflow/tasks/${taskId}`).length);
-    const [canonical, evidence, fingerprints, tools, git, identity, authorityModule, atomic, lock, read, transaction, requestModule, snapshots] = await Promise.all([
-      vite.ssrLoadModule("/src/contracts/canonical.ts"),
-      vite.ssrLoadModule("/src/contracts/evidence.ts"),
-      vite.ssrLoadModule("/src/contracts/fingerprints.ts"),
-      vite.ssrLoadModule("/src/contracts/mcp-tools.ts"),
-      vite.ssrLoadModule("/src/repository/git.ts"),
-      vite.ssrLoadModule("/src/repository/identity.ts"),
-      vite.ssrLoadModule("/src/state/authority.ts"),
-      vite.ssrLoadModule("/src/state/atomic.ts"),
-      vite.ssrLoadModule("/src/state/lock.ts"),
-      vite.ssrLoadModule("/src/state/read.ts"),
-      vite.ssrLoadModule("/src/state/transaction.ts"),
-      vite.ssrLoadModule("/src/state/request.ts"),
-      vite.ssrLoadModule("/src/state/snapshots.ts"),
-    ]);
+    // These modules share an SSR dependency graph. Initialize them in order
+    // so a concurrent entry cannot observe another entry's partial exports.
+    const modules = [];
+    for (const path of [
+      "/src/contracts/canonical.ts",
+      "/src/contracts/evidence.ts",
+      "/src/contracts/fingerprints.ts",
+      "/src/contracts/mcp-tools.ts",
+      "/src/repository/git.ts",
+      "/src/repository/identity.ts",
+      "/src/state/authority.ts",
+      "/src/state/atomic.ts",
+      "/src/state/lock.ts",
+      "/src/state/read.ts",
+      "/src/state/transaction.ts",
+      "/src/state/request.ts",
+      "/src/state/snapshots.ts",
+    ]) {
+      modules.push(await vite.ssrLoadModule(path));
+    }
+    const [canonical, evidence, fingerprints, tools, git, identity, authorityModule, atomic, lock, read, transaction, requestModule, snapshots] = modules;
     const context = {
       task_id: taskId,
       phase_instance: "phase-impl-9",
@@ -319,6 +325,8 @@ try {
   process.send({
     type: "failed",
     name: error instanceof Error ? error.name : "unknown",
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
     stage: error?.stage,
   });
   process.exitCode = 1;

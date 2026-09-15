@@ -356,3 +356,18 @@ This file describes the source at the stamped commit, not a promise that an arbi
 | `docs/contracts/AUTOMATION.md`, `docs/mcp/SERVER.md`, `docs/cli/COMMANDS.md` | Deeper subsystem explanations for maintainers. |
 
 The external app to build consists of a strict status reader, a host session adapter, a serialized task supervisor, and a human conversation surface. Keep workflow decisions inside ArchFlow and treat the returned descriptor as the sole source of the next step.
+
+## Implementation profile discovery
+
+`archflow-local implementation-profiles --task <task>` is an input-free, read-only
+catalog query for application launch settings. Its version `"1"` response contains
+`task_id` and `profiles`: each has `profile_id`, `model`, optional `effort`, and
+`enabled`. The command uses the same shipped catalog and effective task settings as
+fresh assessments. Disabled profiles remain visible for configuring future use.
+It never updates task state or changes retained recommendations. Errors use the
+helper's existing nonzero-exit JSON error contract.
+
+Consumers map model IDs to their own CLI, API provider and model/slot settings.
+Catalog IDs and cost groups do not name installed API providers. An omitted effort
+must not be replaced with a guessed value. Existing recommendations may name profiles
+no longer in the current catalog; discovery is not launch authorization.

@@ -342,6 +342,7 @@ function childEvent(child: ChildProcess, type: "entered" | "failed" | "cut" | "r
     const timeout = setTimeout(() => finish(new Error(`timed out waiting for ${type}`)), 5_000);
     const onMessage = (message: unknown): void => {
       if ((message as { type?: unknown }).type === type) finish(undefined, message as Record<string, unknown>);
+      else if ((message as { type?: unknown }).type === "failed") finish(new Error(`child failed before ${type}: ${JSON.stringify(message)}`));
     };
     const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
       finish(new Error(`child exited before ${type}: ${String(code)}/${String(signal)}`));

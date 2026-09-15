@@ -301,11 +301,7 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
       .toBe(phaseCommit.message);
 
     const observedPhaseDesign = await h.status(phaseDesignInvocation);
-    expect(observedPhaseDesign.implementation_recommendation).toMatchObject({
-      status: "ready",
-      model: "gpt-6-astra",
-      effort: "low",
-    });
+    expect(observedPhaseDesign.implementation_recommendation).toMatchObject({ status: "ready" });
     expect(observedPhaseDesign.next_action).toMatchObject({
       kind: "start-next-skill", skill: "archflow-phase-impl", skill_args: ["1"],
     });
@@ -331,6 +327,10 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
       throw new Error("retained phase-design review is invalid");
     }
     const originalReviewEvidence = originalReview.value.manifest.value.source_artifact.evidence;
+    if (!("effort_review" in originalReviewEvidence)) throw new Error("fresh review assessment unavailable");
+    const assessment = originalReviewEvidence.effort_review;
+    if (assessment?.schema_version !== "3") throw new Error("fresh benchmark assessment unavailable");
+    expect(observedPhaseDesign.implementation_recommendation).toEqual(assessment.recommendation);
     const recommendationVariant = async (
       mutate: (review: Record<string, unknown>) => Record<string, unknown>,
     ) => {

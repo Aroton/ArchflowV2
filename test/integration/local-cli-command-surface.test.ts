@@ -1,6 +1,6 @@
 import { spawnSync, execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +35,9 @@ const RETIRED_COMMANDS = ["build-request", "envelope", "decide", "commit", "stat
 
 beforeAll(async () => {
   bundleRoot = await mkdtemp(resolve(tmpdir(), "archflow-local-cli-"));
-  localBundle = resolve(bundleRoot, "archflow-local.mjs");
+  await mkdir(resolve(bundleRoot, "dist"));
+  await cp(resolve(repositoryRoot, "assets"), resolve(bundleRoot, "assets"), { recursive: true });
+  localBundle = resolve(bundleRoot, "dist/archflow-local.mjs");
   buildSync({
     absWorkingDir: repositoryRoot,
     entryPoints: ["src/local/main.ts"],
@@ -105,6 +107,17 @@ describe("bundled local CLI", () => {
       expect(rejected.status, `${retired} must reject`).not.toBe(0);
       expect(rejected.stderr).toMatch(/unknown archflow-local command/u);
     }
+  }, TIMEOUT);
+
+  it("loads effective implementation profiles without changing task files", async () => {
+    const fixture = await repository();
+    const before = git(fixture.root, "status", "--porcelain", "--untracked-files=all");
+    const result = cli(fixture.root, "implementation-profiles");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.value).toMatchObject({ schema_version: "1", task_id: task });
+    expect(result.value.profiles).toContainEqual({ profile_id: "glm-5-3-max", model: "glm-5.3", effort: "max", enabled: true });
+    expect(result.value.profiles).toContainEqual({ profile_id: "glm-5-3-flash", model: "glm-5.3-flash", enabled: true });
+    expect(git(fixture.root, "status", "--porcelain", "--untracked-files=all")).toBe(before);
   }, TIMEOUT);
 
   it("hashes canonical JSON and rejects unsupported validate kinds through the bundle", async () => {

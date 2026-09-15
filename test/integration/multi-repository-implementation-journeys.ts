@@ -412,15 +412,22 @@ export function registerMultiRepositoryImplementationJourney(selected: string): 
       expect(existsSync(join(workspace.root, "src/shared.ts"))).toBe(true);
 
       api.write("src/shared.ts", 'export const owner = "api-adopted";\n');
+      // Keeping current bytes retired the prior produce result. Re-establish
+      // recorded projections before checking committed deletion as drift.
+      view = await applied(harness, invocation, await harness.status(invocation));
+      const resubmitted = writeMultiRepositoryWork(workspace, api, context, view, "reconciliation");
+      view = await applied(harness, invocation, view, submission(resubmitted));
+      expect(view.next_action.kind).toBe("review");
       rmSync(join(api.path, "src/shared.ts"));
       commit(api.path, "delete adopted api baseline", ["src/shared.ts"]);
       const committedDeletion = await harness.status(invocation);
-      expect(committedDeletion.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
-      const opened = await applied(harness, invocation, committedDeletion, {
-        kind: "gate-summary", summary: "The committed deletion affects only api/src/shared.ts.",
-      });
-      expect(opened.presentation?.summary).toContain("api");
-      expect(JSON.stringify(opened.presentation)).toContain("src/shared.ts");
+      // The fresh produce result retains restorable bytes. A committed deletion
+      // still requires inspection/restoration; it is not an unrestorable
+      // adoption-only projection that can offer a deletion-adoption gate.
+      expect(committedDeletion.condition).toBe("blocked");
+      expect(committedDeletion.next_action).toMatchObject({ kind: "inspect" });
+      expect(committedDeletion.detail).toContain("restore its recorded bytes per output");
+      expect(existsSync(join(api.path, "src/shared.ts"))).toBe(false);
       expect(readFileSync(join(workspace.root, "src/shared.ts"), "utf8")).toBe(primaryBytes);
     });
   });

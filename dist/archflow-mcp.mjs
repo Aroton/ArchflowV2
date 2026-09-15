@@ -36110,6 +36110,16 @@ function selectImplementationModel(value, difficulty, reasoning, fallback = fals
     rationale: `${fallback ? "Difficulty assessment failed; using the bounded-reasoning fallback. " : ""}${reasoning} Difficulty: ${difficulty}; required score: ${threshold}%. ${catalog.benchmark}: ${selected.score}%${selected.qualifier === void 0 ? "" : ` (${selected.qualifier})`}. ${explanation}`
   };
 }
+var implementationProfilesSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: identifier,
+  profiles: external_exports.array(external_exports.object({
+    profile_id: identifier,
+    model: identifier,
+    effort: identifier.optional(),
+    enabled: external_exports.boolean()
+  }).strict())
+}).strict();
 
 // src/contracts/yaml.ts
 var import_yaml = __toESM(require_dist2(), 1);

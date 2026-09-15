@@ -110,3 +110,18 @@ The implementation remains uncommitted throughout recovery. Do not restore the o
 ### Compacting verification logs before retrying review
 
 When an implementation review is pending, compact or replace the optional `verification-transcript` resource and apply the offered `review` again. The server pins the current log into a new review envelope; it does not replace the implementation result. Large logs are bounded excerpts with full-log digest and size metadata. Preserve meaningful verification details and label omissions. Code or verification-claim changes belong in the normal revision path. This works for previously produced results carrying historical transcript metadata too; no hand-edited hashes or task reset is required. Finished reviews and approvals remain bound to their original evidence.
+
+## Implementation profile discovery
+
+`archflow-local implementation-profiles --task <task>` is an input-free, read-only
+catalog query for application launch settings. Its version `"1"` response contains
+`task_id` and `profiles`: each has `profile_id`, `model`, optional `effort`, and
+`enabled`. The command uses the same shipped catalog and effective task settings as
+fresh assessments. Disabled profiles remain visible for configuring future use.
+It never updates task state or changes retained recommendations. Errors use the
+helper's existing nonzero-exit JSON error contract.
+
+Consumers map model IDs to their own CLI, API provider and model/slot settings.
+Catalog IDs and cost groups do not name installed API providers. An omitted effort
+must not be replaced with a guessed value. Existing recommendations may name profiles
+no longer in the current catalog; discovery is not launch authorization.

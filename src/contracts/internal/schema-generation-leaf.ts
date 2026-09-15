@@ -1,3 +1,4 @@
+import { implementationProfilesSchema } from "../implementation-selection.js";
 import { z } from "zod";
 
 import { adjudicationDocumentDefs, adjudicationEvidenceSchema, rawAdjudicationV2Schema } from "../adjudication.js";
@@ -79,6 +80,7 @@ const counterOnlySlots = {
 export const leafSchemaGroup: SchemaGenerationGroup = {
   group: "leaf",
   documents: [
+    { file: "implementation-profiles", id: SCHEMA_IDS.implementationProfiles, root: implementationProfilesSchema, migrated: true },
     {
       file: "primitives",
       id: SCHEMA_IDS.primitives,
