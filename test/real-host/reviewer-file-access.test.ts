@@ -23,6 +23,7 @@ const available = realHostsAvailable();
 requireRealHostsAvailable(available);
 const bytes = (text: string) => new TextEncoder().encode(text);
 const routes: DispatchRoute[] = [
+  { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
   { adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "medium" },
   { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "medium" },
 ];
