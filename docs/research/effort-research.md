@@ -8,16 +8,16 @@ Reviewed designs should settle architecture and consequential decisions. Followi
 
 | Category | Default required score | Default selected model |
 |---|---:|---|
-| Routine instructions and established patterns | 19% | Muse Spark 1.3 max |
-| Bounded local reasoning within a settled approach | 30% | Muse Spark 1.3 max |
-| Hard unresolved algorithms or interacting correctness | 40% | GPT-6 Astra low |
+| Routine instructions and established patterns | 19% | GLM 5.3 Flash |
+| Bounded local reasoning within a settled approach | 30% | GLM 5.3 Flash |
+| Hard unresolved algorithms or interacting correctness | 40% | GLM 5.3 max |
 | Exceptional derivation or deep interacting reasoning | 50% | GPT-6 Astra high |
 
 These thresholds are calibration choices, not a mathematical interpretation of benchmark scores. A 19% benchmark score is the configured eligibility floor, not a guarantee that every task can be completed. Preserve the chart's exact effort variants and qualifications; GLM Flash has no specified effort, and Fable's scores include fallback.
 
 ## Subscription cost preferences
 
-The default cheapest-first priority is Muse, Z.ai, Google, GPT, Claude. This is the user's subscription preference, not an API price table. The server chooses the cheapest enabled cost group meeting the threshold, then the first eligible profile in that group's configured allowlist order. Extra benchmark points alone do not outweigh cost. Thus Muse dominates Gemini while both are enabled under these preferences; disabling Muse makes Gemini useful for routine work. Z.ai and Claude profiles remain listed but disabled by default.
+The default cheapest-first priority is Z.ai, Google, GPT, Claude, Muse. This is the user's subscription preference, not an API price table. The server chooses the cheapest enabled cost group meeting the threshold, then the first eligible profile in that group's configured allowlist order. Extra benchmark points alone do not outweigh cost. GLM Flash precedes GLM max in the allowlist, so it handles routine and bounded reasoning; GLM max handles hard work. Disabling GLM makes Gemini useful for routine work. Muse and Claude profiles remain listed but disabled by default.
 
 When nothing reaches the threshold, use the best enabled score above the minimum and explain the shortfall. An empty allowlist or no profile above the minimum produces unavailable advice. On reviewer failure, use bounded reasoning with the captured settings. No fallback implicitly enables a model or chooses an unbenchmarked effort variant.
 

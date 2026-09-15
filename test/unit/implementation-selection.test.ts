@@ -66,18 +66,18 @@ describe("benchmark implementation selection", () => {
     for (const profile of baseline.catalog.profiles) expect(template).toContain(`#   - ${profile.profile_id} #`);
   });
 
-  it("chooses Muse, Muse, Astra low, and Astra high with default subscriptions", () => {
+  it("chooses GLM Flash, GLM Flash, GLM max, and Astra high with default subscriptions", () => {
     expect(IMPLEMENTATION_DIFFICULTIES.map(difficulty => decide({}, difficulty))).toMatchObject([
-      { model: "muse-spark-1.3", effort: "max" }, { model: "muse-spark-1.3", effort: "max" },
-      { model: "gpt-6-astra", effort: "low" }, { model: "gpt-6-astra", effort: "high" },
+      { model: "glm-5.3-flash" }, { model: "glm-5.3-flash" },
+      { model: "glm-5.3", effort: "max" }, { model: "gpt-6-astra", effort: "high" },
     ]);
   });
 
-  it("uses Gemini without Muse and GLM for hard work when enabled", () => {
-    expect(decide({ enabled_profiles: baseline.settings.enabled_profiles.filter(id => !id.startsWith("muse")) }))
+  it("uses Gemini without GLM and honors opting into Muse", () => {
+    expect(decide({ enabled_profiles: baseline.settings.enabled_profiles.filter(id => !id.startsWith("glm")) }))
       .toMatchObject({ model: "gemini-3.8-flash-high", effort: "high" });
-    expect(decide({ enabled_profiles: [...baseline.settings.enabled_profiles, "glm-5-3-max"] }, "hard"))
-      .toMatchObject({ model: "glm-5.3", effort: "max" });
+    expect(decide({ enabled_profiles: ["muse-spark-1-3-max"] }))
+      .toMatchObject({ model: "muse-spark-1.3", effort: "max" });
   });
 
   it("honors reordered costs and within-group profile preference without chasing extra points", () => {
@@ -89,9 +89,9 @@ describe("benchmark implementation selection", () => {
   it("uses inclusive thresholds and never crosses the hard minimum", () => {
     expect(decide({ minimum_score: 19.7, enabled_profiles: ["gemini-3-8-flash-high"] })).toMatchObject({ status: "ready" });
     expect(decide({ minimum_score: 19.8, enabled_profiles: ["gemini-3-8-flash-high"] })).toMatchObject({ status: "unavailable" });
-    const thresholds = { routine: 33.3, "bounded-reasoning": 40, hard: 45, exceptional: 50 };
-    expect(decide({ difficulty_thresholds: thresholds })).toMatchObject({ model: "muse-spark-1.3" });
-    expect(decide({ difficulty_thresholds: { ...thresholds, routine: 33.4 } })).toMatchObject({ model: "gpt-6-astra", effort: "low" });
+    const thresholds = { routine: 32.8, "bounded-reasoning": 40, hard: 45, exceptional: 50 };
+    expect(decide({ difficulty_thresholds: thresholds })).toMatchObject({ model: "glm-5.3-flash" });
+    expect(decide({ difficulty_thresholds: { ...thresholds, routine: 32.9 } })).toMatchObject({ model: "glm-5.3", effort: "max" });
   });
 
   it("uses the best enabled score on shortfall, with cost ordering only for equal scores", () => {
@@ -134,11 +134,11 @@ describe("benchmark implementation selection", () => {
       const first = await loadImplementationSelectionInput(undefined, root);
       const earlier = createEffortSelectionV3(assessment(), envelope(first), reviewer);
       const changed = { ...baseline.catalog, profiles: baseline.catalog.profiles.map(profile =>
-        profile.cost_group === "muse" ? { ...profile, score: 18 } : profile) };
+        profile.cost_group === "zai" ? { ...profile, score: 18 } : profile) };
       await writeFile(path, JSON.stringify(changed));
       const next = await loadImplementationSelectionInput(undefined, root);
       expect(createEffortSelectionV3(assessment(), envelope(next), reviewer).recommendation).toMatchObject({ model: "gemini-3.8-flash-high" });
-      expect(implementationRecommendationFromAssessment(earlier, 1)).toMatchObject({ model: "muse-spark-1.3" });
+      expect(implementationRecommendationFromAssessment(earlier, 1)).toMatchObject({ model: "glm-5.3-flash" });
       await writeFile(path, "profiles: [broken");
       expect(await loadImplementationSelectionInput(undefined, root)).toMatchObject({ status: "unavailable" });
     } finally {
@@ -158,7 +158,7 @@ describe("captured difficulty evidence", () => {
   it("binds difficulty to the subject and preserves immutable advice across later settings changes", () => {
     const evidence = createEffortSelectionV3(assessment(), input, reviewer);
     expect(effortEvidenceSchema.parse(evidence)).toEqual(evidence);
-    expect(implementationRecommendationFromAssessment(evidence, 1)).toMatchObject({ model: "muse-spark-1.3" });
+    expect(implementationRecommendationFromAssessment(evidence, 1)).toMatchObject({ model: "glm-5.3-flash" });
     const changed = envelope(configured({ enabled_profiles: ["gemini-3-8-flash-high"] }));
     expect(createEffortSelectionV3(assessment(), changed, reviewer).recommendation).toMatchObject({ model: "gemini-3.8-flash-high" });
     expect(implementationRecommendationFromAssessment(evidence, 1)).toEqual(evidence.recommendation);
@@ -169,7 +169,7 @@ describe("captured difficulty evidence", () => {
 
   it("uses bounded reasoning on failure and still respects enabled profiles and unavailable data", () => {
     expect(createDefaultEffortSelectionV3(input)).toMatchObject({ difficulty: "bounded-reasoning", source: { kind: "default" },
-      recommendation: { model: "muse-spark-1.3", rationale: expect.stringContaining("fallback") } });
+      recommendation: { model: "glm-5.3-flash", rationale: expect.stringContaining("fallback") } });
     expect(createDefaultEffortSelectionV3(envelope(configured({ enabled_profiles: ["gemini-3-8-flash-high"] })))).toMatchObject({
       recommendation: { model: "gemini-3.8-flash-high", rationale: expect.stringContaining("short") },
     });

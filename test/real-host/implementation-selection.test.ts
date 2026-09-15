@@ -89,8 +89,8 @@ describe.skipIf(!realHostsEnabled())("live implementation difficulty assessment"
     }
     expect(observations.map(item => item.evidence.difficulty)).toEqual(cases.map(item => item.expected));
     expect(observations.map(item => item.evidence.recommendation)).toMatchObject([
-      { status: "ready", model: "muse-spark-1.3", effort: "max" },
-      { status: "ready", model: "gpt-6-astra", effort: "low" },
+      { status: "ready", model: "glm-5.3-flash" },
+      { status: "ready", model: "glm-5.3", effort: "max" },
       { status: "ready", model: "gpt-6-astra", effort: "high" },
     ]);
   }, REAL_HOST_TEST_TIMEOUT_MS * cases.length);

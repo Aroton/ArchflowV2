@@ -1623,7 +1623,7 @@ describe("partial review round retry", () => {
       if (result.value.evidence.assurance !== "server-attested") throw new Error("expected server-attested evidence");
       expect(result.value.evidence.effort_review).toMatchObject({
         schema_version: "3",
-        recommendation: { model: "muse-spark-1.3", effort: "max" },
+        recommendation: { model: "glm-5.3-flash" },
         source: { kind: "default" },
       });
       return models.sort();

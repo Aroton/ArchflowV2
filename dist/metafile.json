@@ -4400,7 +4400,7 @@
       "imports": []
     },
     "src/contracts/implementation-selection.ts": {
-      "bytes": 6974,
+      "bytes": 6984,
       "format": "esm",
       "imports": [
         {
@@ -10553,7 +10553,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2429097,
+      "bytes": 2429115,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11666,7 +11666,7 @@
           "bytesInOutput": 636
         },
         "src/contracts/implementation-selection.ts": {
-          "bytesInOutput": 6202
+          "bytesInOutput": 6220
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 2018
@@ -11962,7 +11962,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3713571,
+      "bytes": 3713585,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13190,7 +13190,7 @@
           "bytesInOutput": 1033
         },
         "src/contracts/implementation-selection.ts": {
-          "bytesInOutput": 5551
+          "bytesInOutput": 5565
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 1894

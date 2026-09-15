@@ -36045,14 +36045,15 @@ var implementationConfigSchema = external_exports.object({
 }).strict();
 var DEFAULT_IMPLEMENTATION_SETTINGS = Object.freeze({
   enabled_profiles: Object.freeze([
-    "muse-spark-1-3-max",
+    "glm-5-3-flash",
+    "glm-5-3-max",
     "gemini-3-8-flash-high",
     "gpt-5-6-sol-high",
     "gpt-5-6-sol-xhigh",
     "gpt-6-astra-low",
     "gpt-6-astra-high"
   ]),
-  cost_priority: Object.freeze(["muse", "zai", "google", "gpt", "claude"]),
+  cost_priority: Object.freeze(["zai", "google", "gpt", "claude", "muse"]),
   minimum_score: 19,
   difficulty_thresholds: Object.freeze({ routine: 19, "bounded-reasoning": 30, hard: 40, exceptional: 50 })
 });

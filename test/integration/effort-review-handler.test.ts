@@ -58,12 +58,12 @@ describe("phase-design effort review handler", { timeout: 180_000 }, () => {
     const result = await h.apply(boundary.invocation, boundary.view);
     expect(result.ok, JSON.stringify(result)).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
-    expect(result.value.implementation_recommendation).toMatchObject({ status: "ready", model: "gpt-6-astra", effort: "low", rationale: expect.stringContaining(rationale) });
+    expect(result.value.implementation_recommendation).toMatchObject({ status: "ready", model: "glm-5.3", effort: "max", rationale: expect.stringContaining(rationale) });
     expect((await h.status(boundary.invocation)).implementation_recommendation).toEqual(result.value.implementation_recommendation);
     expect((await retainedReview(workspace)).effort_review).toMatchObject({
       schema_version: "3",
       policy_id: "implementation-agent-selector-v5",
-      recommendation: { model: "gpt-6-astra", effort: "low" },
+      recommendation: { model: "glm-5.3", effort: "max" },
       rationale,
     });
   });
@@ -96,7 +96,7 @@ describe("phase-design effort review handler", { timeout: 180_000 }, () => {
     expect((await retainedReview(workspace)).effort_review).toMatchObject({
       schema_version: "3",
       difficulty: "bounded-reasoning",
-      recommendation: { model: "muse-spark-1.3", effort: "max" },
+      recommendation: { model: "glm-5.3-flash" },
       source: { kind: "default" },
     });
   });
