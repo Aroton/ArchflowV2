@@ -8,6 +8,8 @@ Report-workflow coverage exercises irregular extracted JSON, explicit producer i
 
 Local Git fixtures exercise complete implementation patch files, large patches beyond the envelope cap, `.archflow/` exclusion, independent follow-up baselines, reverted outputs, and explicit fallback when historical context is unavailable. These checks use no model allowance. Semantic document journeys require the PRD's authorized commit before design can start, covering both human approval and autonomous rule settlement.
 
+`review-diffs.test.ts` also carries generated patches larger than 1 MiB through the Claude, provider-wrapped Claude, Codex, and Antigravity invocation builders. It resolves the transmitted patch/stat paths from the configured child directory, verifies their digests and complete bytes, checks source availability, and pins Claude read tools and Codex read-only sandboxing. `review-fixed-point.test.ts` checks that general, test, and constitution children receive full diffs, with revision diffs scoped to the assigned reviewer. These are deterministic transport checks; they do not prove that an installed host actually exposes its advertised tools or that a model reads the files.
+
 ## The default is deliberately fast
 
 ArchFlow is an iterated-on prototype, so its everyday gate answers one question: did this edit break the typed code, focused behavior, public shape, or temporary bundle? It does not reproduce a release, simulate process crashes, traverse every schema corpus, or call an authenticated model host.

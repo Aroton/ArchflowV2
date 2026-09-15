@@ -5,6 +5,9 @@ import { sha256Bytes } from "../../src/contracts/canonical.js";
 import { createDispatchWorkspace, materializeRepositoryViews, type DispatchRepositoryViewPlan, type DispatchWorkspace } from "../../src/dispatch/workspace.js";
 import { createGitRunner } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
+import { selectCliAdapter } from "../../src/dispatch/cli.js";
+import type { DispatchRoute } from "../../src/dispatch/routing.js";
+import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { prepareImplementationDiffs } from "../../src/review/diffs.js";
 import { buildReviewEnvelope } from "../../src/review/envelopes.js";
 import type { ProjectionDesired, ProjectionPlan } from "../../src/state/snapshots.js";
@@ -73,7 +76,12 @@ describe("implementation review diff files", () => {
     expect((await lstat(join(h.input.workspace.repository_view_root!, result.full.patch.path))).mode & 0o222).toBe(0);
   });
 
-  it("delivers more than 1 MiB without putting patch bytes into the envelope", async () => {
+  it.each<DispatchRoute>([
+    { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" },
+    { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high", provider: "test-provider" },
+    { adapter: "codex-cli", family: "codex", model: "gpt-5.4", effort: "high" },
+    { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
+  ])("delivers a complete large diff and source view through $adapter ($provider)", async route => {
     const text = `${"a substantive changed line with enough content for a large patch\n".repeat(24_000)}FINAL PATCH LINE\n`;
     const h = await fixture({ "large.txt": present(text) });
     const result = await prepareImplementationDiffs(h.input);
@@ -87,6 +95,35 @@ describe("implementation review diff files", () => {
     } as never);
     expect(envelope.byte_count).toBeLessThan(10_000);
     expect(new TextDecoder().decode(envelope.bytes)).not.toContain("FINAL PATCH LINE");
+
+    const invocation = await selectCliAdapter("codex", route).buildInvocation(
+      envelope, route, h.input.workspace, reviewSchema,
+    );
+    const stdin = new TextDecoder().decode(invocation.stdin);
+    const delivered = JSON.parse(route.adapter === "antigravity-cli" ? JSON.parse(stdin).message.content : stdin);
+    expect(delivered.diffs).toEqual({ full: result.full });
+    expect(delivered.instructions.changes).toContain("complete patch");
+    const childRoot = route.adapter === "codex-cli"
+      ? invocation.argv[invocation.argv.indexOf("-C") + 1]!
+      : invocation.cwd;
+    expect(childRoot).toBe(h.input.workspace.repository_view_root);
+    // Resolve only paths actually delivered to the child, from its actual working directory.
+    // A valid descriptor in a parent envelope is insufficient if the child cannot locate it.
+    for (const kind of ["patch", "stat"] as const) {
+      const descriptor = delivered.diffs.full[kind];
+      const content = await readFile(join(childRoot, descriptor.path));
+      expect(content.byteLength).toBe(descriptor.byte_count);
+      expect(sha256Bytes(content)).toBe(descriptor.content_digest);
+      expect(content.toString()).toContain(kind === "patch" ? "+FINAL PATCH LINE\n" : "large.txt");
+    }
+    expect(await readFile(join(childRoot, "large.txt"), "utf8")).toBe(text);
+    if (route.adapter === "claude-cli") {
+      expect(invocation.argv[invocation.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
+      if (route.provider !== undefined) expect(invocation.command).toBe("cc-switch");
+    }
+    if (route.adapter === "codex-cli") {
+      expect(invocation.argv[invocation.argv.indexOf("-s") + 1]).toBe("read-only");
+    }
   });
 
   it("uses each selected reviewer's last subject, including a skipped round and reverted output", async () => {

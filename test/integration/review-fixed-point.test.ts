@@ -1648,6 +1648,7 @@ describe("partial review round retry", () => {
       observed_failures?: string[];
       observed_models?: string[];
       phase_kind?: "prd" | "phase-impl";
+      prepare_diffs?: Parameters<typeof runCounterReview>[0]["prepare_diffs"];
     }> = {},
   ) {
     const dependencies = options.dependencies ?? h.dependencies;
@@ -1687,6 +1688,7 @@ describe("partial review round retry", () => {
       transaction: dependencies,
       reobserve_projection_digest: async () => ({ schema_version: "1", ok: true, value: subject }),
       retained_outputs: store,
+      ...(options.prepare_diffs === undefined ? {} : { prepare_diffs: options.prepare_diffs }),
       dispatch: async (route, envelope) => {
         routes.push(route);
         options.observed_models?.push(route.model);
@@ -1771,6 +1773,7 @@ describe("partial review round retry", () => {
         ...plan,
         dispatch: async (route, envelope, schema) => {
           routes.push(route);
+          envelopes.set(route.model, JSON.parse(new TextDecoder().decode(envelope.bytes)));
           await settle(route.model);
           if (behaviour.fail_adjudicator === true) throw outage(route);
           if (behaviour.invalid_adjudicator === true) {
@@ -1792,6 +1795,37 @@ describe("partial review round retry", () => {
     const prepared = await prepareEvidence(h, `triage-v${version}`, { kind: "triage", current_reviews: current, evidence: candidate });
     await commitStateEvidence(h, dependencies, `triage-intent-v${version}`, prepared, { schema_version: "1", artifact_kind: "triage", evidence: candidate });
   }
+
+  it("forwards full diffs to every review role and revision diffs only to their assigned reviewer", async () => {
+    const h = await fixture();
+    const { store } = memoryStore();
+    const subject = canonicalJsonDigest({ artifact: 0 });
+    const fingerprint = computeInputFingerprint(fingerprintSubject(0));
+    const base = canonicalJsonDigest({ artifact: "previous" });
+    const descriptor = (name: string) => ({
+      path: `../review-diffs/${name}`,
+      content_digest: canonicalJsonDigest({ file: name }),
+      byte_count: 12,
+    });
+    const full = { kind: "implementation" as const, subject_digest: subject,
+      patch: descriptor("full.patch"), stat: descriptor("full.stat") };
+    const revision = { kind: "revision" as const, subject_digest: subject, base_subject_digest: base,
+      patch: descriptor(`since-${base}.patch`), stat: descriptor(`since-${base}.stat`) };
+    let preparations = 0;
+    const reviewed = await round(h, store, subject, fingerprint, {}, true, {
+      prepare_diffs: async () => {
+        preparations += 1;
+        return { full, reviewers: new Map([["general-2", { full, revision }]]) };
+      },
+    });
+    expect(reviewed.result.ok, JSON.stringify(reviewed.result)).toBe(true);
+    expect(preparations).toBe(1);
+    expect(reviewed.models).toEqual([SOL, FABLE, LUNA, ADJUDICATOR].sort());
+    for (const model of [SOL, LUNA, ADJUDICATOR]) {
+      expect(reviewed.envelopes.get(model)).toHaveProperty("diffs", { full });
+    }
+    expect(reviewed.envelopes.get(FABLE)).toHaveProperty("diffs", { full, revision });
+  });
 
   it("delivers every report, verifies only selected reviewers, and permits explained disagreement", async () => {
     const h = await fixture();
