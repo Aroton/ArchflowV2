@@ -30,6 +30,8 @@ An implementation content match is more than a path list at presentation time. T
 
 A human decision or automatic settlement authorizes only the reviewed result. The current producer executes any returned exact commit and observes its proof, then reports the server-derived successor and stops. The user launches that successor, whose invocation alone owns the handoff offer and the next production window.
 
+A minor implementation correction can reuse its predecessor's review and settle at production completion instead of revisiting triage. After approval and the exact commit proof, this position supports the same next-phase handoff or final-task completion as a normal triage settlement. The successor handoff opens its production window; it does not mark its design produced or approved.
+
 The workflow file's bytes are digest-pinned into each task at creation, so changing the graph mid-task is detectable, not silently applied. Tasks pinned to the retired four-step workflow digest (the one with a separate `adjudicate` step) are invalidated and either restart or go through `archflow-upgrade`; there is no graph migration. Task routing config is deliberately different: every dispatch or state transaction reads the live task-local file, records the parsed shape as `last_seen_config`, and later status calls report field-level changes without invalidating retained evidence or gates. The retired `producer` role remains accepted on read; other invalid or unknown fields block as `config-invalid` until the human fixes the file.
 
 ## What each stage produces

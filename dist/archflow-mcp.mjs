@@ -72201,9 +72201,9 @@ function legalMovement(input) {
   const following = nextPhaseInstance(current.phase_instance);
   return following !== void 0 && target4.phase_instance === following && target4.step === pipeline(following)[0] && target4.attempt === 1;
 }
-function legalSettledDocumentProduceExitMovement(input) {
+function legalSettledProduceExitMovement(input) {
   const { current, target: target4 } = input;
-  if (phaseKind(current.phase_instance) === "phase-impl" || current.step !== "produce" || current.status !== "succeeded" || target4.status !== "running") return false;
+  if (current.terminal !== void 0 || current.open_gate !== void 0 || current.step !== "produce" || current.status !== "succeeded" || target4.status !== "running") return false;
   const following = nextPhaseInstance(current.phase_instance);
   return following !== void 0 && target4.phase_instance === following && target4.step === pipeline(following)[0] && target4.attempt === 1;
 }
@@ -72269,7 +72269,7 @@ function withResultReference(current, reference) {
 }
 function hasAuthenticatedCommittedOutput(input) {
   const decoded = decodePhaseInstance(input.current.phase_instance);
-  if (decoded.kind !== "phase-impl" || input.current.step !== "triage" || input.current.status !== "succeeded" || input.current.terminal !== void 0 || input.current.open_gate !== void 0 || input.completion_subject_digest === void 0 || input.commit_observed !== true || input.artifact !== void 0 || input.result_reference !== void 0 || input.constitution_result_reference !== void 0) return false;
+  if (decoded.kind !== "phase-impl" || input.current.step !== "triage" && input.current.step !== "produce" || input.current.status !== "succeeded" || input.current.terminal !== void 0 || input.current.open_gate !== void 0 || input.completion_subject_digest === void 0 || input.commit_observed !== true || input.artifact !== void 0 || input.result_reference !== void 0 || input.constitution_result_reference !== void 0) return false;
   for (const authenticated of input.authenticated_gate_approvals ?? []) {
     assertAuthenticatedGateApproval(authenticated);
     if (authenticated.approval.gate_kind === "commit-authorization" && authenticated.approval.subject_digest === input.completion_subject_digest && authenticated.request.kind === "commit-authorization" && authenticated.request.phase_instance === input.current.phase_instance && authenticated.request.subject_digest === input.completion_subject_digest) return true;
@@ -72322,13 +72322,13 @@ function planStateTransition(value) {
     const { revision: _revision2, last_transition: _transition2, ...preserved2 } = input.current;
     return ok10(Object.freeze({ ...preserved2, terminal: "complete" }));
   }
-  if (decodedCurrent.kind === "phase-impl" && input.current.step === "triage" && input.current.status === "succeeded" && input.target.phase_instance !== input.current.phase_instance && !committedOutput) return invalid(input, from, to);
+  if (decodedCurrent.kind === "phase-impl" && crossesPhase && !committedOutput) return invalid(input, from, to);
   if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input) && !ruleAccepted && // An accepted migration audit is the design phase's exit authority for a legacy import: the
   // same authenticated approval legalMovement's design-jump rule settles on.
   !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))) return invalid(input, from, to);
   if ((decodedCurrent.kind === "prd" || decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedPlanningCommitApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
   if (decodedCurrent.kind === "design" && crossesPhase && ruleAccepted && input.derived_planned_final_phase === void 0) return invalid(input, from, to);
-  const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledDocumentProduceExitMovement(input);
+  const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledProduceExitMovement(input);
   if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input) || !pendingValidationOverrideMatches(input)) {
     return invalid(input, from, to);
   }
@@ -90194,7 +90194,7 @@ async function handleState(call, context2) {
         const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
         const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
         const planningRestartSignal = restartInput !== void 0;
-        const completionSignal = !planningRestartSignal && artifact === void 0 && decodedCurrent.kind === "phase-impl" && current.value.step === "triage" && current.value.status === "succeeded";
+        const completionSignal = !planningRestartSignal && artifact === void 0 && decodedCurrent.kind === "phase-impl" && (current.value.step === "triage" || current.value.step === "produce") && current.value.status === "succeeded" && (crossesPhase || call.input.step === current.value.step && call.input.status === current.value.status);
         const artifactPhaseExitSignal = !planningRestartSignal && artifact === void 0 && crossesPhase && decodedCurrent.kind !== "phase-impl";
         let currentProduce;
         let authenticatedRuleAcceptance;
@@ -90428,8 +90428,9 @@ async function handleState(call, context2) {
             // Mirrors `legalMovement`: a retry of a failed step and any re-opening of the
             // produce window from elsewhere in the phase both spend an attempt. The produce
             // door counts whatever the position it leaves — succeeded, failed, or a step
-            // still running whose terminal result cannot be recorded.
-            attempt: call.input.phase_instance !== current.value.phase_instance ? parseSafeInteger(1) : current.value.status === "failed" && call.input.step === current.value.step || call.input.step === "produce" && (current.value.step !== "produce" || current.value.status === "succeeded") ? parseSafeInteger(current.value.attempt + 1) : current.value.attempt,
+            // still running whose terminal result cannot be recorded. Final-task completion
+            // retains the succeeded cursor and its attempt; it does not reopen production.
+            attempt: call.input.phase_instance !== current.value.phase_instance ? parseSafeInteger(1) : call.input.status === "running" && (current.value.status === "failed" && call.input.step === current.value.step || call.input.step === "produce" && (current.value.step !== "produce" || current.value.status === "succeeded")) ? parseSafeInteger(current.value.attempt + 1) : current.value.attempt,
             input_fingerprint: call.input.input_fingerprint
           },
           recomputed_input_fingerprint: call.input.input_fingerprint,
