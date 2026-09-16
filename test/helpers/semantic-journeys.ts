@@ -5,7 +5,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { expect } from "vitest";
@@ -110,6 +110,37 @@ export function semanticJourneyHarness(workspace: TaskWorkspace, finishEmptyRepo
 
 function expectOk(result: SemanticResultV1): void {
   if (!result.ok) throw new Error(JSON.stringify(result.error));
+}
+
+/** Reconnect at every boundary and prove read-only status cannot consume approval or restart work. */
+export function stableTransitionJourneyHarness(workspace: TaskWorkspace): SemanticJourneyHarness {
+  const h = semanticJourneyHarness(workspace);
+  const verify = async (invocation: WorkflowInvocationV1 | undefined, expected: WorkflowViewV1) => {
+    const statePath = join(workspace.services.authority.task_root, "state.json");
+    const countPath = join(workspace.root, "semantic-review-count");
+    const state = readFileSync(statePath, "utf8");
+    const count = existsSync(countPath) ? readFileSync(countPath, "utf8") : undefined;
+    for (let repeat = 0; repeat < 2; repeat++) {
+      expect(await semanticJourneyHarness(workspace).status(invocation)).toEqual(expected);
+    }
+    expect(readFileSync(statePath, "utf8")).toBe(state);
+    expect(existsSync(countPath) ? readFileSync(countPath, "utf8") : undefined).toBe(count);
+  };
+  const apply: SemanticJourneyHarness["apply"] = async (invocation, view, submission) => {
+    const result = await h.apply(invocation, view, submission);
+    if (result.ok) await verify(invocation, result.value);
+    return result;
+  };
+  return {
+    ...h,
+    apply,
+    applyAndAssertFreshStatus: apply,
+    status: async (invocation) => {
+      const view = await h.status(invocation);
+      await verify(invocation, view);
+      return view;
+    },
+  };
 }
 
 /**

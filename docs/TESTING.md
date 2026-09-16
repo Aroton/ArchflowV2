@@ -4,6 +4,12 @@
 
 Report-workflow coverage exercises irregular extracted JSON, explicit producer interpretation, selective follow-up, partial-feedback visibility, sibling reuse, and independent constitution/approval boundaries. Archived structured-review tests remain for old evidence.
 
+## Document milestone repair and transition stability
+
+Document milestone repair tests reproduce a project-wide `state.json` ignore rule and ignored decision archives with real temporary Git repositories. They verify repair stops before committing, stable approval after reconnecting, and recovery of an incomplete commit without another review or approval, including an unchanged PRD and autonomous settlement. Tracked files matching ignore rules remain usable, ignored scratch files are excluded, and task commits preserve unrelated staged and working bytes.
+
+The clean document, default-gate, autonomous-document, implementation-succession, terminal-completion, and autonomous-implementation journeys reconnect and read status twice at each observed transition. They compare the returned view and assert that state bytes and reviewer counts remain unchanged. Together they cover initialization through production, review/triage, approval or settlement, commit, each skill handoff, the next implementation phase, and final completion. These integration tests use scripted reviewers, not installed model credentials; run them with `npm run test:integration` or their behavior-named wrappers.
+
 ## Diff transport and PRD completion checks
 
 Local Git fixtures exercise complete implementation patch files, large patches beyond the envelope cap, `.archflow/` exclusion, independent follow-up baselines, reverted outputs, and explicit fallback when historical context is unavailable. These checks use no model allowance. Semantic document journeys require the PRD's authorized commit before design can start, covering both human approval and autonomous rule settlement.

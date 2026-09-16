@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "8e019e497e7ce3379896cb09097ff9b3007d0b4b31236a949d7110a458094b09",
+      "digest": "d13c4bda21c32777616636c006476d558a0bee85d8ef999038dfdf6f2f029c1f",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 2437545
+      "size": 2440136
     },
     {
-      "digest": "71579caabf8f842b5caf23c082a2ca210dd78a2034cc1e4dc158e6055a007061",
+      "digest": "0fcc5f3a0896d41159ebea9d3a9ee42eb3c08f315cfd499468714a08c99d8f38",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3715192
+      "size": 3717763
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,10 +210,10 @@
       "role": "manifest"
     },
     {
-      "digest": "7dd5acf525b9aa747eeeca35370f642d7059bc438aafbd86b8581ede44939c0d",
+      "digest": "07765c65ff79d65a977c761c729149982cbd7bb453e2d67a1412839ba98fee9c",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 389613
+      "size": 390369
     }
   ],
   "build_entries": [
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "71579caabf8f842b5caf23c082a2ca210dd78a2034cc1e4dc158e6055a007061",
+  "bundle_digest": "0fcc5f3a0896d41159ebea9d3a9ee42eb3c08f315cfd499468714a08c99d8f38",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -3901,14 +3901,24 @@
       "size": 758
     },
     {
-      "bytes_in_output": 44169,
-      "digest": "23d44d11b79753a9c7cd1cde093646aaa17ca2d28d457c06b10145c6ef517d70",
+      "bytes_in_output": 2032,
+      "digest": "1b1a17edaedd16a7a72cd31eaba2466cac416d2f97d3857c002071f5aede97b9",
+      "key": "src/state/milestone-repair.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/state/milestone-repair.ts"
+      },
+      "size": 1525
+    },
+    {
+      "bytes_in_output": 44445,
+      "digest": "d58b0604d51165c9179d1004c265667316008690789aab31bff7ec8ffa233532",
       "key": "src/state/next-action.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/next-action.ts"
       },
-      "size": 35881
+      "size": 36146
     },
     {
       "bytes_in_output": 3062,
@@ -4101,14 +4111,14 @@
       "size": 46547
     },
     {
-      "bytes_in_output": 177601,
-      "digest": "cc5a8cea77b7086d6bf20a15020d2f5c72b863df5c8795734674376fc4c77829",
+      "bytes_in_output": 180387,
+      "digest": "c7721d3f1da24ce85d080491079b558378b8673a51aa2ca50586413001cbf788",
       "key": "src/state/status.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/status.ts"
       },
-      "size": 132246
+      "size": 133814
     },
     {
       "bytes_in_output": 101512,
@@ -4486,6 +4496,7 @@
     "src/state/legacy-stage.ts",
     "src/state/lock.ts",
     "src/state/milestone-recovery.ts",
+    "src/state/milestone-repair.ts",
     "src/state/next-action.ts",
     "src/state/pending-waiver.ts",
     "src/state/phase-documents.ts",
@@ -5131,6 +5142,7 @@
         "src/state/legacy-stage.ts",
         "src/state/lock.ts",
         "src/state/milestone-recovery.ts",
+        "src/state/milestone-repair.ts",
         "src/state/next-action.ts",
         "src/state/pending-waiver.ts",
         "src/state/phase-documents.ts",
@@ -5160,7 +5172,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "71579caabf8f842b5caf23c082a2ca210dd78a2034cc1e4dc158e6055a007061",
+      "output_digest": "0fcc5f3a0896d41159ebea9d3a9ee42eb3c08f315cfd499468714a08c99d8f38",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5463,6 +5475,7 @@
         "src/state/legacy-stage.ts",
         "src/state/lock.ts",
         "src/state/milestone-recovery.ts",
+        "src/state/milestone-repair.ts",
         "src/state/next-action.ts",
         "src/state/phase-documents.ts",
         "src/state/planned-final-phase.ts",
@@ -5489,7 +5502,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "8e019e497e7ce3379896cb09097ff9b3007d0b4b31236a949d7110a458094b09",
+      "output_digest": "d13c4bda21c32777616636c006476d558a0bee85d8ef999038dfdf6f2f029c1f",
       "output_path": "archflow-local.mjs"
     }
   ],

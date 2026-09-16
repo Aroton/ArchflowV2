@@ -130,6 +130,8 @@ export type NextActionInput = Readonly<{
    * make the commit unprovable the moment it is made. Absent when the commit is simply not made yet.
    */
   commit_blocked_reason?: string;
+  /** A repairable document commit problem must not retire authenticated approval. */
+  milestone_repair_guidance?: string;
   /** Server-proved same-position recovery after a milestone is missing from target history. */
   milestone_recovery_required?: boolean;
   /** One-shot re-entry for a pre-trigger adjudication fixed point. */
@@ -547,6 +549,9 @@ export function deriveNextAction(input: NextActionInput): NextAction {
     return discoveryBlocker === "retained-receipt-ambiguity"
       ? action("inspect-retained-receipt", "Inspect the ambiguous retained successor receipts.", true, state)
       : action("inspect-state", `Inspect reconciliation discovery blocker ${discoveryBlocker}.`, true, state);
+  }
+  if (input.milestone_repair_guidance !== undefined) {
+    return action("inspect-state", input.milestone_repair_guidance, true, state);
   }
   if (input.milestone_proof_unverifiable_reason !== undefined) {
     return action(

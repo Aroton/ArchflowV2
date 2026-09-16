@@ -21,6 +21,7 @@ import {
   clientCommit,
   installSemanticReviewStub,
   semanticJourneyHarness,
+  stableTransitionJourneyHarness,
   withImplementationComponents,
 } from "../helpers/semantic-journeys.js";
 import {
@@ -71,7 +72,7 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
-    const h = semanticJourneyHarness(workspace);
+    const h = stableTransitionJourneyHarness(workspace);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     const prdPath = join(workspace.services.authority.task_root, "prd.md");
     writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe a small semantic journey.\n");
@@ -689,7 +690,7 @@ roles:
     });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[], [], []]));
-    const h = semanticJourneyHarness(workspace);
+    const h = stableTransitionJourneyHarness(workspace);
     const creationConfigBytes = new Uint8Array(readFileSync(workspace.services.authority.config.absolute));
     const settlementConfigBytes = new TextEncoder().encode(
       `${new TextDecoder().decode(creationConfigBytes)}# config active when no-wait settlements are created\n`,
@@ -994,7 +995,7 @@ The implementation handoff is offered after exact commit proof.
     const workspace = await createTaskWorkspace({ taskId: "semantic-template-defaults", label: "semantic-template-defaults" });
     workspaces.push(workspace);
     restorers.push(installSemanticReviewStub(workspace.root, [[]]));
-    const h = semanticJourneyHarness(workspace);
+    const h = stableTransitionJourneyHarness(workspace);
     const invocation = { skill: "archflow-prd", intent: "resume" } as const;
     writeFileSync(join(workspace.services.authority.task_root, "ask.md"), "Describe a template-defaults journey.\n");
     writeFileSync(join(workspace.services.authority.task_root, "prd.md"), "# Semantic journey\n\nThe client authors this document.\n");

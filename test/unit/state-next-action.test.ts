@@ -225,6 +225,17 @@ describe("deriveNextAction", () => {
       assessment: assessment("advance"),
     }))).toMatchObject({ code: "recover-milestone-authority", human_required: false });
   });
+  it("keeps repairable document commit omissions out of automatic authority recovery", () => {
+    expect(deriveNextAction(input({
+      state: state({ phase_instance: encodePhaseInstance({ kind: "prd" }) }),
+      milestone_repair_guidance: "Repair the incomplete approval commit; retain approval.",
+      milestone_recovery_required: true,
+      assessment: assessment("advance"),
+    }))).toMatchObject({
+      code: "inspect-state", human_required: true,
+      detail: "Repair the incomplete approval commit; retain approval.",
+    });
+  });
   it("reopens the produce window when a missing projection has no retained bytes to restore", () => {
     const unrestorable: ReconciliationFinding = {
       kind: "projection-mismatch", path: parseRepositoryPathClaim("src/gone.ts"),

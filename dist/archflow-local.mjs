@@ -41274,6 +41274,25 @@ async function readDispatchRecovery(context2) {
   }
 }
 
+// src/state/milestone-repair.ts
+init_path_claims();
+async function ignoredMilestonePaths(runner, taskId) {
+  const prefix = `.archflow/tasks/${taskId}/`;
+  const ignored = await runner.runNulFields({
+    argv: ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--", `:(top,literal)${prefix}`],
+    operation: "git-ignored-milestone-paths"
+  });
+  return ignored.filter((path2) => {
+    if (!path2.startsWith(prefix)) return false;
+    try {
+      return classifyTaskPath(taskId, parseTaskPathClaim(path2.slice(prefix.length))).ok;
+    } catch {
+      return false;
+    }
+  }).sort();
+}
+var INCOMPLETE_DOCUMENT_MILESTONE_GUIDANCE = "The approval commit is missing required task state or approval archives. Approval is retained. Correct any Git ignore rules, then repair the incomplete authorized commit to include its durable task files while preserving its approved baseline, message, and reviewed documents. Adding a later commit does not repair the original milestone. Request fresh status after repair; do not repeat review or approval.";
+
 // src/state/status.ts
 init_canonical();
 import { readFile as readFile14 } from "node:fs/promises";
@@ -42800,6 +42819,9 @@ function deriveNextAction(input) {
   const discoveryBlocker = input.reconciliation_blocking_reasons?.[0];
   if (discoveryBlocker !== void 0) {
     return discoveryBlocker === "retained-receipt-ambiguity" ? action("inspect-retained-receipt", "Inspect the ambiguous retained successor receipts.", true, state) : action("inspect-state", `Inspect reconciliation discovery blocker ${discoveryBlocker}.`, true, state);
+  }
+  if (input.milestone_repair_guidance !== void 0) {
+    return action("inspect-state", input.milestone_repair_guidance, true, state);
   }
   if (input.milestone_proof_unverifiable_reason !== void 0) {
     return action(
@@ -44973,6 +44995,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   );
   let commitObserved = false;
   let commitBlockedReason;
+  let milestoneRepairGuidance;
   let milestoneRecoveryRequired = false;
   let milestoneRecoveryNoDelta = false;
   let governingDocumentRecoveryRequired = false;
@@ -45094,7 +45117,9 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         commitObserved = observation.kind === "proven";
         if (observation.kind === "missing-from-history") {
           commitBlockedReason = observation.reason;
-          recordMissingMilestone(observation);
+          if (observation.reason === "missing-recovery-authority") {
+            milestoneRepairGuidance = INCOMPLETE_DOCUMENT_MILESTONE_GUIDANCE;
+          } else recordMissingMilestone(observation);
           blockers.push(`design-milestone-${observation.reason}`);
         } else if (observation.kind === "unverifiable") {
           milestoneProofUnverifiableReason = observation.reason;
@@ -45129,7 +45154,9 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         );
         commitObserved = observation.kind === "proven";
         if (observation.kind === "missing-from-history") {
-          recordMissingMilestone(observation);
+          if (observation.reason === "missing-recovery-authority") {
+            milestoneRepairGuidance = INCOMPLETE_DOCUMENT_MILESTONE_GUIDANCE;
+          } else recordMissingMilestone(observation);
           commitBlockedReason = observation.reason;
           blockers.push(`design-milestone-${observation.reason}`);
         } else if (observation.kind === "unverifiable") {
@@ -45163,9 +45190,11 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
         }) : observedProof;
         commitObserved = observation.kind === "proven";
         if (observation.kind === "missing-from-history") {
-          const boundedRefresh = observation.reason !== "approved-document-mismatch" && observation.target_head !== acceptedSettlement.milestone_baseline_commit;
+          const incompleteAuthority = observation.reason === "missing-recovery-authority";
+          const boundedRefresh = !incompleteAuthority && observation.reason !== "approved-document-mismatch" && observation.target_head !== acceptedSettlement.milestone_baseline_commit;
           commitBlockedReason = boundedRefresh ? "target-moved" : observation.reason;
-          if (!boundedRefresh) recordMissingMilestone(observation);
+          if (incompleteAuthority) milestoneRepairGuidance = INCOMPLETE_DOCUMENT_MILESTONE_GUIDANCE;
+          else if (!boundedRefresh) recordMissingMilestone(observation);
           blockers.push(`design-milestone-${observation.reason}`);
         } else if (observation.kind === "unverifiable") {
           milestoneProofUnverifiableReason = observation.reason;
@@ -45174,6 +45203,18 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       } catch {
         blockers.push("commit-observation-unavailable");
       }
+    }
+  }
+  if (designCommit !== void 0 && !commitObserved) {
+    try {
+      const ignored = await ignoredMilestonePaths(dependencies.runner, state.task_id);
+      if (ignored.length > 0) {
+        milestoneRepairGuidance = `Git ignore rules hide required ArchFlow task files: ${ignored.join(", ")}. Correct the ignore rules before staging the authorized commit, then request fresh status. Approval and review evidence are retained; do not repeat them.` + (milestoneRepairGuidance === void 0 ? "" : ` ${milestoneRepairGuidance}`);
+        blockers.push("ignored-milestone-files");
+      }
+    } catch {
+      milestoneProofUnverifiableReason = "ignore-check-unavailable";
+      blockers.push("commit-observation-unavailable");
     }
   }
   const declaredPredecessor = !midProduce && produceSubject !== void 0 ? produceSubject.artifact.editorial_predecessor : void 0;
@@ -45601,6 +45642,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
       milestone_refresh_config_matches: liveConfigDigest === acceptedSettlement.config_digest
     },
     commit_observed: commitObserved,
+    ...milestoneRepairGuidance === void 0 ? {} : { milestone_repair_guidance: milestoneRepairGuidance },
     ...commitBlockedReason === void 0 ? {} : { commit_blocked_reason: commitBlockedReason },
     ...milestoneRecoveryRequired ? { milestone_recovery_required: true } : {},
     ...approvalTriggerRecoveryRequired ? { approval_trigger_recovery_required: true } : {},

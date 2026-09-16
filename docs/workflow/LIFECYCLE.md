@@ -8,6 +8,8 @@ How a task moves from idea to committed code, and where a human must decide.
 
 A fresh PRD finishes with a recoverable task-local Git commit before design begins. Its existing requirements approval includes the target, baseline, and commit message; it does not introduce a second human decision. When no human approval is required, the rule settlement pins the same milestone facts. The producing client commits the returned task paths and status verifies the exact Git proof before the hand-off can advance. The PRD, ask, task configuration, durable state, and approval evidence are therefore preserved at the end of requirements work. Archived approvals without commit facts retain their original behavior.
 
+Document milestones stop for repair when Git ignore rules hide untracked durable task files. Status names the files and preserves the existing approval or rule settlement; correcting the ignore rule makes the same commit instructions available again. ArchFlow neither edits ignore policy nor force-stages files. A commit already missing required state or approval archives also stops for repair instead of restarting review. Repeating approval cannot fix Git's omission, and would otherwise create an approval loop. Exact milestone proof is still required before handoff.
+
 ## The phase graph
 
 The canonical graph lives in `.archflow/workflow.yaml` (shipped from `assets/workflow.yaml`, mirrored as a hard-coded constant in `src/contracts/workflow.ts`). It is short and declarative — five phases, four attributes each: the owning skill, dependency edges (`requires`), whether the phase iterates per phase number, and the gate policy.

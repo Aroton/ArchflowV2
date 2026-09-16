@@ -9081,8 +9081,24 @@
         }
       ]
     },
+    "src/state/milestone-repair.ts": {
+      "bytes": 1525,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/path-claims.js",
+          "path": "src/contracts/path-claims.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../repository/paths.js",
+          "path": "src/repository/paths.ts"
+        }
+      ]
+    },
     "src/state/next-action.ts": {
-      "bytes": 35881,
+      "bytes": 36146,
       "format": "esm",
       "imports": [
         {
@@ -10086,7 +10102,7 @@
       ]
     },
     "src/state/status.ts": {
-      "bytes": 132246,
+      "bytes": 133814,
       "format": "esm",
       "imports": [
         {
@@ -10098,6 +10114,11 @@
           "kind": "import-statement",
           "original": "../dispatch/recovery.js",
           "path": "src/dispatch/recovery.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./milestone-repair.js",
+          "path": "src/state/milestone-repair.ts"
         },
         {
           "external": true,
@@ -10594,7 +10615,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2437545,
+      "bytes": 2440136,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11957,8 +11978,11 @@
         "src/state/milestone-recovery.ts": {
           "bytesInOutput": 578
         },
+        "src/state/milestone-repair.ts": {
+          "bytesInOutput": 1026
+        },
         "src/state/next-action.ts": {
-          "bytesInOutput": 22101
+          "bytesInOutput": 22239
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 6282
@@ -12009,7 +12033,7 @@
           "bytesInOutput": 31878
         },
         "src/state/status.ts": {
-          "bytesInOutput": 90014
+          "bytesInOutput": 91407
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50783
@@ -12029,7 +12053,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3715192,
+      "bytes": 3717763,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13571,8 +13595,11 @@
         "src/state/milestone-recovery.ts": {
           "bytesInOutput": 561
         },
+        "src/state/milestone-repair.ts": {
+          "bytesInOutput": 1006
+        },
         "src/state/next-action.ts": {
-          "bytesInOutput": 22068
+          "bytesInOutput": 22206
         },
         "src/state/pending-waiver.ts": {
           "bytesInOutput": 3062
@@ -13632,7 +13659,7 @@
           "bytesInOutput": 31961
         },
         "src/state/status.ts": {
-          "bytesInOutput": 87587
+          "bytesInOutput": 88980
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50729

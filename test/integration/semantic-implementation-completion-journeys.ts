@@ -15,6 +15,7 @@ import {
   SEMANTIC_EFFORT_STUB_SOURCE,
   reachImplementationHandoff,
   semanticJourneyHarness,
+  stableTransitionJourneyHarness,
   withImplementationComponents,
   type SemanticJourneyHarness,
 } from "../helpers/semantic-journeys.js";
@@ -490,7 +491,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
-    const h = semanticJourneyHarness(workspace);
+    const h = stableTransitionJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 2 });
     const commitsBeforeWork = commitCountAt(workspace);
 
@@ -572,7 +573,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
-    const h = semanticJourneyHarness(workspace);
+    const h = stableTransitionJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
 
     let view = await applied(h, invocation, handoff);
@@ -767,7 +768,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);
     restorers.push(installScriptedReviewChild(workspace.root, [[], [], [], []]));
-    const h = semanticJourneyHarness(workspace);
+    const h = stableTransitionJourneyHarness(workspace);
     const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
     let view = await applied(h, invocation, handoff);
     writeApprovalRulesConfig(workspace, ["**/*.sql"]);
