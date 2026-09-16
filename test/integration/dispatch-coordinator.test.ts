@@ -13,7 +13,7 @@ import { connectionContextFactory, createInvocationContext } from "../../src/con
 import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
+import { createDispatchCoordinator, createReviewDispatcher } from "../../src/dispatch/coordinator.js";
 import { resetMemoizedCliPreflight } from "../../src/dispatch/cli.js";
 import { capacityError, nativeStream, recoveredCapacityEvents } from "../helpers/antigravity-output.js";
 import {
@@ -203,6 +203,56 @@ function primaryViews(repository: string, commit: ReturnType<typeof parseGitOid>
 
 describe("createDispatchCoordinator", () => {
   beforeEach(() => resetMemoizedCliPreflight());
+
+  it.each([false, true])("captures Claude usage even when output validation fails (%s)", async invalid => {
+    const h = await harness("success");
+    const executable = join(h.bin, "claude");
+    const wrapper = { usage: { input_tokens: 10, output_tokens: 30, output_tokens_details: { thinking_tokens: 20 } },
+      num_turns: 2, duration_ms: 400, total_cost_usd: 0.001,
+      ...(invalid ? {} : { structured_output: { outcome: "no_issues_found", feedback: "Reviewed; no actionable issues." } }) };
+    await writeFile(executable, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === "--version") console.log("2.1.273 (Claude Code)");
+else if (args[0] === "auth") console.log('{"loggedIn":true}');
+else { process.stdin.resume(); process.stdin.on("end", () => console.log(${JSON.stringify(JSON.stringify(wrapper))})); }
+`);
+    await chmod(executable, 0o755);
+    const usageDirectory = join(h.bin, "..", "usage");
+    const coordinator = createDispatchCoordinator({ authority: h.authority, dependencies: h.dependencies,
+      host: "codex", repository_root: h.repository, phase_instance: PHASE, usage_directory: usageDirectory,
+      signal: new AbortController().signal, cancellation_source: "client" });
+    const dispatch = withDispatchEnvironment(h, () => coordinator({ adapter: "claude-cli", family: "claude",
+      model: "claude-opus-5", effort: "medium" }, ENVELOPE, reviewSchema as PlainJsonValue));
+    if (invalid) await expect(dispatch).rejects.toMatchObject({ project_error: { code: "MODEL_OUTPUT_INVALID" } });
+    else expect((await dispatch).usage).toMatchObject({ output_tokens: 30, thinking_tokens: 20, num_turns: 2 });
+    const record = await attemptRecord(h.repository);
+    expect(record).toMatchObject({ status: invalid ? "failed" : "succeeded",
+      usage: { input_tokens: 10, output_tokens: 30, thinking_tokens: 20, total_cost_usd: 0.001 } });
+    if (!invalid) { expect(record).not.toHaveProperty("stdout_tail"); expect(record).not.toHaveProperty("stderr_tail"); }
+    const files = await readdir(usageDirectory);
+    expect(files).toHaveLength(1);
+    const central = JSON.parse(await readFile(join(usageDirectory, files[0]!), "utf8"));
+    expect(central).toMatchObject({ status: invalid ? "failed" : "succeeded", task_id: TASK, phase_instance: PHASE,
+      repository: h.repository, envelope_digest: ENVELOPE.digest, usage: { output_tokens: 30, thinking_tokens: 20 } });
+    expect(central).not.toHaveProperty("stdout_tail");
+    expect(central).not.toHaveProperty("stderr_tail");
+    expect(JSON.stringify(central)).not.toContain("Reviewed; no actionable issues");
+  });
+
+  it("logs standalone dispatches with unknown token usage without inventing task identity", async () => {
+    const h = await harness("success");
+    const usageDirectory = join(h.bin, "..", "usage");
+    const dispatch = createReviewDispatcher({ host: "claude", repository_root: h.repository,
+      signal: new AbortController().signal, cancellation_source: "client", usage_directory: usageDirectory });
+    await withDispatchEnvironment(h, () => dispatch(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
+    const files = await readdir(usageDirectory);
+    expect(files).toHaveLength(1);
+    const logged = JSON.parse(await readFile(join(usageDirectory, files[0]!), "utf8"));
+    expect(logged).toMatchObject({ status: "succeeded", adapter: "codex-cli", repository: h.repository, result_kind: "review" });
+    expect(logged).not.toHaveProperty("task_id");
+    expect(logged).not.toHaveProperty("usage");
+    expect(logged.duration_ms).toBeGreaterThanOrEqual(0);
+  });
 
   it("persists the native terminal error separately from a schema-heavy stdout tail", async () => {
     const h = await harness("success");

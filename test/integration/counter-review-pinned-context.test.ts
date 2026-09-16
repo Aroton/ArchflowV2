@@ -302,7 +302,7 @@ else {
       }]))
     };
   }
-  await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
+  await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }
 `);
@@ -472,7 +472,7 @@ Future tasks should use this revised policy.
     expect(result, JSON.stringify(result)).toMatchObject({ schema_version: "1", ok: true, value: { reports: expect.any(Array) } });
     if (!result.ok) return;
     const evidence = retainedReviewEvidence(h.repository.path);
-    if (evidence.schema_version !== "4") throw new Error("fresh report evidence unavailable");
+    if (evidence.schema_version !== "5") throw new Error("fresh report evidence unavailable");
     expect(evidence.reports).toHaveLength(1);
     expect(evidence).not.toHaveProperty("upstream_alignment");
     const envelope = capturedEnvelope(h.envelopePath);
@@ -615,7 +615,7 @@ Future tasks should use this revised policy.
     if (!result.ok) return;
     const evidence = retainedReviewEvidence(h.repository.path);
     expect(evidence).toMatchObject({
-      schema_version: "4",
+      schema_version: "5",
       reports: [expect.objectContaining({ reviewer_id: "general" })],
     });
   });

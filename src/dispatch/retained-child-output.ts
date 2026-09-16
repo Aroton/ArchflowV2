@@ -1,3 +1,4 @@
+import { dispatchUsageSchema } from "../contracts/dispatch-usage.js";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -86,6 +87,7 @@ const retainedChildOutputSchema = z.object({
   route_source: routeSourceRecordSchema,
   cli_version: nonBlank,
   output_base64: z.string().min(1),
+  usage: dispatchUsageSchema.optional(),
   observed_output_digest: sha256DigestV1Schema,
 }).strict();
 
@@ -197,7 +199,11 @@ export function createRetainedChildOutputStore(
         const record = retainedChildOutputSchema.parse(JSON.parse(await readFile(target.value.absolute, "utf8")));
         const bytes = new Uint8Array(Buffer.from(record.output_base64, "base64"));
         if (matches(record, binding) && sha256Bytes(bytes) === record.observed_output_digest) {
-          return Object.freeze({ cli_version: record.cli_version, extracted_output_bytes: bytes });
+          return Object.freeze({
+            cli_version: record.cli_version,
+            extracted_output_bytes: bytes,
+            ...(record.usage === undefined ? {} : { usage: record.usage as NonNullable<DispatchCoordinatorResult["usage"]> }),
+          });
         }
       } catch {
         // Missing, malformed, or foreign bytes are a miss, never a failure.
@@ -223,6 +229,7 @@ export function createRetainedChildOutputStore(
           route: plainRoute(binding.selection.route),
           route_source: plainSource(binding.selection.source),
           cli_version: result.cli_version,
+          ...(result.usage === undefined ? {} : { usage: result.usage }),
           output_base64: Buffer.from(result.extracted_output_bytes).toString("base64"),
           observed_output_digest: sha256Bytes(result.extracted_output_bytes),
         });

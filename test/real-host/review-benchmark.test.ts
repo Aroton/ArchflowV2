@@ -279,7 +279,7 @@ describe.skipIf(!benchmarkAvailable)("real-host review-quality benchmark", () =>
               extracted_output_bytes: dispatched.extracted_output_bytes,
             });
             const evidence = observed.evidence;
-            if (evidence.schema_version !== "4") throw new Error("expected report evidence");
+            if (evidence.schema_version !== "5") throw new Error("expected report evidence");
             expect(evidence.assurance).toBe("server-attested");
             expect(evidence.model_family).toBe(direction.reviewer_family);
 

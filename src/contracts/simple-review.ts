@@ -1,3 +1,5 @@
+import { reviewReportOutputSchema } from "./review.js";
+import { dispatchUsageSchema } from "./dispatch-usage.js";
 import { z } from "zod";
 import { configRouteSchema } from "./config.js";
 import { adjudicationJudgmentV2Schema } from "./adjudication.js";
@@ -29,7 +31,10 @@ export const simpleReviewInputSchema = z.object({
 });
 const role = z.enum(["counter-reviewer", "test-reviewer", "adjudicator"]);
 const route = configRouteSchema.extend({ adapter: text, family: text }).strict();
-const report = z.object({ role, reviewer_id: text, route, report: z.string() }).strict();
+const report = z.union([
+  reviewReportOutputSchema.extend({ role: z.enum(["counter-reviewer", "test-reviewer"]), reviewer_id: text, route, usage: dispatchUsageSchema.optional() }).strict(),
+  z.object({ role: z.literal("adjudicator"), reviewer_id: text, route, report: z.string(), usage: dispatchUsageSchema.optional() }).strict(),
+]);
 const judgment = adjudicationJudgmentV2Schema.extend({ rule_id: text, rule_version: z.number().int().positive() }).strict();
 const failure = z.object({ role, reviewer_id: text, route, code: text, message: text }).strict();
 export const simpleReviewResultSchema = z.object({

@@ -5,8 +5,10 @@ const page = (path: string) => readFileSync(new URL(`../../${path}`, import.meta
 describe("review report documentation", () => {
   it("describes report interpretation and independent policy authority", () => {
     const review = page("docs/review/COUNTER-REVIEW.md");
-    expect(review).toContain("Review V4");
+    expect(review).toContain("Review V5");
     expect(review).toContain("working AI");
+    expect(review).toContain("no_issues_found");
+    expect(review).toContain("Archived Review V4");
     expect(review).toContain("partial_review_reports");
     expect(review).toContain("previous_review_reports");
     expect(review).toContain("cannot bypass constitution checks");

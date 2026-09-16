@@ -39,6 +39,7 @@ const SAFE_MESSAGES: Readonly<Record<DispatchFailureCodeV1, string>> = Object.fr
 // Only server-defined issue codes select these messages. Never copy exception text, unknown
 // issue codes, or model output into a recovery record or the human-facing status projection.
 const OUTPUT_FAILURE_MESSAGES: ReadonlyMap<string, string> = new Map([
+  ["review-output-unreadable", "The reviewer must return exactly an outcome (issues_found or no_issues_found) and nonblank feedback. Missing or invalid feedback is not signoff."],
   ["antigravity-wrapper-invalid", "The Antigravity CLI response did not contain a valid final result wrapper."],
   ["structured-output-missing", "The reviewer CLI response was missing structured_output."],
   ["structured-output-invalid", "The reviewer CLI structured_output was not a valid plain JSON value."],

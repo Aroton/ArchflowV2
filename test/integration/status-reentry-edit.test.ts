@@ -258,7 +258,7 @@ else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const output = generateOutput(envelope, ${JSON.stringify(findings)});
-  await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
+  await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }`);
   chmodSync(join(bin, "codex"), 0o755);
@@ -272,7 +272,7 @@ else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const output = generateOutput(envelope, ${JSON.stringify(findings)});
-  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+  process.stdout.write(JSON.stringify({ structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output }) + "\\n");
 }`);
   chmodSync(join(bin, "claude"), 0o755);
 
@@ -288,7 +288,7 @@ else {
   const message = JSON.parse(firstLine);
   const envelope = message.event === "user" ? JSON.parse(message.message.content) : message;
   const output = generateOutput(envelope, ${JSON.stringify(findings)});
-  process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: output } }) + "\\n");
+  process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output } }) + "\\n");
 }`);
   chmodSync(join(bin, "agy"), 0o755);
   const saved = { PATH: process.env.PATH, HOME: process.env.HOME };

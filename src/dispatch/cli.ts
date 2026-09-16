@@ -1,3 +1,4 @@
+import type { DispatchUsage } from "../contracts/dispatch-usage.js";
 import { reviewReportOutputSchema } from "../contracts/review.js";
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -403,6 +404,7 @@ export function resetMemoizedCliPreflight(): void {
 }
 
 export type ReviewObservationMint = Readonly<{
+  usage?: DispatchUsage;
   subject: DispatchSubject;
   adapter: AdapterId;
   cli_version: string;
@@ -1036,6 +1038,7 @@ export function mintReviewObservation(input: ReviewObservationMint): ReturnType<
   assertRoute(input.adapter, input.route);
   const binding: ObservationBindingByKind["review"] = {
     kind: "review",
+    ...(input.usage === undefined ? {} : { usage: input.usage }),
     task_id: input.subject.task_id,
     phase_instance: input.subject.phase_instance,
     role: input.subject.role,

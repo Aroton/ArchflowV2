@@ -1,3 +1,4 @@
+import { isFeedbackReview } from "../contracts/review.js";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -183,7 +184,7 @@ export async function prepareImplementationDiffs(input: DiffInput): Promise<Prep
   const reviewers = new Map<string, ReviewDiffContext>();
   const previous = input.prior_triage?.source_review?.evidence;
   const response = input.prior_triage?.response;
-  const reports = previous?.schema_version === "4"
+  const reports = previous !== undefined && isFeedbackReview(previous)
     ? new Map([...(previous.previous_reports ?? []), ...previous.reports].map(report => [report.reviewer_id, report]))
     : new Map();
   const comparisons = new Map<Sha256Digest, ReviewDiff | undefined>();

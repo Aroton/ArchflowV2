@@ -366,10 +366,10 @@ describe("review dispatch envelopes", () => {
     expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("introduced, exposed, or materially worsened");
     expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("not a general code review");
     expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Verify the revisions");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Keep follow-up scoped to these changes");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Keep follow-up scoped to the changes");
     // Remediation rounds are scoped to the revision: no fresh sweep of unchanged sections, and
     // an empty finding list is the intended terminal state.
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("no supported material issue remains");
+    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("outcome=no_issues_found");
     expect(PRIOR_TRIAGE_INSTRUCTION).not.toContain("anywhere in the artifact");
     // Initial envelope does not carry remediation instructions
     expect(json(bare.bytes).instructions).not.toHaveProperty("prior_triage");

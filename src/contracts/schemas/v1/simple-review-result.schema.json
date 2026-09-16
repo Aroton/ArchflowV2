@@ -39,75 +39,255 @@
         "reports": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "role": {
-                "type": "string",
-                "enum": [
-                  "counter-reviewer",
-                  "test-reviewer",
-                  "adjudicator"
-                ]
-              },
-              "reviewer_id": {
-                "type": "string",
-                "minLength": 1,
-                "pattern": "\\S"
-              },
-              "route": {
+            "anyOf": [
+              {
                 "type": "object",
                 "properties": {
-                  "model": {
-                    "type": "string",
-                    "minLength": 1,
-                    "pattern": "\\S"
-                  },
-                  "effort": {
+                  "outcome": {
                     "type": "string",
                     "enum": [
-                      "low",
-                      "medium",
-                      "high",
-                      "xhigh",
-                      "max",
-                      "ultra"
+                      "issues_found",
+                      "no_issues_found"
                     ]
                   },
-                  "provider": {
+                  "feedback": {
                     "type": "string",
                     "minLength": 1,
                     "pattern": "\\S"
                   },
-                  "adapter": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "counter-reviewer",
+                      "test-reviewer"
+                    ]
+                  },
+                  "reviewer_id": {
                     "type": "string",
                     "minLength": 1,
                     "pattern": "\\S"
                   },
-                  "family": {
-                    "type": "string",
-                    "minLength": 1,
-                    "pattern": "\\S"
+                  "route": {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max",
+                          "ultra"
+                        ]
+                      },
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "adapter": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "family": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "model",
+                      "effort",
+                      "adapter",
+                      "family"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "usage": {
+                    "type": "object",
+                    "properties": {
+                      "input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "output_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_read_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_creation_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "thinking_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "num_turns": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_api_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "total_cost_usd": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "required": [
-                  "model",
-                  "effort",
-                  "adapter",
-                  "family"
+                  "outcome",
+                  "feedback",
+                  "role",
+                  "reviewer_id",
+                  "route"
                 ],
                 "additionalProperties": false
               },
-              "report": {
-                "type": "string"
+              {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "const": "adjudicator"
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "route": {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "effort": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          "xhigh",
+                          "max",
+                          "ultra"
+                        ]
+                      },
+                      "provider": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "adapter": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "family": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      }
+                    },
+                    "required": [
+                      "model",
+                      "effort",
+                      "adapter",
+                      "family"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "report": {
+                    "type": "string"
+                  },
+                  "usage": {
+                    "type": "object",
+                    "properties": {
+                      "input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "output_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_read_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_creation_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "thinking_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "num_turns": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_api_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "total_cost_usd": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "role",
+                  "reviewer_id",
+                  "route",
+                  "report"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "role",
-              "reviewer_id",
-              "route",
-              "report"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "constitution": {

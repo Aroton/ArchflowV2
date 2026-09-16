@@ -1,5 +1,6 @@
+import { isFeedbackReview } from "../contracts/review.js";
 import { readReceivedFeedback } from "../dispatch/review-feedback.js";
-import type { ReviewReportV1 } from "../contracts/review.js";
+import type { ReviewReport } from "../contracts/review.js";
 import type { ReviewResponse } from "../contracts/triage.js";
 import { reviewFindings } from "../contracts/review.js";
 import { isDeepStrictEqual } from "node:util";
@@ -59,9 +60,9 @@ export type SemanticStatusEnrichmentsV1 = Readonly<{
   state_document_digest?: Sha256Digest;
   live_config_digest?: Sha256Digest;
   legacy_import_initialization?: true;
-  review_reports?: readonly ReviewReportV1[];
-  previous_review_reports?: readonly ReviewReportV1[];
-  partial_review_reports?: readonly ReviewReportV1[];
+  review_reports?: readonly ReviewReport[];
+  previous_review_reports?: readonly ReviewReport[];
+  partial_review_reports?: readonly ReviewReport[];
   review_response?: ReviewResponse;
   review_revision?: ReviewRevisionDeclaration;
   full_findings: readonly PublicFindingV1[];
@@ -678,7 +679,7 @@ export async function computeAuthoritativeSemanticStatus(
     }),
     ...(() => {
       const source = detailed.value.retained.get("counter_review")?.manifest.source_artifact;
-      if (source?.artifact_kind !== "review-evidence" || source.evidence.schema_version !== "4") return {};
+      if (source?.artifact_kind !== "review-evidence" || !isFeedbackReview(source.evidence)) return {};
       const current = status.evidence?.available === true && status.evidence.assessment.current.includes("counter_review");
       return current ? { review_reports: source.evidence.reports, ...(source.evidence.previous_reports === undefined ? {} : { previous_review_reports: source.evidence.previous_reports }) }
         : { previous_review_reports: [...(source.evidence.previous_reports ?? []), ...source.evidence.reports] };

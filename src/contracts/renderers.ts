@@ -1,3 +1,4 @@
+import { isFeedbackReview } from "./review.js";
 import type { AdjudicationEvidence } from "./adjudication.js";
 import {
   reviewFindingDisplayDetail,
@@ -91,12 +92,12 @@ export function renderReviewEvidence(
     authenticQualifiedEvidence(value, "review", evidence.assurance) ||
     authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
   if (!authenticated) throw new TypeError("authenticated review evidence is required");
-  if (evidence.schema_version === "4") return new TextEncoder().encode([
-    "# ArchFlow Review Reports", `Reviewed subject: ${evidence.subject_digest}`,
+  if (isFeedbackReview(evidence)) return new TextEncoder().encode([
+    "# ArchFlow Review Feedback", `Reviewed subject: ${evidence.subject_digest}`,
     ...provenanceMetadata(evidence),
     ...renderRouteSource(evidence.route_source),
     ...(evidence.route_override === undefined ? [] : renderRouteOverride(evidence.route_override)),
-    ...evidence.reports.flatMap(report => ["", `## ${report.reviewer_id} (${report.focus})`, "", report.report]),
+    ...evidence.reports.flatMap(report => ["", `## ${report.reviewer_id} (${report.focus})`, "", ...("outcome" in report ? [`Outcome: ${report.outcome}`, "", report.feedback] : [report.report])]),
   ].join("\n"));
   const summaryMetadata = evidence.schema_version === "2" || evidence.schema_version === "3"
     ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] as const

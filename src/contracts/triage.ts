@@ -1,3 +1,4 @@
+import { isFeedbackReview } from "./review.js";
 import { reviewFindings } from "./review.js";
 import { z } from "zod";
 
@@ -350,12 +351,12 @@ export function validateTriage(
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
-  const reports = current.reviews.filter(review => review.evidence.schema_version === "4");
+  const reports = current.reviews.filter(review => isFeedbackReview(review.evidence));
   if (reports.length > 0) {
     if (reports.length !== current.reviews.length || parsed.response === undefined) throw new TypeError("review reports require a working-AI response");
     if (parsed.dispositions.length !== 0) throw new TypeError("report responses do not carry finding dispositions");
     if (parsed.response.decision === "revise") {
-      const ids = new Set(reports.flatMap(review => review.evidence.schema_version === "4" ? [...review.evidence.reports, ...(review.evidence.previous_reports ?? [])].map(report => report.reviewer_id) : []));
+      const ids = new Set(reports.flatMap(review => isFeedbackReview(review.evidence) ? [...review.evidence.reports, ...(review.evidence.previous_reports ?? [])].map(report => report.reviewer_id) : []));
       const selected = parsed.response.reviewers.map(reviewer => reviewer.reviewer_id);
       if (new Set(selected).size !== selected.length || selected.some(id => !ids.has(id))) throw new TypeError("follow-up reviewers must identify distinct previous reviewers");
     }

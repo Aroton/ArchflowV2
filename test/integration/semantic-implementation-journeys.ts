@@ -362,7 +362,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
     expect(reviewed.value.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-    expect(reviewed.value.review_reports?.[0]?.report).toContain("findings");
+    expect(reviewed.value.review_reports?.map(item => "feedback" in item ? item.feedback : item.report)[0]).toContain("findings");
     expect(readFileSync(work.sourceAbsolute, "utf8")).toBe(SOURCE_BYTES);
     expect(gitHead(workspace)).toBe(baseline);
 

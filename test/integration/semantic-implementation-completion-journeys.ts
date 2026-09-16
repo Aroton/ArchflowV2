@@ -120,7 +120,7 @@ function generateOutput(envelope, countPath, findingsByReview, script) {
     }));
     const resolved = (script.resolveAtReview ?? null) !== null && (count + 1) >= (script.resolveAtReview ?? 0);
     const implementation = subject.phase_instance.indexOf("phase-impl-") === 0 && !resolved;
-    if (isGeneral && script.materialDrift === true && implementation) return { report: "The approved upstream plan no longer matches the implemented reality. Update the phase design to describe the verified behavior." };
+    if (isGeneral && script.materialDrift === true && implementation) return { outcome: "issues_found", feedback: "The approved upstream plan no longer matches the implemented reality. Update the phase design to describe the verified behavior." };
     const upstreamAlignment = assignment !== undefined && Object.prototype.hasOwnProperty.call(assignment, "expected_upstream_digests")
       ? assignment.expected_upstream_digests.map((digest, index) =>
           script.materialDrift === true && implementation && index === 0
@@ -185,7 +185,7 @@ else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(script)});
-  writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
+  writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }`);
   chmodSync(join(bin, "codex"), 0o755);
@@ -200,7 +200,7 @@ else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(script)});
-  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+  process.stdout.write(JSON.stringify({ structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output }) + "\\n");
 }`);
   chmodSync(join(bin, "claude"), 0o755);
 
@@ -217,7 +217,7 @@ else {
   const message = JSON.parse(firstLine);
   const envelope = message.event === "user" ? JSON.parse(message.message.content) : message;
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(script)});
-  process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: output } }) + "\\n");
+  process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output } }) + "\\n");
 }`);
   chmodSync(join(bin, "agy"), 0o755);
   const saved = { path: process.env.PATH, home: process.env.HOME };
@@ -963,7 +963,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
       expect(view.next_action.kind).toBe("review");
       view = await applied(h, invocation, view);
       expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-      expect(view.review_reports?.[0]?.report).toContain("findings");
+      expect(view.review_reports?.map(item => "feedback" in item ? item.feedback : item.report)[0]).toContain("findings");
       view = await applied(h, invocation, view, { kind: "triage", response: { decision: "revise", rationale: "Address the consequential behavior described in the report.", reviewers: [{ reviewer_id: "general", request: "Verify the changed behavior and regression protection." }] } });
       if (view.next_action.kind === "revise") {
         view = await applied(h, invocation, view);
@@ -1130,7 +1130,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
 
     expect(view.presentation).toBeUndefined();
     expect(view.next_action.kind).toBe("triage");
-    expect(view.review_reports?.[0]?.report).toContain("no longer matches");
+    expect(view.review_reports?.map(item => "feedback" in item ? item.feedback : item.report)[0]).toContain("no longer matches");
     view = await applied(h, invocation, view, { kind: "triage", response: { decision: "revise", rationale: "Update the governing phase design to reflect the implementation.", reviewers: [{ reviewer_id: "general", request: "Verify the phase design reflects the implementation." }] } });
     expect(view.next_action.kind).toBe("revise");
     const reviewsAfterDrift = reviewCountAt(workspace);
@@ -1170,7 +1170,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     view = await applied(h, invocation, view, implementationSubmission(workspace, work.outputs));
     view = await applied(h, invocation, view);
     expect(view.next_action.kind).toBe("triage");
-    expect(view.review_reports?.[0]?.report).toContain("no longer matches");
+    expect(view.review_reports?.map(item => "feedback" in item ? item.feedback : item.report)[0]).toContain("no longer matches");
     view = await applied(h, invocation, view, { kind: "triage", response: { decision: "finish", rationale: "The implementation meets the approved behavior; the suggested wording change adds no value." } });
     expect(view.next_action.kind).toBe("commit");
     expect(view.presentation).toBeUndefined();

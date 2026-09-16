@@ -39,10 +39,8 @@ describe("advertised MCP tool catalogue", () => {
         expect(descriptor.inputSchema, `${descriptor.name} input root ${combinator}`).not.toHaveProperty(combinator);
       }
     }
-    // Measured at 79,378 bytes with per-reviewer failure details and retry progress, in addition
-    // to current, prior, and partial reports plus producer responses. The ceiling retains about
-    // 3% headroom so accidental recursive growth still fails.
-    // Input roots and their host-compatibility constraints remain unchanged.
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(94_000);
+    // Measured at 96,533 bytes with explicit feedback and optional dispatch measurements.
+    // Keep roughly 3% headroom to catch accidental recursive schema growth.
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(100_000);
   });
 });

@@ -1,7 +1,7 @@
 import { benchmarkRecommendationSchema, type BenchmarkRecommendation } from "./implementation-selection.js";
 import { reviewResponseSchema, type ReviewResponse } from "./triage.js";
 import { reviewRevisionDeclarationSchema, type ReviewRevisionDeclaration } from "./durable-document.js";
-import { reviewReportV1Schema, type ReviewReportV1 } from "./review.js";
+import { reviewReportSchema, type ReviewReport } from "./review.js";
 import { workflowProgressV1Schema, type WorkflowProgressV1 } from "./workflow-progress.js";
 import { z } from "zod";
 
@@ -365,9 +365,9 @@ export type WorkflowViewV1 = {
   readonly position?: WorkflowPositionV1;
   readonly resources: readonly WorkflowResourceV1[];
   readonly next_action: SemanticNextActionV1;
-  readonly review_reports?: readonly ReviewReportV1[];
-  readonly previous_review_reports?: readonly ReviewReportV1[];
-  readonly partial_review_reports?: readonly ReviewReportV1[];
+  readonly review_reports?: readonly ReviewReport[];
+  readonly previous_review_reports?: readonly ReviewReport[];
+  readonly partial_review_reports?: readonly ReviewReport[];
   readonly review_response?: ReviewResponse;
   readonly review_revision?: ReviewRevisionDeclaration;
   readonly findings?: readonly PublicFindingV1[];
@@ -500,9 +500,9 @@ export type SemanticStatusSnapshotV1 = {
   /** Authenticated initialization binding; used only to retain legacy migration-audit ownership. */
   readonly legacy_import_initialization?: true;
   readonly status: PlainJsonValue;
-  readonly review_reports?: readonly ReviewReportV1[];
-  readonly previous_review_reports?: readonly ReviewReportV1[];
-  readonly partial_review_reports?: readonly ReviewReportV1[];
+  readonly review_reports?: readonly ReviewReport[];
+  readonly previous_review_reports?: readonly ReviewReport[];
+  readonly partial_review_reports?: readonly ReviewReport[];
   readonly review_response?: ReviewResponse;
   readonly review_revision?: ReviewRevisionDeclaration;
   readonly full_findings: readonly PublicFindingV1[];
@@ -827,9 +827,9 @@ export const workflowViewV1Schema = z.object({
   taxonomy_denial_rates: taxonomyDenialRatesV1Schema.optional(),
   review_context: publicReviewContextV1Schema.optional(),
   review_strength: publicReviewStrengthV1Schema.optional(),
-  review_reports: z.array(reviewReportV1Schema).optional(),
-  previous_review_reports: z.array(reviewReportV1Schema).optional(),
-  partial_review_reports: z.array(reviewReportV1Schema).optional(),
+  review_reports: z.array(reviewReportSchema).optional(),
+  previous_review_reports: z.array(reviewReportSchema).optional(),
+  partial_review_reports: z.array(reviewReportSchema).optional(),
   review_response: reviewResponseSchema.optional(),
   review_revision: reviewRevisionDeclarationSchema.optional(),
   implementation_recommendation: implementationRecommendationV1Schema,

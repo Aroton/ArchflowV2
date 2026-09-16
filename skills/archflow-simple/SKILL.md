@@ -11,6 +11,8 @@ This session owns the complete task: plan, triage, execution, fixes, and convers
 
 Do not initialize a task, write workflow state or task documents, call workflow status/apply, select an implementation agent, or hand off to another skill. Keep the plan and review feedback in conversation. Repository initialization is unnecessary: the MCP reads existing repository configuration and constitution, or shipped defaults when absent. Review snapshots are temporary.
 
+Review feedback is a small per-round response: `outcome:"issues_found"` with actionable `feedback`, or `outcome:"no_issues_found"` with an explicit short signoff. Read and reason as deeply as needed; mostly reading is an efficiency goal, not a quota. Do not author a separate review document, quote whole source files, narrate the investigation, or recap resolved findings. On re-review, use the revision diff and previous feedback to verify the fixes and their consequential regressions. A missing, failed, or interrupted reviewer is never signoff. The calling agent owns triage and follows the returned workflow action; a reviewer outcome does not grant approval. Historical reports without an outcome keep their original meaning.
+
 ## Plan and review
 
 Understand the ask and inspect relevant code and repository instructions. Record the initial full HEAD commit as `base_commit` and note pre-existing edits. Preserve those edits; explain when a declared output already contains unrelated work. Resolve missing information that materially affects the solution, then produce a concise plan covering intended behavior, implementation, and useful verification.

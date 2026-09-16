@@ -39,13 +39,31 @@ function fakeDispatch(calls: Array<{ role: string; envelope: Record<string, any>
     const override = change?.(role, body);
     const result = override ?? (role === "adjudicator" ? { schema_version: "2", judgments: Object.fromEntries(body.rules.map((rule: any) => [rule.slot, {
       compliance: "pass", rationale: "No policy issue.", trigger: "not-matched", trigger_evidence: "No trigger evidence.",
-    }])) } : { report: "Fix the concrete issue in the declared output." });
+    }])) } : { outcome: "issues_found", feedback: "Fix the concrete issue in the declared output." });
     return { cli_version: "test", extracted_output_bytes: new TextEncoder().encode(JSON.stringify(result)) };
   };
 }
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 describe("standalone simple review", () => {
+  it("returns explicit clean feedback and keeps it distinct from failed or ambiguous output", async () => {
+    const { input, context } = await repo();
+    const clean = await runSimpleReview(input, context, { dispatch: fakeDispatch([], role => role === "adjudicator" ? undefined
+      : { outcome: "no_issues_found", feedback: "Reviewed the changes; no actionable issues." }) });
+    expect(clean.ok).toBe(true);
+    expect(clean.value?.reports.filter(report => report.role !== "adjudicator")).toEqual([
+      expect.objectContaining({ outcome: "no_issues_found", feedback: expect.any(String) }),
+      expect.objectContaining({ outcome: "no_issues_found", feedback: expect.any(String) }),
+    ]);
+    for (const invalid of [{ feedback: "Looks good" }, { outcome: "no_issues_found", feedback: " " }, { findings: [] }]) {
+      const calls: Parameters<typeof fakeDispatch>[0] = [];
+      const result = await runSimpleReview(input, context, { dispatch: fakeDispatch(calls, role => role === "counter-reviewer" ? invalid : undefined) });
+      expect(result.ok).toBe(false);
+      expect(result.value?.failures).toEqual([expect.objectContaining({ role: "counter-reviewer", code: "MODEL_OUTPUT_INVALID" })]);
+      expect(calls.filter(call => call.role === "counter-reviewer")).toHaveLength(1);
+    }
+  });
+
   it("runs each role once at both stages without initialization, effort advice, or workflow state", async () => {
     const { root, input, context } = await repo();
     const calls: Parameters<typeof fakeDispatch>[0] = [];

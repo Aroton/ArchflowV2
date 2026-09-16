@@ -326,8 +326,8 @@ describe("CLI invocation construction", () => {
       expect(projected).not.toHaveProperty("oneOf");
       expect(projected).not.toHaveProperty("anyOf");
       const properties = projected.properties as Record<string, Record<string, unknown>>;
-      expect(Object.keys(properties)).toEqual(["report"]);
-      expect(properties.report).toEqual({ type: "string" });
+      expect(Object.keys(properties)).toEqual(["outcome", "feedback"]);
+      expect(properties.feedback).toMatchObject({ type: "string" });
     },
   );
 
@@ -340,7 +340,7 @@ describe("CLI invocation construction", () => {
       { reviewer_id: "general", focus: "general", criterion_ids: [], expected_upstream_digests: [] },
     ) as Record<string, unknown>;
     const alignmentProperties = alignment.properties as Record<string, Record<string, unknown>>;
-    expect(alignmentProperties).toEqual({ report: { type: "string" } });
+    expect(alignmentProperties).toMatchObject({ outcome: { enum: ["issues_found", "no_issues_found"] }, feedback: { type: "string" } });
 
     const confirmation = projectCliOutputSchema(
       reviewSchema as PlainJsonValue,
@@ -355,7 +355,7 @@ describe("CLI invocation construction", () => {
       },
     ) as Record<string, unknown>;
     const confirmationProperties = confirmation.properties as Record<string, Record<string, unknown>>;
-    expect(confirmationProperties.report).toEqual({ type: "string" });
+    expect(confirmationProperties.feedback).toMatchObject({ type: "string" });
     expect(confirmationProperties).not.toHaveProperty("legacy_confirmations");
     expect(confirmationProperties).not.toHaveProperty("upstream_alignment");
   });
@@ -537,7 +537,7 @@ describe("CLI invocation construction", () => {
       reviewSchema as PlainJsonValue, "review", "claude-cli", undefined, assignment,
     );
     const validateProjectedClaudeReview = createJsonSchemaValidator<Record<string, unknown>>(projectedClaudeReview as Record<string, unknown>);
-    expect(() => validateProjectedClaudeReview.assert({ report: JSON.stringify(invalidReview) }, "projected review")).not.toThrow();
+    expect(() => validateProjectedClaudeReview.assert({ outcome: "issues_found", feedback: JSON.stringify(invalidReview) }, "projected review")).not.toThrow();
     expect(() => parseGeneralReviewOutputV3(invalidReview, {
       criterion_ids: assignment.criterion_ids,
     })).toThrow();

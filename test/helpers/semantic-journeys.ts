@@ -83,6 +83,7 @@ export function semanticJourneyHarness(workspace: TaskWorkspace, finishEmptyRepo
     }, context());
     if (finishEmptyReports && result.ok && view.next_action.kind === "review" && result.value.next_action.kind === "triage" &&
         result.value.review_reports?.every(report => {
+          if ("outcome" in report) return report.outcome === "no_issues_found";
           try { const parsed = JSON.parse(report.report); return Array.isArray(parsed.findings) && parsed.findings.length === 0; } catch { return false; }
         })) {
       result = await handleSemanticApply({ schema_version: "1", task_id: workspace.taskId, invocation,
@@ -265,7 +266,7 @@ else {
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   if (${JSON.stringify(failFixedEffortRoute)} && envelope.policy_id === "implementation-agent-selector-v5" && argv[argv.indexOf("-m") + 1] === "gpt-5.6-luna") process.exit(70);
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)}, ${JSON.stringify(options.phaseDesignTrigger ?? "")});
-  writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
+  writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }`);
   chmodSync(join(bin, "codex"), 0o755);
@@ -280,7 +281,7 @@ else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
   const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)}, ${JSON.stringify(options.phaseDesignTrigger ?? "")});
-  process.stdout.write(JSON.stringify({ structured_output: output }) + "\\n");
+  process.stdout.write(JSON.stringify({ structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output }) + "\\n");
 }`);
   chmodSync(join(bin, "claude"), 0o755);
 
@@ -297,7 +298,7 @@ else {
   const message = JSON.parse(firstLine);
   const envelope = message.event === "user" ? JSON.parse(message.message.content) : message;
   const output = generateOutput(envelope, ${JSON.stringify(countPath)}, ${JSON.stringify(findingsByReview)}, ${JSON.stringify(adjudicationCompliance)}, ${JSON.stringify(implementationFailingRule)}, ${JSON.stringify(options.phaseDesignTrigger ?? "")});
-  process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: output } }) + "\\n");
+  process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output } }) + "\\n");
 }`);
   chmodSync(join(bin, "agy"), 0o755);
   const saved = { path: process.env.PATH, home: process.env.HOME };

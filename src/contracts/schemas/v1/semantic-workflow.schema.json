@@ -1984,133 +1984,445 @@
         "review_reports": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "subject_digest": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "subject_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "effort": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "focus": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  "report": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "report"
+                ],
+                "additionalProperties": false
               },
-              "model": {
-                "type": "string",
-                "minLength": 1
-              },
-              "effort": {
-                "type": "string",
-                "minLength": 1
-              },
-              "reviewer_id": {
-                "type": "string",
-                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-              },
-              "focus": {
-                "type": "string",
-                "enum": [
-                  "general",
-                  "tests"
-                ]
-              },
-              "report": {
-                "type": "string",
-                "minLength": 1
+              {
+                "type": "object",
+                "properties": {
+                  "subject_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "effort": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "focus": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "issues_found",
+                      "no_issues_found"
+                    ]
+                  },
+                  "feedback": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "usage": {
+                    "type": "object",
+                    "properties": {
+                      "input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "output_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_read_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_creation_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "thinking_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "num_turns": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_api_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "total_cost_usd": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "outcome",
+                  "feedback"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "subject_digest",
-              "model",
-              "effort",
-              "reviewer_id",
-              "focus",
-              "report"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "previous_review_reports": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "subject_digest": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "subject_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "effort": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "focus": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  "report": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "report"
+                ],
+                "additionalProperties": false
               },
-              "model": {
-                "type": "string",
-                "minLength": 1
-              },
-              "effort": {
-                "type": "string",
-                "minLength": 1
-              },
-              "reviewer_id": {
-                "type": "string",
-                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-              },
-              "focus": {
-                "type": "string",
-                "enum": [
-                  "general",
-                  "tests"
-                ]
-              },
-              "report": {
-                "type": "string",
-                "minLength": 1
+              {
+                "type": "object",
+                "properties": {
+                  "subject_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "effort": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "focus": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "issues_found",
+                      "no_issues_found"
+                    ]
+                  },
+                  "feedback": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "usage": {
+                    "type": "object",
+                    "properties": {
+                      "input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "output_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_read_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_creation_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "thinking_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "num_turns": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_api_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "total_cost_usd": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "outcome",
+                  "feedback"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "subject_digest",
-              "model",
-              "effort",
-              "reviewer_id",
-              "focus",
-              "report"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "partial_review_reports": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "subject_digest": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "subject_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "effort": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "focus": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  "report": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "report"
+                ],
+                "additionalProperties": false
               },
-              "model": {
-                "type": "string",
-                "minLength": 1
-              },
-              "effort": {
-                "type": "string",
-                "minLength": 1
-              },
-              "reviewer_id": {
-                "type": "string",
-                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-              },
-              "focus": {
-                "type": "string",
-                "enum": [
-                  "general",
-                  "tests"
-                ]
-              },
-              "report": {
-                "type": "string",
-                "minLength": 1
+              {
+                "type": "object",
+                "properties": {
+                  "subject_digest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "effort": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reviewer_id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  "focus": {
+                    "type": "string",
+                    "enum": [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "issues_found",
+                      "no_issues_found"
+                    ]
+                  },
+                  "feedback": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "usage": {
+                    "type": "object",
+                    "properties": {
+                      "input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "output_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_read_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "cache_creation_input_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "thinking_tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "num_turns": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "duration_api_ms": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "total_cost_usd": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "outcome",
+                  "feedback"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "subject_digest",
-              "model",
-              "effort",
-              "reviewer_id",
-              "focus",
-              "report"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "review_response": {
@@ -4164,133 +4476,445 @@
     "review_reports": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "subject_digest": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "report": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            "additionalProperties": false
           },
-          "model": {
-            "type": "string",
-            "minLength": 1
-          },
-          "effort": {
-            "type": "string",
-            "minLength": 1
-          },
-          "reviewer_id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          "focus": {
-            "type": "string",
-            "enum": [
-              "general",
-              "tests"
-            ]
-          },
-          "report": {
-            "type": "string",
-            "minLength": 1
+          {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "issues_found",
+                  "no_issues_found"
+                ]
+              },
+              "feedback": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "cache_read_input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "cache_creation_input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "thinking_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "num_turns": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "duration_ms": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "duration_api_ms": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "total_cost_usd": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "outcome",
+              "feedback"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "subject_digest",
-          "model",
-          "effort",
-          "reviewer_id",
-          "focus",
-          "report"
-        ],
-        "additionalProperties": false
+        ]
       }
     },
     "previous_review_reports": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "subject_digest": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "report": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            "additionalProperties": false
           },
-          "model": {
-            "type": "string",
-            "minLength": 1
-          },
-          "effort": {
-            "type": "string",
-            "minLength": 1
-          },
-          "reviewer_id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          "focus": {
-            "type": "string",
-            "enum": [
-              "general",
-              "tests"
-            ]
-          },
-          "report": {
-            "type": "string",
-            "minLength": 1
+          {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "issues_found",
+                  "no_issues_found"
+                ]
+              },
+              "feedback": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "cache_read_input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "cache_creation_input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "thinking_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "num_turns": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "duration_ms": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "duration_api_ms": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "total_cost_usd": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "outcome",
+              "feedback"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "subject_digest",
-          "model",
-          "effort",
-          "reviewer_id",
-          "focus",
-          "report"
-        ],
-        "additionalProperties": false
+        ]
       }
     },
     "partial_review_reports": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "subject_digest": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "report": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            "additionalProperties": false
           },
-          "model": {
-            "type": "string",
-            "minLength": 1
-          },
-          "effort": {
-            "type": "string",
-            "minLength": 1
-          },
-          "reviewer_id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          "focus": {
-            "type": "string",
-            "enum": [
-              "general",
-              "tests"
-            ]
-          },
-          "report": {
-            "type": "string",
-            "minLength": 1
+          {
+            "type": "object",
+            "properties": {
+              "subject_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effort": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reviewer_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              "focus": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "tests"
+                ]
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "issues_found",
+                  "no_issues_found"
+                ]
+              },
+              "feedback": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "cache_read_input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "cache_creation_input_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "thinking_tokens": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "num_turns": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "duration_ms": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "duration_api_ms": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "total_cost_usd": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "outcome",
+              "feedback"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "subject_digest",
-          "model",
-          "effort",
-          "reviewer_id",
-          "focus",
-          "report"
-        ],
-        "additionalProperties": false
+        ]
       }
     },
     "review_response": {

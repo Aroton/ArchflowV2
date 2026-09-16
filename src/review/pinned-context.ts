@@ -1,3 +1,4 @@
+import { isFeedbackReview } from "../contracts/review.js";
 import type { ReviewResponse } from "../contracts/triage.js";
 import { reviewFindings } from "../contracts/review.js";
 import { readFile } from "node:fs/promises";
@@ -708,9 +709,15 @@ export function priorTriageContextEntry(
 ): PinnedContextEntry {
   if (record.response !== undefined) {
     const source = record.source_review?.evidence;
-    const reports = source?.schema_version === "4" ? [...(source.previous_reports ?? []), ...source.reports].filter(report => reviewerId === undefined || report.reviewer_id === reviewerId) : [];
+    const reports = source !== undefined && isFeedbackReview(source) ? [...(source.previous_reports ?? []), ...source.reports].filter(report => reviewerId === undefined || report.reviewer_id === reviewerId) : [];
     const requests = record.response.decision === "revise" ? record.response.reviewers.filter(reviewer => reviewerId === undefined || reviewer.reviewer_id === reviewerId) : [];
-    return pinnedContextEntry("prior-triage", "prior-round-response", new TextEncoder().encode(JSON.stringify({ previous_reports: reports, revision_summary: record.response.rationale, verification_requests: requests })));
+    // The child needs previous feedback, not accounting or the server's provenance bookkeeping.
+    const previousReports = reports.map(report => "outcome" in report
+      ? { reviewer_id: report.reviewer_id, outcome: report.outcome, feedback: report.feedback }
+      : { reviewer_id: report.reviewer_id, report: report.report });
+    return pinnedContextEntry("prior-triage", "prior-round-response", new TextEncoder().encode(JSON.stringify({
+      previous_reports: previousReports, revision_summary: record.response.rationale, verification_requests: requests,
+    })));
   }
   const accepted = record.dispositions.filter((disposition) => disposition.disposition === "accepted");
   const dispositions = owns === undefined

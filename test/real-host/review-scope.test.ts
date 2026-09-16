@@ -20,7 +20,7 @@ import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import {
-  readableReviewReport,
+  parseReviewFeedback,
 } from "../../src/contracts/review.js";
 import { CliAdapterError, preflightAdapter, serializeDispatch } from "../../src/dispatch/cli.js";
 import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
@@ -204,7 +204,7 @@ describe.skipIf(!enabled)("real-host reviewer-owned evidence scope", () => {
         });
         const generalResult = await dispatchOrSkip(context, () => serializeDispatch(() =>
           dispatch(generalRoute, generalEnvelope, reviewOutputSchema as PlainJsonValue)));
-        const generalReport = readableReviewReport(JSON.parse(decoder.decode(generalResult.extracted_output_bytes))).toLowerCase();
+        const generalReport = parseReviewFeedback(JSON.parse(decoder.decode(generalResult.extracted_output_bytes))).feedback.toLowerCase();
         expect(generalReport).toContain("format-count");
         expect(["summary", "touppercase", "call site", "consumer", "string operation", "interface"].some(term => generalReport.includes(term)), generalReport).toBe(true);
         expect(generalReport.includes("legacy-auth") || generalReport.includes("always grants access"), generalReport).toBe(false);
@@ -224,7 +224,7 @@ describe.skipIf(!enabled)("real-host reviewer-owned evidence scope", () => {
         });
         const testResult = await dispatchOrSkip(context, () => serializeDispatch(() =>
           dispatch(testRoute, testEnvelope, reviewOutputSchema as PlainJsonValue)));
-        const testReport = readableReviewReport(JSON.parse(decoder.decode(testResult.extracted_output_bytes)));
+        const testReport = parseReviewFeedback(JSON.parse(decoder.decode(testResult.extracted_output_bytes))).feedback;
         expect(testReport.trim().length).toBeGreaterThan(0);
         expect(testReport.toLowerCase()).toMatch(/test|assert|coverage|regression/u);
 

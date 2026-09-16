@@ -45,7 +45,7 @@ else {
     fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ cwd, args, role: envelope.assignment?.focus ?? 'constitution' }) + '\\n');
     const result = envelope.rules ? { schema_version: '2', judgments: Object.fromEntries(envelope.rules.map(rule => [rule.slot, {
       compliance: 'pass', rationale: 'Inspected exact bytes.', trigger: 'not-matched', trigger_evidence: 'No matched trigger.'
-    }])) } : { report: 'Inspected exact current and baseline bytes.' };
+    }])) } : { outcome: 'no_issues_found', feedback: 'Inspected exact current and baseline bytes; no actionable issues.' };
     fs.writeFileSync(args[args.indexOf('-o') + 1], JSON.stringify(result));
     console.log(JSON.stringify({type: 'turn.completed'}));
   });

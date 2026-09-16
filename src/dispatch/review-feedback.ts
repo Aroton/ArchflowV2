@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { canonicalJsonBytes } from "../contracts/canonical.js";
-import { reviewReportV1Schema, type ReviewReportV1 } from "../contracts/review.js";
+import { reviewReportSchema, type ReviewReport } from "../contracts/review.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { safeIntegerV1Schema, sha256DigestV1Schema, taskSlugV1Schema, type Sha256Digest } from "../contracts/evidence.js";
 import { phaseInstanceIdV1Schema } from "../contracts/phase-instance.js";
@@ -14,7 +14,7 @@ import type { TransactionDependencies } from "../state/transaction.js";
 const feedbackSchema = z.object({
   task_id: taskSlugV1Schema, phase_instance: phaseInstanceIdV1Schema,
   attempt: safeIntegerV1Schema, input_fingerprint: sha256DigestV1Schema,
-  subject_digest: sha256DigestV1Schema, reports: z.array(reviewReportV1Schema),
+  subject_digest: sha256DigestV1Schema, reports: z.array(reviewReportSchema),
 }).strict();
 
 async function target(authority: TransactionAuthority, dependencies: Pick<TransactionDependencies, "runner">, state: TaskStateV1) {
@@ -27,7 +27,7 @@ async function target(authority: TransactionAuthority, dependencies: Pick<Transa
 
 export async function writeReceivedFeedback(
   authority: TransactionAuthority, dependencies: TransactionDependencies, state: TaskStateV1,
-  subject: Sha256Digest, reports: readonly ReviewReportV1[],
+  subject: Sha256Digest, reports: readonly ReviewReport[],
 ): Promise<void> {
   try {
     const writer = dependencies.projection_writer;
@@ -44,7 +44,7 @@ export async function writeReceivedFeedback(
 
 export async function readReceivedFeedback(
   authority: TransactionAuthority, dependencies: Pick<TransactionDependencies, "runner">, state: TaskStateV1,
-): Promise<readonly ReviewReportV1[] | undefined> {
+): Promise<readonly ReviewReport[] | undefined> {
   if (state.step !== "counter_review" || state.status !== "running") return undefined;
   try {
     const path = await target(authority, dependencies, state);

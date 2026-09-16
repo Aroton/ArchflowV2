@@ -1,3 +1,6 @@
+import { writeDispatchUsageRecord } from "./usage-log.js";
+import type { DispatchUsage } from "../contracts/dispatch-usage.js";
+import { claudeDispatchUsage } from "./usage.js";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,7 +25,6 @@ import {
   runDispatchChild,
   type DispatchChildResult,
   type DispatchChildSpec,
-  type DispatchFailureChannels,
 } from "./process.js";
 import type { DispatchRoute } from "./routing.js";
 import { antigravityOutputDiagnostics } from "./antigravity-output.js";
@@ -43,6 +45,9 @@ export type DispatchCoordinatorInput = Readonly<{
   host: HostIdentity;
   repository_root: string;
   phase_instance: PhaseInstanceId;
+  /** Optional local destination for embedders/tests; installed bundles resolve their own home. */
+  usage_directory?: string;
+  usage_context?: { task_id: string; phase_instance: string; attempt: number };
   signal: AbortSignal;
   cancellation_source: NonNullable<DispatchChildSpec["cancellation_source"]>;
   /** Ordered, validated server-owned snapshots. When absent the child receives no repository. */
@@ -58,6 +63,7 @@ export type DispatchCoordinatorInput = Readonly<{
 export type DispatchCoordinatorResult = Readonly<{
   cli_version: string;
   extracted_output_bytes: Uint8Array;
+  usage?: DispatchUsage;
 }>;
 
 function failureCode(error: unknown): string | undefined {
@@ -89,6 +95,9 @@ function channelTail(channel: Uint8Array): string {
 }
 
 type AttemptTelemetry = Readonly<{
+  result_kind: DispatchEnvelope["result_kind"];
+  envelope_digest: DispatchEnvelope["digest"];
+  input_byte_count: number;
   started_at: string;
   duration_ms: number;
   failure_stage: DispatchFailureStage;
@@ -105,10 +114,9 @@ type DispatchFailureStage =
   | "output-parse";
 
 /**
- * Persists the forensic record of one FAILED dispatch. Successful dispatches write nothing:
- * their evidence is the retained result itself, and per-success telemetry was pure
- * write-only ceremony that grew without bound. The failure record is what canary/leak
- * forensics reads (see docs/LIMITATIONS.md); adapter details are optional diagnostic fields.
+ * Failures retain forensic diagnostics; successful Claude dispatches retain numeric usage only.
+ * These ignored records follow existing phase cleanup. Accepted reviewer feedback also keeps
+ * its measurements durably, without raw CLI transcripts.
  */
 async function writeAttemptRecord(
   input: DispatchCoordinatorInput,
@@ -119,7 +127,10 @@ async function writeAttemptRecord(
   telemetry: AttemptTelemetry,
 ): Promise<void> {
   const writer = input.dependencies.projection_writer;
-  if (writer === undefined || error === undefined) return;
+  if (writer === undefined) return;
+  const channels = telemetry.child_result ?? (error instanceof DispatchProcessError ? error.channels : undefined);
+  const usage = route.adapter === "claude-cli" && channels !== undefined ? claudeDispatchUsage(channels.stdout) : undefined;
+  if (error === undefined && usage === undefined) return;
 
   await ensureAttemptDirectory(input.authority, input.phase_instance);
   const target = await resolveTaskWorkspacePath({
@@ -131,6 +142,18 @@ async function writeAttemptRecord(
   });
   if (!target.ok) return;
 
+  // Successful dispatches retain only small measurements, never channel transcripts.
+  if (error === undefined) {
+    await writer.replaceRegular(target.value, canonicalJsonBytes({
+      schema_version: "1", attempt_id: attemptId, task_id: input.authority.task_id,
+      phase_instance: input.phase_instance, attempt: input.authority.context.attempt,
+      adapter: route.adapter, model: route.model, effort: route.effort,
+      started_at: telemetry.started_at, duration_ms: telemetry.duration_ms,
+      status: "succeeded", usage: usage!,
+      result_kind: telemetry.result_kind, envelope_digest: telemetry.envelope_digest, input_byte_count: telemetry.input_byte_count,
+    }), false);
+    return;
+  }
   const code = failureCode(error);
   const parameters = error instanceof CliAdapterError || error instanceof DispatchProcessError
     ? error.project_error.diagnostic.parameters : undefined;
@@ -138,8 +161,6 @@ async function writeAttemptRecord(
   const systemCode = unclassified && "code" in error && typeof error.code === "string"
     ? error.code
     : undefined;
-  const channels: DispatchFailureChannels | DispatchChildResult | undefined = telemetry.child_result
-    ?? (error instanceof DispatchProcessError ? error.channels : undefined);
   const stdoutTail = channels === undefined ? "" : channelTail(channels.stdout);
   const stderrTail = channels === undefined ? "" : channelTail(channels.stderr);
   const record = {
@@ -153,6 +174,8 @@ async function writeAttemptRecord(
     effort: route.effort,
     ...(route.provider === undefined ? {} : { provider: route.provider }),
     status: "failed",
+    result_kind: telemetry.result_kind, envelope_digest: telemetry.envelope_digest, input_byte_count: telemetry.input_byte_count,
+    ...(usage === undefined ? {} : { usage }),
     failure_stage: telemetry.failure_stage,
     started_at: telemetry.started_at,
     duration_ms: telemetry.duration_ms,
@@ -189,14 +212,16 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
     runner: input.dependencies.runner,
     environment: input.dependencies.environment,
   });
-  return createReviewDispatcher(input, (attemptId, route, preflight, error, telemetry) =>
+  return createReviewDispatcher({ ...input, usage_context: {
+    task_id: input.authority.task_id, phase_instance: input.phase_instance, attempt: input.authority.context.attempt,
+  } }, (attemptId, route, preflight, error, telemetry) =>
     writeAttemptRecord(input, attemptId, route, preflight, error, telemetry));
 }
 
 /** CLI execution and disposable snapshots, independent of workflow authority or persistence. */
 export function createReviewDispatcher(
-  input: Pick<DispatchCoordinatorInput, "host" | "repository_root" | "signal" | "cancellation_source" | "repository_views" | "shared_workspace">,
-  observeFailure?: (attemptId: string, route: DispatchRoute, preflight: CliPreflight | undefined,
+  input: Pick<DispatchCoordinatorInput, "host" | "repository_root" | "signal" | "cancellation_source" | "repository_views" | "shared_workspace" | "usage_directory" | "usage_context">,
+  observeAttempt?: (attemptId: string, route: DispatchRoute, preflight: CliPreflight | undefined,
     error: unknown, telemetry: AttemptTelemetry) => Promise<void>,
 ): ReturnType<typeof createDispatchCoordinator> {
   if (input.shared_workspace !== undefined && input.repository_views !== undefined) {
@@ -264,23 +289,42 @@ export function createReviewDispatcher(
       const failure = adapter.classifyFailure(childResult);
       if (failure !== undefined) throw new CliAdapterError(failure);
       failureStage = "output-parse";
+      const usage = route.adapter === "claude-cli" ? claudeDispatchUsage(childResult.stdout) : undefined;
       return Object.freeze({
         cli_version: preflight.cli_version,
         extracted_output_bytes: adapter.parseOutput(childResult),
+        ...(usage === undefined ? {} : { usage }),
       });
     } catch (error) {
       primaryError = error;
       throw error;
     } finally {
       if (ownsWorkspace) await workspace?.dispose().catch(() => undefined);
-      if (primaryError !== undefined) {
-        await observeFailure?.(attemptId, route, preflight, primaryError, {
-          started_at: startedAt.toISOString(),
-          duration_ms: Date.now() - startedAt.getTime(),
-          failure_stage: failureStage,
-          child_result: childResult,
-        })?.catch(() => undefined);
-      }
+      const channels = childResult ?? (primaryError instanceof DispatchProcessError ? primaryError.channels : undefined);
+      const usage = route.adapter === "claude-cli" && channels !== undefined ? claudeDispatchUsage(channels.stdout) : undefined;
+      const completedAt = new Date();
+      await writeDispatchUsageRecord({
+        schema_version: "1", dispatch_id: attemptId,
+        started_at: startedAt.toISOString(), completed_at: completedAt.toISOString(),
+        duration_ms: completedAt.getTime() - startedAt.getTime(), repository: input.repository_root,
+        ...input.usage_context,
+        adapter: route.adapter, model: route.model, effort: route.effort,
+        ...(route.provider === undefined ? {} : { provider: route.provider }),
+        ...(preflight === undefined ? {} : { cli_version: preflight.cli_version }),
+        result_kind: envelope.result_kind, envelope_digest: envelope.digest, input_byte_count: envelope.byte_count,
+        status: primaryError === undefined ? "succeeded" : "failed",
+        ...(primaryError === undefined ? {} : { failure_stage: failureStage, failure_code: failureCode(primaryError) ?? "UNCLASSIFIED" }),
+        ...(usage === undefined ? {} : { usage }),
+      }, input.usage_directory);
+      await observeAttempt?.(attemptId, route, preflight, primaryError, {
+        started_at: startedAt.toISOString(),
+        duration_ms: Date.now() - startedAt.getTime(),
+        failure_stage: failureStage,
+        child_result: childResult,
+        result_kind: envelope.result_kind,
+        envelope_digest: envelope.digest,
+        input_byte_count: envelope.byte_count,
+      })?.catch(() => undefined);
     }
   };
 }

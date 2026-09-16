@@ -1,4 +1,5 @@
-import { readableReviewReport, serverAttestedReviewV4Schema, type ServerAttestedReviewV4 } from "./review.js";
+import type { DispatchUsage } from "./dispatch-usage.js";
+import { parseReviewFeedback, serverAttestedReviewV5Schema, type ServerAttestedReviewV5 } from "./review.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
@@ -70,7 +71,7 @@ export type ObservationBindingBase<K extends EvidenceKind> = {
   readonly route_override?: RouteOverrideRecord;
 };
 export type ObservationBindingByKind = {
-  readonly review: ObservationBindingBase<"review"> & { readonly role: "counter-review"; readonly rubric_digest: Sha256Digest; readonly producer_family: ModelFamily; /** Required by every fresh dispatch; omission retains the archived V2 observation seam. */ readonly assignment?: ReviewObservationAssignmentV3 };
+  readonly review: ObservationBindingBase<"review"> & { readonly role: "counter-review"; readonly rubric_digest: Sha256Digest; readonly producer_family: ModelFamily; /** Required by every fresh dispatch; omission retains the archived V2 observation seam. */ readonly assignment?: ReviewObservationAssignmentV3; readonly usage?: DispatchUsage };
   readonly adjudication: ObservationBindingBase<"adjudication"> & { readonly pinned_constitution_digest: Sha256Digest; readonly source_review_envelope_digest: Sha256Digest; /** Archived V1 observation seam. */ readonly approved_upstream_digests?: readonly Sha256Digest[]; /** Required by every fresh V2 adjudication dispatch. */ readonly rule_slots?: readonly AdjudicationRuleSlotV1[] };
 };
 export type ObservationCapability<K extends EvidenceKind> = { readonly kind: K; readonly [observationCapabilityBrand]: ObservationBindingByKind[K] };
@@ -218,12 +219,12 @@ function observeReviewV3(
   return copyFreezeJson(serverAttestedReviewV3Schema.parse(candidate) as ServerAttestedReviewV3);
 }
 
-function observeReviewReport(binding: ObservationBindingByKind["review"], assignment: ReviewObservationAssignmentV3, bytes: Uint8Array, outputDigest: Sha256Digest): ServerAttestedReviewV4 {
-  const { kind: _kind, assignment: _assignment, family, ...provenance } = binding;
+function observeReviewReport(binding: ObservationBindingByKind["review"], assignment: ReviewObservationAssignmentV3, bytes: Uint8Array, outputDigest: Sha256Digest): ServerAttestedReviewV5 {
+  const { kind: _kind, assignment: _assignment, usage, family, ...provenance } = binding;
   const candidate = {
-    ...provenance, schema_version: "4", step: "counter_review", assurance: "server-attested",
+    ...provenance, schema_version: "5", step: "counter_review", assurance: "server-attested",
     model_family: family, observed_output_digest: outputDigest,
-    reports: [{ subject_digest: binding.subject_digest, model: binding.model, effort: binding.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, report: readableReviewReport(decodeJson(bytes)) }],
+    reports: [{ subject_digest: binding.subject_digest, model: binding.model, effort: binding.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, ...parseReviewFeedback(decodeJson(bytes)), ...(usage === undefined ? {} : { usage }) }],
     reviewer_runs: [{
       reviewer_id: assignment.reviewer_id, focus: assignment.focus, routing_role: assignment.routing_role,
       criterion_ids: [...assignment.criterion_ids], finding_ids: [], rubric_digest: binding.rubric_digest,
@@ -235,7 +236,7 @@ function observeReviewReport(binding: ObservationBindingByKind["review"], assign
       ...(binding.route_override === undefined ? {} : { route_override: binding.route_override }),
     }],
   };
-  return copyFreezeJson(serverAttestedReviewV4Schema.parse(candidate) as ServerAttestedReviewV4);
+  return copyFreezeJson(serverAttestedReviewV5Schema.parse(candidate) as ServerAttestedReviewV5);
 }
 
 export const observationSource: ObservationSource = Object.freeze({

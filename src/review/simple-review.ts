@@ -1,3 +1,4 @@
+import type { DispatchCoordinatorResult } from "../dispatch/coordinator.js";
 import { reportInternalError } from "../mcp/diagnostics.js";
 import { setTimeout as delay } from "node:timers/promises";
 import { canonicalJsonBytes, sha256Bytes } from "../contracts/canonical.js";
@@ -19,7 +20,7 @@ import { loadCanonicalRubricForPhaseKind, reviewAssignment } from "./rubrics.js"
 import { captureSimpleContext, SimpleReviewError } from "./simple-context.js";
 
 export type SimpleReviewDependencies = {
-  dispatch?: (route: DispatchRoute, envelope: DispatchEnvelope, schema: PlainJsonValue) => Promise<{ cli_version: string; extracted_output_bytes: Uint8Array }>;
+  dispatch?: (route: DispatchRoute, envelope: DispatchEnvelope, schema: PlainJsonValue) => Promise<DispatchCoordinatorResult>;
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
 };
 const failure = (code: string, message: string): SimpleReviewResult => ({ schema_version: "1", ok: false, error: { code, message, retryable: false } });
@@ -106,6 +107,7 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
         let parsed: unknown;
         try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(returned.extracted_output_bytes)); }
         catch { throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer returned invalid JSON."); }
+        const usage = returned.usage === undefined ? {} : { usage: returned.usage };
         if (role === "adjudicator") {
           const result = constitutionSchema!.safeParse(parsed);
           if (!result.success) throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Constitution review did not cover every assigned rule with valid judgments.");
@@ -116,11 +118,11 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
             }
             return { rule_id: slot.rule_id, rule_version: slot.rule_version, ...judgment };
           });
-          return { selection, judgments, report: judgments.map((entry) => `${entry.rule_id}: ${entry.compliance}. ${entry.rationale}`).join("\n") };
+          return { selection, judgments, report: { role, reviewer_id, route, ...usage, report: judgments.map((entry) => `${entry.rule_id}: ${entry.compliance}. ${entry.rationale}`).join("\n") } };
         }
         const result = reviewReportOutputSchema.strict().safeParse(parsed);
-        if (!result.success || result.data.report.trim() === "") throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer returned no usable report.");
-        return { selection, report: result.data.report };
+        if (!result.success) throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer must return an explicit outcome and nonblank feedback.");
+        return { selection, report: { role, reviewer_id, route, ...result.data, ...usage } };
       } catch (error) {
         if (!(error instanceof SimpleReviewError) && classifiedDispatchFailure(error) === undefined) reportInternalError(context.invocation_id, error);
         return { selection, error };
@@ -135,7 +137,7 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
           message: outcome.error instanceof SimpleReviewError ? outcome.error.message : classified?.message ?? "Reviewer dispatch failed or was cancelled. Repair it before requesting a fresh review.",
         });
       } else {
-        value.reports.push({ ...selection, report: outcome.report });
+        value.reports.push(outcome.report);
         if (outcome.judgments !== undefined) {
           value.constitution = { status: "complete", judgments: outcome.judgments };
           for (const judgment of outcome.judgments) if (judgment.trigger !== "not-matched") {

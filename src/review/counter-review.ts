@@ -1,5 +1,6 @@
+import type { DispatchUsage } from "../contracts/dispatch-usage.js";
 import type { PreparedReviewDiffs } from "./diffs.js";
-import { reviewReportOutputSchema, readableReviewReport, type ReviewReportV1, type ServerAttestedReviewV4 } from "../contracts/review.js";
+import { reviewReportOutputSchema, parseReviewFeedback, isFeedbackReview, type ReviewReport, type ReviewFeedbackV1, type ServerAttestedReviewV5 } from "../contracts/review.js";
 import effortReviewOutputSchema from "../contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
 const reviewOutputSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue;
 
@@ -104,6 +105,7 @@ import { reviewAssignment, type CounterReviewPhaseKind } from "./rubrics.js";
 export type CounterReviewDispatchResult = Readonly<{
   cli_version: string;
   extracted_output_bytes: Uint8Array;
+  usage?: DispatchUsage;
 }>;
 
 const fail = <T>(error: ProjectError): ProjectResult<T> =>
@@ -211,7 +213,7 @@ export type RunCounterReviewDependencies = Readonly<{
    * child dispatches fresh.
    */
   retained_outputs?: RetainedChildOutputStore;
-  observe_reports?: (reports: readonly ReviewReportV1[]) => Promise<void>;
+  observe_reports?: (reports: readonly ReviewReport[]) => Promise<void>;
   /** Best-effort runtime observation seam. It must never replace the original routing/dispatch error. */
   observe_failure?: (
     role: DispatchFailureRoleV1,
@@ -347,7 +349,7 @@ async function planCounterReviewCommit(
     revision,
     request_digest: inputs.request_digest,
   } as const;
-  const success = inputs.review_evidence.schema_version === "4"
+  const success = isFeedbackReview(inputs.review_evidence)
     ? Object.freeze({ ...commonSuccess, reports: inputs.review_evidence.reports, constitution: constitutionOutcome })
     : inputs.review_evidence.schema_version === "3"
     ? Object.freeze({
@@ -669,7 +671,7 @@ export async function runCounterReview(
     | Readonly<{ ok: true; value: ChildValue }>
     | Readonly<{ ok: false; error: unknown; project_error?: ProjectError }>;
   const retained = dependencies.retained_outputs;
-  const receivedReports = new Map<string, ReviewReportV1>();
+  const receivedReports = new Map<string, ReviewFeedbackV1>();
   // Failures in the order they FINISHED, so the surfaced error names the same child the
   // failure-observation slot recorded first.
   const failures: Extract<ChildOutcome, { ok: false }>[] = [];
@@ -695,12 +697,13 @@ export async function runCounterReview(
       extracted_output_bytes: dispatched.extracted_output_bytes,
       repositories: input.repositories,
       assignment: Object.freeze({ ...assignment, routing_role: routeEntry.role, report_format: true }),
+      ...(dispatched.usage === undefined ? {} : { usage: dispatched.usage }),
       ...(routeOverride === undefined ? {} : { route_override: routeOverride }),
     });
     const binding = { envelope_digest: reviewEnvelope.digest, role: routeEntry.role, selection: routeEntry.selection };
     const receive = (result: CounterReviewDispatchResult): void => {
-      const report = readableReviewReport(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.extracted_output_bytes)));
-      receivedReports.set(assignment.reviewer_id, { subject_digest: subject.subject_digest, model: route.model, effort: route.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, report });
+      const feedback = parseReviewFeedback(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.extracted_output_bytes)));
+      receivedReports.set(assignment.reviewer_id, { subject_digest: subject.subject_digest, model: route.model, effort: route.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, ...feedback, ...(result.usage === undefined ? {} : { usage: result.usage }) });
     };
     let dispatched = await retained?.read(binding);
     if (dispatched !== undefined) {
@@ -878,21 +881,21 @@ export async function runCounterReview(
   if (singleObservations.length !== reviewRoutes.length) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
   }
-  if (singleObservations.some((observation) => observation.evidence.schema_version !== "4")) {
-    throw new TypeError("fresh counter-review observations must all use review schema version 4");
+  if (singleObservations.some((observation) => observation.evidence.schema_version !== "5")) {
+    throw new TypeError("fresh counter-review observations must all use review schema version 5");
   }
   if (effortPlan !== undefined && effortAssessment === undefined) {
     throw new TypeError("phase-design counter-review settled without an effort assessment");
   }
 
-  const observations = singleObservations.map(observation => observation.evidence as ServerAttestedReviewV4);
+  const observations = singleObservations.map(observation => observation.evidence as ServerAttestedReviewV5);
   const primaryObs = observations[0]!;
-  const mergedReviewEvidence: ServerAttestedReviewV4 = Object.freeze({
+  const mergedReviewEvidence: ServerAttestedReviewV5 = Object.freeze({
     ...primaryObs,
     reports: Object.freeze(observations.flatMap(evidence => evidence.reports)),
     ...(() => {
       const previous = priorTriage?.source_review?.evidence;
-      if (previous?.schema_version !== "4") return {};
+      if (previous === undefined || !isFeedbackReview(previous)) return {};
       const latest = new Map([...(previous.previous_reports ?? []), ...previous.reports].map(report => [report.reviewer_id, report]));
       for (const observation of observations) for (const report of observation.reports) latest.delete(report.reviewer_id);
       return latest.size === 0 ? {} : { previous_reports: [...latest.values()] };

@@ -607,8 +607,8 @@ var require_Node = __commonJS({
         };
         const res = toJS.toJS(this, "", ctx);
         if (typeof onAnchor === "function")
-          for (const { count, res: res2 } of ctx.anchors.values())
-            onAnchor(res2, count);
+          for (const { count: count2, res: res2 } of ctx.anchors.values())
+            onAnchor(res2, count2);
         return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
       }
     };
@@ -714,13 +714,13 @@ var require_Alias = __commonJS({
         const anchor = anchors2 && source && anchors2.get(source);
         return anchor ? anchor.count * anchor.aliasCount : 0;
       } else if (identity.isCollection(node)) {
-        let count = 0;
+        let count2 = 0;
         for (const item of node.items) {
           const c = getAliasCount(doc, item, anchors2);
-          if (c > count)
-            count = c;
+          if (c > count2)
+            count2 = c;
         }
-        return count;
+        return count2;
       } else if (identity.isPair(node)) {
         const kc = getAliasCount(doc, node.key, anchors2);
         const vc = getAliasCount(doc, node.value, anchors2);
@@ -3673,8 +3673,8 @@ var require_Document = __commonJS({
         };
         const res = toJS.toJS(this.contents, jsonArg ?? "", ctx);
         if (typeof onAnchor === "function")
-          for (const { count, res: res2 } of ctx.anchors.values())
-            onAnchor(res2, count);
+          for (const { count: count2, res: res2 } of ctx.anchors.values())
+            onAnchor(res2, count2);
         return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
       }
       /**
@@ -3751,12 +3751,12 @@ var require_errors2 = __commonJS({
         lineStr = prev + lineStr;
       }
       if (/[^ ]/.test(lineStr)) {
-        let count = 1;
+        let count2 = 1;
         const end = error51.linePos[1];
         if (end?.line === line && end.col > col) {
-          count = Math.max(1, Math.min(end.col - col, 80 - ci));
+          count2 = Math.max(1, Math.min(end.col - col, 80 - ci));
         }
-        const pointer = " ".repeat(ci) + "^".repeat(count);
+        const pointer = " ".repeat(ci) + "^".repeat(count2);
         error51.message += `:
 
 ${lineStr}
@@ -12781,8 +12781,8 @@ function az_default() {
 }
 
 // node_modules/zod/v4/locales/be.js
-function getBelarusianPlural(count, one, few, many) {
-  const absCount = Math.abs(count);
+function getBelarusianPlural(count2, one, few, many) {
+  const absCount = Math.abs(count2);
   const lastDigit = absCount % 10;
   const lastTwoDigits = absCount % 100;
   if (lastTwoDigits >= 11 && lastTwoDigits <= 19) {
@@ -14860,8 +14860,8 @@ function hu_default() {
 }
 
 // node_modules/zod/v4/locales/hy.js
-function getArmenianPlural(count, one, many) {
-  return Math.abs(count) === 1 ? one : many;
+function getArmenianPlural(count2, one, many) {
+  return Math.abs(count2) === 1 ? one : many;
 }
 function withDefiniteArticle(word) {
   if (!word)
@@ -16989,8 +16989,8 @@ function ro_default() {
 }
 
 // node_modules/zod/v4/locales/ru.js
-function getRussianPlural(count, one, few, many) {
-  const absCount = Math.abs(count);
+function getRussianPlural(count2, one, few, many) {
+  const absCount = Math.abs(count2);
   const lastDigit = absCount % 10;
   const lastTwoDigits = absCount % 100;
   if (lastTwoDigits >= 11 && lastTwoDigits <= 19) {
@@ -30112,15 +30112,15 @@ var require_resolve = /* @__PURE__ */ __commonJSMin(((exports) => {
     return false;
   }
   function countKeys(schema) {
-    let count = 0;
+    let count2 = 0;
     for (const key2 in schema) {
       if (key2 === "$ref") return Infinity;
-      count++;
+      count2++;
       if (SIMPLE_INLINED.has(key2)) continue;
-      if (typeof schema[key2] == "object") (0, util_1.eachItem)(schema[key2], (sch) => count += countKeys(sch));
-      if (count === Infinity) return Infinity;
+      if (typeof schema[key2] == "object") (0, util_1.eachItem)(schema[key2], (sch) => count2 += countKeys(sch));
+      if (count2 === Infinity) return Infinity;
     }
-    return count;
+    return count2;
   }
   function getFullPath(resolver, id6 = "", normalize) {
     if (normalize !== false) id6 = normalizeId(id6);
@@ -32720,8 +32720,8 @@ var require_contains = /* @__PURE__ */ __commonJSMin(((exports) => {
       cxt.result(valid, () => cxt.reset());
       function validateItemsWithCount() {
         const schValid = gen.name("_valid");
-        const count = gen.let("count", 0);
-        validateItems(schValid, () => gen.if(schValid, () => checkLimits(count)));
+        const count2 = gen.let("count", 0);
+        validateItems(schValid, () => gen.if(schValid, () => checkLimits(count2)));
       }
       function validateItems(_valid, block) {
         gen.forRange("i", 0, len, (i) => {
@@ -32734,13 +32734,13 @@ var require_contains = /* @__PURE__ */ __commonJSMin(((exports) => {
           block();
         });
       }
-      function checkLimits(count) {
-        gen.code((0, codegen_1._)`${count}++`);
-        if (max === void 0) gen.if((0, codegen_1._)`${count} >= ${min}`, () => gen.assign(valid, true).break());
+      function checkLimits(count2) {
+        gen.code((0, codegen_1._)`${count2}++`);
+        if (max === void 0) gen.if((0, codegen_1._)`${count2} >= ${min}`, () => gen.assign(valid, true).break());
         else {
-          gen.if((0, codegen_1._)`${count} > ${max}`, () => gen.assign(valid, false).break());
+          gen.if((0, codegen_1._)`${count2} > ${max}`, () => gen.assign(valid, false).break());
           if (min === 1) gen.assign(valid, true);
-          else gen.if((0, codegen_1._)`${count} >= ${min}`, () => gen.assign(valid, true));
+          else gen.if((0, codegen_1._)`${count2} >= ${min}`, () => gen.assign(valid, true));
         }
       }
     }
@@ -37036,6 +37036,20 @@ function gateDecisionEffect(payload) {
   return effects[payload.decision];
 }
 
+// src/contracts/dispatch-usage.ts
+var count = external_exports.number().int().nonnegative().safe().optional();
+var dispatchUsageSchema = external_exports.object({
+  input_tokens: count,
+  output_tokens: count,
+  cache_read_input_tokens: count,
+  cache_creation_input_tokens: count,
+  thinking_tokens: count,
+  num_turns: count,
+  duration_ms: count,
+  duration_api_ms: count,
+  total_cost_usd: external_exports.number().finite().nonnegative().optional()
+}).strict();
+
 // src/contracts/component-manifest.ts
 var componentIdSchema = external_exports.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u, "component id must be kebab-case");
 var nonblank = external_exports.string().min(1).regex(/\S/u, "must contain a non-whitespace character");
@@ -37840,6 +37854,9 @@ var ROUTE_SOURCE_PROVENANCES = ["configured", "invocation-declared", "route-over
 var DISPLACED_ROUTE_SOURCES = ["configured", "invocation-declared"];
 var REVIEW_RUN_FOCUSES = ["general", "tests"];
 var REVIEW_RUN_ROLES = ["counter-reviewer", "test-reviewer"];
+function isFeedbackReview(review) {
+  return review.schema_version === "4" || review.schema_version === "5";
+}
 var routeOverrideRecordSchema2 = external_exports.object({
   reason: nonBlank2,
   pinned_model: nonBlank2.optional(),
@@ -38088,7 +38105,7 @@ function validateServerAttestedReviewV3(review, context2) {
 var serverAttestedReviewV3Schema = serverAttestedReviewV3StructuralSchema.superRefine((review, context2) => {
   validateServerAttestedReviewV3(review, context2);
 });
-var reviewReportV1Schema = external_exports.object({
+var reviewReportV1StructuralSchema = external_exports.object({
   subject_digest: external_exports.string().regex(/^[0-9a-f]{64}$/u),
   model: external_exports.string().min(1),
   effort: external_exports.string().min(1),
@@ -38096,34 +38113,43 @@ var reviewReportV1Schema = external_exports.object({
   focus: external_exports.enum(["general", "tests"]),
   report: external_exports.string().min(1)
 }).strict();
-var serverAttestedReviewV4Schema = serverAttestedReviewV3StructuralSchema.omit({
+var reviewReportV1Schema = reviewReportV1StructuralSchema;
+var reviewReportsStructuralSchema = serverAttestedReviewV3StructuralSchema.omit({
   findings: true,
   verdict: true,
   total_findings: true,
   partition_counts: true,
   upstream_alignment: true,
   drift: true
-}).extend({ schema_version: external_exports.literal("4"), reports: external_exports.array(reviewReportV1Schema).min(1), previous_reports: external_exports.array(reviewReportV1Schema).optional() }).strict().superRefine((review, context2) => {
+}).extend({ schema_version: external_exports.literal("4"), reports: external_exports.array(reviewReportV1Schema).min(1), previous_reports: external_exports.array(reviewReportV1Schema).optional() }).strict();
+function validateReportBindings(review, context2) {
   const ids = review.reviewer_runs.map((run) => run.reviewer_id);
   if (new Set(ids).size !== ids.length || review.reports.length !== ids.length || review.reports.some((report2, index) => report2.reviewer_id !== ids[index] || report2.focus !== review.reviewer_runs[index]?.focus || report2.subject_digest !== review.subject_digest || report2.model !== review.reviewer_runs[index]?.model || report2.effort !== review.reviewer_runs[index]?.effort)) {
     context2.addIssue({ code: "custom", path: ["reports"], message: "reports must match dispatched reviewers" });
   }
-});
-var reviewReportOutputSchema = external_exports.object({ report: external_exports.string() });
-function readableReviewReport(value) {
-  assertPlainJson(value, "review report");
-  if (typeof value === "string") {
-    if (value.trim() === "") throw new TypeError("review report is empty");
-    return value;
-  }
-  if (value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && "report" in value && typeof value.report === "string") {
-    if (value.report.trim() === "") throw new TypeError("review report is empty");
-    return value.report;
-  }
-  return JSON.stringify(value, null, 2);
+}
+var serverAttestedReviewV4Schema = reviewReportsStructuralSchema.superRefine(validateReportBindings);
+var reviewReportOutputSchema = external_exports.object({
+  outcome: external_exports.enum(["issues_found", "no_issues_found"]),
+  feedback: external_exports.string().min(1).regex(/\S/u)
+}).strict();
+var reviewFeedbackV1Schema = reviewReportV1StructuralSchema.omit({ report: true }).extend({
+  outcome: reviewReportOutputSchema.shape.outcome,
+  feedback: reviewReportOutputSchema.shape.feedback,
+  usage: dispatchUsageSchema.optional()
+}).strict();
+var reviewReportSchema = external_exports.union([reviewReportV1Schema, reviewFeedbackV1Schema]);
+var serverAttestedReviewV5Schema = reviewReportsStructuralSchema.extend({
+  schema_version: external_exports.literal("5"),
+  reports: external_exports.array(reviewFeedbackV1Schema).min(1),
+  previous_reports: external_exports.array(reviewReportSchema).optional()
+}).superRefine(validateReportBindings);
+function parseReviewFeedback(value) {
+  assertPlainJson(value, "review feedback");
+  return reviewReportOutputSchema.parse(structuredClone(value));
 }
 function reviewFindings(review) {
-  return review.schema_version === "4" ? [] : review.findings;
+  return isFeedbackReview(review) ? [] : review.findings;
 }
 var degradedReviewV1Schema = rawReviewV1StructuralSchema.safeExtend(degradedFields).strict().superRefine((review, context2) => {
   validateUniqueReviewMembers(review, context2);
@@ -38137,7 +38163,7 @@ var degradedReviewV2Schema = rawReviewV2StructuralSchema.safeExtend(degradedFiel
 });
 var v1EvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewV1Schema, degradedReviewV1Schema]);
 var v2EvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewV2Schema, degradedReviewV2Schema]);
-var reviewEvidenceSchema = external_exports.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema, serverAttestedReviewV3Schema, serverAttestedReviewV4Schema]);
+var reviewEvidenceSchema = external_exports.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema, serverAttestedReviewV3Schema, serverAttestedReviewV4Schema, serverAttestedReviewV5Schema]);
 function parseReviewEvidence(value) {
   assertPlainJson(value, "review evidence");
   const parsed = reviewEvidenceSchema.parse(structuredClone(value));
@@ -38982,7 +39008,10 @@ var simpleReviewInputSchema = external_exports.object({
 });
 var role = external_exports.enum(["counter-reviewer", "test-reviewer", "adjudicator"]);
 var route = configRouteSchema.extend({ adapter: text2, family: text2 }).strict();
-var report = external_exports.object({ role, reviewer_id: text2, route, report: external_exports.string() }).strict();
+var report = external_exports.union([
+  reviewReportOutputSchema.extend({ role: external_exports.enum(["counter-reviewer", "test-reviewer"]), reviewer_id: text2, route, usage: dispatchUsageSchema.optional() }).strict(),
+  external_exports.object({ role: external_exports.literal("adjudicator"), reviewer_id: text2, route, report: external_exports.string(), usage: dispatchUsageSchema.optional() }).strict()
+]);
 var judgment = adjudicationJudgmentV2Schema.extend({ rule_id: text2, rule_version: external_exports.number().int().positive() }).strict();
 var failure = external_exports.object({ role, reviewer_id: text2, route, code: text2, message: text2 }).strict();
 var simpleReviewResultSchema = external_exports.object({
@@ -39265,12 +39294,12 @@ function validateTriage(current, candidate, dispositionLedger, reviewRoundHistor
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
-  const reports = current.reviews.filter((review) => review.evidence.schema_version === "4");
+  const reports = current.reviews.filter((review) => isFeedbackReview(review.evidence));
   if (reports.length > 0) {
     if (reports.length !== current.reviews.length || parsed.response === void 0) throw new TypeError("review reports require a working-AI response");
     if (parsed.dispositions.length !== 0) throw new TypeError("report responses do not carry finding dispositions");
     if (parsed.response.decision === "revise") {
-      const ids = new Set(reports.flatMap((review) => review.evidence.schema_version === "4" ? [...review.evidence.reports, ...review.evidence.previous_reports ?? []].map((report2) => report2.reviewer_id) : []));
+      const ids = new Set(reports.flatMap((review) => isFeedbackReview(review.evidence) ? [...review.evidence.reports, ...review.evidence.previous_reports ?? []].map((report2) => report2.reviewer_id) : []));
       const selected = parsed.response.reviewers.map((reviewer) => reviewer.reviewer_id);
       if (new Set(selected).size !== selected.length || selected.some((id6) => !ids.has(id6))) throw new TypeError("follow-up reviewers must identify distinct previous reviewers");
     }
@@ -39980,9 +40009,9 @@ var workflowViewV1Schema = external_exports.object({
   taxonomy_denial_rates: taxonomyDenialRatesV1Schema.optional(),
   review_context: publicReviewContextV1Schema.optional(),
   review_strength: publicReviewStrengthV1Schema.optional(),
-  review_reports: external_exports.array(reviewReportV1Schema).optional(),
-  previous_review_reports: external_exports.array(reviewReportV1Schema).optional(),
-  partial_review_reports: external_exports.array(reviewReportV1Schema).optional(),
+  review_reports: external_exports.array(reviewReportSchema).optional(),
+  previous_review_reports: external_exports.array(reviewReportSchema).optional(),
+  partial_review_reports: external_exports.array(reviewReportSchema).optional(),
   review_response: reviewResponseSchema.optional(),
   review_revision: reviewRevisionDeclarationSchema.optional(),
   implementation_recommendation: implementationRecommendationV1Schema,
@@ -44528,45 +44557,149 @@ var mcp_tools_schema_default = {
                 minItems: 1,
                 type: "array",
                 items: {
-                  type: "object",
-                  properties: {
-                    subject_digest: {
-                      type: "string",
-                      pattern: "^[0-9a-f]{64}$"
+                  anyOf: [
+                    {
+                      type: "object",
+                      properties: {
+                        subject_digest: {
+                          type: "string",
+                          pattern: "^[0-9a-f]{64}$"
+                        },
+                        model: {
+                          type: "string",
+                          minLength: 1
+                        },
+                        effort: {
+                          type: "string",
+                          minLength: 1
+                        },
+                        reviewer_id: {
+                          type: "string",
+                          pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                        },
+                        focus: {
+                          type: "string",
+                          enum: [
+                            "general",
+                            "tests"
+                          ]
+                        },
+                        report: {
+                          type: "string",
+                          minLength: 1
+                        }
+                      },
+                      required: [
+                        "subject_digest",
+                        "model",
+                        "effort",
+                        "reviewer_id",
+                        "focus",
+                        "report"
+                      ],
+                      additionalProperties: false
                     },
-                    model: {
-                      type: "string",
-                      minLength: 1
-                    },
-                    effort: {
-                      type: "string",
-                      minLength: 1
-                    },
-                    reviewer_id: {
-                      type: "string",
-                      pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-                    },
-                    focus: {
-                      type: "string",
-                      enum: [
-                        "general",
-                        "tests"
-                      ]
-                    },
-                    report: {
-                      type: "string",
-                      minLength: 1
+                    {
+                      type: "object",
+                      properties: {
+                        subject_digest: {
+                          type: "string",
+                          pattern: "^[0-9a-f]{64}$"
+                        },
+                        model: {
+                          type: "string",
+                          minLength: 1
+                        },
+                        effort: {
+                          type: "string",
+                          minLength: 1
+                        },
+                        reviewer_id: {
+                          type: "string",
+                          pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                        },
+                        focus: {
+                          type: "string",
+                          enum: [
+                            "general",
+                            "tests"
+                          ]
+                        },
+                        outcome: {
+                          type: "string",
+                          enum: [
+                            "issues_found",
+                            "no_issues_found"
+                          ]
+                        },
+                        feedback: {
+                          type: "string",
+                          minLength: 1,
+                          pattern: "\\S"
+                        },
+                        usage: {
+                          type: "object",
+                          properties: {
+                            input_tokens: {
+                              type: "integer",
+                              minimum: -9007199254740991,
+                              maximum: 9007199254740991
+                            },
+                            output_tokens: {
+                              type: "integer",
+                              minimum: -9007199254740991,
+                              maximum: 9007199254740991
+                            },
+                            cache_read_input_tokens: {
+                              type: "integer",
+                              minimum: -9007199254740991,
+                              maximum: 9007199254740991
+                            },
+                            cache_creation_input_tokens: {
+                              type: "integer",
+                              minimum: -9007199254740991,
+                              maximum: 9007199254740991
+                            },
+                            thinking_tokens: {
+                              type: "integer",
+                              minimum: -9007199254740991,
+                              maximum: 9007199254740991
+                            },
+                            num_turns: {
+                              type: "integer",
+                              minimum: -9007199254740991,
+                              maximum: 9007199254740991
+                            },
+                            duration_ms: {
+                              type: "integer",
+                              minimum: -9007199254740991,
+                              maximum: 9007199254740991
+                            },
+                            duration_api_ms: {
+                              type: "integer",
+                              minimum: -9007199254740991,
+                              maximum: 9007199254740991
+                            },
+                            total_cost_usd: {
+                              type: "number",
+                              minimum: 0
+                            }
+                          },
+                          additionalProperties: false
+                        }
+                      },
+                      required: [
+                        "subject_digest",
+                        "model",
+                        "effort",
+                        "reviewer_id",
+                        "focus",
+                        "outcome",
+                        "feedback"
+                      ],
+                      additionalProperties: false
                     }
-                  },
-                  required: [
-                    "subject_digest",
-                    "model",
-                    "effort",
-                    "reviewer_id",
-                    "focus",
-                    "report"
-                  ],
-                  additionalProperties: false
+                  ]
                 }
               },
               constitution: {
@@ -54617,133 +54750,445 @@ var semantic_workflow_schema_default = {
         review_reports: {
           type: "array",
           items: {
-            type: "object",
-            properties: {
-              subject_digest: {
-                type: "string",
-                pattern: "^[0-9a-f]{64}$"
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  subject_digest: {
+                    type: "string",
+                    pattern: "^[0-9a-f]{64}$"
+                  },
+                  model: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  effort: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  reviewer_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  focus: {
+                    type: "string",
+                    enum: [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  report: {
+                    type: "string",
+                    minLength: 1
+                  }
+                },
+                required: [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "report"
+                ],
+                additionalProperties: false
               },
-              model: {
-                type: "string",
-                minLength: 1
-              },
-              effort: {
-                type: "string",
-                minLength: 1
-              },
-              reviewer_id: {
-                type: "string",
-                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-              },
-              focus: {
-                type: "string",
-                enum: [
-                  "general",
-                  "tests"
-                ]
-              },
-              report: {
-                type: "string",
-                minLength: 1
+              {
+                type: "object",
+                properties: {
+                  subject_digest: {
+                    type: "string",
+                    pattern: "^[0-9a-f]{64}$"
+                  },
+                  model: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  effort: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  reviewer_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  focus: {
+                    type: "string",
+                    enum: [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  outcome: {
+                    type: "string",
+                    enum: [
+                      "issues_found",
+                      "no_issues_found"
+                    ]
+                  },
+                  feedback: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  usage: {
+                    type: "object",
+                    properties: {
+                      input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      output_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      cache_read_input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      cache_creation_input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      thinking_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      num_turns: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      duration_ms: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      duration_api_ms: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      total_cost_usd: {
+                        type: "number",
+                        minimum: 0
+                      }
+                    },
+                    additionalProperties: false
+                  }
+                },
+                required: [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "outcome",
+                  "feedback"
+                ],
+                additionalProperties: false
               }
-            },
-            required: [
-              "subject_digest",
-              "model",
-              "effort",
-              "reviewer_id",
-              "focus",
-              "report"
-            ],
-            additionalProperties: false
+            ]
           }
         },
         previous_review_reports: {
           type: "array",
           items: {
-            type: "object",
-            properties: {
-              subject_digest: {
-                type: "string",
-                pattern: "^[0-9a-f]{64}$"
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  subject_digest: {
+                    type: "string",
+                    pattern: "^[0-9a-f]{64}$"
+                  },
+                  model: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  effort: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  reviewer_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  focus: {
+                    type: "string",
+                    enum: [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  report: {
+                    type: "string",
+                    minLength: 1
+                  }
+                },
+                required: [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "report"
+                ],
+                additionalProperties: false
               },
-              model: {
-                type: "string",
-                minLength: 1
-              },
-              effort: {
-                type: "string",
-                minLength: 1
-              },
-              reviewer_id: {
-                type: "string",
-                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-              },
-              focus: {
-                type: "string",
-                enum: [
-                  "general",
-                  "tests"
-                ]
-              },
-              report: {
-                type: "string",
-                minLength: 1
+              {
+                type: "object",
+                properties: {
+                  subject_digest: {
+                    type: "string",
+                    pattern: "^[0-9a-f]{64}$"
+                  },
+                  model: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  effort: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  reviewer_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  focus: {
+                    type: "string",
+                    enum: [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  outcome: {
+                    type: "string",
+                    enum: [
+                      "issues_found",
+                      "no_issues_found"
+                    ]
+                  },
+                  feedback: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  usage: {
+                    type: "object",
+                    properties: {
+                      input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      output_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      cache_read_input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      cache_creation_input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      thinking_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      num_turns: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      duration_ms: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      duration_api_ms: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      total_cost_usd: {
+                        type: "number",
+                        minimum: 0
+                      }
+                    },
+                    additionalProperties: false
+                  }
+                },
+                required: [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "outcome",
+                  "feedback"
+                ],
+                additionalProperties: false
               }
-            },
-            required: [
-              "subject_digest",
-              "model",
-              "effort",
-              "reviewer_id",
-              "focus",
-              "report"
-            ],
-            additionalProperties: false
+            ]
           }
         },
         partial_review_reports: {
           type: "array",
           items: {
-            type: "object",
-            properties: {
-              subject_digest: {
-                type: "string",
-                pattern: "^[0-9a-f]{64}$"
+            anyOf: [
+              {
+                type: "object",
+                properties: {
+                  subject_digest: {
+                    type: "string",
+                    pattern: "^[0-9a-f]{64}$"
+                  },
+                  model: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  effort: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  reviewer_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  focus: {
+                    type: "string",
+                    enum: [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  report: {
+                    type: "string",
+                    minLength: 1
+                  }
+                },
+                required: [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "report"
+                ],
+                additionalProperties: false
               },
-              model: {
-                type: "string",
-                minLength: 1
-              },
-              effort: {
-                type: "string",
-                minLength: 1
-              },
-              reviewer_id: {
-                type: "string",
-                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-              },
-              focus: {
-                type: "string",
-                enum: [
-                  "general",
-                  "tests"
-                ]
-              },
-              report: {
-                type: "string",
-                minLength: 1
+              {
+                type: "object",
+                properties: {
+                  subject_digest: {
+                    type: "string",
+                    pattern: "^[0-9a-f]{64}$"
+                  },
+                  model: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  effort: {
+                    type: "string",
+                    minLength: 1
+                  },
+                  reviewer_id: {
+                    type: "string",
+                    pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                  },
+                  focus: {
+                    type: "string",
+                    enum: [
+                      "general",
+                      "tests"
+                    ]
+                  },
+                  outcome: {
+                    type: "string",
+                    enum: [
+                      "issues_found",
+                      "no_issues_found"
+                    ]
+                  },
+                  feedback: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  },
+                  usage: {
+                    type: "object",
+                    properties: {
+                      input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      output_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      cache_read_input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      cache_creation_input_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      thinking_tokens: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      num_turns: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      duration_ms: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      duration_api_ms: {
+                        type: "integer",
+                        minimum: -9007199254740991,
+                        maximum: 9007199254740991
+                      },
+                      total_cost_usd: {
+                        type: "number",
+                        minimum: 0
+                      }
+                    },
+                    additionalProperties: false
+                  }
+                },
+                required: [
+                  "subject_digest",
+                  "model",
+                  "effort",
+                  "reviewer_id",
+                  "focus",
+                  "outcome",
+                  "feedback"
+                ],
+                additionalProperties: false
               }
-            },
-            required: [
-              "subject_digest",
-              "model",
-              "effort",
-              "reviewer_id",
-              "focus",
-              "report"
-            ],
-            additionalProperties: false
+            ]
           }
         },
         review_response: {
@@ -56797,133 +57242,445 @@ var semantic_workflow_schema_default = {
     review_reports: {
       type: "array",
       items: {
-        type: "object",
-        properties: {
-          subject_digest: {
-            type: "string",
-            pattern: "^[0-9a-f]{64}$"
+        anyOf: [
+          {
+            type: "object",
+            properties: {
+              subject_digest: {
+                type: "string",
+                pattern: "^[0-9a-f]{64}$"
+              },
+              model: {
+                type: "string",
+                minLength: 1
+              },
+              effort: {
+                type: "string",
+                minLength: 1
+              },
+              reviewer_id: {
+                type: "string",
+                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              focus: {
+                type: "string",
+                enum: [
+                  "general",
+                  "tests"
+                ]
+              },
+              report: {
+                type: "string",
+                minLength: 1
+              }
+            },
+            required: [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            additionalProperties: false
           },
-          model: {
-            type: "string",
-            minLength: 1
-          },
-          effort: {
-            type: "string",
-            minLength: 1
-          },
-          reviewer_id: {
-            type: "string",
-            pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          focus: {
-            type: "string",
-            enum: [
-              "general",
-              "tests"
-            ]
-          },
-          report: {
-            type: "string",
-            minLength: 1
+          {
+            type: "object",
+            properties: {
+              subject_digest: {
+                type: "string",
+                pattern: "^[0-9a-f]{64}$"
+              },
+              model: {
+                type: "string",
+                minLength: 1
+              },
+              effort: {
+                type: "string",
+                minLength: 1
+              },
+              reviewer_id: {
+                type: "string",
+                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              focus: {
+                type: "string",
+                enum: [
+                  "general",
+                  "tests"
+                ]
+              },
+              outcome: {
+                type: "string",
+                enum: [
+                  "issues_found",
+                  "no_issues_found"
+                ]
+              },
+              feedback: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              usage: {
+                type: "object",
+                properties: {
+                  input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  output_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  cache_read_input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  cache_creation_input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  thinking_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  num_turns: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  duration_ms: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  duration_api_ms: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  total_cost_usd: {
+                    type: "number",
+                    minimum: 0
+                  }
+                },
+                additionalProperties: false
+              }
+            },
+            required: [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "outcome",
+              "feedback"
+            ],
+            additionalProperties: false
           }
-        },
-        required: [
-          "subject_digest",
-          "model",
-          "effort",
-          "reviewer_id",
-          "focus",
-          "report"
-        ],
-        additionalProperties: false
+        ]
       }
     },
     previous_review_reports: {
       type: "array",
       items: {
-        type: "object",
-        properties: {
-          subject_digest: {
-            type: "string",
-            pattern: "^[0-9a-f]{64}$"
+        anyOf: [
+          {
+            type: "object",
+            properties: {
+              subject_digest: {
+                type: "string",
+                pattern: "^[0-9a-f]{64}$"
+              },
+              model: {
+                type: "string",
+                minLength: 1
+              },
+              effort: {
+                type: "string",
+                minLength: 1
+              },
+              reviewer_id: {
+                type: "string",
+                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              focus: {
+                type: "string",
+                enum: [
+                  "general",
+                  "tests"
+                ]
+              },
+              report: {
+                type: "string",
+                minLength: 1
+              }
+            },
+            required: [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            additionalProperties: false
           },
-          model: {
-            type: "string",
-            minLength: 1
-          },
-          effort: {
-            type: "string",
-            minLength: 1
-          },
-          reviewer_id: {
-            type: "string",
-            pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          focus: {
-            type: "string",
-            enum: [
-              "general",
-              "tests"
-            ]
-          },
-          report: {
-            type: "string",
-            minLength: 1
+          {
+            type: "object",
+            properties: {
+              subject_digest: {
+                type: "string",
+                pattern: "^[0-9a-f]{64}$"
+              },
+              model: {
+                type: "string",
+                minLength: 1
+              },
+              effort: {
+                type: "string",
+                minLength: 1
+              },
+              reviewer_id: {
+                type: "string",
+                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              focus: {
+                type: "string",
+                enum: [
+                  "general",
+                  "tests"
+                ]
+              },
+              outcome: {
+                type: "string",
+                enum: [
+                  "issues_found",
+                  "no_issues_found"
+                ]
+              },
+              feedback: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              usage: {
+                type: "object",
+                properties: {
+                  input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  output_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  cache_read_input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  cache_creation_input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  thinking_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  num_turns: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  duration_ms: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  duration_api_ms: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  total_cost_usd: {
+                    type: "number",
+                    minimum: 0
+                  }
+                },
+                additionalProperties: false
+              }
+            },
+            required: [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "outcome",
+              "feedback"
+            ],
+            additionalProperties: false
           }
-        },
-        required: [
-          "subject_digest",
-          "model",
-          "effort",
-          "reviewer_id",
-          "focus",
-          "report"
-        ],
-        additionalProperties: false
+        ]
       }
     },
     partial_review_reports: {
       type: "array",
       items: {
-        type: "object",
-        properties: {
-          subject_digest: {
-            type: "string",
-            pattern: "^[0-9a-f]{64}$"
+        anyOf: [
+          {
+            type: "object",
+            properties: {
+              subject_digest: {
+                type: "string",
+                pattern: "^[0-9a-f]{64}$"
+              },
+              model: {
+                type: "string",
+                minLength: 1
+              },
+              effort: {
+                type: "string",
+                minLength: 1
+              },
+              reviewer_id: {
+                type: "string",
+                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              focus: {
+                type: "string",
+                enum: [
+                  "general",
+                  "tests"
+                ]
+              },
+              report: {
+                type: "string",
+                minLength: 1
+              }
+            },
+            required: [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "report"
+            ],
+            additionalProperties: false
           },
-          model: {
-            type: "string",
-            minLength: 1
-          },
-          effort: {
-            type: "string",
-            minLength: 1
-          },
-          reviewer_id: {
-            type: "string",
-            pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
-          },
-          focus: {
-            type: "string",
-            enum: [
-              "general",
-              "tests"
-            ]
-          },
-          report: {
-            type: "string",
-            minLength: 1
+          {
+            type: "object",
+            properties: {
+              subject_digest: {
+                type: "string",
+                pattern: "^[0-9a-f]{64}$"
+              },
+              model: {
+                type: "string",
+                minLength: 1
+              },
+              effort: {
+                type: "string",
+                minLength: 1
+              },
+              reviewer_id: {
+                type: "string",
+                pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+              },
+              focus: {
+                type: "string",
+                enum: [
+                  "general",
+                  "tests"
+                ]
+              },
+              outcome: {
+                type: "string",
+                enum: [
+                  "issues_found",
+                  "no_issues_found"
+                ]
+              },
+              feedback: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              usage: {
+                type: "object",
+                properties: {
+                  input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  output_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  cache_read_input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  cache_creation_input_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  thinking_tokens: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  num_turns: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  duration_ms: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  duration_api_ms: {
+                    type: "integer",
+                    minimum: -9007199254740991,
+                    maximum: 9007199254740991
+                  },
+                  total_cost_usd: {
+                    type: "number",
+                    minimum: 0
+                  }
+                },
+                additionalProperties: false
+              }
+            },
+            required: [
+              "subject_digest",
+              "model",
+              "effort",
+              "reviewer_id",
+              "focus",
+              "outcome",
+              "feedback"
+            ],
+            additionalProperties: false
           }
-        },
-        required: [
-          "subject_digest",
-          "model",
-          "effort",
-          "reviewer_id",
-          "focus",
-          "report"
-        ],
-        additionalProperties: false
+        ]
       }
     },
     review_response: {
@@ -57623,19 +58380,79 @@ async function startMcpRuntime(options) {
 // src/review/simple-review.ts
 import { setTimeout as delay2 } from "node:timers/promises";
 
+// src/dispatch/usage-log.ts
+import { mkdir, readdir, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname as dirname2, join as join2 } from "node:path";
+import { fileURLToPath } from "node:url";
+var DISPATCH_USAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
+var RECORD_NAME = /^(\d{13})-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/u;
+function installedDispatchUsageDirectory(moduleUrl = import.meta.url) {
+  const entry = fileURLToPath(moduleUrl);
+  const dist = dirname2(entry);
+  const bundle = dirname2(dist);
+  if (basename(dist) !== "dist" || basename(bundle) !== "bundle" || !["archflow-mcp.mjs", "archflow-local.mjs"].includes(basename(entry))) return void 0;
+  return join2(dirname2(bundle), "usage");
+}
+async function writeDispatchUsageRecord(record3, directory = installedDispatchUsageDirectory(), now = Date.now()) {
+  if (directory === void 0) return;
+  try {
+    const name = `${Date.parse(record3.completed_at)}-${record3.dispatch_id}.json`;
+    if (!RECORD_NAME.test(name)) return;
+    await mkdir(directory, { recursive: true, mode: 448 });
+    const cutoff = now - DISPATCH_USAGE_RETENTION_MS;
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const match = RECORD_NAME.exec(entry.name);
+      if (entry.isFile() && match !== null && Number(match[1]) < cutoff) {
+        await unlink(join2(directory, entry.name)).catch(() => void 0);
+      }
+    }
+    await writeFile(join2(directory, name), `${JSON.stringify(record3)}
+`, { flag: "wx", mode: 384 });
+  } catch {
+  }
+}
+
+// src/dispatch/usage.ts
+function claudeDispatchUsage(stdout) {
+  try {
+    const wrapper = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(stdout));
+    if (wrapper === null || typeof wrapper !== "object" || Array.isArray(wrapper)) return void 0;
+    const record3 = wrapper;
+    const usage = record3.usage !== null && typeof record3.usage === "object" && !Array.isArray(record3.usage) ? record3.usage : {};
+    const details = usage.output_tokens_details !== null && typeof usage.output_tokens_details === "object" ? usage.output_tokens_details : {};
+    const candidate = {};
+    for (const [name, value] of Object.entries({
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      cache_read_input_tokens: usage.cache_read_input_tokens,
+      cache_creation_input_tokens: usage.cache_creation_input_tokens,
+      thinking_tokens: details.thinking_tokens,
+      num_turns: record3.num_turns,
+      duration_ms: record3.duration_ms,
+      duration_api_ms: record3.duration_api_ms,
+      total_cost_usd: record3.total_cost_usd
+    })) {
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0 && (name === "total_cost_usd" || Number.isSafeInteger(value))) candidate[name] = value;
+    }
+    return Object.keys(candidate).length === 0 ? void 0 : dispatchUsageSchema.parse(candidate);
+  } catch {
+    return void 0;
+  }
+}
+
 // src/dispatch/coordinator.ts
 import { randomUUID } from "node:crypto";
-import { mkdir as mkdir3 } from "node:fs/promises";
-import { join as join6 } from "node:path";
+import { mkdir as mkdir4 } from "node:fs/promises";
+import { join as join7 } from "node:path";
 
 // src/repository/paths.ts
 import { constants as fsConstants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import {
-  basename,
-  dirname as dirname2,
+  basename as basename2,
+  dirname as dirname3,
   isAbsolute,
-  join as join2,
+  join as join3,
   relative,
   resolve as resolvePath,
   sep,
@@ -57841,13 +58658,13 @@ async function realpathWithMissingTail(candidate) {
   for (; ; ) {
     try {
       const real = await realpath(current);
-      return tail.length === 0 ? real : join2(real, ...tail);
+      return tail.length === 0 ? real : join3(real, ...tail);
     } catch (error51) {
       if (errnoOf(error51) !== "ENOENT") throw error51;
     }
-    const parent = dirname2(current);
+    const parent = dirname3(current);
     if (parent === current) throw Object.assign(new Error("no existing ancestor"), { code: "ENOENT" });
-    tail.unshift(basename(current));
+    tail.unshift(basename2(current));
     current = parent;
   }
 }
@@ -57903,7 +58720,7 @@ async function resolveTaskPath(options) {
 }
 async function resolveTaskRoot(options) {
   const { runner, taskId, context: context2 } = options;
-  const repositoryRelative = join2(ARCHFLOW_TREE, "tasks", taskId);
+  const repositoryRelative = join3(ARCHFLOW_TREE, "tasks", taskId);
   const withinWorktree = await containedUnder(runner.location.worktreeRoot, repositoryRelative);
   if (withinWorktree.kind === "io") return fail2(ioError(context2));
   if (withinWorktree.kind === "escape") return fail2(pathEscape(taskId, "task-state"));
@@ -58012,7 +58829,7 @@ async function resolveTaskWorkspaceCleanupTarget(options) {
   const worktreeRoot = runner.location.worktreeRoot;
   const workspaceRoot = resolvePath(worktreeRoot, ARCHFLOW_TREE, "runtime", "tasks", taskId);
   const target4 = resolvePath(worktreeRoot, repositoryRelative);
-  const parent = dirname2(target4);
+  const parent = dirname3(target4);
   const parentRepositoryRelative = relative(worktreeRoot, parent);
   const withinWorktree = await containedUnder(worktreeRoot, parentRepositoryRelative);
   if (withinWorktree.kind === "io") return fail2(ioError(context2));
@@ -58119,8 +58936,8 @@ async function openResolved(path3, flags) {
 }
 
 // src/dispatch/cli.ts
-import { stat as stat2, writeFile } from "node:fs/promises";
-import { join as join3 } from "node:path";
+import { stat as stat2, writeFile as writeFile2 } from "node:fs/promises";
+import { join as join4 } from "node:path";
 
 // src/contracts/internal/trust-mints.ts
 function createReviewObservationCapability(binding2) {
@@ -58287,15 +59104,15 @@ function observeReviewV3(binding2, assignment, bytes, rawOutputDigest) {
   return copyFreezeJson(serverAttestedReviewV3Schema.parse(candidate));
 }
 function observeReviewReport(binding2, assignment, bytes, outputDigest) {
-  const { kind: _kind, assignment: _assignment, family: family2, ...provenance2 } = binding2;
+  const { kind: _kind, assignment: _assignment, usage, family: family2, ...provenance2 } = binding2;
   const candidate = {
     ...provenance2,
-    schema_version: "4",
+    schema_version: "5",
     step: "counter_review",
     assurance: "server-attested",
     model_family: family2,
     observed_output_digest: outputDigest,
-    reports: [{ subject_digest: binding2.subject_digest, model: binding2.model, effort: binding2.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, report: readableReviewReport(decodeJson(bytes)) }],
+    reports: [{ subject_digest: binding2.subject_digest, model: binding2.model, effort: binding2.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, ...parseReviewFeedback(decodeJson(bytes)), ...usage === void 0 ? {} : { usage } }],
     reviewer_runs: [{
       reviewer_id: assignment.reviewer_id,
       focus: assignment.focus,
@@ -58316,7 +59133,7 @@ function observeReviewReport(binding2, assignment, bytes, outputDigest) {
       ...binding2.route_override === void 0 ? {} : { route_override: binding2.route_override }
     }]
   };
-  return copyFreezeJson(serverAttestedReviewV4Schema.parse(candidate));
+  return copyFreezeJson(serverAttestedReviewV5Schema.parse(candidate));
 }
 var observationSource = Object.freeze({
   observeReview(capability, observedOutputBytes) {
@@ -58807,7 +59624,7 @@ var CODEX_DISABLED_FEATURES = Object.freeze([
 function withLocalBinOnPath(workspace) {
   const home = workspace.env.HOME;
   if (home === void 0 || home === "") return workspace.env;
-  const localBin = join3(home, ".local", "bin");
+  const localBin = join4(home, ".local", "bin");
   const path3 = workspace.env.PATH;
   if (path3 === void 0) return Object.freeze({ ...workspace.env, PATH: localBin });
   if (path3.split(":").includes(localBin)) return workspace.env;
@@ -59241,9 +60058,9 @@ var claudeAdapter = Object.freeze({
     if (route3.effort === "ultra") {
       return fail4(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
-    const mcpConfigPath = join3(workspace.root, "empty-mcp.json");
-    await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
-    const diffDirectory = workspace.repository_view_root === void 0 ? void 0 : join3(workspace.repository_view_root, "..", "review-diffs");
+    const mcpConfigPath = join4(workspace.root, "empty-mcp.json");
+    await writeFile2(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
+    const diffDirectory = workspace.repository_view_root === void 0 ? void 0 : join4(workspace.repository_view_root, "..", "review-diffs");
     const hasDiffs = diffDirectory !== void 0 && await stat2(diffDirectory).then((value) => value.isDirectory(), (error51) => {
       if (error51.code === "ENOENT") return false;
       throw error51;
@@ -59357,9 +60174,9 @@ var codexAdapter = Object.freeze({
       projection.subject,
       projection.assignment
     );
-    const schemaPath = join3(workspace.root, `${envelope2.result_kind}.schema.json`);
-    const outputPath = join3(workspace.root, `${envelope2.result_kind}-final-output.json`);
-    await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
+    const schemaPath = join4(workspace.root, `${envelope2.result_kind}.schema.json`);
+    const outputPath = join4(workspace.root, `${envelope2.result_kind}-final-output.json`);
+    await writeFile2(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const readTools = workspace.repository_view_root === void 0 ? [] : ["shell_tool", "unified_exec"];
     const disabled = CODEX_DISABLED_FEATURES.filter((feature) => !readTools.includes(feature)).flatMap((feature) => ["--disable", feature]);
@@ -59467,8 +60284,8 @@ var antigravityAdapter = Object.freeze({
       projection.subject,
       projection.assignment
     );
-    const schemaPath = join3(workspace.root, `${envelope2.result_kind}.schema.json`);
-    await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
+    const schemaPath = join4(workspace.root, `${envelope2.result_kind}.schema.json`);
+    await writeFile2(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope2.bytes);
     const stdin = new TextEncoder().encode(
@@ -59555,6 +60372,7 @@ function mintReviewObservation(input) {
   assertRoute(input.adapter, input.route);
   const binding2 = {
     kind: "review",
+    ...input.usage === void 0 ? {} : { usage: input.usage },
     task_id: input.subject.task_id,
     phase_instance: input.subject.phase_instance,
     role: input.subject.role,
@@ -59613,9 +60431,9 @@ function mintAdjudicationObservation(input) {
 
 // src/dispatch/workspace.ts
 import { spawn as spawn2 } from "node:child_process";
-import { chmod, lstat as lstat2, mkdir, mkdtemp, realpath as realpath2, rm, symlink, writeFile as writeFile2 } from "node:fs/promises";
+import { chmod, lstat as lstat2, mkdir as mkdir2, mkdtemp, realpath as realpath2, rm, symlink, writeFile as writeFile3 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute2, join as join4, relative as relative2, resolve } from "node:path";
+import { isAbsolute as isAbsolute2, join as join5, relative as relative2, resolve } from "node:path";
 
 // src/contracts/rubric.ts
 var rubricV1Schema = external_exports.object({
@@ -59659,11 +60477,11 @@ var PRODUCED_REPOSITORY_VIEW_NOTE = "Your working directory is a sealed read-onl
 var MULTI_REPOSITORY_VIEW_NOTE = "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. An entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output; review only its declared outputs and their current post-change behavior. Every other file and every entry without `snapshot_digest` is supporting evidence only. The artifact and pinned context take precedence on conflict.";
 var DIFF_REVIEW_INSTRUCTION = "Start with the supplied changed-file statistics and complete patch. On follow-up, start with the revision patch when available; the full implementation patch remains available for context. Read large patches in sections, then inspect surrounding code, callers and tests as needed. Patches exclude .archflow/; governing documents and verification evidence are supplied separately.";
 var REVIEW_FOCUSES = ["general", "tests"];
-var REVIEW_INSTRUCTION = "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. If no supported material issue remains, say so. Prefer a JSON object with one report string; no finding taxonomy, IDs, or ordering are required.";
+var REVIEW_INSTRUCTION = "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. Spend the work on reading relevant code and tests and reasoning about concrete failures; this is guidance, not a read quota. Return only actionable feedback: where the issue is, what can fail, and why it matters. Do not reproduce source files, narrate the investigation, restate the design, enumerate everything that is correct, or write a separate review document. Return exactly one JSON object with outcome and feedback. Use outcome=issues_found with nonblank actionable feedback, or outcome=no_issues_found with a short explicit confirmation that the reviewed changes have no remaining actionable issues. Never manufacture a concern to fill the response. No finding taxonomy, IDs, or ordering are required.";
 var GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION = "Use the assigned criteria to focus on the changed work, design soundness, interfaces, unsafe behavior, and verification where assigned. Treat them as investigation guidance, not a checklist.";
 var TEST_REVIEW_ASSIGNMENT_INSTRUCTION = "Focus on meaningful verification gaps. Inspect the implementation, existing tests and assertions, and supplied verification evidence before claiming a check is missing or ineffective. Name the concrete failure that could escape detection and suggest the cheapest credible way to catch it; equivalent coverage at another layer is sufficient.";
 var IMPLEMENTATION_REVIEW_INSTRUCTION = `${REVIEW_INSTRUCTION} Review the implementation output declared by this phase and its current behavior. Use unchanged files as supporting evidence for problems introduced, exposed, or materially worsened by the changes; this is not a general code review.`;
-var PRIOR_TRIAGE_INSTRUCTION = "Verify the revisions against the earlier feedback and the working AI's request. Check whether the concrete problems are resolved and whether the changes introduce consequential regressions. Do not demand the earlier suggested solution when a different solution works. Keep follow-up scoped to these changes, and say so when no supported material issue remains; agreement on every suggestion is unnecessary.";
+var PRIOR_TRIAGE_INSTRUCTION = "Verify the revisions against the earlier feedback and the working AI's request. Check whether the concrete problems are resolved and whether the changes introduce consequential regressions. Do not demand the earlier suggested solution when a different solution works. Start with the revision diff when supplied, the previous feedback, and the working AI's verification request; read current code and tests as needed to validate the fix. Keep follow-up scoped to the changes and their consequential regressions. Return only unresolved actionable issues or regressions; do not repeat resolved findings or explain everything that is correct. When no actionable issue remains, return outcome=no_issues_found and a short explicit confirmation. Agreement on every earlier suggestion is unnecessary.";
 var CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION = "For this implementation phase, judge rule compliance and triggers only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, or triggered result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
 function buildEffortEnvelope(value) {
   const envelope2 = parseEffortEnvelopeV3(value);
@@ -60164,7 +60982,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp(join4(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp(join5(realTemporaryRoot, "archflow-dispatch-"));
   try {
     const sourceHome = resolve(process.env.HOME ?? homedir());
     const env = {
@@ -60172,7 +60990,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
       TMPDIR: root,
       // A shared workspace serves both adapters of one review; each CLI ignores the other's
       // variable, and a single-adapter list produces exactly the env it produced before.
-      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join4(sourceHome, ".codex")) } : {},
+      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join5(sourceHome, ".codex")) } : {},
       ...adapters.includes("claude-cli") && process.env.CLAUDE_CONFIG_DIR !== void 0 ? { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) } : {}
     };
     for (const name of FORWARDED_ENVIRONMENT) {
@@ -60272,7 +61090,7 @@ function projectReviewedRepositories(candidate) {
   })));
 }
 async function materializeRepositoryArchive(view, member) {
-  await mkdir(view);
+  await mkdir2(view);
   await new Promise((resolvePipeline, reject) => {
     const archive = spawn2("git", ["-C", member.repository_root, "archive", "--format=tar", member.commit], {
       stdio: ["ignore", "pipe", "pipe"]
@@ -60318,26 +61136,26 @@ async function materializeRepositoryArchive(view, member) {
     });
   });
   if (member.member_kind === "primary") {
-    await rm(join4(view, ".archflow", "tasks"), { recursive: true, force: true });
-    await rm(join4(view, ".archflow", "constitution"), { recursive: true, force: true });
+    await rm(join5(view, ".archflow", "tasks"), { recursive: true, force: true });
+    await rm(join5(view, ".archflow", "constitution"), { recursive: true, force: true });
   } else {
-    await rm(join4(view, ".archflow"), { recursive: true, force: true });
+    await rm(join5(view, ".archflow"), { recursive: true, force: true });
   }
   if (member.projection_plan !== void 0) await applyProducedProjection(view, member.projection_plan);
 }
 async function materializeRepositoryViews(workspace, candidate) {
   const plan = validateDispatchRepositoryViewPlan(candidate);
-  const container = plan.length === 1 ? workspace.root : join4(workspace.root, "repos");
-  if (plan.length > 1) await mkdir(container);
+  const container = plan.length === 1 ? workspace.root : join5(workspace.root, "repos");
+  if (plan.length > 1) await mkdir2(container);
   for (const member of plan) {
-    const view = plan.length === 1 ? join4(workspace.root, "repo") : join4(container, member.name);
+    const view = plan.length === 1 ? join5(workspace.root, "repo") : join5(container, member.name);
     try {
       await materializeRepositoryArchive(view, member);
     } catch (error51) {
       throw new RepositoryViewMaterializationError(member.name, error51);
     }
   }
-  return Object.freeze({ ...workspace, repository_view_root: plan.length === 1 ? join4(workspace.root, "repo") : container });
+  return Object.freeze({ ...workspace, repository_view_root: plan.length === 1 ? join5(workspace.root, "repo") : container });
 }
 function errno(error51) {
   return error51 !== null && typeof error51 === "object" && "code" in error51 && typeof error51.code === "string" ? error51.code : void 0;
@@ -60350,7 +61168,7 @@ async function ensureContainedParent(view, repositoryPath) {
   const segments = repositoryPath.split("/");
   let parent = view;
   for (const segment of segments.slice(0, -1)) {
-    parent = join4(parent, segment);
+    parent = join5(parent, segment);
     try {
       const status = await lstat2(parent);
       if (!status.isDirectory() || status.isSymbolicLink()) {
@@ -60358,7 +61176,7 @@ async function ensureContainedParent(view, repositoryPath) {
       }
     } catch (error51) {
       if (errno(error51) !== "ENOENT") throw error51;
-      await mkdir(parent);
+      await mkdir2(parent);
     }
   }
   return target4;
@@ -60386,7 +61204,7 @@ async function applyProducedProjection(view, projectionPlan) {
       await symlink(new TextDecoder().decode(entry.desired.bytes), target4);
       continue;
     }
-    await writeFile2(target4, entry.desired.bytes, { mode: entry.desired.mode === "100755" ? 493 : 420 });
+    await writeFile3(target4, entry.desired.bytes, { mode: entry.desired.mode === "100755" ? 493 : 420 });
     await chmod(target4, entry.desired.mode === "100755" ? 493 : 420);
   }
 }
@@ -61209,8 +62027,8 @@ async function createInternalTransactionAuthority(input) {
 
 // src/state/layout.ts
 import { constants as fsConstants2 } from "node:fs";
-import { lstat as lstat3, mkdir as mkdir2 } from "node:fs/promises";
-import { isAbsolute as isAbsolute3, join as join5, relative as relative3, sep as sep2 } from "node:path";
+import { lstat as lstat3, mkdir as mkdir3 } from "node:fs/promises";
+import { isAbsolute as isAbsolute3, join as join6, relative as relative3, sep as sep2 } from "node:path";
 var IntentLayoutError = class extends Error {
   constructor(stage) {
     super(`intent layout ${stage} failed`);
@@ -61241,10 +62059,10 @@ function errnoOf2(error51) {
   return error51 !== null && typeof error51 === "object" && "code" in error51 ? String(error51.code) : void 0;
 }
 async function ensureWorkspaceRoot(authority) {
-  const archflowRoot = join5(authority.task_root, "..", "..");
+  const archflowRoot = join6(authority.task_root, "..", "..");
   const fixed = [
-    join5(archflowRoot, "runtime"),
-    join5(archflowRoot, "runtime", "tasks"),
+    join6(archflowRoot, "runtime"),
+    join6(archflowRoot, "runtime", "tasks"),
     authority.workspace_root
   ];
   for (const directory of fixed) await ensureRealDirectory(directory);
@@ -61253,9 +62071,9 @@ async function ensureIntentDirectory(authority) {
   assertInternalTransactionAuthority(authority);
   try {
     await ensureWorkspaceRoot(authority);
-    await ensureRealDirectory(join5(authority.workspace_root, "transient"));
+    await ensureRealDirectory(join6(authority.workspace_root, "transient"));
     await ensureRealDirectory(
-      join5(authority.workspace_root, "transient", "intents")
+      join6(authority.workspace_root, "transient", "intents")
     );
   } catch (error51) {
     throw new IntentLayoutError(
@@ -61265,7 +62083,7 @@ async function ensureIntentDirectory(authority) {
 }
 async function ensureDecisionChild(path3) {
   try {
-    await mkdir2(path3);
+    await mkdir3(path3);
   } catch (error51) {
     if (errnoOf2(error51) !== "EEXIST") throw new DecisionLayoutError("create");
   }
@@ -61286,9 +62104,9 @@ async function ensureDecisionChild(path3) {
 async function ensureDecisionDirectory(authority, gateId) {
   assertInternalTransactionAuthority(authority);
   const validatedGateId = parsePathSafeId(gateId);
-  const authorityRoot = join5(authority.task_root, "authority");
-  const decisions2 = join5(authorityRoot, "decisions");
-  const gate = join5(decisions2, validatedGateId);
+  const authorityRoot = join6(authority.task_root, "authority");
+  const decisions2 = join6(authorityRoot, "decisions");
+  const gate = join6(decisions2, validatedGateId);
   await ensureDecisionChild(authorityRoot);
   await ensureDecisionChild(decisions2);
   await ensureDecisionChild(gate);
@@ -61297,17 +62115,17 @@ async function ensureAttemptDirectory(authority, phaseInstance5) {
   assertInternalTransactionAuthority(authority);
   const validated = parsePhaseInstanceId(phaseInstance5);
   await ensureWorkspaceRoot(authority);
-  await ensureRealDirectory(join5(authority.workspace_root, "diagnostics"));
+  await ensureRealDirectory(join6(authority.workspace_root, "diagnostics"));
   await ensureRealDirectory(
-    join5(authority.workspace_root, "diagnostics", "attempts")
+    join6(authority.workspace_root, "diagnostics", "attempts")
   );
   await ensureRealDirectory(
-    join5(authority.workspace_root, "diagnostics", "attempts", validated)
+    join6(authority.workspace_root, "diagnostics", "attempts", validated)
   );
 }
 async function ensureRealDirectory(path3) {
   try {
-    await mkdir2(path3);
+    await mkdir3(path3);
   } catch (error51) {
     if (errnoOf2(error51) !== "EEXIST") throw new ResultLayoutError("create", errnoOf2(error51));
   }
@@ -61327,37 +62145,37 @@ async function ensureRealDirectory(path3) {
 }
 async function ensureAuthorityDirectory(authority) {
   assertInternalTransactionAuthority(authority);
-  await ensureRealDirectory(join5(authority.task_root, "authority"));
+  await ensureRealDirectory(join6(authority.task_root, "authority"));
 }
 async function ensureResultDirectory(authority, digest12) {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
   await ensureAuthorityDirectory(authority);
-  await ensureRealDirectory(join5(authority.task_root, "authority", "results"));
+  await ensureRealDirectory(join6(authority.task_root, "authority", "results"));
   await ensureWorkspaceRoot(authority);
   const parts = ["cache", "results", digest12, "payload"];
   let current = authority.workspace_root;
   for (const part of parts) {
-    current = join5(current, part);
+    current = join6(current, part);
     await ensureRealDirectory(current);
   }
 }
 async function ensurePayloadParent(authority, digest12, target4) {
   assertInternalTransactionAuthority(authority);
   if (!/^[0-9a-f]{64}$/u.test(digest12)) throw new TypeError("result digest must be lowercase SHA-256");
-  const root = join5(authority.workspace_root, "cache", "results", digest12, "payload");
-  const parent = join5(target4, "..");
+  const root = join6(authority.workspace_root, "cache", "results", digest12, "payload");
+  const parent = join6(target4, "..");
   const rel = relative3(root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute3(rel)) throw new TypeError("payload parent escaped result directory");
   let current = root;
   for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
-    current = join5(current, part);
+    current = join6(current, part);
     await ensureRealDirectory(current);
   }
 }
 async function ensureWorkspaceProjectionParent(authority, target4) {
   assertInternalTransactionAuthority(authority);
-  const parent = join5(target4, "..");
+  const parent = join6(target4, "..");
   const rel = relative3(authority.workspace_root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute3(rel)) {
     throw new TypeError("workspace projection parent escaped task workspace");
@@ -61365,18 +62183,18 @@ async function ensureWorkspaceProjectionParent(authority, target4) {
   await ensureWorkspaceRoot(authority);
   let current = authority.workspace_root;
   for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
-    current = join5(current, part);
+    current = join6(current, part);
     await ensureRealDirectory(current);
   }
 }
 async function ensureTaskProjectionParent(authority, target4) {
   assertInternalTransactionAuthority(authority);
-  const parent = join5(target4, "..");
+  const parent = join6(target4, "..");
   const rel = relative3(authority.task_root, parent);
   if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute3(rel)) return;
   let current = authority.task_root;
   for (const part of rel.split(sep2).filter((candidate) => candidate !== "" && candidate !== ".")) {
-    current = join5(current, part);
+    current = join6(current, part);
     await ensureRealDirectory(current);
   }
 }
@@ -61404,7 +62222,10 @@ function channelTail(channel) {
 }
 async function writeAttemptRecord(input, attemptId, route3, preflight2, error51, telemetry) {
   const writer = input.dependencies.projection_writer;
-  if (writer === void 0 || error51 === void 0) return;
+  if (writer === void 0) return;
+  const channels = telemetry.child_result ?? (error51 instanceof DispatchProcessError ? error51.channels : void 0);
+  const usage = route3.adapter === "claude-cli" && channels !== void 0 ? claudeDispatchUsage(channels.stdout) : void 0;
+  if (error51 === void 0 && usage === void 0) return;
   await ensureAttemptDirectory(input.authority, input.phase_instance);
   const target4 = await resolveTaskWorkspacePath({
     runner: input.dependencies.runner,
@@ -61414,11 +62235,30 @@ async function writeAttemptRecord(input, attemptId, route3, preflight2, error51,
     context: input.authority.context
   });
   if (!target4.ok) return;
+  if (error51 === void 0) {
+    await writer.replaceRegular(target4.value, canonicalJsonBytes({
+      schema_version: "1",
+      attempt_id: attemptId,
+      task_id: input.authority.task_id,
+      phase_instance: input.phase_instance,
+      attempt: input.authority.context.attempt,
+      adapter: route3.adapter,
+      model: route3.model,
+      effort: route3.effort,
+      started_at: telemetry.started_at,
+      duration_ms: telemetry.duration_ms,
+      status: "succeeded",
+      usage,
+      result_kind: telemetry.result_kind,
+      envelope_digest: telemetry.envelope_digest,
+      input_byte_count: telemetry.input_byte_count
+    }), false);
+    return;
+  }
   const code2 = failureCode(error51);
   const parameters = error51 instanceof CliAdapterError || error51 instanceof DispatchProcessError ? error51.project_error.diagnostic.parameters : void 0;
   const unclassified = code2 === void 0 && error51 instanceof Error;
   const systemCode = unclassified && "code" in error51 && typeof error51.code === "string" ? error51.code : void 0;
-  const channels = telemetry.child_result ?? (error51 instanceof DispatchProcessError ? error51.channels : void 0);
   const stdoutTail = channels === void 0 ? "" : channelTail(channels.stdout);
   const stderrTail = channels === void 0 ? "" : channelTail(channels.stderr);
   const record3 = {
@@ -61432,6 +62272,10 @@ async function writeAttemptRecord(input, attemptId, route3, preflight2, error51,
     effort: route3.effort,
     ...route3.provider === void 0 ? {} : { provider: route3.provider },
     status: "failed",
+    result_kind: telemetry.result_kind,
+    envelope_digest: telemetry.envelope_digest,
+    input_byte_count: telemetry.input_byte_count,
+    ...usage === void 0 ? {} : { usage },
     failure_stage: telemetry.failure_stage,
     started_at: telemetry.started_at,
     duration_ms: telemetry.duration_ms,
@@ -61460,9 +62304,13 @@ function createDispatchCoordinator(input) {
     runner: input.dependencies.runner,
     environment: input.dependencies.environment
   });
-  return createReviewDispatcher(input, (attemptId, route3, preflight2, error51, telemetry) => writeAttemptRecord(input, attemptId, route3, preflight2, error51, telemetry));
+  return createReviewDispatcher({ ...input, usage_context: {
+    task_id: input.authority.task_id,
+    phase_instance: input.phase_instance,
+    attempt: input.authority.context.attempt
+  } }, (attemptId, route3, preflight2, error51, telemetry) => writeAttemptRecord(input, attemptId, route3, preflight2, error51, telemetry));
 }
-function createReviewDispatcher(input, observeFailure) {
+function createReviewDispatcher(input, observeAttempt) {
   if (input.shared_workspace !== void 0 && input.repository_views !== void 0) {
     throw new TypeError("shared_workspace replaces repository_views; pass one, not both");
   }
@@ -61505,8 +62353,8 @@ function createReviewDispatcher(input, observeFailure) {
       failureStage = "cli-preflight";
       preflight2 = await memoizedCliPreflight(adapter2, workspace, input.signal, input.cancellation_source);
       failureStage = "invocation-build";
-      const childRoot = join6(workspace.root, "children", attemptId);
-      await mkdir3(childRoot, { recursive: true, mode: 448 });
+      const childRoot = join7(workspace.root, "children", attemptId);
+      await mkdir4(childRoot, { recursive: true, mode: 448 });
       const childWorkspace = Object.freeze({
         ...workspace,
         root: childRoot,
@@ -61523,23 +62371,49 @@ function createReviewDispatcher(input, observeFailure) {
       const failure6 = adapter2.classifyFailure(childResult);
       if (failure6 !== void 0) throw new CliAdapterError(failure6);
       failureStage = "output-parse";
+      const usage = route3.adapter === "claude-cli" ? claudeDispatchUsage(childResult.stdout) : void 0;
       return Object.freeze({
         cli_version: preflight2.cli_version,
-        extracted_output_bytes: adapter2.parseOutput(childResult)
+        extracted_output_bytes: adapter2.parseOutput(childResult),
+        ...usage === void 0 ? {} : { usage }
       });
     } catch (error51) {
       primaryError = error51;
       throw error51;
     } finally {
       if (ownsWorkspace) await workspace?.dispose().catch(() => void 0);
-      if (primaryError !== void 0) {
-        await observeFailure?.(attemptId, route3, preflight2, primaryError, {
-          started_at: startedAt.toISOString(),
-          duration_ms: Date.now() - startedAt.getTime(),
-          failure_stage: failureStage,
-          child_result: childResult
-        })?.catch(() => void 0);
-      }
+      const channels = childResult ?? (primaryError instanceof DispatchProcessError ? primaryError.channels : void 0);
+      const usage = route3.adapter === "claude-cli" && channels !== void 0 ? claudeDispatchUsage(channels.stdout) : void 0;
+      const completedAt = /* @__PURE__ */ new Date();
+      await writeDispatchUsageRecord({
+        schema_version: "1",
+        dispatch_id: attemptId,
+        started_at: startedAt.toISOString(),
+        completed_at: completedAt.toISOString(),
+        duration_ms: completedAt.getTime() - startedAt.getTime(),
+        repository: input.repository_root,
+        ...input.usage_context,
+        adapter: route3.adapter,
+        model: route3.model,
+        effort: route3.effort,
+        ...route3.provider === void 0 ? {} : { provider: route3.provider },
+        ...preflight2 === void 0 ? {} : { cli_version: preflight2.cli_version },
+        result_kind: envelope2.result_kind,
+        envelope_digest: envelope2.digest,
+        input_byte_count: envelope2.byte_count,
+        status: primaryError === void 0 ? "succeeded" : "failed",
+        ...primaryError === void 0 ? {} : { failure_stage: failureStage, failure_code: failureCode(primaryError) ?? "UNCLASSIFIED" },
+        ...usage === void 0 ? {} : { usage }
+      }, input.usage_directory);
+      await observeAttempt?.(attemptId, route3, preflight2, primaryError, {
+        started_at: startedAt.toISOString(),
+        duration_ms: Date.now() - startedAt.getTime(),
+        failure_stage: failureStage,
+        child_result: childResult,
+        result_kind: envelope2.result_kind,
+        envelope_digest: envelope2.digest,
+        input_byte_count: envelope2.byte_count
+      })?.catch(() => void 0);
     }
   };
 }
@@ -61562,6 +62436,7 @@ var SAFE_MESSAGES = Object.freeze({
   REPOSITORY_VIEW_UNAVAILABLE: "A required read-only repository snapshot is unavailable. Repair repository access and resume the unchanged review."
 });
 var OUTPUT_FAILURE_MESSAGES = /* @__PURE__ */ new Map([
+  ["review-output-unreadable", "The reviewer must return exactly an outcome (issues_found or no_issues_found) and nonblank feedback. Missing or invalid feedback is not signoff."],
   ["antigravity-wrapper-invalid", "The Antigravity CLI response did not contain a valid final result wrapper."],
   ["structured-output-missing", "The reviewer CLI response was missing structured_output."],
   ["structured-output-invalid", "The reviewer CLI structured_output was not a valid plain JSON value."],
@@ -62217,13 +63092,13 @@ function buildRuleSettlement(state, subjectDigest, configDigest, conclusion, mil
 
 // src/review/rubrics.ts
 import { readFile as readFile4 } from "node:fs/promises";
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 
 // src/init/assets.ts
 import { constants } from "node:fs";
-import { access, mkdir as mkdir4, open as open3, readFile as readFile3, unlink } from "node:fs/promises";
-import { dirname as dirname3, join as join7 } from "node:path";
-import { fileURLToPath } from "node:url";
+import { access, mkdir as mkdir5, open as open3, readFile as readFile3, unlink as unlink2 } from "node:fs/promises";
+import { dirname as dirname4, join as join8 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/contracts/constitution.ts
 var CONSTITUTION_RULE_NAME = /^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
@@ -62313,12 +63188,12 @@ function errno2(error51, code2) {
 }
 async function assetRoot() {
   const candidates = [
-    fileURLToPath(new URL("../assets/", import.meta.url)),
-    fileURLToPath(new URL("../../assets/", import.meta.url))
+    fileURLToPath2(new URL("../assets/", import.meta.url)),
+    fileURLToPath2(new URL("../../assets/", import.meta.url))
   ];
   for (const candidate of candidates) {
     try {
-      await access(join7(candidate, "workflow.yaml"), constants.R_OK);
+      await access(join8(candidate, "workflow.yaml"), constants.R_OK);
       return candidate;
     } catch (error51) {
       if (!errno2(error51, "ENOENT")) throw error51;
@@ -62385,7 +63260,7 @@ async function loadRubricFile(input) {
   const label = `assets/${input.file}`;
   let document2;
   try {
-    const bytes = await readFile4(join8(input.root, input.file));
+    const bytes = await readFile4(join9(input.root, input.file));
     document2 = parseSingleYamlDocument(new TextDecoder("utf-8", { fatal: true }).decode(bytes), label);
   } catch (error51) {
     if (error51 instanceof SyntaxError) {
@@ -62431,8 +63306,8 @@ async function loadCanonicalRubricForPhaseKind(phaseKind2) {
 // src/review/simple-context.ts
 import { execFile as execFile2 } from "node:child_process";
 import { constants as constants2 } from "node:fs";
-import { lstat as lstat4, open as open4, readdir, readlink } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { lstat as lstat4, open as open4, readdir as readdir2, readlink } from "node:fs/promises";
+import { join as join10 } from "node:path";
 import { promisify } from "node:util";
 var exec = promisify(execFile2);
 var BYTE_CAP = 25 * 1024 * 1024;
@@ -62451,7 +63326,7 @@ var absent = (error51) => error51.code === "ENOENT";
 async function safeParents(root, path3) {
   let parent = root;
   for (const part of path3.split("/").slice(0, -1)) {
-    parent = join9(parent, part);
+    parent = join10(parent, part);
     try {
       const stat4 = await lstat4(parent);
       if (!stat4.isDirectory() || stat4.isSymbolicLink()) throw new SimpleReviewError("INPUT_INVALID", "Review paths must not traverse symlinks or non-directories.");
@@ -62463,7 +63338,7 @@ async function safeParents(root, path3) {
 }
 async function regular(root, path3) {
   await safeParents(root, path3);
-  const handle = await open4(join9(root, path3), constants2.O_RDONLY | constants2.O_NOFOLLOW);
+  const handle = await open4(join10(root, path3), constants2.O_RDONLY | constants2.O_NOFOLLOW);
   try {
     const stat4 = await handle.stat();
     if (!stat4.isFile() || stat4.size > BYTE_CAP) throw new SimpleReviewError("INPUT_INVALID", "Review input must be a bounded regular file.");
@@ -62491,7 +63366,7 @@ async function loadSimplePolicy(root) {
   let prefix = ".archflow/constitution";
   try {
     await safeParents(root, `${prefix}/placeholder`);
-    const directory = await lstat4(join9(root, prefix));
+    const directory = await lstat4(join10(root, prefix));
     if (!directory.isDirectory() || directory.isSymbolicLink()) throw new SimpleReviewError("CONFIG_INVALID", "Constitution must be a regular directory.");
   } catch (error51) {
     if (!absent(error51)) throw error51;
@@ -62504,7 +63379,7 @@ async function loadSimplePolicy(root) {
     let entries;
     try {
       await safeParents(policyRoot, `${relative9}/placeholder`);
-      entries = await readdir(join9(policyRoot, relative9));
+      entries = await readdir2(join10(policyRoot, relative9));
     } catch (error51) {
       if (absent(error51)) continue;
       throw error51;
@@ -62552,7 +63427,7 @@ async function captureSimpleContext(workingDirectory, input, signal) {
       await safeParents(root, path3);
       let stat4;
       try {
-        stat4 = await lstat4(join9(root, path3));
+        stat4 = await lstat4(join10(root, path3));
       } catch (error51) {
         if (absent(error51)) {
           entries.push({ path: claim, desired: { state: "absent" } });
@@ -62561,12 +63436,12 @@ async function captureSimpleContext(workingDirectory, input, signal) {
         throw error51;
       }
       if (stat4.isSymbolicLink()) {
-        const bytes = new TextEncoder().encode(await readlink(join9(root, path3)));
+        const bytes = new TextEncoder().encode(await readlink(join10(root, path3)));
         entries.push({ path: claim, desired: { state: "present", file_type: "symlink", mode: "120000", bytes } });
         size += bytes.byteLength;
       } else if (stat4.isFile()) {
         if (stat4.size + size > BYTE_CAP) throw new SimpleReviewError("INPUT_TOO_LARGE", "Simple review snapshot exceeds 25 MiB of changed files.");
-        const handle = await open4(join9(root, path3), constants2.O_RDONLY | constants2.O_NOFOLLOW);
+        const handle = await open4(join10(root, path3), constants2.O_RDONLY | constants2.O_NOFOLLOW);
         let bytes;
         try {
           bytes = new Uint8Array(await handle.readFile());
@@ -62726,6 +63601,7 @@ async function runSimpleReview(raw, context2, dependencies = {}) {
         } catch {
           throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer returned invalid JSON.");
         }
+        const usage = returned.usage === void 0 ? {} : { usage: returned.usage };
         if (role2 === "adjudicator") {
           const result2 = constitutionSchema.safeParse(parsed);
           if (!result2.success) throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Constitution review did not cover every assigned rule with valid judgments.");
@@ -62736,11 +63612,11 @@ async function runSimpleReview(raw, context2, dependencies = {}) {
             }
             return { rule_id: slot.rule_id, rule_version: slot.rule_version, ...judgment2 };
           });
-          return { selection, judgments, report: judgments.map((entry) => `${entry.rule_id}: ${entry.compliance}. ${entry.rationale}`).join("\n") };
+          return { selection, judgments, report: { role: role2, reviewer_id, route: route3, ...usage, report: judgments.map((entry) => `${entry.rule_id}: ${entry.compliance}. ${entry.rationale}`).join("\n") } };
         }
         const result = reviewReportOutputSchema.strict().safeParse(parsed);
-        if (!result.success || result.data.report.trim() === "") throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer returned no usable report.");
-        return { selection, report: result.data.report };
+        if (!result.success) throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer must return an explicit outcome and nonblank feedback.");
+        return { selection, report: { role: role2, reviewer_id, route: route3, ...result.data, ...usage } };
       } catch (error51) {
         if (!(error51 instanceof SimpleReviewError) && classifiedDispatchFailure(error51) === void 0) reportInternalError(context2.invocation_id, error51);
         return { selection, error: error51 };
@@ -62756,7 +63632,7 @@ async function runSimpleReview(raw, context2, dependencies = {}) {
           message: outcome.error instanceof SimpleReviewError ? outcome.error.message : classified?.message ?? "Reviewer dispatch failed or was cancelled. Repair it before requesting a fresh review."
         });
       } else {
-        value.reports.push({ ...selection, report: outcome.report });
+        value.reports.push(outcome.report);
         if (outcome.judgments !== void 0) {
           value.constitution = { status: "complete", judgments: outcome.judgments };
           for (const judgment2 of outcome.judgments) if (judgment2.trigger !== "not-matched") {
@@ -63999,7 +64875,7 @@ function bindParsedToolCallRequest(call, requestDigest) {
 }
 var toolSuccessSchemas = {
   archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest10.optional() }).strict(),
-  archflow_counter_review: external_exports.union([external_exports.object({ path: repositoryPathClaimV1Schema, reports: external_exports.array(reviewReportV1Schema).min(1), constitution: external_exports.union([external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict(), external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(["pass", "fail", "uncertain"]), triggers: external_exports.array(rule3) }).strict()]), revision: safeInteger6, request_digest: digest10.optional() }).strict(), external_exports.object({
+  archflow_counter_review: external_exports.union([external_exports.object({ path: repositoryPathClaimV1Schema, reports: external_exports.array(reviewReportSchema).min(1), constitution: external_exports.union([external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict(), external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(["pass", "fail", "uncertain"]), triggers: external_exports.array(rule3) }).strict()]), revision: safeInteger6, request_digest: digest10.optional() }).strict(), external_exports.object({
     path: repositoryPathClaimV1Schema,
     verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
     total_findings: safeInteger6,
@@ -65432,13 +66308,13 @@ function renderReviewEvidence(value) {
   const evidence = value.evidence;
   const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
   if (!authenticated) throw new TypeError("authenticated review evidence is required");
-  if (evidence.schema_version === "4") return new TextEncoder().encode([
-    "# ArchFlow Review Reports",
+  if (isFeedbackReview(evidence)) return new TextEncoder().encode([
+    "# ArchFlow Review Feedback",
     `Reviewed subject: ${evidence.subject_digest}`,
     ...provenanceMetadata(evidence),
     ...renderRouteSource(evidence.route_source),
     ...evidence.route_override === void 0 ? [] : renderRouteOverride(evidence.route_override),
-    ...evidence.reports.flatMap((report2) => ["", `## ${report2.reviewer_id} (${report2.focus})`, "", report2.report])
+    ...evidence.reports.flatMap((report2) => ["", `## ${report2.reviewer_id} (${report2.focus})`, "", ..."outcome" in report2 ? [`Outcome: ${report2.outcome}`, "", report2.feedback] : [report2.report]])
   ].join("\n"));
   const summaryMetadata = evidence.schema_version === "2" || evidence.schema_version === "3" ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] : [["blocking_count", evidence.blocking_count]];
   const lines = ["# ArchFlow Review Evidence", ...metadata([
@@ -73865,14 +74741,14 @@ function policyReviewFacts(review, adjudication, activeRules) {
   if (adjudication !== void 0 && review.assurance === "server-attested" && adjudication.source_review_envelope_digest !== review.envelope_input_digest) {
     throw new TypeError("policy review evidence round bindings disagree");
   }
-  if (review.schema_version === "3" || review.schema_version === "4") {
+  if (review.schema_version === "3" || isFeedbackReview(review)) {
     if (review.assurance !== "server-attested") {
       throw new TypeError("Review V3 policy facts require server-attested evidence");
     }
     if (adjudication !== void 0 !== activeRules || adjudication !== void 0 && adjudication.schema_version !== "2") {
       throw new TypeError("fresh policy evidence cohort is incomplete or mixed");
     }
-    const alignment2 = review.schema_version === "4" ? [] : review.upstream_alignment ?? [];
+    const alignment2 = isFeedbackReview(review) ? [] : review.upstream_alignment ?? [];
     return Object.freeze({
       subject_digest: review.subject_digest,
       input_fingerprint: review.input_fingerprint,
@@ -73885,7 +74761,7 @@ function policyReviewFacts(review, adjudication, activeRules) {
         uncertain_rule_versions: adjudication.uncertain_rule_versions
       }),
       alignment: Object.freeze({
-        source: review.schema_version === "4" || review.upstream_alignment === void 0 ? "not-reviewed" : "review-v3",
+        source: isFeedbackReview(review) || review.upstream_alignment === void 0 ? "not-reviewed" : "review-v3",
         result: alignmentResult(alignment2),
         findings: alignment2
       })
@@ -74009,7 +74885,7 @@ function completedReviewRoundCount(state, retained) {
   if (history === void 0) {
     const artifact = retained.get("counter_review")?.manifest.source_artifact;
     if (artifact?.artifact_kind !== "review-evidence") return 0;
-    if (artifact.evidence.schema_version === "3" || artifact.evidence.schema_version === "4") return 1;
+    if (artifact.evidence.schema_version === "3" || isFeedbackReview(artifact.evidence)) return 1;
     return state.attempt;
   }
   const attempts = new Set(history.filter((round) => round.attempt <= state.attempt).map((round) => round.attempt));
@@ -74085,7 +74961,7 @@ function currentFor(retained, step, subject, reviews) {
     const currentEnvelopeDigest = currentReview !== void 0 && currentReview.assurance === "server-attested" ? currentReview.envelope_input_digest : void 0;
     if (currentEnvelopeDigest === void 0 || adjudication.source_review_envelope_digest !== currentEnvelopeDigest) return false;
     if (adjudication.schema_version === "2") {
-      return currentReview?.schema_version === "3" || currentReview?.schema_version === "4";
+      return currentReview !== void 0 && (currentReview.schema_version === "3" || isFeedbackReview(currentReview));
     }
     return adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest12, index) => digest12 === (subject.approved_upstream_digests ?? [])[index]);
   }
@@ -74125,7 +75001,7 @@ function evidenceBindingFailure(request, gate, evidence, subject) {
   if (counterReview === void 0) return "counter-review-evidence-missing";
   if (triage === void 0) return "triage-evidence-missing";
   if (!boundToSubjectOrDeclaredPredecessor(triage, subject)) return "triage-not-bound-to-subject";
-  const adjudicationRequired = gate.kind === "constitution-review" || counterReview.schema_version !== "3" && counterReview.schema_version !== "4";
+  const adjudicationRequired = gate.kind === "constitution-review" || counterReview.schema_version !== "3" && !isFeedbackReview(counterReview);
   if (adjudicationRequired) {
     if (adjudication === void 0) return "adjudication-evidence-missing";
     if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
@@ -74229,7 +75105,7 @@ function dispositionState(retained, reviews, triage) {
   if (reviews === void 0 || triage === void 0) {
     return Object.freeze({ complete: false, blocker: false, accepted: false, escalated_human: false, deferred: false });
   }
-  if (reviews.reviews.some((review) => review.evidence.schema_version === "4")) {
+  if (reviews.reviews.some((review) => isFeedbackReview(review.evidence))) {
     const response = triage.response;
     return Object.freeze({ complete: response !== void 0, blocker: response?.decision === "escalate", accepted: response?.decision === "revise", escalated_human: response?.decision === "escalate", deferred: false });
   }
@@ -74555,8 +75431,8 @@ function buildGateDecisionTemplates(active) {
     ]);
   }
   const templates = [];
-  const baselineLiveCount = request.kind === "baseline-adoption" ? request.context.drifted_projections.length + (request.context.secondary_targets ?? []).reduce((count, target4) => count + target4.drifted_projections.length, 0) : 0;
-  const baselineDeletedCount = request.kind === "baseline-adoption" ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? []).reduce((count, target4) => count + (target4.deleted_projections?.length ?? 0), 0) : 0;
+  const baselineLiveCount = request.kind === "baseline-adoption" ? request.context.drifted_projections.length + (request.context.secondary_targets ?? []).reduce((count2, target4) => count2 + target4.drifted_projections.length, 0) : 0;
+  const baselineDeletedCount = request.kind === "baseline-adoption" ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? []).reduce((count2, target4) => count2 + (target4.deleted_projections?.length ?? 0), 0) : 0;
   for (const decision3 of request.allowed_decisions) {
     if (decision3 === "cancel") {
       templates.push(cancellation);
@@ -74777,7 +75653,7 @@ function ordinaryReasons(active, authenticatedDetails) {
   return Object.freeze(reasons);
 }
 function baselineAffectedCount(context2) {
-  return context2.drifted_projections.length + (context2.deleted_projections?.length ?? 0) + (context2.secondary_targets ?? []).reduce((count, target4) => count + target4.drifted_projections.length + (target4.deleted_projections?.length ?? 0), 0);
+  return context2.drifted_projections.length + (context2.deleted_projections?.length ?? 0) + (context2.secondary_targets ?? []).reduce((count2, target4) => count2 + target4.drifted_projections.length + (target4.deleted_projections?.length ?? 0), 0);
 }
 function baselineProjectionDetails(context2) {
   const projectionLines = (repository, drifted, deleted) => {
@@ -75002,8 +75878,8 @@ function selectGateDecisionTemplate(active, value) {
 
 // src/state/lock.ts
 import { AsyncLocalStorage } from "node:async_hooks";
-import { lstat as lstat7, mkdir as mkdir5, open as open5, readdir as readdir2, realpath as realpath4, rename, rmdir } from "node:fs/promises";
-import { dirname as dirname4, join as join10 } from "node:path";
+import { lstat as lstat7, mkdir as mkdir6, open as open5, readdir as readdir3, realpath as realpath4, rename, rmdir } from "node:fs/promises";
+import { dirname as dirname5, join as join11 } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay3 } from "node:timers/promises";
 var TaskLockError = class extends Error {
@@ -75015,7 +75891,7 @@ var TaskLockError = class extends Error {
   stage;
 };
 var TASK_LOCK_POLICY = Object.freeze({
-  relativePath: join10("transient", ".transaction-lock"),
+  relativePath: join11("transient", ".transaction-lock"),
   pollIntervalMs: 10,
   deadlineMs: 250
 });
@@ -75028,7 +75904,7 @@ function createTaskLock() {
     const deadline = performance.now() + TASK_LOCK_POLICY.deadlineMs;
     for (; ; ) {
       try {
-        await mkdir5(lockPath);
+        await mkdir6(lockPath);
         return;
       } catch (error51) {
         if (errnoOf3(error51) !== "EEXIST") throw new TaskLockError("acquire");
@@ -75041,7 +75917,7 @@ function createTaskLock() {
   async function runExclusive(taskRoot, work) {
     const inheritedRoots = heldRoots.getStore() ?? /* @__PURE__ */ new Set();
     if (inheritedRoots.has(taskRoot)) throw new TaskLockError("acquire");
-    const lockPath = join10(taskRoot, TASK_LOCK_POLICY.relativePath);
+    const lockPath = join11(taskRoot, TASK_LOCK_POLICY.relativePath);
     await acquire(lockPath);
     const scopedRoots = /* @__PURE__ */ new Set([...inheritedRoots, taskRoot]);
     let workResult;
@@ -75827,8 +76703,8 @@ function reconcileCurrentAuthority(value) {
 
 // src/state/reconciliation-discovery.ts
 import { constants as fsConstants4 } from "node:fs";
-import { lstat as lstat8, readdir as readdir3, readlink as readlink4 } from "node:fs/promises";
-import { join as join11 } from "node:path";
+import { lstat as lstat8, readdir as readdir4, readlink as readlink4 } from "node:fs/promises";
+import { join as join12 } from "node:path";
 var ok12 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var stateInvalid2 = (authority, issueCode) => Object.freeze({
   schema_version: "1",
@@ -76111,7 +76987,7 @@ async function discoverGateHead(dependencies, authority, state) {
 async function discoverIntent(dependencies, authority, state) {
   let names;
   try {
-    names = await readdir3(join11(authority.workspace_root, "transient", "intents"));
+    names = await readdir4(join12(authority.workspace_root, "transient", "intents"));
   } catch (error51) {
     if (error51.code === "ENOENT") return ok12(Object.freeze({}));
     return ioFailure(authority, "discover-reconciliation-intents");
@@ -76168,8 +77044,8 @@ import { lstat as lstat10, readFile as readFile8, readlink as readlink5 } from "
 
 // src/state/atomic.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { link, open as open6, rename as rename2, symlink as symlink2, unlink as unlink2 } from "node:fs/promises";
-import { basename as basename2, dirname as dirname5, join as join12 } from "node:path";
+import { link, open as open6, rename as rename2, symlink as symlink2, unlink as unlink3 } from "node:fs/promises";
+import { basename as basename3, dirname as dirname6, join as join13 } from "node:path";
 async function replaceTaskAsk(writer, path3, bytes) {
   if (path3.path_class !== "task-ask") throw new TypeError("task ask replacement requires task-ask authority");
   await writer.replaceTaskAsk(path3, bytes);
@@ -76204,9 +77080,9 @@ async function createExclusive(path3, bytes) {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
   const target4 = path3.absolute;
-  const temporary = join12(
-    dirname5(target4),
-    `.${basename2(target4)}.${process.pid}.${randomUUID2()}.tmp`
+  const temporary = join13(
+    dirname6(target4),
+    `.${basename3(target4)}.${process.pid}.${randomUUID2()}.tmp`
   );
   let handle;
   let linkAttempted = false;
@@ -76236,7 +77112,7 @@ async function createExclusive(path3, bytes) {
     if (handle !== void 0) {
       await handle.close().catch(() => void 0);
     }
-    await unlink2(temporary).catch(() => void 0);
+    await unlink3(temporary).catch(() => void 0);
   }
 }
 async function replace(path3, bytes) {
@@ -76250,7 +77126,7 @@ async function removeGateInterface(path3) {
     throw new TypeError("removeGateInterface requires a gate-interface resolved path");
   }
   try {
-    await unlink2(path3.absolute);
+    await unlink3(path3.absolute);
   } catch (error51) {
     if (errnoOf4(error51) !== "ENOENT") {
       throw new AtomicReplaceError({
@@ -76285,7 +77161,7 @@ function requireProjectable(path3) {
   if (!PROJECTABLE.has(path3.path_class)) throw new TypeError("projection requires a declared output path");
 }
 async function replaceRegularBytes(target4, bytes, mode) {
-  const temporary = join12(dirname5(target4), `.${basename2(target4)}.${process.pid}.${randomUUID2()}.tmp`);
+  const temporary = join13(dirname6(target4), `.${basename3(target4)}.${process.pid}.${randomUUID2()}.tmp`);
   let handle;
   let renameAttempted = false;
   try {
@@ -76305,7 +77181,7 @@ async function replaceRegularBytes(target4, bytes, mode) {
     });
   } finally {
     await handle?.close().catch(() => void 0);
-    await unlink2(temporary).catch(() => void 0);
+    await unlink3(temporary).catch(() => void 0);
   }
 }
 async function replaceRegular(path3, bytes, executable) {
@@ -76314,7 +77190,7 @@ async function replaceRegular(path3, bytes, executable) {
 }
 async function replaceSymlink(path3, target4) {
   requireProjectable(path3);
-  const temporary = join12(dirname5(path3.absolute), `.${basename2(path3.absolute)}.${process.pid}.${randomUUID2()}.tmp`);
+  const temporary = join13(dirname6(path3.absolute), `.${basename3(path3.absolute)}.${process.pid}.${randomUUID2()}.tmp`);
   let created = false;
   try {
     await symlink2(target4, temporary);
@@ -76329,13 +77205,13 @@ async function replaceSymlink(path3, target4) {
       errno: errnoOf4(error51)
     });
   } finally {
-    if (created) await unlink2(temporary).catch(() => void 0);
+    if (created) await unlink3(temporary).catch(() => void 0);
   }
 }
 async function remove(path3) {
   requireProjectable(path3);
   try {
-    await unlink2(path3.absolute);
+    await unlink3(path3.absolute);
   } catch (error51) {
     if (errnoOf4(error51) !== "ENOENT") {
       throw new AtomicReplaceError({
@@ -77169,8 +78045,8 @@ async function createProductionServices(input) {
 }
 
 // src/state/workspace-cleanup.ts
-import { lstat as lstat11, readFile as readFile9, readdir as readdir4, rm as rm2, rmdir as rmdir2, stat as stat3, unlink as unlink3 } from "node:fs/promises";
-import { basename as basename3, dirname as dirname6, join as join13, relative as relative5, sep as sep4 } from "node:path";
+import { lstat as lstat11, readFile as readFile9, readdir as readdir5, rm as rm2, rmdir as rmdir2, stat as stat3, unlink as unlink4 } from "node:fs/promises";
+import { basename as basename4, dirname as dirname7, join as join14, relative as relative5, sep as sep4 } from "node:path";
 var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function io2(authority, operation) {
   return Object.freeze({
@@ -77186,8 +78062,8 @@ function inside(root, candidate) {
 async function filesBelow(root) {
   const output = [];
   const walk = async (directory) => {
-    for (const entry of await readdir4(directory, { withFileTypes: true })) {
-      const absolute = join13(directory, entry.name);
+    for (const entry of await readdir5(directory, { withFileTypes: true })) {
+      const absolute = join14(directory, entry.name);
       if (!inside(root, absolute)) throw new TypeError("workspace inventory escaped its root");
       if (entry.isSymbolicLink()) {
         const metadata2 = await lstat11(absolute);
@@ -77232,11 +78108,11 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
   if (entry.relative === "transient/.transaction-lock" || entry.relative.startsWith("transient/.transaction-lock/")) return true;
   if (await receiptIsRecoveryBuffer(entry, state)) return true;
   if (/^transient\/intents\/.+\.request\.json$/u.test(entry.relative)) {
-    const intentId = basename3(entry.relative, ".request.json");
+    const intentId = basename4(entry.relative, ".request.json");
     if (state.last_transition?.intent_id === intentId) return false;
     const receipt = entry.relative.replace(/\.request\.json$/u, ".json");
     try {
-      await lstat11(join13(entry.absolute, "..", basename3(receipt)));
+      await lstat11(join14(entry.absolute, "..", basename4(receipt)));
       return false;
     } catch (error51) {
       return error51.code === "ENOENT";
@@ -77255,7 +78131,7 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
   return false;
 }
 async function referencedDecisionDigests(authority) {
-  const root = join13(authority.task_root, "authority", "decisions");
+  const root = join14(authority.task_root, "authority", "decisions");
   const digests = /* @__PURE__ */ new Set();
   let files;
   try {
@@ -77272,7 +78148,7 @@ async function referencedDecisionDigests(authority) {
   return digests;
 }
 async function decisionProtectedAuthorityResults(authority) {
-  const root = join13(authority.task_root, "authority", "results");
+  const root = join14(authority.task_root, "authority", "results");
   const decisionDigests = await referencedDecisionDigests(authority);
   let files;
   try {
@@ -77306,7 +78182,7 @@ async function decisionProtectedAuthorityResults(authority) {
   return protectedResults;
 }
 async function unreferencedAuthorityResults(authority, state, decisionProtectedResults) {
-  const root = join13(authority.task_root, "authority", "results");
+  const root = join14(authority.task_root, "authority", "results");
   const live = retainedResultDigests(state);
   if (decisionProtectedResults.has("*")) return Object.freeze([]);
   let files;
@@ -77321,10 +78197,10 @@ async function unreferencedAuthorityResults(authority, state, decisionProtectedR
   }));
 }
 async function unreferencedAuthorityDecisions(authority, state) {
-  const root = join13(authority.task_root, "authority", "decisions");
+  const root = join14(authority.task_root, "authority", "decisions");
   let groups;
   try {
-    groups = await readdir4(root, { withFileTypes: true });
+    groups = await readdir5(root, { withFileTypes: true });
   } catch (error51) {
     return error51.code === "ENOENT" ? Object.freeze([]) : Object.freeze([]);
   }
@@ -77358,7 +78234,7 @@ async function unreferencedAuthorityDecisions(authority, state) {
     for (const gateId of [...live]) {
       let entries;
       try {
-        entries = await filesBelow(join13(root, gateId));
+        entries = await filesBelow(join14(root, gateId));
       } catch {
         return Object.freeze([]);
       }
@@ -77378,7 +78254,7 @@ async function unreferencedAuthorityDecisions(authority, state) {
   for (const gateId of known) {
     if (live.has(gateId)) continue;
     try {
-      stale.push(...await filesBelow(join13(root, gateId)));
+      stale.push(...await filesBelow(join14(root, gateId)));
     } catch {
       return Object.freeze([]);
     }
@@ -77386,19 +78262,19 @@ async function unreferencedAuthorityDecisions(authority, state) {
   return Object.freeze(stale);
 }
 async function removeFile(entry) {
-  await unlink3(entry.absolute);
+  await unlink4(entry.absolute);
 }
 async function removeEmptyDirectories(root, preserve = /* @__PURE__ */ new Set()) {
   let directories = [];
   const walk = async (directory) => {
     let children;
     try {
-      children = await readdir4(directory, { withFileTypes: true });
+      children = await readdir5(directory, { withFileTypes: true });
     } catch (error51) {
       if (error51.code === "ENOENT") return;
       throw error51;
     }
-    for (const child of children) if (child.isDirectory() && !child.isSymbolicLink()) await walk(join13(directory, child.name));
+    for (const child of children) if (child.isDirectory() && !child.isSymbolicLink()) await walk(join14(directory, child.name));
     if (!preserve.has(directory)) directories.push(directory);
   };
   await walk(root);
@@ -77413,7 +78289,7 @@ async function removeEmptyParents(start, boundary) {
     } catch {
       return;
     }
-    current = dirname6(current);
+    current = dirname7(current);
   }
 }
 async function cleanupTarget(dependencies, authority) {
@@ -77429,7 +78305,7 @@ async function inspectWorkspaceCleanup(dependencies, authority, state) {
   if (!target4.ok) return target4;
   try {
     const workspaceFiles = await filesBelow(target4.value.absolute);
-    const authorityFiles = await filesBelow(join13(authority.task_root, "authority"));
+    const authorityFiles = await filesBelow(join14(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
       ...await unreferencedAuthorityResults(authority, state, decisionProtectedResults),
@@ -77467,7 +78343,7 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
   if (!target4.ok) return target4;
   try {
     const workspaceFiles = await filesBelow(target4.value.absolute);
-    const authorityFiles = await filesBelow(join13(authority.task_root, "authority"));
+    const authorityFiles = await filesBelow(join14(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
       ...await unreferencedAuthorityResults(authority, state, decisionProtectedResults),
@@ -77480,22 +78356,22 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
     let retainedFiles = retainedAuthority.length;
     let retainedBytes = retainedAuthority.reduce((sum, entry) => sum + entry.byte_count, 0);
     for (const entry of [...workspaceFiles, ...authorityCandidates]) {
-      const authorityFile = entry.absolute.startsWith(join13(authority.task_root, "authority") + sep4);
+      const authorityFile = entry.absolute.startsWith(join14(authority.task_root, "authority") + sep4);
       if (!authorityFile && await shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults)) {
         retainedFiles += 1;
         retainedBytes += entry.byte_count;
         continue;
       }
       await removeFile(entry);
-      await removeEmptyParents(dirname6(entry.absolute), authorityFile ? join13(authority.task_root, "authority") : target4.value.absolute);
+      await removeEmptyParents(dirname7(entry.absolute), authorityFile ? join14(authority.task_root, "authority") : target4.value.absolute);
       removedFiles += 1;
       removedBytes += entry.byte_count;
     }
     await removeEmptyDirectories(target4.value.absolute, /* @__PURE__ */ new Set([
-      join13(target4.value.absolute, "transient", ".transaction-lock")
+      join14(target4.value.absolute, "transient", ".transaction-lock")
     ]));
-    await removeEmptyDirectories(join13(authority.task_root, "authority", "results"));
-    await removeEmptyDirectories(join13(authority.task_root, "authority", "decisions"));
+    await removeEmptyDirectories(join14(authority.task_root, "authority", "results"));
+    await removeEmptyDirectories(join14(authority.task_root, "authority", "decisions"));
     return ok16(Object.freeze({
       removed_files: parseSafeInteger(removedFiles),
       removed_bytes: parseSafeInteger(removedBytes),
@@ -77532,10 +78408,10 @@ async function removeSupersededPhaseDocuments(dependencies, authority, targetPha
     const phase3 = Number(document2[1]);
     const superseded = document2[2] === "impl-notes" ? phase3 >= target4 : phase3 > target4;
     if (!superseded) continue;
-    const absolute = join13(authority.task_root, ...relative9.split("/"));
+    const absolute = join14(authority.task_root, ...relative9.split("/"));
     if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
-    await unlink3(absolute).catch(() => void 0);
-    await removeEmptyParents(dirname6(absolute), join13(authority.task_root, "phases"));
+    await unlink4(absolute).catch(() => void 0);
+    await removeEmptyParents(dirname7(absolute), join14(authority.task_root, "phases"));
     removed.push(relative9);
   }
   return Object.freeze(removed.sort());
@@ -77839,10 +78715,10 @@ function deriveNextAction(input) {
           state
         );
       }
-      const count = input.reconciliation_findings?.filter((candidate) => candidate.kind === "projection-mismatch").length ?? 1;
+      const count2 = input.reconciliation_findings?.filter((candidate) => candidate.kind === "projection-mismatch").length ?? 1;
       return action(
         "open-gate",
-        `${count} file${count === 1 ? "" : "s"} changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Open the baseline decision so a human chooses: keep the current bytes as the new recorded baseline, or restore the recorded bytes.`,
+        `${count2} file${count2 === 1 ? "" : "s"} changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Open the baseline decision so a human chooses: keep the current bytes as the new recorded baseline, or restore the recorded bytes.`,
         true,
         state,
         { gate_kind: "baseline-adoption" }
@@ -78423,7 +79299,7 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target4) {
       })).sort((left, right) => left.path.localeCompare(right.path)))
     });
   });
-  if (secondaryTargets.some((item) => item === void 0) || drifted.length + deleted.length + secondaryTargets.reduce((count, item) => count + item.drifted_projections.length + item.deleted_projections.length, 0) !== mismatches.length) return void 0;
+  if (secondaryTargets.some((item) => item === void 0) || drifted.length + deleted.length + secondaryTargets.reduce((count2, item) => count2 + item.drifted_projections.length + item.deleted_projections.length, 0) !== mismatches.length) return void 0;
   if (drifted.length + deleted.length + secondaryTargets.length === 0) return void 0;
   const context2 = Object.freeze({
     drifted_projections: Object.freeze(drifted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest })).sort((left, right) => left.path.localeCompare(right.path))),
@@ -80176,8 +81052,8 @@ async function openDurableGate(dependencies, input) {
         if (dependencies.load_retained_manifest === void 0) return issue2("STATE_INVALID", current.value, "review-round-history-unavailable");
         const history = await loadRetainedEvidence({ load_retained_manifest: dependencies.load_retained_manifest }, current.value, current.value.phase_instance);
         if (!history.ok) return history;
-        const count = completedReviewRoundCount(current.value, history.value);
-        if (count !== attemptsContext.completed_review_rounds || count < attemptsContext.maximum_attempts) {
+        const count2 = completedReviewRoundCount(current.value, history.value);
+        if (count2 !== attemptsContext.completed_review_rounds || count2 < attemptsContext.maximum_attempts) {
           return issue2("STATE_INVALID", current.value, "review-round-context-stale");
         }
       }
@@ -82263,8 +83139,8 @@ import { randomUUID as randomUUID3 } from "node:crypto";
 import { readFile as readFile15 } from "node:fs/promises";
 
 // src/init/task-initialization.ts
-import { mkdir as mkdir6, open as open7, readFile as readFile12 } from "node:fs/promises";
-import { dirname as dirname7, join as join14 } from "node:path";
+import { mkdir as mkdir7, open as open7, readFile as readFile12 } from "node:fs/promises";
+import { dirname as dirname8, join as join15 } from "node:path";
 var decoder4 = new TextDecoder("utf-8", { fatal: true });
 var ok18 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail17 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
@@ -82280,14 +83156,14 @@ function policyBaseInvalid(commit) {
   });
 }
 async function createTaskConfig(root, taskId) {
-  const taskConfig = join14(root, ".archflow", "tasks", taskId, "config.yaml");
+  const taskConfig = join15(root, ".archflow", "tasks", taskId, "config.yaml");
   try {
     return new Uint8Array(await readFile12(taskConfig));
   } catch (error51) {
     if (!errno3(error51, "ENOENT")) throw error51;
   }
-  const template = new Uint8Array(await readFile12(join14(root, ".archflow", "config.yaml")));
-  await mkdir6(dirname7(taskConfig), { recursive: true });
+  const template = new Uint8Array(await readFile12(join15(root, ".archflow", "config.yaml")));
+  await mkdir7(dirname8(taskConfig), { recursive: true });
   try {
     const handle = await open7(taskConfig, "wx");
     try {
@@ -82307,9 +83183,9 @@ async function stageTaskAsk(input) {
   const taskId = parseTaskSlug(snapshot.task_id);
   if (typeof snapshot.text !== "string") throw new TypeError("task ask text must be a string");
   const bytes = new TextEncoder().encode(snapshot.text);
-  const askPath = join14(snapshot.working_directory, ".archflow", "tasks", taskId, "ask.md");
+  const askPath = join15(snapshot.working_directory, ".archflow", "tasks", taskId, "ask.md");
   try {
-    await mkdir6(dirname7(askPath), { recursive: true });
+    await mkdir7(dirname8(askPath), { recursive: true });
     const handle = await open7(askPath, "wx");
     try {
       await handle.writeFile(bytes);
@@ -82582,18 +83458,18 @@ async function buildDocumentArtifact(runner, authority, input) {
 }
 
 // src/state/initialization.ts
-import { mkdir as mkdir7, mkdtemp as mkdtemp2, rename as rename3, rm as rm3, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname as dirname8, isAbsolute as isAbsolute5, join as join16, relative as relative6 } from "node:path";
+import { mkdir as mkdir8, mkdtemp as mkdtemp2, rename as rename3, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname9, isAbsolute as isAbsolute5, join as join17, relative as relative6 } from "node:path";
 
 // src/state/legacy-stage.ts
 import { readFile as readFile13 } from "node:fs/promises";
-import { join as join15 } from "node:path";
+import { join as join16 } from "node:path";
 function importRoot(authority, initialization) {
-  return join15(authority.workspace_root, "cache", "imports", initialization.import_digest);
+  return join16(authority.workspace_root, "cache", "imports", initialization.import_digest);
 }
 async function readStagedLegacyConfig(authority, initialization) {
   try {
-    const bytes = new Uint8Array(await readFile13(join15(importRoot(authority, initialization), "config.yaml")));
+    const bytes = new Uint8Array(await readFile13(join16(importRoot(authority, initialization), "config.yaml")));
     const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest12 = sha256Bytes(bytes);
     if (digest12 !== initialization.config_digest) return void 0;
@@ -82604,7 +83480,7 @@ async function readStagedLegacyConfig(authority, initialization) {
 }
 async function readStagedLegacyPayload(authority, initialization, reference) {
   try {
-    const bytes = new Uint8Array(await readFile13(join15(importRoot(authority, initialization), "payload", reference.legacy_path)));
+    const bytes = new Uint8Array(await readFile13(join16(importRoot(authority, initialization), "payload", reference.legacy_path)));
     if (bytes.byteLength !== reference.byte_count || sha256Bytes(bytes) !== reference.digest) return void 0;
     return bytes;
   } catch {
@@ -82801,9 +83677,9 @@ async function installLegacyDestination(request, initialization, initializationB
   const references = new Map(initialization.staged_payload_refs.map((entry) => [entry.legacy_path, entry]));
   let temporary;
   try {
-    temporary = await mkdtemp2(join16(request.authority.workspace_root, ".adopt-"));
-    await mkdir7(join16(temporary, "authority"), { recursive: true });
-    await writeFile3(join16(temporary, "config.yaml"), config2.bytes, { flag: "wx", mode: 420 });
+    temporary = await mkdtemp2(join17(request.authority.workspace_root, ".adopt-"));
+    await mkdir8(join17(temporary, "authority"), { recursive: true });
+    await writeFile4(join17(temporary, "config.yaml"), config2.bytes, { flag: "wx", mode: 420 });
     for (const entry of initialization.mapping) {
       const reference = references.get(entry.legacy_path);
       if (reference === void 0) return contract("legacy-mapping-payload-missing");
@@ -82811,12 +83687,12 @@ async function installLegacyDestination(request, initialization, initializationB
       if (bytes === void 0) return contract("legacy-staged-payload-invalid");
       const prefix = `.archflow/tasks/${initialization.task_id}/`;
       const relativeDestination = entry.destination_path.slice(prefix.length);
-      const target4 = join16(temporary, relativeDestination);
-      await mkdir7(dirname8(target4), { recursive: true });
-      await writeFile3(target4, bytes, { flag: "wx", mode: 420 });
+      const target4 = join17(temporary, relativeDestination);
+      await mkdir8(dirname9(target4), { recursive: true });
+      await writeFile4(target4, bytes, { flag: "wx", mode: 420 });
     }
-    await writeFile3(join16(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
-    await writeFile3(join16(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
+    await writeFile4(join17(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
+    await writeFile4(join17(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
     await rename3(temporary, request.authority.task_root);
     temporary = void 0;
     return ok20(void 0);
@@ -85533,7 +86409,7 @@ var feedbackSchema = external_exports.object({
   attempt: safeIntegerV1Schema,
   input_fingerprint: sha256DigestV1Schema,
   subject_digest: sha256DigestV1Schema,
-  reports: external_exports.array(reviewReportV1Schema)
+  reports: external_exports.array(reviewReportSchema)
 }).strict();
 async function target2(authority, dependencies, state) {
   return resolveTaskWorkspacePath({
@@ -86035,7 +86911,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
     },
     ...(() => {
       const source = detailed.value.retained.get("counter_review")?.manifest.source_artifact;
-      if (source?.artifact_kind !== "review-evidence" || source.evidence.schema_version !== "4") return {};
+      if (source?.artifact_kind !== "review-evidence" || !isFeedbackReview(source.evidence)) return {};
       const current = status.evidence?.available === true && status.evidence.assessment.current.includes("counter_review");
       return current ? { review_reports: source.evidence.reports, ...source.evidence.previous_reports === void 0 ? {} : { previous_review_reports: source.evidence.previous_reports } } : { previous_review_reports: [...source.evidence.previous_reports ?? [], ...source.evidence.reports] };
     })(),
@@ -86130,10 +87006,10 @@ function computeSemanticStatusSnapshot(status, enrichments) {
 
 // src/review/implementation-models.ts
 import { readFile as readFile17 } from "node:fs/promises";
-import { join as join17 } from "node:path";
+import { join as join18 } from "node:path";
 async function loadImplementationSelectionInput(config2, root) {
   try {
-    const source = await readFile17(join17(root ?? await assetRoot(), "implementation-models.yaml"), "utf8");
+    const source = await readFile17(join18(root ?? await assetRoot(), "implementation-models.yaml"), "utf8");
     const catalog = implementationCatalogSchema.parse(parseSingleYamlDocument(source, "implementation-models.yaml"));
     return implementationSelectionInputSchema.parse({
       status: "ready",
@@ -86180,8 +87056,8 @@ async function captureImplementationSelectionInput(context2, binding2, load) {
 import { spawn as spawn3 } from "node:child_process";
 import { createHash as createHash4 } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { chmod as chmod3, lstat as lstat12, mkdir as mkdir8, rm as rm4, symlink as symlink3, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join18, relative as relative7, resolve as resolve2 } from "node:path";
+import { chmod as chmod3, lstat as lstat12, mkdir as mkdir9, rm as rm4, symlink as symlink3, writeFile as writeFile5 } from "node:fs/promises";
+import { join as join19, relative as relative7, resolve as resolve2 } from "node:path";
 import { pipeline as pipeline2 } from "node:stream/promises";
 var visiblePath = (path3) => path3 !== ".archflow" && !path3.startsWith(".archflow/");
 var ordinal11 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
@@ -86195,18 +87071,18 @@ async function writeImage(root, path3, image) {
   }
   let parent = root;
   for (const segment of local.split("/").slice(0, -1)) {
-    parent = join18(parent, segment);
+    parent = join19(parent, segment);
     try {
       if (!(await lstat12(parent)).isDirectory()) throw new TypeError("review diff path crosses a non-directory");
     } catch (error51) {
       if (error51.code !== "ENOENT") throw error51;
-      await mkdir8(parent);
+      await mkdir9(parent);
     }
   }
   if (image.file_type === "symlink") await symlink3(new TextDecoder("utf-8", { fatal: true }).decode(image.bytes), target4);
   else {
     const mode = image.mode === "100755" ? 493 : 420;
-    await writeFile4(target4, image.bytes, { mode, flag: "wx" });
+    await writeFile5(target4, image.bytes, { mode, flag: "wx" });
     await chmod3(target4, mode);
   }
 }
@@ -86262,11 +87138,11 @@ async function gitDiffFile(cwd, output, flags, signal) {
   }
 }
 async function comparison(input, label, previous) {
-  const directory = join18(input.workspace.root, "review-diffs");
-  await mkdir8(directory, { recursive: true });
-  const trees = join18(directory, `${label}-trees`);
-  await mkdir8(join18(trees, "a"), { recursive: true });
-  await mkdir8(join18(trees, "b"), { recursive: true });
+  const directory = join19(input.workspace.root, "review-diffs");
+  await mkdir9(directory, { recursive: true });
+  const trees = join19(directory, `${label}-trees`);
+  await mkdir9(join19(trees, "a"), { recursive: true });
+  await mkdir9(join19(trees, "b"), { recursive: true });
   try {
     for (const repository of input.repositories) {
       const before = new Map(previous?.plans.get(repository.name)?.entries.map((entry) => [String(entry.path), entry.desired]));
@@ -86286,12 +87162,12 @@ async function comparison(input, label, previous) {
           };
         }
         const display = input.repositories.length === 1 ? path3 : `${repository.name}/${path3}`;
-        await writeImage(join18(trees, "a"), display, before.get(path3) ?? baseline);
-        await writeImage(join18(trees, "b"), display, after.get(path3) ?? baseline);
+        await writeImage(join19(trees, "a"), display, before.get(path3) ?? baseline);
+        await writeImage(join19(trees, "b"), display, after.get(path3) ?? baseline);
       }
     }
-    const patchPath = join18(directory, `${label}.patch`);
-    const statPath = join18(directory, `${label}.stat`);
+    const patchPath = join19(directory, `${label}.patch`);
+    const statPath = join19(directory, `${label}.stat`);
     const patch = await gitDiffFile(trees, patchPath, ["--patch"], input.signal);
     const stat4 = await gitDiffFile(trees, statPath, ["--numstat", "--summary"], input.signal);
     const childPath2 = (path3) => relative7(input.workspace.repository_view_root, path3);
@@ -86341,7 +87217,7 @@ async function prepareImplementationDiffs(input) {
   const reviewers = /* @__PURE__ */ new Map();
   const previous = input.prior_triage?.source_review?.evidence;
   const response = input.prior_triage?.response;
-  const reports = previous?.schema_version === "4" ? new Map([...previous.previous_reports ?? [], ...previous.reports].map((report2) => [report2.reviewer_id, report2])) : /* @__PURE__ */ new Map();
+  const reports = previous !== void 0 && isFeedbackReview(previous) ? new Map([...previous.previous_reports ?? [], ...previous.reports].map((report2) => [report2.reviewer_id, report2])) : /* @__PURE__ */ new Map();
   const comparisons = /* @__PURE__ */ new Map();
   if (response?.decision === "revise") for (const selected of response.reviewers) {
     input.signal.throwIfAborted();
@@ -86370,8 +87246,8 @@ async function prepareImplementationDiffs(input) {
 }
 
 // src/state/governing-document-comparison.ts
-import { readFile as readFile18, readdir as readdir5 } from "node:fs/promises";
-import { join as join19 } from "node:path";
+import { readFile as readFile18, readdir as readdir6 } from "node:fs/promises";
+import { join as join20 } from "node:path";
 async function governingDocumentComparisons(dependencies, authority, state, subject) {
   const changed = await changedCoProducedDocumentPaths(dependencies, state, subject);
   if (!changed.ok) throw new Error("Cannot identify changed governing documents");
@@ -86387,7 +87263,7 @@ async function governingDocumentComparisons(dependencies, authority, state, subj
   }
   const subjects = new Set(approvals.map((approval) => approval.approval.subject_digest));
   const manifests = [];
-  for (const name of await readdir5(join19(authority.task_root, "authority", "results"))) {
+  for (const name of await readdir6(join20(authority.task_root, "authority", "results"))) {
     if (!/^[0-9a-f]{64}\.json$/u.test(name)) continue;
     const target4 = await resolveTaskPath({
       runner: dependencies.runner,
@@ -86432,11 +87308,11 @@ async function governingDocumentComparisons(dependencies, authority, state, subj
 
 // src/mcp/handlers/counter-review.ts
 import { readFile as readFile21 } from "node:fs/promises";
-import { join as join22 } from "node:path";
+import { join as join23 } from "node:path";
 
 // src/dispatch/retained-child-output.ts
-import { readdir as readdir6, readFile as readFile19 } from "node:fs/promises";
-import { join as join20 } from "node:path";
+import { readdir as readdir7, readFile as readFile19 } from "node:fs/promises";
+import { join as join21 } from "node:path";
 var nonBlank6 = external_exports.string().min(1);
 var retainedRouteSchema = external_exports.object({
   adapter: external_exports.enum(ADAPTER_IDS),
@@ -86457,6 +87333,7 @@ var retainedChildOutputSchema = external_exports.object({
   route_source: routeSourceRecordSchema,
   cli_version: nonBlank6,
   output_base64: external_exports.string().min(1),
+  usage: dispatchUsageSchema.optional(),
   observed_output_digest: sha256DigestV1Schema
 }).strict();
 function plainRoute(route3) {
@@ -86522,7 +87399,11 @@ function createRetainedChildOutputStore(context2) {
         const record3 = retainedChildOutputSchema.parse(JSON.parse(await readFile19(target4.value.absolute, "utf8")));
         const bytes = new Uint8Array(Buffer.from(record3.output_base64, "base64"));
         if (matches(record3, binding2) && sha256Bytes(bytes) === record3.observed_output_digest) {
-          return Object.freeze({ cli_version: record3.cli_version, extracted_output_bytes: bytes });
+          return Object.freeze({
+            cli_version: record3.cli_version,
+            extracted_output_bytes: bytes,
+            ...record3.usage === void 0 ? {} : { usage: record3.usage }
+          });
         }
       } catch {
       }
@@ -86545,6 +87426,7 @@ function createRetainedChildOutputStore(context2) {
           route: plainRoute(binding2.selection.route),
           route_source: plainSource(binding2.selection.source),
           cli_version: result.cli_version,
+          ...result.usage === void 0 ? {} : { usage: result.usage },
           output_base64: Buffer.from(result.extracted_output_bytes).toString("base64"),
           observed_output_digest: sha256Bytes(result.extracted_output_bytes)
         });
@@ -86573,9 +87455,9 @@ function createRetainedChildOutputStore(context2) {
     },
     async discard(envelopeDigest) {
       try {
-        const directory = join20(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
+        const directory = join21(context2.authority.workspace_root, "diagnostics", "attempts", context2.phase_instance);
         const prefix = roundPrefix(envelopeDigest);
-        for (const name of await readdir6(directory)) {
+        for (const name of await readdir7(directory)) {
           if (!name.startsWith(prefix) || !name.endsWith(".json")) continue;
           const target4 = await resolveRecord(
             context2,
@@ -87646,7 +88528,7 @@ async function runStateTransaction(dependencies, request, prepare) {
 
 // src/review/pinned-context.ts
 import { readFile as readFile20 } from "node:fs/promises";
-import { join as join21, posix } from "node:path";
+import { join as join22, posix } from "node:path";
 
 // src/contracts/utf8.ts
 import { Buffer as Buffer3 } from "node:buffer";
@@ -88103,9 +88985,14 @@ async function loadPriorTriageRecord(dependencies, state) {
 function priorTriageContextEntry(record3, owns, reviewerId) {
   if (record3.response !== void 0) {
     const source = record3.source_review?.evidence;
-    const reports = source?.schema_version === "4" ? [...source.previous_reports ?? [], ...source.reports].filter((report2) => reviewerId === void 0 || report2.reviewer_id === reviewerId) : [];
+    const reports = source !== void 0 && isFeedbackReview(source) ? [...source.previous_reports ?? [], ...source.reports].filter((report2) => reviewerId === void 0 || report2.reviewer_id === reviewerId) : [];
     const requests = record3.response.decision === "revise" ? record3.response.reviewers.filter((reviewer) => reviewerId === void 0 || reviewer.reviewer_id === reviewerId) : [];
-    return pinnedContextEntry("prior-triage", "prior-round-response", new TextEncoder().encode(JSON.stringify({ previous_reports: reports, revision_summary: record3.response.rationale, verification_requests: requests })));
+    const previousReports = reports.map((report2) => "outcome" in report2 ? { reviewer_id: report2.reviewer_id, outcome: report2.outcome, feedback: report2.feedback } : { reviewer_id: report2.reviewer_id, report: report2.report });
+    return pinnedContextEntry("prior-triage", "prior-round-response", new TextEncoder().encode(JSON.stringify({
+      previous_reports: previousReports,
+      revision_summary: record3.response.rationale,
+      verification_requests: requests
+    })));
   }
   const accepted = record3.dispositions.filter((disposition) => disposition.disposition === "accepted");
   const dispositions = owns === void 0 ? accepted : accepted.filter((disposition) => owns(disposition.finding_id));
@@ -88131,7 +89018,7 @@ async function priorTriageEvidence(dependencies, state, preloaded) {
 async function conventionsEvidence(runner) {
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile20(join21(runner.location.worktreeRoot, "CLAUDE.md")));
+    bytes = new Uint8Array(await readFile20(join22(runner.location.worktreeRoot, "CLAUDE.md")));
   } catch {
     return Object.freeze([]);
   }
@@ -88206,7 +89093,7 @@ async function planCounterReviewCommit(inputs, current, call) {
     revision,
     request_digest: inputs.request_digest
   };
-  const success3 = inputs.review_evidence.schema_version === "4" ? Object.freeze({ ...commonSuccess, reports: inputs.review_evidence.reports, constitution: constitutionOutcome }) : inputs.review_evidence.schema_version === "3" ? Object.freeze({
+  const success3 = isFeedbackReview(inputs.review_evidence) ? Object.freeze({ ...commonSuccess, reports: inputs.review_evidence.reports, constitution: constitutionOutcome }) : inputs.review_evidence.schema_version === "3" ? Object.freeze({
     ...commonSuccess,
     constitution: constitutionOutcome,
     alignment: inputs.review_evidence.upstream_alignment === void 0 ? Object.freeze({ status: "not-run", reason: "prd-has-no-approved-upstream-plan" }) : Object.freeze({
@@ -88446,12 +89333,13 @@ async function runCounterReview(dependencies, input) {
       extracted_output_bytes: dispatched2.extracted_output_bytes,
       repositories: input.repositories,
       assignment: Object.freeze({ ...assignment, routing_role: routeEntry.role, report_format: true }),
+      ...dispatched2.usage === void 0 ? {} : { usage: dispatched2.usage },
       ...routeOverride === void 0 ? {} : { route_override: routeOverride }
     });
     const binding2 = { envelope_digest: reviewEnvelope.digest, role: routeEntry.role, selection: routeEntry.selection };
     const receive = (result) => {
-      const report2 = readableReviewReport(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.extracted_output_bytes)));
-      receivedReports.set(assignment.reviewer_id, { subject_digest: subject.subject_digest, model: route3.model, effort: route3.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, report: report2 });
+      const feedback = parseReviewFeedback(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.extracted_output_bytes)));
+      receivedReports.set(assignment.reviewer_id, { subject_digest: subject.subject_digest, model: route3.model, effort: route3.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, ...feedback, ...result.usage === void 0 ? {} : { usage: result.usage } });
     };
     let dispatched = await retained?.read(binding2);
     if (dispatched !== void 0) {
@@ -88622,8 +89510,8 @@ async function runCounterReview(dependencies, input) {
   if (singleObservations.length !== reviewRoutes.length) {
     throw new TypeError("counter-review settled without an observation for every selected reviewer");
   }
-  if (singleObservations.some((observation) => observation.evidence.schema_version !== "4")) {
-    throw new TypeError("fresh counter-review observations must all use review schema version 4");
+  if (singleObservations.some((observation) => observation.evidence.schema_version !== "5")) {
+    throw new TypeError("fresh counter-review observations must all use review schema version 5");
   }
   if (effortPlan !== void 0 && effortAssessment === void 0) {
     throw new TypeError("phase-design counter-review settled without an effort assessment");
@@ -88635,7 +89523,7 @@ async function runCounterReview(dependencies, input) {
     reports: Object.freeze(observations.flatMap((evidence) => evidence.reports)),
     ...(() => {
       const previous = priorTriage?.source_review?.evidence;
-      if (previous?.schema_version !== "4") return {};
+      if (previous === void 0 || !isFeedbackReview(previous)) return {};
       const latest = new Map([...previous.previous_reports ?? [], ...previous.reports].map((report2) => [report2.reviewer_id, report2]));
       for (const observation of observations) for (const report2 of observation.reports) latest.delete(report2.reviewer_id);
       return latest.size === 0 ? {} : { previous_reports: [...latest.values()] };
@@ -88855,7 +89743,7 @@ function stableId(prefix, seed) {
 }
 async function readHazardRegistryBytes(primaryRoot) {
   try {
-    return new Uint8Array(await readFile21(join22(primaryRoot, ".archflow", "hazards.yaml")));
+    return new Uint8Array(await readFile21(join23(primaryRoot, ".archflow", "hazards.yaml")));
   } catch (error51) {
     if (error51.code !== "ENOENT") throw error51;
     return void 0;

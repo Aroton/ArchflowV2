@@ -483,7 +483,7 @@ function reviewOutput(
       consequence: "The required behavior could regress without detection.",
       proposed_verification_change: item.suggested_resolution,
     }));
-  return {
+  const output = {
     schema_version: "3" as const,
     task_id: task,
     phase_instance: phase,
@@ -500,6 +500,7 @@ function reviewOutput(
         upstream_digest, drift: "aligned" as const, affected_claim_ids: [], rationale: "Fixture alignment is clean.",
       })) }),
   };
+  return { outcome: findings.length ? "issues_found" as const : "no_issues_found" as const, feedback: JSON.stringify(output) };
 }
 
 type TriageMode = "accepted" | "rejected" | "editorial" | "escalated" | "deferred" | "mixed-accepted-escalated";
@@ -571,8 +572,8 @@ function triageCandidate(
       };
     }));
   return {
-    ...(current.reviews.some(review => review.evidence.schema_version === "4") ? { response: mode === "accepted" || mode === "editorial"
-      ? { decision: "revise" as const, rationale: "Revise the work based on the reports.", reviewers: current.reviews.flatMap(review => review.evidence.schema_version === "4" ? review.evidence.reports.map(report => ({ reviewer_id: report.reviewer_id, request: "Verify the revisions." })) : []) }
+    ...(current.reviews.some(review => review.evidence.schema_version === "5") ? { response: mode === "accepted" || mode === "editorial"
+      ? { decision: "revise" as const, rationale: "Revise the work based on the reports.", reviewers: current.reviews.flatMap(review => review.evidence.schema_version === "5" ? review.evidence.reports.map(report => ({ reviewer_id: report.reviewer_id, request: "Verify the revisions." })) : []) }
       : { decision: mode === "escalated" || mode === "mixed-accepted-escalated" ? "escalate" as const : "finish" as const, rationale: "The working AI has assessed the feedback." } } : {}),
     schema_version: "1",
     task_id: task,
@@ -1561,11 +1562,7 @@ describe("partial review round retry", () => {
           const child = JSON.parse(new TextDecoder().decode(envelope.bytes)) as { assignment?: Parameters<typeof reviewOutput>[5] };
           return {
             cli_version: "fixture-1",
-            extracted_output_bytes: canonicalJsonBytes({
-              ...reviewOutput("counter-review", subject, fingerprint, "clean", "claude", child.assignment),
-              phase_instance: designPhase,
-              rubric_digest: designRubricDigest,
-            }),
+            extracted_output_bytes: canonicalJsonBytes(reviewOutput("counter-review", subject, fingerprint, "clean", "claude", child.assignment)),
           };
         },
         prepare_evidence: async (evidence, measuredAtRevision) => {
@@ -1838,14 +1835,14 @@ describe("partial review round retry", () => {
     expect(first.models).toEqual([SOL, FABLE, LUNA, ADJUDICATOR].sort());
     expect(first.result.ok).toBe(true);
     if (!first.result.ok) throw new Error("review failed");
-    expect(first.result.value.evidence).toMatchObject({ schema_version: "4", reports: [ { reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" } ] });
+    expect(first.result.value.evidence).toMatchObject({ schema_version: "5", reports: [ { reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" } ] });
     await respond(h, h.dependencies, 0, { decision: "revise", rationale: "Fix the retry behavior.", reviewers: [{ reviewer_id: "general-2", request: "Verify retries stop after cancellation." }] });
     const dependencies = await rewrite(h, h.dependencies, 1);
     const second = await round(h, store, subjects[1]!, fingerprints[1]!, {}, true, { dependencies, version: 1, remediation: true });
     expect(second.models).toEqual([FABLE, ADJUDICATOR].sort());
     expect(JSON.stringify(second.envelopes.get(FABLE))).toContain("Verify retries stop after cancellation.");
     expect(second.result.ok).toBe(true);
-    if (!second.result.ok || second.result.value.evidence.schema_version !== "4") throw new Error("expected reports");
+    if (!second.result.ok || second.result.value.evidence.schema_version !== "5") throw new Error("expected reports");
     expect(second.result.value.evidence.previous_reports?.map(report => report.reviewer_id)).toEqual(["general-1", "test"]);
     expect(second.result.value.evidence.previous_reports?.every(report => report.subject_digest === subjects[0])).toBe(true);
     await respond(h, dependencies, 1, { decision: "finish", rationale: "The remaining suggestion is disproportionate; the requested behavior works." });
@@ -2047,10 +2044,10 @@ describe("partial review round retry", () => {
     expect(retried.models).toEqual([ADJUDICATOR]);
     expect(retried.result.ok, JSON.stringify(retried.result)).toBe(true);
     if (!retried.result.ok) return;
-    expect(retried.result.value.evidence).toMatchObject({ schema_version: "4", reports: [{ reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" }] });
+    expect(retried.result.value.evidence).toMatchObject({ schema_version: "5", reports: [{ reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" }] });
     const review = retried.result.value.evidence;
-    expect(review.schema_version).toBe("4");
-    if (review.schema_version !== "4") throw new Error("expected reports");
+    expect(review.schema_version).toBe("5");
+    if (review.schema_version !== "5") throw new Error("expected reports");
     expect(review.reports).toHaveLength(3);
     expect(review.assurance).toBe("server-attested");
     if (review.assurance !== "server-attested") return;
@@ -2075,7 +2072,7 @@ describe("partial review round retry", () => {
     if (!retried.result.ok) return;
     // Reused sol plus fresh fable merge in config order, and the reused constitution result still
     // binds to the round the reused review answered.
-    expect(retried.result.value.evidence).toMatchObject({ schema_version: "4", reports: [{ reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" }] });
+    expect(retried.result.value.evidence).toMatchObject({ schema_version: "5", reports: [{ reviewer_id: "general-1" }, { reviewer_id: "general-2" }, { reviewer_id: "test" }] });
     const review = retried.result.value.evidence;
     if (review.assurance !== "server-attested") throw new Error("expected server-attested review");
     expect(retried.result.value.constitution_evidence?.source_review_envelope_digest).toBe(review.envelope_input_digest);

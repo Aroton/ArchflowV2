@@ -95,6 +95,14 @@ const binding = (overrides: Partial<RetainedChildOutputBinding> = {}): RetainedC
 });
 
 describe("retained child outputs", () => {
+  it("reuses a completed review's measurements without another dispatch", async () => {
+    const f = await fixture();
+    const result = { cli_version: "fixture", extracted_output_bytes: output,
+      usage: { output_tokens: 30, thinking_tokens: 20, num_turns: 2, total_cost_usd: 0.001 } };
+    await f.store.write(binding(), result);
+    expect(await f.store.read(binding())).toEqual(result);
+  });
+
   it("exposes partial feedback only during the matching unfinished review", async () => {
     const f = await fixture();
     const state = { task_id: f.authority.task_id, phase_instance: phase, attempt: parseSafeInteger(1),

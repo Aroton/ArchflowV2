@@ -1,3 +1,4 @@
+import { dispatchUsageSchema, type DispatchUsage } from "./dispatch-usage.js";
 import { z } from "zod";
 
 import { gitOidV1Schema, type GitOid } from "./canonical.js";
@@ -791,7 +792,19 @@ export type ServerAttestedReviewV4 = Omit<ServerAttestedReviewV3,
   readonly reports: readonly ReviewReportV1[];
   readonly previous_reports?: readonly ReviewReportV1[];
 };
-export type ServerAttestedReview = ServerAttestedReviewV1 | ServerAttestedReviewV2 | ServerAttestedReviewV3 | ServerAttestedReviewV4;
+/** The reviewer explicitly completes its investigation; this is not workflow approval. */
+export type ReviewFeedbackOutput = {
+  readonly outcome: "issues_found" | "no_issues_found";
+  readonly feedback: string;
+};
+export type ReviewFeedbackV1 = Omit<ReviewReportV1, "report"> & ReviewFeedbackOutput & { readonly usage?: DispatchUsage };
+export type ReviewReport = ReviewReportV1 | ReviewFeedbackV1;
+export type ServerAttestedReviewV5 = Omit<ServerAttestedReviewV4, "schema_version" | "reports" | "previous_reports"> & {
+  readonly schema_version: "5";
+  readonly reports: readonly ReviewFeedbackV1[];
+  readonly previous_reports?: readonly ReviewReport[];
+};
+export type ServerAttestedReview = ServerAttestedReviewV1 | ServerAttestedReviewV2 | ServerAttestedReviewV3 | ServerAttestedReviewV4 | ServerAttestedReviewV5;
 export type DegradedReviewV1 = ReviewProvenanceBaseV1 & {
   readonly assurance: "degraded";
   readonly reason: string;
@@ -802,6 +815,9 @@ export type DegradedReviewV2 = ReviewProvenanceBaseV2 & {
 };
 export type DegradedReview = DegradedReviewV1 | DegradedReviewV2;
 export type ReviewEvidence = ServerAttestedReview | DegradedReview;
+export function isFeedbackReview(review: ReviewEvidence): review is ServerAttestedReviewV4 | ServerAttestedReviewV5 {
+  return review.schema_version === "4" || review.schema_version === "5";
+}
 export const routeOverrideRecordSchema = z.object({
   reason: nonBlank,
   pinned_model: nonBlank.optional(),
@@ -1082,24 +1098,56 @@ export const serverAttestedReviewV3Schema = serverAttestedReviewV3StructuralSche
   validateServerAttestedReviewV3(review as ServerAttestedReviewV3, context);
 });
 
-export const reviewReportV1Schema = z.object({
+const reviewReportV1StructuralSchema = z.object({
   subject_digest: z.string().regex(/^[0-9a-f]{64}$/u), model: z.string().min(1), effort: z.string().min(1),
   reviewer_id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u), focus: z.enum(["general", "tests"]), report: z.string().min(1),
-}).strict() as unknown as z.ZodType<ReviewReportV1>;
-export const serverAttestedReviewV4Schema = serverAttestedReviewV3StructuralSchema.omit({
+}).strict();
+export const reviewReportV1Schema = reviewReportV1StructuralSchema as unknown as z.ZodType<ReviewReportV1>;
+const reviewReportsStructuralSchema = serverAttestedReviewV3StructuralSchema.omit({
   findings: true, verdict: true, total_findings: true, partition_counts: true,
   upstream_alignment: true, drift: true,
-}).extend({ schema_version: z.literal("4"), reports: z.array(reviewReportV1Schema).min(1), previous_reports: z.array(reviewReportV1Schema).optional() }).strict()
-  .superRefine((review, context) => {
-    const ids = review.reviewer_runs.map(run => run.reviewer_id);
-    if (new Set(ids).size !== ids.length || review.reports.length !== ids.length ||
-        review.reports.some((report, index) => report.reviewer_id !== ids[index] || report.focus !== review.reviewer_runs[index]?.focus || report.subject_digest !== review.subject_digest || report.model !== review.reviewer_runs[index]?.model || report.effort !== review.reviewer_runs[index]?.effort)) {
-      context.addIssue({ code: "custom", path: ["reports"], message: "reports must match dispatched reviewers" });
-    }
-  });
+}).extend({ schema_version: z.literal("4"), reports: z.array(reviewReportV1Schema).min(1), previous_reports: z.array(reviewReportV1Schema).optional() }).strict();
+function validateReportBindings(
+  review: {
+    subject_digest: string;
+    reports: readonly (Pick<ReviewReportV1, "reviewer_id" | "focus" | "model" | "effort"> & { subject_digest: string })[];
+    reviewer_runs: readonly Pick<ReviewerRunV2, "reviewer_id" | "focus" | "model" | "effort">[];
+  },
+  context: z.RefinementCtx,
+): void {
+  const ids = review.reviewer_runs.map(run => run.reviewer_id);
+  if (new Set(ids).size !== ids.length || review.reports.length !== ids.length ||
+      review.reports.some((report, index) => report.reviewer_id !== ids[index] ||
+        report.focus !== review.reviewer_runs[index]?.focus || report.subject_digest !== review.subject_digest ||
+        report.model !== review.reviewer_runs[index]?.model || report.effort !== review.reviewer_runs[index]?.effort)) {
+    context.addIssue({ code: "custom", path: ["reports"], message: "reports must match dispatched reviewers" });
+  }
+}
 
-/** Preferred child shape only. Other extracted JSON is retained as readable feedback. */
-export const reviewReportOutputSchema = z.object({ report: z.string() });
+export const serverAttestedReviewV4Schema = reviewReportsStructuralSchema.superRefine(validateReportBindings);
+
+/** Plain object root for every CLI host. Blank or unstructured output is not signoff. */
+export const reviewReportOutputSchema = z.object({
+  outcome: z.enum(["issues_found", "no_issues_found"]),
+  feedback: z.string().min(1).regex(/\S/u),
+}).strict();
+export const reviewFeedbackV1Schema = reviewReportV1StructuralSchema.omit({ report: true }).extend({
+  outcome: reviewReportOutputSchema.shape.outcome,
+  feedback: reviewReportOutputSchema.shape.feedback,
+  usage: dispatchUsageSchema.optional(),
+}).strict() as unknown as z.ZodType<ReviewFeedbackV1>;
+export const reviewReportSchema = z.union([reviewReportV1Schema, reviewFeedbackV1Schema]);
+export const serverAttestedReviewV5Schema = reviewReportsStructuralSchema.extend({
+  schema_version: z.literal("5"),
+  reports: z.array(reviewFeedbackV1Schema).min(1),
+  previous_reports: z.array(reviewReportSchema).optional(),
+}).superRefine(validateReportBindings);
+export function parseReviewFeedback(value: unknown): ReviewFeedbackOutput {
+  assertPlainJson(value, "review feedback");
+  return reviewReportOutputSchema.parse(structuredClone(value));
+}
+
+/** Archived prose remains readable without inferring a new explicit outcome. */
 export function readableReviewReport(value: unknown): string {
   assertPlainJson(value, "review report");
   if (typeof value === "string") { if (value.trim() === "") throw new TypeError("review report is empty"); return value; }
@@ -1112,7 +1160,7 @@ export function readableReviewReport(value: unknown): string {
 }
 
 export function reviewFindings(review: ReviewEvidence): readonly (LegacyReviewFinding | ReviewFindingV2 | ReviewFindingV3)[] {
-  return review.schema_version === "4" ? [] : review.findings;
+  return isFeedbackReview(review) ? [] : review.findings;
 }
 
 export const degradedReviewV1Schema = rawReviewV1StructuralSchema.safeExtend(degradedFields).strict().superRefine((review, context) => {
@@ -1128,7 +1176,7 @@ export const degradedReviewV2Schema = rawReviewV2StructuralSchema.safeExtend(deg
 
 const v1EvidenceSchema = z.discriminatedUnion("assurance", [serverAttestedReviewV1Schema, degradedReviewV1Schema]);
 const v2EvidenceSchema = z.discriminatedUnion("assurance", [serverAttestedReviewV2Schema, degradedReviewV2Schema]);
-export const reviewEvidenceSchema = z.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema, serverAttestedReviewV3Schema, serverAttestedReviewV4Schema]);
+export const reviewEvidenceSchema = z.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema, serverAttestedReviewV3Schema, serverAttestedReviewV4Schema, serverAttestedReviewV5Schema]);
 
 export function parseReviewEvidence(value: unknown): ReviewEvidence {
   assertPlainJson(value, "review evidence");

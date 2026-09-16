@@ -2,7 +2,7 @@
 
 **Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
-Fresh report triage accepts `response` with `decision` and `rationale`; revise also supplies reviewer IDs and verification requests. Archived per-finding `dispositions` remain accepted only for archived structured review evidence. Requests continue to derive bindings from current authority.
+Fresh report triage accepts `response` with `decision` and `rationale`; revise also supplies reviewer IDs and verification requests. Archived per-finding `dispositions` remain accepted only for archived structured review evidence. Fresh review feedback carries an explicit issues/no-issues outcome; historical prose keeps its original shape. Requests continue to derive bindings from current authority.
 
 `archflow-local` is the local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, a degraded human classifier, and the versioned read-only automation observation used by external controllers. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
 

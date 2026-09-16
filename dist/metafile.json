@@ -3673,6 +3673,17 @@
         }
       ]
     },
+    "src/contracts/dispatch-usage.ts": {
+      "bytes": 895,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "zod",
+          "path": "node_modules/zod/index.js"
+        }
+      ]
+    },
     "src/contracts/durable-document.ts": {
       "bytes": 8927,
       "format": "esm",
@@ -4452,7 +4463,7 @@
       ]
     },
     "src/contracts/mcp-tools.ts": {
-      "bytes": 46411,
+      "bytes": 46415,
       "format": "esm",
       "imports": [
         {
@@ -4600,9 +4611,14 @@
       "imports": []
     },
     "src/contracts/renderers.ts": {
-      "bytes": 14134,
+      "bytes": 14261,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "./review.js",
+          "path": "src/contracts/review.ts"
+        },
         {
           "kind": "import-statement",
           "original": "./review.js",
@@ -4616,9 +4632,14 @@
       ]
     },
     "src/contracts/review.ts": {
-      "bytes": 56371,
+      "bytes": 58852,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "./dispatch-usage.js",
+          "path": "src/contracts/dispatch-usage.ts"
+        },
         {
           "kind": "import-statement",
           "original": "zod",
@@ -4732,7 +4753,7 @@
       }
     },
     "src/contracts/schemas/v1/mcp-tools.schema.json": {
-      "bytes": 56725,
+      "bytes": 61216,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4780,7 +4801,7 @@
       }
     },
     "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-      "bytes": 123210,
+      "bytes": 145164,
       "format": "esm",
       "imports": [],
       "with": {
@@ -4838,7 +4859,7 @@
       ]
     },
     "src/contracts/semantic-workflow.ts": {
-      "bytes": 49841,
+      "bytes": 49819,
       "format": "esm",
       "imports": [
         {
@@ -4929,9 +4950,19 @@
       ]
     },
     "src/contracts/simple-review.ts": {
-      "bytes": 3905,
+      "bytes": 4267,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "./review.js",
+          "path": "src/contracts/review.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./dispatch-usage.js",
+          "path": "src/contracts/dispatch-usage.ts"
+        },
         {
           "kind": "import-statement",
           "original": "zod",
@@ -4965,9 +4996,14 @@
       "imports": []
     },
     "src/contracts/triage.ts": {
-      "bytes": 23927,
+      "bytes": 23965,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "./review.js",
+          "path": "src/contracts/review.ts"
+        },
         {
           "kind": "import-statement",
           "original": "./review.js",
@@ -5001,7 +5037,7 @@
       ]
     },
     "src/contracts/trust.ts": {
-      "bytes": 35268,
+      "bytes": 35401,
       "format": "esm",
       "imports": [
         {
@@ -5153,7 +5189,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 47337,
+      "bytes": 47497,
       "format": "esm",
       "imports": [
         {
@@ -5219,9 +5255,19 @@
       ]
     },
     "src/dispatch/coordinator.ts": {
-      "bytes": 12353,
+      "bytes": 15384,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "./usage-log.js",
+          "path": "src/dispatch/usage-log.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./usage.js",
+          "path": "src/dispatch/usage.ts"
+        },
         {
           "external": true,
           "kind": "import-statement",
@@ -5285,7 +5331,7 @@
       ]
     },
     "src/dispatch/failure-observation.ts": {
-      "bytes": 11778,
+      "bytes": 11958,
       "format": "esm",
       "imports": [
         {
@@ -5403,9 +5449,14 @@
       ]
     },
     "src/dispatch/retained-child-output.ts": {
-      "bytes": 11052,
+      "bytes": 11399,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/dispatch-usage.js",
+          "path": "src/contracts/dispatch-usage.ts"
+        },
         {
           "external": true,
           "kind": "import-statement",
@@ -5454,7 +5505,7 @@
       ]
     },
     "src/dispatch/review-feedback.ts": {
-      "bytes": 3148,
+      "bytes": 3138,
       "format": "esm",
       "imports": [
         {
@@ -5527,6 +5578,38 @@
           "kind": "import-statement",
           "original": "../contracts/trust.js",
           "path": "src/contracts/trust.ts"
+        }
+      ]
+    },
+    "src/dispatch/usage-log.ts": {
+      "bytes": 2911,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:url"
+        }
+      ]
+    },
+    "src/dispatch/usage.ts": {
+      "bytes": 1743,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/dispatch-usage.js",
+          "path": "src/contracts/dispatch-usage.ts"
         }
       ]
     },
@@ -7516,9 +7599,14 @@
       ]
     },
     "src/review/adjudication.ts": {
-      "bytes": 17148,
+      "bytes": 17192,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/review.js",
+          "path": "src/contracts/review.ts"
+        },
         {
           "kind": "import-statement",
           "original": "../contracts/errors.js",
@@ -7527,7 +7615,7 @@
       ]
     },
     "src/review/counter-review.ts": {
-      "bytes": 47340,
+      "bytes": 47636,
       "format": "esm",
       "imports": [
         {
@@ -7641,9 +7729,14 @@
       ]
     },
     "src/review/diffs.ts": {
-      "bytes": 11383,
+      "bytes": 11462,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/review.js",
+          "path": "src/contracts/review.ts"
+        },
         {
           "external": true,
           "kind": "import-statement",
@@ -7697,7 +7790,7 @@
       "imports": []
     },
     "src/review/envelopes.ts": {
-      "bytes": 41907,
+      "bytes": 42859,
       "format": "esm",
       "imports": [
         {
@@ -7748,9 +7841,14 @@
       ]
     },
     "src/review/fixed-point.ts": {
-      "bytes": 46216,
+      "bytes": 46287,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/review.js",
+          "path": "src/contracts/review.ts"
+        },
         {
           "kind": "import-statement",
           "original": "../contracts/review.js",
@@ -7860,9 +7958,14 @@
       ]
     },
     "src/review/pinned-context.ts": {
-      "bytes": 34880,
+      "bytes": 35308,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/review.js",
+          "path": "src/contracts/review.ts"
+        },
         {
           "kind": "import-statement",
           "original": "../contracts/review.js",
@@ -8048,7 +8151,7 @@
       ]
     },
     "src/review/simple-review.ts": {
-      "bytes": 12355,
+      "bytes": 12533,
       "format": "esm",
       "imports": [
         {
@@ -10107,9 +10210,14 @@
       ]
     },
     "src/state/semantic-status.ts": {
-      "bytes": 43362,
+      "bytes": 43409,
       "format": "esm",
       "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/review.js",
+          "path": "src/contracts/review.ts"
+        },
         {
           "kind": "import-statement",
           "original": "../dispatch/review-feedback.js",
@@ -10813,7 +10921,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2442162,
+      "bytes": 2444481,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11466,7 +11574,7 @@
           "bytesInOutput": 587
         },
         "node_modules/yaml/dist/doc/Document.js": {
-          "bytesInOutput": 12252
+          "bytesInOutput": 12261
         },
         "node_modules/yaml/dist/doc/anchors.js": {
           "bytesInOutput": 2302
@@ -11481,7 +11589,7 @@
           "bytesInOutput": 5900
         },
         "node_modules/yaml/dist/errors.js": {
-          "bytesInOutput": 2142
+          "bytesInOutput": 2145
         },
         "node_modules/yaml/dist/index.js": {
           "bytesInOutput": 1866
@@ -11490,13 +11598,13 @@
           "bytesInOutput": 580
         },
         "node_modules/yaml/dist/nodes/Alias.js": {
-          "bytesInOutput": 3830
+          "bytesInOutput": 3834
         },
         "node_modules/yaml/dist/nodes/Collection.js": {
           "bytesInOutput": 5119
         },
         "node_modules/yaml/dist/nodes/Node.js": {
-          "bytesInOutput": 1479
+          "bytesInOutput": 1488
         },
         "node_modules/yaml/dist/nodes/Pair.js": {
           "bytesInOutput": 1343
@@ -11718,7 +11826,7 @@
           "bytesInOutput": 4835
         },
         "node_modules/zod/v4/locales/be.js": {
-          "bytesInOutput": 9341
+          "bytesInOutput": 9343
         },
         "node_modules/zod/v4/locales/bg.js": {
           "bytesInOutput": 8380
@@ -11769,7 +11877,7 @@
           "bytesInOutput": 4787
         },
         "node_modules/zod/v4/locales/hy.js": {
-          "bytesInOutput": 8888
+          "bytesInOutput": 8890
         },
         "node_modules/zod/v4/locales/id.js": {
           "bytesInOutput": 4464
@@ -11829,7 +11937,7 @@
           "bytesInOutput": 4918
         },
         "node_modules/zod/v4/locales/ru.js": {
-          "bytesInOutput": 9628
+          "bytesInOutput": 9630
         },
         "node_modules/zod/v4/locales/sl.js": {
           "bytesInOutput": 4534
@@ -11894,6 +12002,9 @@
         "src/contracts/dispatch-failure.ts": {
           "bytesInOutput": 3835
         },
+        "src/contracts/dispatch-usage.ts": {
+          "bytesInOutput": 603
+        },
         "src/contracts/durable-document.ts": {
           "bytesInOutput": 2333
         },
@@ -11955,7 +12066,7 @@
           "bytesInOutput": 763
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 29542
+          "bytesInOutput": 29540
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3732
@@ -11967,10 +12078,10 @@
           "bytesInOutput": 4267
         },
         "src/contracts/renderers.ts": {
-          "bytesInOutput": 12824
+          "bytesInOutput": 12920
         },
         "src/contracts/review.ts": {
-          "bytesInOutput": 42587
+          "bytesInOutput": 43461
         },
         "src/contracts/rubric.ts": {
           "bytesInOutput": 1008
@@ -11979,16 +12090,16 @@
           "bytesInOutput": 1323
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 28662
+          "bytesInOutput": 28656
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 396
         },
         "src/contracts/triage.ts": {
-          "bytesInOutput": 16759
+          "bytesInOutput": 16764
         },
         "src/contracts/trust.ts": {
-          "bytesInOutput": 21975
+          "bytesInOutput": 22014
         },
         "src/contracts/validators.ts": {
           "bytesInOutput": 1449
@@ -12021,7 +12132,7 @@
           "bytesInOutput": 3951
         },
         "src/dispatch/review-feedback.ts": {
-          "bytesInOutput": 1434
+          "bytesInOutput": 1432
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 7354
@@ -12108,10 +12219,10 @@
           "bytesInOutput": 1897
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 1968
+          "bytesInOutput": 2534
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 27087
+          "bytesInOutput": 27111
         },
         "src/review/implementation-models.ts": {
           "bytesInOutput": 1043
@@ -12150,7 +12261,7 @@
           "bytesInOutput": 4016
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 25242
+          "bytesInOutput": 25248
         },
         "src/state/gates.ts": {
           "bytesInOutput": 6109
@@ -12180,7 +12291,7 @@
           "bytesInOutput": 1026
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 22239
+          "bytesInOutput": 22242
         },
         "src/state/phase-documents.ts": {
           "bytesInOutput": 6282
@@ -12222,7 +12333,7 @@
           "bytesInOutput": 4944
         },
         "src/state/semantic-status.ts": {
-          "bytesInOutput": 33342
+          "bytesInOutput": 33353
         },
         "src/state/semantic-view.ts": {
           "bytesInOutput": 29493
@@ -12231,7 +12342,7 @@
           "bytesInOutput": 31878
         },
         "src/state/status.ts": {
-          "bytesInOutput": 91407
+          "bytesInOutput": 91409
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50783
@@ -12251,7 +12362,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3744934,
+      "bytes": 3779776,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12334,6 +12445,21 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:timers/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:url"
         },
         {
           "external": true,
@@ -12891,7 +13017,7 @@
           "bytesInOutput": 34870
         },
         "node_modules/@modelcontextprotocol/server/dist/ajvProvider-CEoC__sr.mjs": {
-          "bytesInOutput": 272240
+          "bytesInOutput": 272252
         },
         "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs": {
           "bytesInOutput": 1410
@@ -13032,7 +13158,7 @@
           "bytesInOutput": 587
         },
         "node_modules/yaml/dist/doc/Document.js": {
-          "bytesInOutput": 12263
+          "bytesInOutput": 12272
         },
         "node_modules/yaml/dist/doc/anchors.js": {
           "bytesInOutput": 2302
@@ -13047,7 +13173,7 @@
           "bytesInOutput": 5900
         },
         "node_modules/yaml/dist/errors.js": {
-          "bytesInOutput": 2143
+          "bytesInOutput": 2146
         },
         "node_modules/yaml/dist/index.js": {
           "bytesInOutput": 1868
@@ -13056,13 +13182,13 @@
           "bytesInOutput": 580
         },
         "node_modules/yaml/dist/nodes/Alias.js": {
-          "bytesInOutput": 3830
+          "bytesInOutput": 3834
         },
         "node_modules/yaml/dist/nodes/Collection.js": {
           "bytesInOutput": 5137
         },
         "node_modules/yaml/dist/nodes/Node.js": {
-          "bytesInOutput": 1479
+          "bytesInOutput": 1488
         },
         "node_modules/yaml/dist/nodes/Pair.js": {
           "bytesInOutput": 1357
@@ -13284,7 +13410,7 @@
           "bytesInOutput": 4342
         },
         "node_modules/zod/v4/locales/be.js": {
-          "bytesInOutput": 8704
+          "bytesInOutput": 8706
         },
         "node_modules/zod/v4/locales/bg.js": {
           "bytesInOutput": 7827
@@ -13335,7 +13461,7 @@
           "bytesInOutput": 4281
         },
         "node_modules/zod/v4/locales/hy.js": {
-          "bytesInOutput": 8266
+          "bytesInOutput": 8268
         },
         "node_modules/zod/v4/locales/id.js": {
           "bytesInOutput": 3966
@@ -13395,7 +13521,7 @@
           "bytesInOutput": 4368
         },
         "node_modules/zod/v4/locales/ru.js": {
-          "bytesInOutput": 8990
+          "bytesInOutput": 8992
         },
         "node_modules/zod/v4/locales/sl.js": {
           "bytesInOutput": 4024
@@ -13456,6 +13582,9 @@
         },
         "src/contracts/dispatch-failure.ts": {
           "bytesInOutput": 3771
+        },
+        "src/contracts/dispatch-usage.ts": {
+          "bytesInOutput": 433
         },
         "src/contracts/durable-document.ts": {
           "bytesInOutput": 2242
@@ -13518,7 +13647,7 @@
           "bytesInOutput": 1607
         },
         "src/contracts/mcp-tools.ts": {
-          "bytesInOutput": 29430
+          "bytesInOutput": 29428
         },
         "src/contracts/path-claims.ts": {
           "bytesInOutput": 3110
@@ -13530,10 +13659,10 @@
           "bytesInOutput": 4150
         },
         "src/contracts/renderers.ts": {
-          "bytesInOutput": 12407
+          "bytesInOutput": 12487
         },
         "src/contracts/review.ts": {
-          "bytesInOutput": 39518
+          "bytesInOutput": 40204
         },
         "src/contracts/rubric.ts": {
           "bytesInOutput": 977
@@ -13563,7 +13692,7 @@
           "bytesInOutput": 3748
         },
         "src/contracts/schemas/v1/mcp-tools.schema.json": {
-          "bytesInOutput": 54815
+          "bytesInOutput": 59174
         },
         "src/contracts/schemas/v1/path-claim.schema.json": {
           "bytesInOutput": 487
@@ -13581,7 +13710,7 @@
           "bytesInOutput": 3054
         },
         "src/contracts/schemas/v1/semantic-workflow.schema.json": {
-          "bytesInOutput": 118098
+          "bytesInOutput": 139260
         },
         "src/contracts/schemas/v1/task-initialization.schema.json": {
           "bytesInOutput": 1432
@@ -13596,19 +13725,19 @@
           "bytesInOutput": 1255
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 29444
+          "bytesInOutput": 29438
         },
         "src/contracts/simple-review.ts": {
-          "bytesInOutput": 3791
+          "bytesInOutput": 4083
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 514
         },
         "src/contracts/triage.ts": {
-          "bytesInOutput": 16686
+          "bytesInOutput": 16676
         },
         "src/contracts/trust.ts": {
-          "bytesInOutput": 21862
+          "bytesInOutput": 21901
         },
         "src/contracts/utf8.ts": {
           "bytesInOutput": 475
@@ -13632,13 +13761,13 @@
           "bytesInOutput": 3858
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 34240
+          "bytesInOutput": 34318
         },
         "src/dispatch/coordinator.ts": {
-          "bytesInOutput": 7769
+          "bytesInOutput": 10446
         },
         "src/dispatch/failure-observation.ts": {
-          "bytesInOutput": 8385
+          "bytesInOutput": 8565
         },
         "src/dispatch/process.ts": {
           "bytesInOutput": 7799
@@ -13647,19 +13776,25 @@
           "bytesInOutput": 10685
         },
         "src/dispatch/retained-child-output.ts": {
-          "bytesInOutput": 6736
+          "bytesInOutput": 6953
         },
         "src/dispatch/review-feedback.ts": {
-          "bytesInOutput": 2008
+          "bytesInOutput": 2006
         },
         "src/dispatch/routing.ts": {
           "bytesInOutput": 7338
         },
+        "src/dispatch/usage-log.ts": {
+          "bytesInOutput": 1530
+        },
+        "src/dispatch/usage.ts": {
+          "bytesInOutput": 1360
+        },
         "src/dispatch/workspace.ts": {
-          "bytesInOutput": 11215
+          "bytesInOutput": 11228
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 2297
+          "bytesInOutput": 2328
         },
         "src/init/task-initialization.ts": {
           "bytesInOutput": 6636
@@ -13728,34 +13863,34 @@
           "bytesInOutput": 2792
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 18894
+          "bytesInOutput": 18908
         },
         "src/repository/repository-set.ts": {
           "bytesInOutput": 6057
         },
         "src/review/adjudication.ts": {
-          "bytesInOutput": 9300
+          "bytesInOutput": 9285
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 27239
+          "bytesInOutput": 27382
         },
         "src/review/diffs.ts": {
-          "bytesInOutput": 9024
+          "bytesInOutput": 9041
         },
         "src/review/effort-policy.ts": {
           "bytesInOutput": 1558
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 28498
+          "bytesInOutput": 29450
         },
         "src/review/fixed-point.ts": {
-          "bytesInOutput": 27843
+          "bytesInOutput": 27852
         },
         "src/review/implementation-models.ts": {
           "bytesInOutput": 2107
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 21378
+          "bytesInOutput": 21655
         },
         "src/review/reviewer-tags.ts": {
           "bytesInOutput": 118
@@ -13764,10 +13899,10 @@
           "bytesInOutput": 4921
         },
         "src/review/simple-context.ts": {
-          "bytesInOutput": 8696
+          "bytesInOutput": 8717
         },
         "src/review/simple-review.ts": {
-          "bytesInOutput": 10182
+          "bytesInOutput": 10344
         },
         "src/state/approval-rules.ts": {
           "bytesInOutput": 8079
@@ -13803,10 +13938,10 @@
           "bytesInOutput": 8320
         },
         "src/state/gate-decision-interface.ts": {
-          "bytesInOutput": 29417
+          "bytesInOutput": 29423
         },
         "src/state/gates.ts": {
-          "bytesInOutput": 139100
+          "bytesInOutput": 139103
         },
         "src/state/governing-document-comparison.ts": {
           "bytesInOutput": 4363
@@ -13836,7 +13971,7 @@
           "bytesInOutput": 1006
         },
         "src/state/next-action.ts": {
-          "bytesInOutput": 22206
+          "bytesInOutput": 22209
         },
         "src/state/pending-waiver.ts": {
           "bytesInOutput": 3062
@@ -13887,7 +14022,7 @@
           "bytesInOutput": 37085
         },
         "src/state/semantic-status.ts": {
-          "bytesInOutput": 33243
+          "bytesInOutput": 33239
         },
         "src/state/semantic-view.ts": {
           "bytesInOutput": 29414
@@ -13896,7 +14031,7 @@
           "bytesInOutput": 31991
         },
         "src/state/status.ts": {
-          "bytesInOutput": 88980
+          "bytesInOutput": 88982
         },
         "src/state/transaction.ts": {
           "bytesInOutput": 50729

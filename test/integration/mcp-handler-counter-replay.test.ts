@@ -193,7 +193,7 @@ else {
     }]))
   };
   await appendFile(${JSON.stringify(countPath)}, "call\\n");
-  await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
+  await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }
 `);

@@ -476,7 +476,7 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     if (!result.ok) return;
     view = result.value;
     expect(view.next_action).toMatchObject({ kind: "triage", expected_submission: "triage" });
-    expect(view.review_reports?.[0]?.report).toContain("The success condition is not observable.");
+    expect(view.review_reports?.map(item => "feedback" in item ? item.feedback : item.report)[0]).toContain("The success condition is not observable.");
     expect(readFileSync(prdPath, "utf8")).toBe("# Result\n\nImprove the workflow.\n");
 
     result = await h.apply(invocation, view, { kind: "triage", response: { decision: "revise", rationale: "Add an observable semantic status outcome.", reviewers: [{ reviewer_id: "general", request: "Verify the result is observable." }] } });

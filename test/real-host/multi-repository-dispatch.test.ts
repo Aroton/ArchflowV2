@@ -283,8 +283,8 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host multi-repository counter-revie
         // Reviewer prose is not a contract. Either outcome satisfies the journey: the reviewer read
         // the secondary and cited it, or it returned a verdict while the evidence still carries the
         // `api` pin asserted above. Record which one happened instead of failing on wording.
-        if (observed.evidence.schema_version !== "4") throw new Error("expected report evidence");
-        const texts = observed.evidence.reports.map(report => report.report);
+        if (observed.evidence.schema_version !== "5") throw new Error("expected report evidence");
+        const texts = observed.evidence.reports.map(report => report.feedback);
         const citedSecondary = texts.some((text) => text.includes(SECONDARY_CITATION) || text.includes(SECONDARY_FUNCTION));
         expect(texts.length).toBeGreaterThan(0);
         console.info(

@@ -111,7 +111,7 @@ else {
       trigger_evidence: "No review trigger matched."
     }])) };
   }
-  writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output) + "\\n");
+  writeFileSync(argv[argv.indexOf("-o") + 1], JSON.stringify(output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
 }`);
   chmodSync(join(bin, "codex"), 0o755);
@@ -141,7 +141,7 @@ else {
       trigger_evidence: "No review trigger matched."
     }])) };
   }
-  process.stdout.write(JSON.stringify({ structured_output: output }));
+  process.stdout.write(JSON.stringify({ structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output }));
 }`);
   chmodSync(join(bin, "claude"), 0o755);
   const saved = { path: process.env.PATH, home: process.env.HOME };

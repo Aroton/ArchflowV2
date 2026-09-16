@@ -13,6 +13,8 @@ Use only the returned `resources` entries shaped `{role,path,access}`: select wo
 
 The server identifies the producer family from the connected client and dispatches the configured counter-review (opposite-family by default), plus constitution review when active rules exist; never perform, spawn, or simulate either. Keep conversation, human gates, triage, and synthesis here. Delegate substantial parallel research with complete briefs and use inline work for small pieces. Triage material defects; do not iterate on polish.
 
+Review feedback is a small per-round response: `outcome:"issues_found"` with actionable `feedback`, or `outcome:"no_issues_found"` with an explicit short signoff. Read and reason as deeply as needed; mostly reading is an efficiency goal, not a quota. Do not author a separate review document, quote whole source files, narrate the investigation, or recap resolved findings. On re-review, use the revision diff and previous feedback to verify the fixes and their consequential regressions. A missing, failed, or interrupted reviewer is never signoff. The calling agent owns triage and follows the returned workflow action; a reviewer outcome does not grant approval. Historical reports without an outcome keep their original meaning.
+
 ## Degraded operation
 
 If either semantic workflow tool is unavailable, run read-only `archflow-local manual-status --task <task>`, report its position, and stop. Create no milestone, edit no workflow artifact, record nothing offline, and never infer authorization. A stale or rejected offer is normal semantic recovery, not tool unavailability.

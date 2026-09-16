@@ -4178,8 +4178,8 @@ var init_az = __esm({
 });
 
 // node_modules/zod/v4/locales/be.js
-function getBelarusianPlural(count, one, few, many) {
-  const absCount = Math.abs(count);
+function getBelarusianPlural(count2, one, few, many) {
+  const absCount = Math.abs(count2);
   const lastDigit = absCount % 10;
   const lastTwoDigits = absCount % 100;
   if (lastTwoDigits >= 11 && lastTwoDigits <= 19) {
@@ -6359,8 +6359,8 @@ var init_hu = __esm({
 });
 
 // node_modules/zod/v4/locales/hy.js
-function getArmenianPlural(count, one, many) {
-  return Math.abs(count) === 1 ? one : many;
+function getArmenianPlural(count2, one, many) {
+  return Math.abs(count2) === 1 ? one : many;
 }
 function withDefiniteArticle(word) {
   if (!word)
@@ -8601,8 +8601,8 @@ var init_ro = __esm({
 });
 
 // node_modules/zod/v4/locales/ru.js
-function getRussianPlural(count, one, few, many) {
-  const absCount = Math.abs(count);
+function getRussianPlural(count2, one, few, many) {
+  const absCount = Math.abs(count2);
   const lastDigit = absCount % 10;
   const lastTwoDigits = absCount % 100;
   if (lastTwoDigits >= 11 && lastTwoDigits <= 19) {
@@ -16021,8 +16021,8 @@ var require_Node = __commonJS({
         };
         const res = toJS.toJS(this, "", ctx);
         if (typeof onAnchor === "function")
-          for (const { count, res: res2 } of ctx.anchors.values())
-            onAnchor(res2, count);
+          for (const { count: count2, res: res2 } of ctx.anchors.values())
+            onAnchor(res2, count2);
         return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
       }
     };
@@ -16128,13 +16128,13 @@ var require_Alias = __commonJS({
         const anchor = anchors2 && source && anchors2.get(source);
         return anchor ? anchor.count * anchor.aliasCount : 0;
       } else if (identity.isCollection(node)) {
-        let count = 0;
+        let count2 = 0;
         for (const item of node.items) {
           const c = getAliasCount(doc, item, anchors2);
-          if (c > count)
-            count = c;
+          if (c > count2)
+            count2 = c;
         }
-        return count;
+        return count2;
       } else if (identity.isPair(node)) {
         const kc = getAliasCount(doc, node.key, anchors2);
         const vc = getAliasCount(doc, node.value, anchors2);
@@ -19087,8 +19087,8 @@ var require_Document = __commonJS({
         };
         const res = toJS.toJS(this.contents, jsonArg ?? "", ctx);
         if (typeof onAnchor === "function")
-          for (const { count, res: res2 } of ctx.anchors.values())
-            onAnchor(res2, count);
+          for (const { count: count2, res: res2 } of ctx.anchors.values())
+            onAnchor(res2, count2);
         return typeof reviver === "function" ? applyReviver.applyReviver(reviver, { "": res }, "", res) : res;
       }
       /**
@@ -19165,12 +19165,12 @@ var require_errors = __commonJS({
         lineStr = prev + lineStr;
       }
       if (/[^ ]/.test(lineStr)) {
-        let count = 1;
+        let count2 = 1;
         const end = error51.linePos[1];
         if (end?.line === line && end.col > col) {
-          count = Math.max(1, Math.min(end.col - col, 80 - ci));
+          count2 = Math.max(1, Math.min(end.col - col, 80 - ci));
         }
-        const pointer = " ".repeat(ci) + "^".repeat(count);
+        const pointer = " ".repeat(ci) + "^".repeat(count2);
         error51.message += `:
 
 ${lineStr}
@@ -23127,6 +23127,26 @@ var init_path_claims = __esm({
   }
 });
 
+// src/contracts/dispatch-usage.ts
+var count, dispatchUsageSchema;
+var init_dispatch_usage = __esm({
+  "src/contracts/dispatch-usage.ts"() {
+    init_zod();
+    count = external_exports.number().int().nonnegative().safe().optional();
+    dispatchUsageSchema = external_exports.object({
+      input_tokens: count,
+      output_tokens: count,
+      cache_read_input_tokens: count,
+      cache_creation_input_tokens: count,
+      thinking_tokens: count,
+      num_turns: count,
+      duration_ms: count,
+      duration_api_ms: count,
+      total_cost_usd: external_exports.number().finite().nonnegative().optional()
+    }).strict();
+  }
+});
+
 // src/contracts/component-manifest.ts
 var componentIdSchema, nonblank, repositoryName, componentRepositorySchema, componentSchema, phaseDesignComponentManifestV1Schema;
 var init_component_manifest = __esm({
@@ -23722,6 +23742,9 @@ function validateV2Summary(review, context2) {
     if (review.partition_counts[key] !== expected.partition_counts[key]) context2.addIssue({ code: "custom", path: ["partition_counts", key], message: `review partition count must be ${expected.partition_counts[key]}` });
   }
 }
+function isFeedbackReview(review) {
+  return review.schema_version === "4" || review.schema_version === "5";
+}
 function reviewFindingDisplayDetail(finding) {
   if ("reviewer_focus" in finding && finding.reviewer_focus === "tests") {
     return Object.freeze({
@@ -23794,29 +23817,28 @@ function validateServerAttestedReviewV3(review, context2) {
     if (review.drift !== expectedDrift) context2.addIssue({ code: "custom", path: ["drift"], message: `review drift must be ${expectedDrift}` });
   }
 }
-function readableReviewReport(value) {
-  assertPlainJson(value, "review report");
-  if (typeof value === "string") {
-    if (value.trim() === "") throw new TypeError("review report is empty");
-    return value;
+function validateReportBindings(review, context2) {
+  const ids = review.reviewer_runs.map((run) => run.reviewer_id);
+  if (new Set(ids).size !== ids.length || review.reports.length !== ids.length || review.reports.some((report, index) => report.reviewer_id !== ids[index] || report.focus !== review.reviewer_runs[index]?.focus || report.subject_digest !== review.subject_digest || report.model !== review.reviewer_runs[index]?.model || report.effort !== review.reviewer_runs[index]?.effort)) {
+    context2.addIssue({ code: "custom", path: ["reports"], message: "reports must match dispatched reviewers" });
   }
-  if (value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && "report" in value && typeof value.report === "string") {
-    if (value.report.trim() === "") throw new TypeError("review report is empty");
-    return value.report;
-  }
-  return JSON.stringify(value, null, 2);
+}
+function parseReviewFeedback(value) {
+  assertPlainJson(value, "review feedback");
+  return reviewReportOutputSchema.parse(structuredClone(value));
 }
 function reviewFindings(review) {
-  return review.schema_version === "4" ? [] : review.findings;
+  return isFeedbackReview(review) ? [] : review.findings;
 }
 function parseReviewEvidence(value) {
   assertPlainJson(value, "review evidence");
   const parsed = reviewEvidenceSchema.parse(structuredClone(value));
   return parsed;
 }
-var CLAIM_TYPES, CONFIDENCE_LEVELS, REVIEW_VERDICTS, LEGACY_REVIEW_VERDICTS, REVIEW_ROLES, LEGACY_REVIEW_FINDING_SEVERITIES, REVIEW_FINDING_SEVERITIES, MODEL_FAMILIES, ADAPTER_IDS, EFFORT_VALUES, nonBlank2, boundedNonBlank, id, digest3, taskSlug2, phaseInstance2, safePositive, safeCount, repositoryName4, reviewedRepositoryV1Schema, reviewedRepositoriesV1Schema2, ruleVersionRefSchema, legacyReviewFindingV1Schema, reviewFindingV2Schema, rawGeneralReviewFindingV3Schema, rawTestReviewFindingV3Schema, upstreamAlignmentV1StructuralSchema, upstreamAlignmentV1Schema, legacyConfirmationAssignmentV1Schema, findingPartitionShape, findingPartitionCountsSchema, rawReviewCommonShape, rawReviewV3CommonShape, resolvedLegacyConfirmationV1Schema, unresolvedGeneralLegacyConfirmationV1Schema, unresolvedTestLegacyConfirmationV1Schema, generalLegacyConfirmationV1Schema, testLegacyConfirmationV1Schema, rawGeneralReviewOutputV3Schema, rawTestReviewOutputV3Schema, rawReviewOutputV3Schema, rawReviewV1StructuralSchema, rawReviewV1Schema, rawReviewV2StructuralSchema, rawReviewV2Schema, childReviewOutputV2Schema, rawReviewSchema, ROUTE_SOURCE_PROVENANCES, DISPLACED_ROUTE_SOURCES, REVIEW_RUN_FOCUSES, REVIEW_RUN_ROLES, routeOverrideRecordSchema2, displacedRouteRecordSchema, routeSourceRecordSchema, reviewerRunV1Schema, reviewerRunV2Schema, generalReviewFindingV3Schema, testReviewFindingV3Schema, reviewFindingV3Schema, provenanceFields, serverAttestedFields, degradedFields, serverAttestedReviewV1Schema, serverAttestedReviewV2Schema, serverAttestedReviewV3StructuralSchema, serverAttestedReviewV3Schema, reviewReportV1Schema, serverAttestedReviewV4Schema, reviewReportOutputSchema, degradedReviewV1Schema, degradedReviewV2Schema, v1EvidenceSchema, v2EvidenceSchema, reviewEvidenceSchema, referencedReviewWrapperSchema;
+var CLAIM_TYPES, CONFIDENCE_LEVELS, REVIEW_VERDICTS, LEGACY_REVIEW_VERDICTS, REVIEW_ROLES, LEGACY_REVIEW_FINDING_SEVERITIES, REVIEW_FINDING_SEVERITIES, MODEL_FAMILIES, ADAPTER_IDS, EFFORT_VALUES, nonBlank2, boundedNonBlank, id, digest3, taskSlug2, phaseInstance2, safePositive, safeCount, repositoryName4, reviewedRepositoryV1Schema, reviewedRepositoriesV1Schema2, ruleVersionRefSchema, legacyReviewFindingV1Schema, reviewFindingV2Schema, rawGeneralReviewFindingV3Schema, rawTestReviewFindingV3Schema, upstreamAlignmentV1StructuralSchema, upstreamAlignmentV1Schema, legacyConfirmationAssignmentV1Schema, findingPartitionShape, findingPartitionCountsSchema, rawReviewCommonShape, rawReviewV3CommonShape, resolvedLegacyConfirmationV1Schema, unresolvedGeneralLegacyConfirmationV1Schema, unresolvedTestLegacyConfirmationV1Schema, generalLegacyConfirmationV1Schema, testLegacyConfirmationV1Schema, rawGeneralReviewOutputV3Schema, rawTestReviewOutputV3Schema, rawReviewOutputV3Schema, rawReviewV1StructuralSchema, rawReviewV1Schema, rawReviewV2StructuralSchema, rawReviewV2Schema, childReviewOutputV2Schema, rawReviewSchema, ROUTE_SOURCE_PROVENANCES, DISPLACED_ROUTE_SOURCES, REVIEW_RUN_FOCUSES, REVIEW_RUN_ROLES, routeOverrideRecordSchema2, displacedRouteRecordSchema, routeSourceRecordSchema, reviewerRunV1Schema, reviewerRunV2Schema, generalReviewFindingV3Schema, testReviewFindingV3Schema, reviewFindingV3Schema, provenanceFields, serverAttestedFields, degradedFields, serverAttestedReviewV1Schema, serverAttestedReviewV2Schema, serverAttestedReviewV3StructuralSchema, serverAttestedReviewV3Schema, reviewReportV1StructuralSchema, reviewReportV1Schema, reviewReportsStructuralSchema, serverAttestedReviewV4Schema, reviewReportOutputSchema, reviewFeedbackV1Schema, reviewReportSchema, serverAttestedReviewV5Schema, degradedReviewV1Schema, degradedReviewV2Schema, v1EvidenceSchema, v2EvidenceSchema, reviewEvidenceSchema, referencedReviewWrapperSchema;
 var init_review = __esm({
   "src/contracts/review.ts"() {
+    init_dispatch_usage();
     init_zod();
     init_canonical();
     init_config();
@@ -24175,7 +24197,7 @@ var init_review = __esm({
     serverAttestedReviewV3Schema = serverAttestedReviewV3StructuralSchema.superRefine((review, context2) => {
       validateServerAttestedReviewV3(review, context2);
     });
-    reviewReportV1Schema = external_exports.object({
+    reviewReportV1StructuralSchema = external_exports.object({
       subject_digest: external_exports.string().regex(/^[0-9a-f]{64}$/u),
       model: external_exports.string().min(1),
       effort: external_exports.string().min(1),
@@ -24183,20 +24205,31 @@ var init_review = __esm({
       focus: external_exports.enum(["general", "tests"]),
       report: external_exports.string().min(1)
     }).strict();
-    serverAttestedReviewV4Schema = serverAttestedReviewV3StructuralSchema.omit({
+    reviewReportV1Schema = reviewReportV1StructuralSchema;
+    reviewReportsStructuralSchema = serverAttestedReviewV3StructuralSchema.omit({
       findings: true,
       verdict: true,
       total_findings: true,
       partition_counts: true,
       upstream_alignment: true,
       drift: true
-    }).extend({ schema_version: external_exports.literal("4"), reports: external_exports.array(reviewReportV1Schema).min(1), previous_reports: external_exports.array(reviewReportV1Schema).optional() }).strict().superRefine((review, context2) => {
-      const ids = review.reviewer_runs.map((run) => run.reviewer_id);
-      if (new Set(ids).size !== ids.length || review.reports.length !== ids.length || review.reports.some((report, index) => report.reviewer_id !== ids[index] || report.focus !== review.reviewer_runs[index]?.focus || report.subject_digest !== review.subject_digest || report.model !== review.reviewer_runs[index]?.model || report.effort !== review.reviewer_runs[index]?.effort)) {
-        context2.addIssue({ code: "custom", path: ["reports"], message: "reports must match dispatched reviewers" });
-      }
-    });
-    reviewReportOutputSchema = external_exports.object({ report: external_exports.string() });
+    }).extend({ schema_version: external_exports.literal("4"), reports: external_exports.array(reviewReportV1Schema).min(1), previous_reports: external_exports.array(reviewReportV1Schema).optional() }).strict();
+    serverAttestedReviewV4Schema = reviewReportsStructuralSchema.superRefine(validateReportBindings);
+    reviewReportOutputSchema = external_exports.object({
+      outcome: external_exports.enum(["issues_found", "no_issues_found"]),
+      feedback: external_exports.string().min(1).regex(/\S/u)
+    }).strict();
+    reviewFeedbackV1Schema = reviewReportV1StructuralSchema.omit({ report: true }).extend({
+      outcome: reviewReportOutputSchema.shape.outcome,
+      feedback: reviewReportOutputSchema.shape.feedback,
+      usage: dispatchUsageSchema.optional()
+    }).strict();
+    reviewReportSchema = external_exports.union([reviewReportV1Schema, reviewFeedbackV1Schema]);
+    serverAttestedReviewV5Schema = reviewReportsStructuralSchema.extend({
+      schema_version: external_exports.literal("5"),
+      reports: external_exports.array(reviewFeedbackV1Schema).min(1),
+      previous_reports: external_exports.array(reviewReportSchema).optional()
+    }).superRefine(validateReportBindings);
     degradedReviewV1Schema = rawReviewV1StructuralSchema.safeExtend(degradedFields).strict().superRefine((review, context2) => {
       validateUniqueReviewMembers(review, context2);
       const expected = expectedLegacyReviewSummary(review.findings);
@@ -24209,7 +24242,7 @@ var init_review = __esm({
     });
     v1EvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewV1Schema, degradedReviewV1Schema]);
     v2EvidenceSchema = external_exports.discriminatedUnion("assurance", [serverAttestedReviewV2Schema, degradedReviewV2Schema]);
-    reviewEvidenceSchema = external_exports.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema, serverAttestedReviewV3Schema, serverAttestedReviewV4Schema]);
+    reviewEvidenceSchema = external_exports.discriminatedUnion("schema_version", [v1EvidenceSchema, v2EvidenceSchema, serverAttestedReviewV3Schema, serverAttestedReviewV4Schema, serverAttestedReviewV5Schema]);
     referencedReviewWrapperSchema = external_exports.object({ evidence_digest: digest3, evidence: external_exports.unknown() }).strict();
   }
 });
@@ -24323,13 +24356,13 @@ function renderReviewEvidence(value) {
   const evidence = value.evidence;
   const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
   if (!authenticated) throw new TypeError("authenticated review evidence is required");
-  if (evidence.schema_version === "4") return new TextEncoder().encode([
-    "# ArchFlow Review Reports",
+  if (isFeedbackReview(evidence)) return new TextEncoder().encode([
+    "# ArchFlow Review Feedback",
     `Reviewed subject: ${evidence.subject_digest}`,
     ...provenanceMetadata(evidence),
     ...renderRouteSource(evidence.route_source),
     ...evidence.route_override === void 0 ? [] : renderRouteOverride(evidence.route_override),
-    ...evidence.reports.flatMap((report) => ["", `## ${report.reviewer_id} (${report.focus})`, "", report.report])
+    ...evidence.reports.flatMap((report) => ["", `## ${report.reviewer_id} (${report.focus})`, "", ..."outcome" in report ? [`Outcome: ${report.outcome}`, "", report.feedback] : [report.report]])
   ].join("\n"));
   const summaryMetadata = evidence.schema_version === "2" || evidence.schema_version === "3" ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] : [["blocking_count", evidence.blocking_count]];
   const lines = ["# ArchFlow Review Evidence", ...metadata([
@@ -24464,6 +24497,7 @@ function renderAdjudicationEvidence(value) {
 var encoder2, ESCAPE, visibleJsonString, canonical, optional2, linesToBytes, metadata, prose;
 var init_renderers = __esm({
   "src/contracts/renderers.ts"() {
+    init_review();
     init_review();
     init_trust_brands();
     encoder2 = new TextEncoder();
@@ -28091,15 +28125,15 @@ function observeReviewV3(binding2, assignment, bytes, rawOutputDigest) {
   return copyFreezeJson(serverAttestedReviewV3Schema.parse(candidate));
 }
 function observeReviewReport(binding2, assignment, bytes, outputDigest) {
-  const { kind: _kind, assignment: _assignment, family: family2, ...provenance2 } = binding2;
+  const { kind: _kind, assignment: _assignment, usage, family: family2, ...provenance2 } = binding2;
   const candidate = {
     ...provenance2,
-    schema_version: "4",
+    schema_version: "5",
     step: "counter_review",
     assurance: "server-attested",
     model_family: family2,
     observed_output_digest: outputDigest,
-    reports: [{ subject_digest: binding2.subject_digest, model: binding2.model, effort: binding2.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, report: readableReviewReport(decodeJson(bytes)) }],
+    reports: [{ subject_digest: binding2.subject_digest, model: binding2.model, effort: binding2.effort, reviewer_id: assignment.reviewer_id, focus: assignment.focus, ...parseReviewFeedback(decodeJson(bytes)), ...usage === void 0 ? {} : { usage } }],
     reviewer_runs: [{
       reviewer_id: assignment.reviewer_id,
       focus: assignment.focus,
@@ -28120,7 +28154,7 @@ function observeReviewReport(binding2, assignment, bytes, outputDigest) {
       ...binding2.route_override === void 0 ? {} : { route_override: binding2.route_override }
     }]
   };
-  return copyFreezeJson(serverAttestedReviewV4Schema.parse(candidate));
+  return copyFreezeJson(serverAttestedReviewV5Schema.parse(candidate));
 }
 var observationSource = Object.freeze({
   observeReview(capability, observedOutputBytes) {
@@ -28927,6 +28961,7 @@ init_review();
 
 // src/contracts/triage.ts
 init_review();
+init_review();
 init_zod();
 init_evidence();
 init_plain_json();
@@ -29132,12 +29167,12 @@ function validateTriage(current, candidate, dispositionLedger, reviewRoundHistor
   if (parsed.task_id !== current.task_id || parsed.phase_instance !== current.phase_instance || parsed.subject_digest !== current.subject_digest || parsed.input_fingerprint !== current.input_fingerprint || parsed.current_evidence_set_digest !== current.current_evidence_set.set_digest) throw new TypeError("triage scope does not match current review set");
   const expectedDigests = current.current_evidence_set.slots.map((slot) => slot.evidence_digest);
   if (parsed.source_evidence_digests.length !== expectedDigests.length || parsed.source_evidence_digests.some((digestValue, index) => digestValue !== expectedDigests[index])) throw new TypeError("source_evidence_digests must exactly match canonical current slots");
-  const reports = current.reviews.filter((review) => review.evidence.schema_version === "4");
+  const reports = current.reviews.filter((review) => isFeedbackReview(review.evidence));
   if (reports.length > 0) {
     if (reports.length !== current.reviews.length || parsed.response === void 0) throw new TypeError("review reports require a working-AI response");
     if (parsed.dispositions.length !== 0) throw new TypeError("report responses do not carry finding dispositions");
     if (parsed.response.decision === "revise") {
-      const ids = new Set(reports.flatMap((review) => review.evidence.schema_version === "4" ? [...review.evidence.reports, ...review.evidence.previous_reports ?? []].map((report) => report.reviewer_id) : []));
+      const ids = new Set(reports.flatMap((review) => isFeedbackReview(review.evidence) ? [...review.evidence.reports, ...review.evidence.previous_reports ?? []].map((report) => report.reviewer_id) : []));
       const selected = parsed.response.reviewers.map((reviewer) => reviewer.reviewer_id);
       if (new Set(selected).size !== selected.length || selected.some((id6) => !ids.has(id6))) throw new TypeError("follow-up reviewers must identify distinct previous reviewers");
     }
@@ -30153,7 +30188,7 @@ function bindParsedToolCallRequest(call, requestDigest) {
 }
 var toolSuccessSchemas = {
   archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest8.optional() }).strict(),
-  archflow_counter_review: external_exports.union([external_exports.object({ path: repositoryPathClaimV1Schema, reports: external_exports.array(reviewReportV1Schema).min(1), constitution: external_exports.union([external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict(), external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(["pass", "fail", "uncertain"]), triggers: external_exports.array(rule3) }).strict()]), revision: safeInteger6, request_digest: digest8.optional() }).strict(), external_exports.object({
+  archflow_counter_review: external_exports.union([external_exports.object({ path: repositoryPathClaimV1Schema, reports: external_exports.array(reviewReportSchema).min(1), constitution: external_exports.union([external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict(), external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(["pass", "fail", "uncertain"]), triggers: external_exports.array(rule3) }).strict()]), revision: safeInteger6, request_digest: digest8.optional() }).strict(), external_exports.object({
     path: repositoryPathClaimV1Schema,
     verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
     total_findings: safeInteger6,
@@ -39187,6 +39222,9 @@ async function createProductionServices(input) {
   }));
 }
 
+// src/state/semantic-status.ts
+init_review();
+
 // src/dispatch/review-feedback.ts
 init_zod();
 init_canonical();
@@ -39200,7 +39238,7 @@ var feedbackSchema = external_exports.object({
   attempt: safeIntegerV1Schema,
   input_fingerprint: sha256DigestV1Schema,
   subject_digest: sha256DigestV1Schema,
-  reports: external_exports.array(reviewReportV1Schema)
+  reports: external_exports.array(reviewReportSchema)
 }).strict();
 async function target(authority, dependencies, state) {
   return resolveTaskWorkspacePath({
@@ -39678,9 +39716,9 @@ var workflowViewV1Schema = external_exports.object({
   taxonomy_denial_rates: taxonomyDenialRatesV1Schema.optional(),
   review_context: publicReviewContextV1Schema.optional(),
   review_strength: publicReviewStrengthV1Schema.optional(),
-  review_reports: external_exports.array(reviewReportV1Schema).optional(),
-  previous_review_reports: external_exports.array(reviewReportV1Schema).optional(),
-  partial_review_reports: external_exports.array(reviewReportV1Schema).optional(),
+  review_reports: external_exports.array(reviewReportSchema).optional(),
+  previous_review_reports: external_exports.array(reviewReportSchema).optional(),
+  partial_review_reports: external_exports.array(reviewReportSchema).optional(),
   review_response: reviewResponseSchema.optional(),
   review_revision: reviewRevisionDeclarationSchema.optional(),
   implementation_recommendation: implementationRecommendationV1Schema,
@@ -41318,6 +41356,7 @@ init_phase_instance();
 init_review();
 
 // src/review/adjudication.ts
+init_review();
 var AdjudicationServiceError = class extends Error {
   constructor(project_error) {
     super(project_error.code);
@@ -41331,14 +41370,14 @@ function policyReviewFacts(review, adjudication, activeRules) {
   if (adjudication !== void 0 && review.assurance === "server-attested" && adjudication.source_review_envelope_digest !== review.envelope_input_digest) {
     throw new TypeError("policy review evidence round bindings disagree");
   }
-  if (review.schema_version === "3" || review.schema_version === "4") {
+  if (review.schema_version === "3" || isFeedbackReview(review)) {
     if (review.assurance !== "server-attested") {
       throw new TypeError("Review V3 policy facts require server-attested evidence");
     }
     if (adjudication !== void 0 !== activeRules || adjudication !== void 0 && adjudication.schema_version !== "2") {
       throw new TypeError("fresh policy evidence cohort is incomplete or mixed");
     }
-    const alignment2 = review.schema_version === "4" ? [] : review.upstream_alignment ?? [];
+    const alignment2 = isFeedbackReview(review) ? [] : review.upstream_alignment ?? [];
     return Object.freeze({
       subject_digest: review.subject_digest,
       input_fingerprint: review.input_fingerprint,
@@ -41351,7 +41390,7 @@ function policyReviewFacts(review, adjudication, activeRules) {
         uncertain_rule_versions: adjudication.uncertain_rule_versions
       }),
       alignment: Object.freeze({
-        source: review.schema_version === "4" || review.upstream_alignment === void 0 ? "not-reviewed" : "review-v3",
+        source: isFeedbackReview(review) || review.upstream_alignment === void 0 ? "not-reviewed" : "review-v3",
         result: alignmentResult(alignment2),
         findings: alignment2
       })
@@ -41444,6 +41483,7 @@ function gateDeclaredByReviewTrigger(gate) {
 
 // src/review/fixed-point.ts
 init_review();
+init_review();
 init_evidence();
 init_review();
 init_phase_instance();
@@ -41454,7 +41494,7 @@ function completedReviewRoundCount(state, retained) {
   if (history === void 0) {
     const artifact = retained.get("counter_review")?.manifest.source_artifact;
     if (artifact?.artifact_kind !== "review-evidence") return 0;
-    if (artifact.evidence.schema_version === "3" || artifact.evidence.schema_version === "4") return 1;
+    if (artifact.evidence.schema_version === "3" || isFeedbackReview(artifact.evidence)) return 1;
     return state.attempt;
   }
   const attempts = new Set(history.filter((round) => round.attempt <= state.attempt).map((round) => round.attempt));
@@ -41530,7 +41570,7 @@ function currentFor(retained, step, subject, reviews) {
     const currentEnvelopeDigest = currentReview !== void 0 && currentReview.assurance === "server-attested" ? currentReview.envelope_input_digest : void 0;
     if (currentEnvelopeDigest === void 0 || adjudication.source_review_envelope_digest !== currentEnvelopeDigest) return false;
     if (adjudication.schema_version === "2") {
-      return currentReview?.schema_version === "3" || currentReview?.schema_version === "4";
+      return currentReview !== void 0 && (currentReview.schema_version === "3" || isFeedbackReview(currentReview));
     }
     return adjudication.approved_upstream_digests.length === (subject.approved_upstream_digests ?? []).length && adjudication.approved_upstream_digests.every((digest12, index) => digest12 === (subject.approved_upstream_digests ?? [])[index]);
   }
@@ -41570,7 +41610,7 @@ function evidenceBindingFailure(request, gate, evidence, subject) {
   if (counterReview === void 0) return "counter-review-evidence-missing";
   if (triage === void 0) return "triage-evidence-missing";
   if (!boundToSubjectOrDeclaredPredecessor(triage, subject)) return "triage-not-bound-to-subject";
-  const adjudicationRequired = gate.kind === "constitution-review" || counterReview.schema_version !== "3" && counterReview.schema_version !== "4";
+  const adjudicationRequired = gate.kind === "constitution-review" || counterReview.schema_version !== "3" && !isFeedbackReview(counterReview);
   if (adjudicationRequired) {
     if (adjudication === void 0) return "adjudication-evidence-missing";
     if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
@@ -41674,7 +41714,7 @@ function dispositionState(retained, reviews, triage) {
   if (reviews === void 0 || triage === void 0) {
     return Object.freeze({ complete: false, blocker: false, accepted: false, escalated_human: false, deferred: false });
   }
-  if (reviews.reviews.some((review) => review.evidence.schema_version === "4")) {
+  if (reviews.reviews.some((review) => isFeedbackReview(review.evidence))) {
     const response = triage.response;
     return Object.freeze({ complete: response !== void 0, blocker: response?.decision === "escalate", accepted: response?.decision === "revise", escalated_human: response?.decision === "escalate", deferred: false });
   }
@@ -42163,8 +42203,8 @@ function buildGateDecisionTemplates(active) {
     ]);
   }
   const templates = [];
-  const baselineLiveCount = request.kind === "baseline-adoption" ? request.context.drifted_projections.length + (request.context.secondary_targets ?? []).reduce((count, target4) => count + target4.drifted_projections.length, 0) : 0;
-  const baselineDeletedCount = request.kind === "baseline-adoption" ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? []).reduce((count, target4) => count + (target4.deleted_projections?.length ?? 0), 0) : 0;
+  const baselineLiveCount = request.kind === "baseline-adoption" ? request.context.drifted_projections.length + (request.context.secondary_targets ?? []).reduce((count2, target4) => count2 + target4.drifted_projections.length, 0) : 0;
+  const baselineDeletedCount = request.kind === "baseline-adoption" ? (request.context.deleted_projections?.length ?? 0) + (request.context.secondary_targets ?? []).reduce((count2, target4) => count2 + (target4.deleted_projections?.length ?? 0), 0) : 0;
   for (const decision3 of request.allowed_decisions) {
     if (decision3 === "cancel") {
       templates.push(cancellation);
@@ -42385,7 +42425,7 @@ function ordinaryReasons(active, authenticatedDetails) {
   return Object.freeze(reasons);
 }
 function baselineAffectedCount(context2) {
-  return context2.drifted_projections.length + (context2.deleted_projections?.length ?? 0) + (context2.secondary_targets ?? []).reduce((count, target4) => count + target4.drifted_projections.length + (target4.deleted_projections?.length ?? 0), 0);
+  return context2.drifted_projections.length + (context2.deleted_projections?.length ?? 0) + (context2.secondary_targets ?? []).reduce((count2, target4) => count2 + target4.drifted_projections.length + (target4.deleted_projections?.length ?? 0), 0);
 }
 function baselineProjectionDetails(context2) {
   const projectionLines = (repository, drifted, deleted) => {
@@ -42823,10 +42863,10 @@ function deriveNextAction(input) {
           state
         );
       }
-      const count = input.reconciliation_findings?.filter((candidate) => candidate.kind === "projection-mismatch").length ?? 1;
+      const count2 = input.reconciliation_findings?.filter((candidate) => candidate.kind === "projection-mismatch").length ?? 1;
       return action(
         "open-gate",
-        `${count} file${count === 1 ? "" : "s"} changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Open the baseline decision so a human chooses: keep the current bytes as the new recorded baseline, or restore the recorded bytes.`,
+        `${count2} file${count2 === 1 ? "" : "s"} changed after ArchFlow recorded their reviewed bytes (for example by later commits or a merge). Open the baseline decision so a human chooses: keep the current bytes as the new recorded baseline, or restore the recorded bytes.`,
         true,
         state,
         { gate_kind: "baseline-adoption" }
@@ -44303,7 +44343,7 @@ function baselineAdoptionInputFromFindings(task_id, state, findings, target4) {
       })).sort((left, right) => left.path.localeCompare(right.path)))
     });
   });
-  if (secondaryTargets.some((item) => item === void 0) || drifted.length + deleted.length + secondaryTargets.reduce((count, item) => count + item.drifted_projections.length + item.deleted_projections.length, 0) !== mismatches.length) return void 0;
+  if (secondaryTargets.some((item) => item === void 0) || drifted.length + deleted.length + secondaryTargets.reduce((count2, item) => count2 + item.drifted_projections.length + item.deleted_projections.length, 0) !== mismatches.length) return void 0;
   if (drifted.length + deleted.length + secondaryTargets.length === 0) return void 0;
   const context2 = Object.freeze({
     drifted_projections: Object.freeze(drifted.map((finding) => Object.freeze({ path: finding.path, recorded_digest: finding.recorded_digest, observed_digest: finding.observed_digest })).sort((left, right) => left.path.localeCompare(right.path))),
@@ -46392,7 +46432,7 @@ async function computeAuthoritativeSemanticStatus(dependencies, authority) {
     },
     ...(() => {
       const source = detailed.value.retained.get("counter_review")?.manifest.source_artifact;
-      if (source?.artifact_kind !== "review-evidence" || source.evidence.schema_version !== "4") return {};
+      if (source?.artifact_kind !== "review-evidence" || !isFeedbackReview(source.evidence)) return {};
       const current = status.evidence?.available === true && status.evidence.assessment.current.includes("counter_review");
       return current ? { review_reports: source.evidence.reports, ...source.evidence.previous_reports === void 0 ? {} : { previous_review_reports: source.evidence.previous_reports } } : { previous_review_reports: [...source.evidence.previous_reports ?? [], ...source.evidence.reports] };
     })(),
@@ -48076,7 +48116,7 @@ init_phase_instance();
 init_plain_json();
 init_review();
 init_effort_review();
-var REVIEW_INSTRUCTION = "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. If no supported material issue remains, say so. Prefer a JSON object with one report string; no finding taxonomy, IDs, or ordering are required.";
+var REVIEW_INSTRUCTION = "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. Spend the work on reading relevant code and tests and reasoning about concrete failures; this is guidance, not a read quota. Return only actionable feedback: where the issue is, what can fail, and why it matters. Do not reproduce source files, narrate the investigation, restate the design, enumerate everything that is correct, or write a separate review document. Return exactly one JSON object with outcome and feedback. Use outcome=issues_found with nonblank actionable feedback, or outcome=no_issues_found with a short explicit confirmation that the reviewed changes have no remaining actionable issues. Never manufacture a concern to fill the response. No finding taxonomy, IDs, or ordering are required.";
 var IMPLEMENTATION_REVIEW_INSTRUCTION = `${REVIEW_INSTRUCTION} Review the implementation output declared by this phase and its current behavior. Use unchanged files as supporting evidence for problems introduced, exposed, or materially worsened by the changes; this is not a general code review.`;
 var ReviewEnvelopeError = class extends Error {
   project_error;

@@ -1,3 +1,4 @@
+import { isFeedbackReview } from "../contracts/review.js";
 import { reviewFindings } from "../contracts/review.js";
 import type { AdjudicationEvidence } from "../contracts/adjudication.js";
 import type { ResultManifestV1 } from "../contracts/durable-result-manifest.js";
@@ -50,7 +51,7 @@ export function completedReviewRoundCount(state: TaskStateV1, retained: Retained
   if (history === undefined) {
     const artifact = retained.get("counter_review")?.manifest.source_artifact;
     if (artifact?.artifact_kind !== "review-evidence") return 0;
-    if (artifact.evidence.schema_version === "3" || artifact.evidence.schema_version === "4") return 1;
+    if (artifact.evidence.schema_version === "3" || isFeedbackReview(artifact.evidence)) return 1;
     return state.attempt;
   }
   const attempts = new Set(history.filter((round) => round.attempt <= state.attempt).map((round) => round.attempt));
@@ -294,7 +295,7 @@ function currentFor(
     if (currentEnvelopeDigest === undefined ||
         adjudication.source_review_envelope_digest !== currentEnvelopeDigest) return false;
     if (adjudication.schema_version === "2") {
-      return currentReview?.schema_version === "3" || currentReview?.schema_version === "4";
+      return currentReview !== undefined && (currentReview.schema_version === "3" || isFeedbackReview(currentReview));
     }
     return adjudication.approved_upstream_digests.length ===
       (subject.approved_upstream_digests ?? []).length &&
@@ -405,7 +406,7 @@ function evidenceBindingFailure(
   // review is dispatched with the counter-review, so an editorial revision re-runs neither
   // and the gate summary discloses that the evidence evaluated the predecessor bytes.
   if (!boundToSubjectOrDeclaredPredecessor(triage, subject)) return "triage-not-bound-to-subject";
-  const adjudicationRequired = gate.kind === "constitution-review" || (counterReview.schema_version !== "3" && counterReview.schema_version !== "4");
+  const adjudicationRequired = gate.kind === "constitution-review" || (counterReview.schema_version !== "3" && !isFeedbackReview(counterReview));
   if (adjudicationRequired) {
     if (adjudication === undefined) return "adjudication-evidence-missing";
     if (!boundToSubjectOrDeclaredPredecessor(adjudication, subject)) {
@@ -595,7 +596,7 @@ function dispositionState(
   if (reviews === undefined || triage === undefined) {
     return Object.freeze({ complete: false, blocker: false, accepted: false, escalated_human: false, deferred: false });
   }
-  if (reviews.reviews.some(review => review.evidence.schema_version === "4")) {
+  if (reviews.reviews.some(review => isFeedbackReview(review.evidence))) {
     const response = triage.response;
     return Object.freeze({ complete: response !== undefined, blocker: response?.decision === "escalate", accepted: response?.decision === "revise", escalated_human: response?.decision === "escalate", deferred: false });
   }
