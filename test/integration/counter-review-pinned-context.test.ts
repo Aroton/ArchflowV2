@@ -483,18 +483,12 @@ Future tasks should use this revised policy.
     const context = envelope.context;
     expect(context.map((entry) => [entry.kind, entry.label, entry.status])).toEqual([
       ["approved-upstream", "prd.md", "pinned"],
-      ["interface-excerpt", "tracked.txt", "pinned"],
-      ["interface-excerpt", "src/missing.ts", "unavailable"],
-      ["repo-map", `tree ${h.repository.git("rev-parse", "HEAD")}`, "pinned"],
-      ["conventions", "CLAUDE.md", "pinned"],
     ]);
     expect(context[0]).toMatchObject({
       content_digest: sha256Bytes(PRD_BYTES),
       content: new TextDecoder().decode(PRD_BYTES),
     });
-    expect(context[1]).toMatchObject({ content: "base\n" });
-    expect(String(context[3]!.content)).toContain("tracked.txt");
-    expect(context[4]).toMatchObject({ content: new TextDecoder().decode(CONVENTIONS_BYTES) });
+
   });
 
   it("fails closed without dispatching when the upstream lacks durable approval", async () => {

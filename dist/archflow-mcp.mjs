@@ -60475,9 +60475,9 @@ var PINNED_CONTEXT_KINDS = [
 var REPOSITORY_VIEW_NOTE = "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. It is evidence for claims about the review subject, not a separate review subject. The artifact and pinned context take precedence on conflict.";
 var PRODUCED_REPOSITORY_VIEW_NOTE = "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. Review the declared outputs and their current post-change behavior. Unchanged files are supporting evidence only.";
 var MULTI_REPOSITORY_VIEW_NOTE = "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. An entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output; review only its declared outputs and their current post-change behavior. Every other file and every entry without `snapshot_digest` is supporting evidence only. The artifact and pinned context take precedence on conflict.";
-var DIFF_REVIEW_INSTRUCTION = "Start with the supplied changed-file statistics and complete patch. On follow-up, start with the revision patch when available; the full implementation patch remains available for context. Read large patches in sections, then inspect surrounding code, callers and tests as needed. Patches exclude .archflow/; governing documents and verification evidence are supplied separately.";
+var DIFF_REVIEW_INSTRUCTION = "Start with the supplied changed-file statistics, complete patch, and governing documents together. A diff file's content field already contains its complete text; do not reread that file. On follow-up, start with the revision patch when available; the full patch remains available for context. If content is absent, read the named file, in sections only when too large for one read. Batch independent reads and searches in the same turn. Then inspect surrounding code, callers and tests as needed to assess concrete concerns. Implementation patches exclude .archflow/; document patches cover only this task's reviewed documents. Governing documents and verification evidence are supplied separately.";
 var REVIEW_FOCUSES = ["general", "tests"];
-var REVIEW_INSTRUCTION = "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. Spend the work on reading relevant code and tests and reasoning about concrete failures; this is guidance, not a read quota. Return only actionable feedback: where the issue is, what can fail, and why it matters. Do not reproduce source files, narrate the investigation, restate the design, enumerate everything that is correct, or write a separate review document. Return exactly one JSON object with outcome and feedback. Use outcome=issues_found with nonblank actionable feedback, or outcome=no_issues_found with a short explicit confirmation that the reviewed changes have no remaining actionable issues. Never manufacture a concern to fill the response. No finding taxonomy, IDs, or ordering are required.";
+var REVIEW_INSTRUCTION = "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. Use the supplied artifact, governing documents, and diff together before requesting more evidence. Batch independent file reads and searches in the same turn. Read relevant code and tests to resolve concrete concerns; stop when the evidence supports a decision. This is guidance, not a read quota. Return only actionable feedback: where the issue is, what can fail, and why it matters. Do not reproduce source files, narrate the investigation, restate the design, enumerate everything that is correct, or write a separate review document. Return exactly one JSON object with outcome and feedback. Use outcome=issues_found with nonblank actionable feedback, or outcome=no_issues_found with a short explicit confirmation that the reviewed changes have no remaining actionable issues. Never manufacture a concern to fill the response. No finding taxonomy, IDs, or ordering are required.";
 var GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION = "Use the assigned criteria to focus on the changed work, design soundness, interfaces, unsafe behavior, and verification where assigned. Treat them as investigation guidance, not a checklist.";
 var TEST_REVIEW_ASSIGNMENT_INSTRUCTION = "Focus on meaningful verification gaps. Inspect the implementation, existing tests and assertions, and supplied verification evidence before claiming a check is missing or ineffective. Name the concrete failure that could escape detection and suggest the cheapest credible way to catch it; equivalent coverage at another layer is sufficient.";
 var IMPLEMENTATION_REVIEW_INSTRUCTION = `${REVIEW_INSTRUCTION} Review the implementation output declared by this phase and its current behavior. Use unchanged files as supporting evidence for problems introduced, exposed, or materially worsened by the changes; this is not a general code review.`;
@@ -60825,8 +60825,19 @@ function validateRules(values) {
   return rules2;
 }
 function finishEnvelope(resultKind, envelope2, digestKind) {
-  const bytes = utf8.encode(`${JSON.stringify(envelope2, null, 2)}
+  let bytes = utf8.encode(`${JSON.stringify(envelope2, null, 2)}
 `);
+  const record3 = envelope2;
+  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP && record3.diffs !== void 0) {
+    const diffs = record3.diffs;
+    envelope2 = { ...record3, diffs: {
+      ...diffs,
+      full: diffReferences(diffs.full),
+      ...diffs.revision === void 0 ? {} : { revision: diffReferences(diffs.revision) }
+    } };
+    bytes = utf8.encode(`${JSON.stringify(envelope2, null, 2)}
+`);
+  }
   if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) {
     throw new ReviewEnvelopeError(
       createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }),
@@ -60839,32 +60850,40 @@ function finishEnvelope(resultKind, envelope2, digestKind) {
   });
   return Object.freeze({ result_kind: resultKind, bytes, digest: digest12, byte_count: bytes.byteLength });
 }
+function diffReferences(diff) {
+  const { content: _patch, ...patch } = diff.patch;
+  const { content: _stat, ...stat4 } = diff.stat;
+  return { ...diff, patch, stat: stat4 };
+}
 function validateDiffs(value, subjectDigest) {
   exactFields(value, [
     "full",
     ...value.revision === void 0 ? [] : ["revision"],
     ...value.revision_unavailable === void 0 ? [] : ["revision_unavailable"]
   ], "review diffs");
-  for (const [kind, diff] of [["implementation", value.full], ["revision", value.revision]]) {
+  for (const [kind, diff] of [["full", value.full], ["revision", value.revision]]) {
     if (diff === void 0) {
-      if (kind === "implementation") throw new TypeError("full review diff is required");
+      if (kind === "full") throw new TypeError("full review diff is required");
       continue;
     }
     exactFields(diff, ["kind", "subject_digest", "patch", "stat", ...kind === "revision" ? ["base_subject_digest"] : []], "review diff");
-    if (diff.kind !== kind || parseSha256Digest(diff.subject_digest) !== subjectDigest) throw new TypeError("review diff subject mismatch");
+    if ((kind === "full" ? !["implementation", "document"].includes(diff.kind) : diff.kind !== kind) || parseSha256Digest(diff.subject_digest) !== subjectDigest) throw new TypeError("review diff subject mismatch");
     if (kind === "revision") parseSha256Digest(diff.base_subject_digest);
     for (const [extension, file2] of [["patch", diff.patch], ["stat", diff.stat]]) {
-      exactFields(file2, ["path", "content_digest", "byte_count"], "review diff file");
-      const name = kind === "implementation" ? "full" : `since-${diff.base_subject_digest}`;
+      exactFields(file2, ["path", "content_digest", "byte_count", ...file2.content === void 0 ? [] : ["content"]], "review diff file");
+      const name = kind === "full" ? "full" : `since-${diff.base_subject_digest}`;
       if (file2.path !== `../review-diffs/${name}.${extension}`) throw new TypeError("invalid review diff path");
       parseSha256Digest(file2.content_digest);
       parseSafeInteger(file2.byte_count);
+      if (file2.content !== void 0 && (typeof file2.content !== "string" || utf8.encode(file2.content).byteLength !== file2.byte_count || sha256Bytes(utf8.encode(file2.content)) !== file2.content_digest)) {
+        throw new TypeError("inline review diff content mismatch");
+      }
     }
   }
   if (value.revision_unavailable !== void 0 && (value.revision !== void 0 || typeof value.revision_unavailable !== "string" || !value.revision_unavailable.trim())) {
     throw new TypeError("invalid revision diff availability");
   }
-  return value;
+  return value.revision === void 0 ? value : { ...value, full: diffReferences(value.full) };
 }
 function buildReviewEnvelope(value) {
   const snapshot = materialize(value);
@@ -61398,7 +61417,6 @@ var MAX_COMMIT_TREE_BLOB_CACHE_ENTRIES = 4096;
 var MAX_COMMIT_TREE_ENTRIES_CACHE_ENTRIES = 1024;
 var MAX_COMMIT_ANCESTOR_CACHE_ENTRIES = 2048;
 var MAX_FIRST_PARENT_CHILD_CACHE_ENTRIES = 1024;
-var MAX_COMMIT_TREE_PATH_LISTING_CACHE_ENTRIES = 512;
 function createRunnerCache() {
   return {
     commitResolution: /* @__PURE__ */ new Map(),
@@ -61612,31 +61630,6 @@ async function readCommitTreeEntries(runner, commit, directory) {
     setBoundedCache(cache.commitTreeEntries, cacheKey, frozen, MAX_COMMIT_TREE_ENTRIES_CACHE_ENTRIES);
   }
   return frozen;
-}
-async function readCommitTreePathListing(runner, commit, directories) {
-  const prefixes = [...new Set(directories)].map((directory) => directory === "" || directory === "." ? "." : directory.endsWith("/") ? directory : `${directory}/`);
-  if (prefixes.length === 0) return Object.freeze({ paths: Object.freeze([]), truncated: false });
-  const isCommitOid = GIT_OID2.test(commit);
-  const cacheKey = isCommitOid ? `${commit}\0${prefixes.join("\0")}` : void 0;
-  const cache = getRunnerCache(runner);
-  if (cacheKey !== void 0) {
-    const cached2 = cache.commitTreePathListing.get(cacheKey);
-    if (cached2 !== void 0) return cached2;
-  }
-  const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-r", "-z", "--name-only", commit, "--", ...prefixes],
-    operation: "git-tree-paths"
-  });
-  const unique = [...new Set(fields)].sort();
-  const truncated = unique.length > MAX_COMMIT_TREE_ENTRIES;
-  const result = Object.freeze({
-    paths: Object.freeze(truncated ? unique.slice(0, MAX_COMMIT_TREE_ENTRIES) : unique),
-    truncated
-  });
-  if (cacheKey !== void 0) {
-    setBoundedCache(cache.commitTreePathListing, cacheKey, result, MAX_COMMIT_TREE_PATH_LISTING_CACHE_ENTRIES);
-  }
-  return result;
 }
 async function resolveCommit(runner, revision) {
   const isOid = GIT_OID2.test(revision);
@@ -87056,12 +87049,30 @@ async function captureImplementationSelectionInput(context2, binding2, load) {
 import { spawn as spawn3 } from "node:child_process";
 import { createHash as createHash4 } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { chmod as chmod3, lstat as lstat12, mkdir as mkdir9, rm as rm4, symlink as symlink3, writeFile as writeFile5 } from "node:fs/promises";
+import { chmod as chmod3, lstat as lstat12, mkdir as mkdir9, readFile as readFile18, rm as rm4, symlink as symlink3, writeFile as writeFile5 } from "node:fs/promises";
 import { join as join19, relative as relative7, resolve as resolve2 } from "node:path";
 import { pipeline as pipeline2 } from "node:stream/promises";
+
+// src/contracts/utf8.ts
+import { Buffer as Buffer3 } from "node:buffer";
+var strictDecoder = new TextDecoder("utf-8", { fatal: true });
+function decodeUtf8Strict(bytes) {
+  try {
+    return strictDecoder.decode(bytes);
+  } catch {
+    return void 0;
+  }
+}
+function visibleContent(bytes) {
+  const content = decodeUtf8Strict(bytes);
+  return content === void 0 ? Object.freeze({ encoding: "base64", content: Buffer3.from(bytes).toString("base64") }) : Object.freeze({ encoding: "utf8", content });
+}
+
+// src/review/diffs.ts
 var visiblePath = (path3) => path3 !== ".archflow" && !path3.startsWith(".archflow/");
 var ordinal11 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-var UNAVAILABLE = "The previous reviewed implementation could not be reconstructed. Start with the complete implementation diff and the supplied prior feedback.";
+var UNAVAILABLE = "The previous reviewed subject could not be reconstructed. Start with the full patch, current artifact, and supplied prior feedback.";
+var INLINE_DIFF_BYTE_LIMIT = 131072;
 async function writeImage(root, path3, image) {
   if (image.state === "absent") return;
   const target4 = resolve2(root, path3);
@@ -87131,7 +87142,12 @@ async function gitDiffFile(cwd, output, flags, signal) {
   try {
     await Promise.all([exited, pipeline2(child.stdout, createWriteStream(output, { flags: "wx", mode: 384 }))]);
     await chmod3(output, 292);
-    return { content_digest: hash2.digest("hex"), byte_count: bytes };
+    const content = bytes <= INLINE_DIFF_BYTE_LIMIT ? decodeUtf8Strict(await readFile18(output)) : void 0;
+    return {
+      content_digest: hash2.digest("hex"),
+      byte_count: bytes,
+      ...content === void 0 ? {} : { content }
+    };
   } finally {
     clearTimeout(deadline);
     if (child.exitCode === null) child.kill("SIGKILL");
@@ -87145,9 +87161,18 @@ async function comparison(input, label, previous) {
   await mkdir9(join19(trees, "b"), { recursive: true });
   try {
     for (const repository of input.repositories) {
+      const document2 = input.subject.artifact.artifact_kind === "document";
+      if (document2 && repository.name !== "primary") continue;
+      const prefix = `.archflow/tasks/${input.state.task_id}/`;
+      if (document2 && input.document_projections === void 0) throw new TypeError("document projections are required");
       const before = new Map(previous?.plans.get(repository.name)?.entries.map((entry) => [String(entry.path), entry.desired]));
-      const after = new Map(repository.projection_plan?.entries.map((entry) => [String(entry.path), entry.desired]));
-      const paths = [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])].filter(visiblePath).sort(ordinal11);
+      const after = document2 ? new Map(input.document_projections.map((projection) => [`${prefix}${projection.path}`, {
+        state: "present",
+        file_type: "regular",
+        mode: "100644",
+        bytes: projection.bytes
+      }])) : new Map(repository.projection_plan?.entries.map((entry) => [String(entry.path), entry.desired]));
+      const paths = [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])].filter((path3) => document2 ? path3.startsWith(prefix) : visiblePath(path3)).sort(ordinal11);
       const runner = input.runners.get(repository.name);
       if (runner === void 0) throw new TypeError("review diff repository is unavailable");
       for (const path3 of paths) {
@@ -87161,7 +87186,7 @@ async function comparison(input, label, previous) {
             bytes: await readGitBlobBytes(runner, blob.oid)
           };
         }
-        const display = input.repositories.length === 1 ? path3 : `${repository.name}/${path3}`;
+        const display = document2 ? path3.slice(prefix.length) : input.repositories.length === 1 ? path3 : `${repository.name}/${path3}`;
         await writeImage(join19(trees, "a"), display, before.get(path3) ?? baseline);
         await writeImage(join19(trees, "b"), display, after.get(path3) ?? baseline);
       }
@@ -87172,7 +87197,7 @@ async function comparison(input, label, previous) {
     const stat4 = await gitDiffFile(trees, statPath, ["--numstat", "--summary"], input.signal);
     const childPath2 = (path3) => relative7(input.workspace.repository_view_root, path3);
     return {
-      kind: previous === void 0 ? "implementation" : "revision",
+      kind: previous === void 0 ? input.subject.artifact.artifact_kind === "document" ? "document" : "implementation" : "revision",
       subject_digest: input.subject.artifact_digest,
       ...previous === void 0 ? {} : { base_subject_digest: previous.digest },
       patch: { path: childPath2(patchPath), ...patch },
@@ -87196,6 +87221,16 @@ async function previousPlans(input, digest12) {
   if (!loaded.ok) return void 0;
   const retained = loaded.value;
   const artifact = retained.prepared.manifest.value.source_artifact;
+  if (input.subject.artifact.artifact_kind === "document") {
+    if (artifact.artifact_kind !== "document" || artifact.task_id !== input.state.task_id || artifact.phase_instance !== input.state.phase_instance) return void 0;
+    const documents = documentProjectionDescriptors(artifact);
+    const current = new Set(input.document_projections?.map((projection) => String(projection.path)));
+    if (documents.length !== current.size || documents.some((doc) => !current.has(doc.document_path))) return void 0;
+    const targets = new Set(documents.map((doc) => String(doc.projection_target)));
+    const entries = retained.projection_plan.entries.filter((entry) => targets.has(String(entry.path)));
+    if (entries.length !== targets.size) return void 0;
+    return /* @__PURE__ */ new Map([["primary", { ...retained.projection_plan, entries }]]);
+  }
   if (artifact.artifact_kind !== "implementation-output" || artifact.task_id !== input.state.task_id || artifact.phase_instance !== input.state.phase_instance || artifact.base_commit !== input.repositories[0]?.commit) return void 0;
   const plans = /* @__PURE__ */ new Map([["primary", retained.projection_plan]]);
   for (const secondary of retained.secondary_projection_plans ?? []) {
@@ -87205,8 +87240,7 @@ async function previousPlans(input, digest12) {
   }
   return plans;
 }
-async function prepareImplementationDiffs(input) {
-  if (input.subject.artifact.artifact_kind !== "implementation-output") throw new TypeError("diffs require implementation output");
+async function prepareReviewDiffs(input) {
   let full;
   try {
     full = await comparison(input, "full");
@@ -87246,7 +87280,7 @@ async function prepareImplementationDiffs(input) {
 }
 
 // src/state/governing-document-comparison.ts
-import { readFile as readFile18, readdir as readdir6 } from "node:fs/promises";
+import { readFile as readFile19, readdir as readdir6 } from "node:fs/promises";
 import { join as join20 } from "node:path";
 async function governingDocumentComparisons(dependencies, authority, state, subject) {
   const changed = await changedCoProducedDocumentPaths(dependencies, state, subject);
@@ -87273,7 +87307,7 @@ async function governingDocumentComparisons(dependencies, authority, state, subj
       context: authority.context
     });
     if (!target4.ok) throw new Error("Governing document result path is unavailable");
-    const bytes = await readFile18(target4.value.absolute);
+    const bytes = await readFile19(target4.value.absolute);
     if (sha256Bytes(bytes) !== name.slice(0, -5)) throw new Error("Governing document result address mismatch");
     const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     assertPlainJson(value, "governing comparison manifest");
@@ -87307,11 +87341,11 @@ async function governingDocumentComparisons(dependencies, authority, state, subj
 }
 
 // src/mcp/handlers/counter-review.ts
-import { readFile as readFile21 } from "node:fs/promises";
-import { join as join23 } from "node:path";
+import { readFile as readFile22 } from "node:fs/promises";
+import { join as join22 } from "node:path";
 
 // src/dispatch/retained-child-output.ts
-import { readdir as readdir7, readFile as readFile19 } from "node:fs/promises";
+import { readdir as readdir7, readFile as readFile20 } from "node:fs/promises";
 import { join as join21 } from "node:path";
 var nonBlank6 = external_exports.string().min(1);
 var retainedRouteSchema = external_exports.object({
@@ -87396,7 +87430,7 @@ function createRetainedChildOutputStore(context2) {
       try {
         target4 = await resolveRecord(context2, recordClaim(context2.phase_instance, binding2));
         if (!target4.ok) return void 0;
-        const record3 = retainedChildOutputSchema.parse(JSON.parse(await readFile19(target4.value.absolute, "utf8")));
+        const record3 = retainedChildOutputSchema.parse(JSON.parse(await readFile20(target4.value.absolute, "utf8")));
         const bytes = new Uint8Array(Buffer.from(record3.output_base64, "base64"));
         if (matches(record3, binding2) && sha256Bytes(bytes) === record3.observed_output_digest) {
           return Object.freeze({
@@ -88527,25 +88561,7 @@ async function runStateTransaction(dependencies, request, prepare) {
 }
 
 // src/review/pinned-context.ts
-import { readFile as readFile20 } from "node:fs/promises";
-import { join as join22, posix } from "node:path";
-
-// src/contracts/utf8.ts
-import { Buffer as Buffer3 } from "node:buffer";
-var strictDecoder = new TextDecoder("utf-8", { fatal: true });
-function decodeUtf8Strict(bytes) {
-  try {
-    return strictDecoder.decode(bytes);
-  } catch {
-    return void 0;
-  }
-}
-function visibleContent(bytes) {
-  const content = decodeUtf8Strict(bytes);
-  return content === void 0 ? Object.freeze({ encoding: "base64", content: Buffer3.from(bytes).toString("base64") }) : Object.freeze({ encoding: "utf8", content });
-}
-
-// src/review/pinned-context.ts
+import { readFile as readFile21 } from "node:fs/promises";
 var CAP_PRIORITY = [
   "approved-upstream",
   "imported-reference",
@@ -88564,7 +88580,6 @@ var CAP_DROPPABLE_KINDS = /* @__PURE__ */ new Set([
   "repo-map"
 ]);
 var EXCERPT_BYTE_BUDGET = 24576;
-var MECHANICAL_TARGET_LIMIT = 32;
 function pinnedContextEntry(kind, label, bytes) {
   return Object.freeze({
     kind,
@@ -88583,19 +88598,6 @@ function utf8SafeHead(bytes, budget) {
     if (decodeUtf8Strict(head) !== void 0) return head;
   }
   return bytes.slice(0, budget);
-}
-function excerptContextEntry(kind, label, bytes) {
-  if (bytes.byteLength <= EXCERPT_BYTE_BUDGET) {
-    return pinnedContextEntry(kind, label, bytes);
-  }
-  return Object.freeze({
-    kind,
-    label,
-    status: "truncated",
-    content_digest: sha256Bytes(bytes),
-    ...visibleContent(utf8SafeHead(bytes, EXCERPT_BYTE_BUDGET)),
-    total_byte_count: bytes.byteLength
-  });
 }
 function omittedForCap(entry, digest12) {
   return Object.freeze({
@@ -88637,7 +88639,7 @@ async function assembleReviewContext(input) {
   if (phase3.kind !== "prd") {
     const upstreams = await assembleUpstreamContext(input);
     if (!upstreams.ok) return upstreams;
-    let mechanical;
+    let mechanical = [];
     if (input.subject.artifact.artifact_kind === "implementation-output") {
       const validationOverrides = await validationOverrideEvidence(input);
       if (!validationOverrides.ok) return validationOverrides;
@@ -88645,12 +88647,8 @@ async function assembleReviewContext(input) {
         ...validationOverrides.value,
         ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject)
       ];
-    } else {
-      const artifactText = decodeUtf8Strict(input.projection_bytes);
-      mechanical = artifactText === void 0 ? Object.freeze([]) : await documentMechanicalEvidence(input.runner, artifactText);
     }
-    const conventions = await conventionsEvidence(input.runner);
-    return ok25(Object.freeze([...upstreams.value, ...priorTriage.value, ...mechanical, ...conventions]));
+    return ok25(Object.freeze([...upstreams.value, ...priorTriage.value, ...mechanical]));
   }
   if (input.subject.artifact.artifact_kind !== "document") {
     return ok25(Object.freeze([...priorTriage.value]));
@@ -88794,7 +88792,7 @@ async function assembleUpstreamContext(input) {
           context: input.authority.context
         });
         if (!target4.ok) return target4;
-        const bytes = new Uint8Array(await readFile20(target4.value.absolute));
+        const bytes = new Uint8Array(await readFile21(target4.value.absolute));
         const reference = imported.value.staged_payload_refs.find((item) => item.legacy_path === mapping.legacy_path);
         if (reference === void 0 || sha256Bytes(bytes) !== reference.digest) return fail24(input.state.phase_instance, "imported-reference-changed");
         entries.push(pinnedContextEntry("imported-reference", relativePath, bytes));
@@ -88808,57 +88806,6 @@ async function assembleUpstreamContext(input) {
     }
   }
   return ok25(Object.freeze(entries));
-}
-var DOC_PATH_MENTION = /`([A-Za-z0-9_@][A-Za-z0-9_@./:-]*)`/gu;
-function mentionedRepositoryPaths(text5) {
-  const paths = /* @__PURE__ */ new Set();
-  for (const match of text5.matchAll(DOC_PATH_MENTION)) {
-    const token = match[1].replace(/:[0-9]+(?:-[0-9]+)?$/u, "");
-    if (token.includes(":") || token.includes("..")) continue;
-    const looksLikePath = token.includes("/") || /^[A-Za-z0-9_@-]+\.[A-Za-z0-9]+$/u.test(token);
-    if (!looksLikePath) continue;
-    paths.add(token);
-  }
-  return [...paths];
-}
-var failedMechanicalEvidence = (kind, label) => unavailableContextEntry(kind, label, "mechanical evidence generation failed for this review");
-async function documentMechanicalEvidence(runner, artifactText) {
-  try {
-    const head = await readHeadCommit(runner);
-    const mentioned = mentionedRepositoryPaths(artifactText);
-    const bounded = mentioned.slice(0, MECHANICAL_TARGET_LIMIT);
-    const entries = [];
-    const pinnedDirectories = /* @__PURE__ */ new Set();
-    for (const path3 of bounded) {
-      const blob = await readCommitTreeBlob(runner, head, path3);
-      if (blob === void 0) {
-        entries.push(unavailableContextEntry(
-          "interface-excerpt",
-          path3,
-          `not found in the pinned tree ${head}`
-        ));
-        continue;
-      }
-      entries.push(excerptContextEntry("interface-excerpt", path3, await readGitBlobBytes(runner, blob.oid)));
-      pinnedDirectories.add(posix.dirname(path3));
-    }
-    if (mentioned.length > bounded.length) {
-      entries.push(unavailableContextEntry(
-        "interface-excerpt",
-        "additional-mentions",
-        `${mentioned.length - bounded.length} further mentioned paths not pinned (mechanical evidence limit)`
-      ));
-    }
-    if (pinnedDirectories.size > 0) {
-      const listing = await readCommitTreePathListing(runner, head, [...pinnedDirectories]);
-      const body = `${listing.paths.join("\n")}${listing.truncated ? "\n\u2026 listing truncated" : ""}
-`;
-      entries.push(pinnedContextEntry("repo-map", `tree ${head}`, new TextEncoder().encode(body)));
-    }
-    return entries;
-  } catch {
-    return [failedMechanicalEvidence("interface-excerpt", "document-mentions")];
-  }
 }
 async function verificationTranscriptEvidence(runner, authority, state, subject) {
   if (subject.artifact.artifact_kind !== "implementation-output") return Object.freeze([]);
@@ -88881,7 +88828,7 @@ async function verificationTranscriptEvidence(runner, authority, state, subject)
   }
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile20(resolved.value.absolute));
+    bytes = new Uint8Array(await readFile21(resolved.value.absolute));
   } catch {
     return [unavailableContextEntry(
       "verification-transcript",
@@ -89014,15 +88961,6 @@ async function priorTriageEvidence(dependencies, state, preloaded) {
   return ok25(Object.freeze(
     record3.value === void 0 || record3.value.response === void 0 && record3.value.dispositions.length === 0 ? [] : [priorTriageContextEntry(record3.value)]
   ));
-}
-async function conventionsEvidence(runner) {
-  let bytes;
-  try {
-    bytes = new Uint8Array(await readFile20(join22(runner.location.worktreeRoot, "CLAUDE.md")));
-  } catch {
-    return Object.freeze([]);
-  }
-  return [excerptContextEntry("conventions", "CLAUDE.md", bytes)];
 }
 function dropCandidateIndex(context2) {
   let candidate;
@@ -89743,7 +89681,7 @@ function stableId(prefix, seed) {
 }
 async function readHazardRegistryBytes(primaryRoot) {
   try {
-    return new Uint8Array(await readFile21(join23(primaryRoot, ".archflow", "hazards.yaml")));
+    return new Uint8Array(await readFile22(join22(primaryRoot, ".archflow", "hazards.yaml")));
   } catch (error51) {
     if (error51.code !== "ENOENT") throw error51;
     return void 0;
@@ -90207,18 +90145,17 @@ async function handleCounterReview(call, context2, dispatchAlreadySerialized = f
       observed_at_revision: state.value.revision
     });
     const result = await runCounterReview({
-      ...produce.value.artifact.artifact_kind !== "implementation-output" ? {} : {
-        prepare_diffs: async () => prepareImplementationDiffs({
-          workspace: await sharedWorkspace.acquire(),
-          repositories: repositoryViews,
-          runners: new Map(session.value.repository_set.members.map((member) => [member.name, member.binding.runner])),
-          subject: produce.value,
-          state: state.value,
-          dependencies: services.dependencies,
-          ...priorTriage.value === void 0 ? {} : { prior_triage: priorTriage.value },
-          signal: context2.signal
-        })
-      },
+      prepare_diffs: async () => prepareReviewDiffs({
+        workspace: await sharedWorkspace.acquire(),
+        repositories: repositoryViews,
+        runners: new Map(session.value.repository_set.members.map((member) => [member.name, member.binding.runner])),
+        subject: produce.value,
+        state: state.value,
+        dependencies: services.dependencies,
+        document_projections: projections.value,
+        ...priorTriage.value === void 0 ? {} : { prior_triage: priorTriage.value },
+        signal: context2.signal
+      }),
       transaction: services.dependencies,
       dispatch: coordinator,
       retry_dispatch: (role2, selected, envelopeDigest, operation) => recovery.run(role2, selected, operation, envelopeDigest),

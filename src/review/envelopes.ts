@@ -1,4 +1,4 @@
-import { canonicalJsonDigest, parseGitOid, type GitOid } from "../contracts/canonical.js";
+import { canonicalJsonDigest, parseGitOid, sha256Bytes, type GitOid } from "../contracts/canonical.js";
 import { REPOSITORY_NAME_PATTERN } from "../contracts/config.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import {
@@ -150,9 +150,11 @@ export type ReviewDiffFile = {
   readonly path: string;
   readonly content_digest: Sha256Digest;
   readonly byte_count: number;
+  /** Complete small text files are included up front; the file remains available either way. */
+  readonly content?: string;
 };
 export type ReviewDiff = {
-  readonly kind: "implementation" | "revision";
+  readonly kind: "implementation" | "document" | "revision";
   readonly subject_digest: Sha256Digest;
   readonly base_subject_digest?: Sha256Digest;
   readonly patch: ReviewDiffFile;
@@ -164,7 +166,7 @@ export type ReviewDiffContext = {
   readonly revision_unavailable?: string;
 };
 
-const DIFF_REVIEW_INSTRUCTION = "Start with the supplied changed-file statistics and complete patch. On follow-up, start with the revision patch when available; the full implementation patch remains available for context. Read large patches in sections, then inspect surrounding code, callers and tests as needed. Patches exclude .archflow/; governing documents and verification evidence are supplied separately.";
+const DIFF_REVIEW_INSTRUCTION = "Start with the supplied changed-file statistics, complete patch, and governing documents together. A diff file's content field already contains its complete text; do not reread that file. On follow-up, start with the revision patch when available; the full patch remains available for context. If content is absent, read the named file, in sections only when too large for one read. Batch independent reads and searches in the same turn. Then inspect surrounding code, callers and tests as needed to assess concrete concerns. Implementation patches exclude .archflow/; document patches cover only this task's reviewed documents. Governing documents and verification evidence are supplied separately.";
 
 export type ReviewEnvelopeInput = {
   readonly diffs?: ReviewDiffContext;
@@ -203,7 +205,7 @@ export type ReviewEnvelopeSeed = Readonly<
  * Both are server-owned so caller prose cannot enter the instruction channel.
  */
 export const REVIEW_INSTRUCTION =
-  "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. Spend the work on reading relevant code and tests and reasoning about concrete failures; this is guidance, not a read quota. Return only actionable feedback: where the issue is, what can fail, and why it matters. Do not reproduce source files, narrate the investigation, restate the design, enumerate everything that is correct, or write a separate review document. Return exactly one JSON object with outcome and feedback. Use outcome=issues_found with nonblank actionable feedback, or outcome=no_issues_found with a short explicit confirmation that the reviewed changes have no remaining actionable issues. Never manufacture a concern to fill the response. No finding taxonomy, IDs, or ordering are required.";
+  "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. Use the supplied artifact, governing documents, and diff together before requesting more evidence. Batch independent file reads and searches in the same turn. Read relevant code and tests to resolve concrete concerns; stop when the evidence supports a decision. This is guidance, not a read quota. Return only actionable feedback: where the issue is, what can fail, and why it matters. Do not reproduce source files, narrate the investigation, restate the design, enumerate everything that is correct, or write a separate review document. Return exactly one JSON object with outcome and feedback. Use outcome=issues_found with nonblank actionable feedback, or outcome=no_issues_found with a short explicit confirmation that the reviewed changes have no remaining actionable issues. Never manufacture a concern to fill the response. No finding taxonomy, IDs, or ordering are required.";
 
 export const GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION =
   "Use the assigned criteria to focus on the changed work, design soundness, interfaces, unsafe behavior, and verification where assigned. Treat them as investigation guidance, not a checklist.";
@@ -655,7 +657,17 @@ function finishEnvelope(
   envelope: PlainJsonValue,
   digestKind: "dispatch-envelope" | "adjudication-envelope",
 ): DispatchEnvelope {
-  const bytes = utf8.encode(`${JSON.stringify(envelope, null, 2)}\n`);
+  let bytes = utf8.encode(`${JSON.stringify(envelope, null, 2)}\n`);
+  const record = envelope as Readonly<Record<string, PlainJsonValue>>;
+  // Inline text is a convenience. Keep complete file references before dropping any evidence.
+  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP && record.diffs !== undefined) {
+    const diffs = record.diffs as ReviewDiffContext;
+    envelope = { ...record, diffs: {
+      ...diffs, full: diffReferences(diffs.full),
+      ...(diffs.revision === undefined ? {} : { revision: diffReferences(diffs.revision) }),
+    } };
+    bytes = utf8.encode(`${JSON.stringify(envelope, null, 2)}\n`);
+  }
   if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) {
     throw new ReviewEnvelopeError(
       createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }),
@@ -669,26 +681,38 @@ function finishEnvelope(
   return Object.freeze({ result_kind: resultKind, bytes, digest, byte_count: bytes.byteLength });
 }
 
+function diffReferences(diff: ReviewDiff): ReviewDiff {
+  const { content: _patch, ...patch } = diff.patch;
+  const { content: _stat, ...stat } = diff.stat;
+  return { ...diff, patch, stat };
+}
+
 function validateDiffs(value: ReviewDiffContext, subjectDigest: Sha256Digest): ReviewDiffContext {
   exactFields(value, ["full", ...(value.revision === undefined ? [] : ["revision"]),
     ...(value.revision_unavailable === undefined ? [] : ["revision_unavailable"])], "review diffs");
-  for (const [kind, diff] of [["implementation", value.full], ["revision", value.revision]] as const) {
-    if (diff === undefined) { if (kind === "implementation") throw new TypeError("full review diff is required"); continue; }
+  for (const [kind, diff] of [["full", value.full], ["revision", value.revision]] as const) {
+    if (diff === undefined) { if (kind === "full") throw new TypeError("full review diff is required"); continue; }
     exactFields(diff, ["kind", "subject_digest", "patch", "stat", ...(kind === "revision" ? ["base_subject_digest"] : [])], "review diff");
-    if (diff.kind !== kind || parseSha256Digest(diff.subject_digest) !== subjectDigest) throw new TypeError("review diff subject mismatch");
+    if ((kind === "full" ? !["implementation", "document"].includes(diff.kind) : diff.kind !== kind) ||
+        parseSha256Digest(diff.subject_digest) !== subjectDigest) throw new TypeError("review diff subject mismatch");
     if (kind === "revision") parseSha256Digest(diff.base_subject_digest);
     for (const [extension, file] of [["patch", diff.patch], ["stat", diff.stat]] as const) {
-      exactFields(file, ["path", "content_digest", "byte_count"], "review diff file");
-      const name = kind === "implementation" ? "full" : `since-${diff.base_subject_digest}`;
+      exactFields(file, ["path", "content_digest", "byte_count", ...(file.content === undefined ? [] : ["content"])], "review diff file");
+      const name = kind === "full" ? "full" : `since-${diff.base_subject_digest}`;
       if (file.path !== `../review-diffs/${name}.${extension}`) throw new TypeError("invalid review diff path");
       parseSha256Digest(file.content_digest);
       parseSafeInteger(file.byte_count);
+      if (file.content !== undefined && (typeof file.content !== "string" ||
+          utf8.encode(file.content).byteLength !== file.byte_count || sha256Bytes(utf8.encode(file.content)) !== file.content_digest)) {
+        throw new TypeError("inline review diff content mismatch");
+      }
     }
   }
   if (value.revision_unavailable !== undefined && (value.revision !== undefined || typeof value.revision_unavailable !== "string" || !value.revision_unavailable.trim())) {
     throw new TypeError("invalid revision diff availability");
   }
-  return value;
+  // A follow-up starts with its delta; avoid preloading the whole change again.
+  return value.revision === undefined ? value : { ...value, full: diffReferences(value.full) };
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
+import { canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
@@ -585,6 +585,34 @@ describe("review dispatch envelopes", () => {
     expect(buildReviewEnvelope({ ...input(), diffs: { full: { ...full, patch: { ...full.patch, content_digest: digest("3") } } } }).digest).not.toBe(first.digest);
     expect(() => buildReviewEnvelope({ ...input(), diffs: { full: { ...full, patch: { ...full.patch, path: "../../outside" } } } })).toThrow(/diff path/);
     expect(() => buildReviewEnvelope({ ...input(), diffs: { full: { ...full, subject_digest: digest("4") } } })).toThrow(/subject mismatch/);
+  });
+
+  it("authenticates inline diff bytes, preloads only the revision on follow-up, and falls back to files at the envelope cap", () => {
+    const file = (path: string, content: string) => ({ path, content,
+      byte_count: Buffer.byteLength(content), content_digest: sha256Bytes(new TextEncoder().encode(content)),
+    });
+    const full = { kind: "document" as const, subject_digest: subject().subject_digest,
+      patch: file("../review-diffs/full.patch", "FULL PATCH\n"), stat: file("../review-diffs/full.stat", "full stat\n") };
+    const revision = { kind: "revision" as const, subject_digest: subject().subject_digest, base_subject_digest: digest("b"),
+      patch: file(`../review-diffs/since-${digest("b")}.patch`, "REVISION PATCH\n"),
+      stat: file(`../review-diffs/since-${digest("b")}.stat`, "revision stat\n") };
+    const decode = (envelope: ReturnType<typeof buildReviewEnvelope>) => JSON.parse(new TextDecoder().decode(envelope.bytes));
+    const delivered = decode(buildReviewEnvelope({ ...input(), diffs: { full, revision } }));
+    expect(delivered.diffs.full.patch).not.toHaveProperty("content");
+    expect(delivered.diffs.revision.patch.content).toBe("REVISION PATCH\n");
+    expect(() => buildReviewEnvelope({ ...input(), diffs: { full: { ...full,
+      patch: { ...full.patch, content: "forged text" } } } })).toThrow(/inline review diff content mismatch/);
+
+    const huge = { ...full, patch: file(full.patch.path, "x".repeat(REVIEW_ENVELOPE_BYTE_CAP)) };
+    const result = buildReviewEnvelope({ ...input(), diffs: { full: huge } });
+    expect(result.byte_count).toBeLessThan(REVIEW_ENVELOPE_BYTE_CAP);
+    expect(decode(result).diffs.full.patch).toEqual({ path: huge.patch.path,
+      content_digest: huge.patch.content_digest, byte_count: huge.patch.byte_count });
+    const { content: _patch, ...patch } = huge.patch;
+    const { content: _stat, ...stat } = huge.stat;
+    expect(result.digest).toBe(buildReviewEnvelope({ ...input(), diffs: { full: { ...huge, patch, stat } } }).digest);
+    expect(decode(buildAdjudicationEnvelope({ ...adjudicationInput(), diffs: { full: huge } })).diffs.full.patch)
+      .not.toHaveProperty("content");
   });
 
   it("keeps contamination fields out of the representable and accepted shapes", () => {

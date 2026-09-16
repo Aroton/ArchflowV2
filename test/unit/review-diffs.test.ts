@@ -8,7 +8,7 @@ import { discoverWorktree } from "../../src/repository/identity.js";
 import { selectCliAdapter } from "../../src/dispatch/cli.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
-import { prepareImplementationDiffs } from "../../src/review/diffs.js";
+import { prepareReviewDiffs } from "../../src/review/diffs.js";
 import { buildReviewEnvelope } from "../../src/review/envelopes.js";
 import type { ProjectionDesired, ProjectionPlan } from "../../src/state/snapshots.js";
 import { cleanupTemporaryRepositories, createTempRepository } from "../helpers/temp-repository.js";
@@ -37,7 +37,7 @@ async function fixture(changes: Record<string, ProjectionDesired>, before: Recor
     repository_identity_digest: digest("repository"), commit: commit as never, projection_plan: projection, snapshot_digest: digest("snapshot") }];
   const workspace = await materializeRepositoryViews(await createDispatchWorkspace("codex-cli", repository.path), repositories);
   workspaces.push(workspace);
-  const input: Parameters<typeof prepareImplementationDiffs>[0] = {
+  const input: Parameters<typeof prepareReviewDiffs>[0] = {
     workspace, repositories, runners: new Map([["primary", discovered.value]]),
     subject: { artifact_digest: digest("current"), artifact: { artifact_kind: "implementation-output" } } as never,
     state: { task_id: "diff-test", phase_instance: "phase-impl-1", authoritative_results: [] } as never,
@@ -60,7 +60,7 @@ describe("implementation review diff files", () => {
     }, { "src/change.ts": "before\n", "src/[literal].ts": "literal before\n", "src/delete.ts": "deleted content\n", "src/old.ts": "rename identity\n", "run.sh": "#!/bin/sh\n",
       ".archflow/tasks/diff-test/prd.md": "PRIVATE OLD\n", ".archflow/constitution/rule.md": "PRIVATE RULE\n" });
     h.repository.write("src/change.ts", "unreviewed live drift\n");
-    const result = await prepareImplementationDiffs(h.input);
+    const result = await prepareReviewDiffs(h.input);
     const patch = await h.read(result.full.patch.path);
     expect(patch).toContain("-before\n+after");
     expect(patch).toContain("-literal before\n+literal after");
@@ -73,6 +73,7 @@ describe("implementation review diff files", () => {
     expect(patch).not.toMatch(/PRIVATE|\.archflow|unreviewed live drift|unrelated.txt/);
     expect(result.full.patch.byte_count).toBe(Buffer.byteLength(patch));
     expect(result.full.patch.content_digest).toBe(sha256Bytes(bytes(patch)));
+    expect(result.full.patch.content).toBe(patch);
     expect((await lstat(join(h.input.workspace.repository_view_root!, result.full.patch.path))).mode & 0o222).toBe(0);
   });
 
@@ -84,8 +85,9 @@ describe("implementation review diff files", () => {
   ])("delivers a complete large diff and source view through $adapter ($provider)", async route => {
     const text = `${"a substantive changed line with enough content for a large patch\n".repeat(24_000)}FINAL PATCH LINE\n`;
     const h = await fixture({ "large.txt": present(text) });
-    const result = await prepareImplementationDiffs(h.input);
+    const result = await prepareReviewDiffs(h.input);
     expect(result.full.patch.byte_count).toBeGreaterThan(1_048_576);
+    expect(result.full.patch).not.toHaveProperty("content");
     expect(await h.read(result.full.patch.path)).toContain("+FINAL PATCH LINE\n");
     const envelope = buildReviewEnvelope({ artifact: "implementation metadata", diffs: { full: result.full }, context: [],
       rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "correctness", text: "Review behavior", blocking: true }] },
@@ -134,13 +136,22 @@ describe("implementation review diff files", () => {
     }
   });
 
+  it("keeps non-UTF-8 patch bytes in the complete file instead of injecting replacement characters", async () => {
+    const h = await fixture({ "legacy.txt": { ...present(""), bytes: new Uint8Array([0xff, 10]) } as ProjectionDesired });
+    const output = await prepareReviewDiffs(h.input);
+    const patch = await readFile(join(h.input.workspace.repository_view_root!, output.full.patch.path));
+    expect(patch.includes(0xff)).toBe(true);
+    expect(output.full.patch).not.toHaveProperty("content");
+    expect(output.full.patch.content_digest).toBe(sha256Bytes(patch));
+  });
+
   it("uses each selected reviewer's last subject, including a skipped round and reverted output", async () => {
     const h = await fixture({ "change.txt": present("current\n") }, { "change.txt": "baseline\n", "reverted.txt": "original\n" });
     const first = digest("first"), second = digest("second");
     const refs = [first, second].map((value, i) => ({ phase_instance: "phase-impl-1", step: "produce", result_digest: value, result_id: `result-${i}`, input_fingerprint: digest("input") }));
     const oldPlans = new Map([[first, plan({ "change.txt": present("first\n"), "reverted.txt": present("temporary\n") })],
       [second, plan({ "change.txt": present("second\n") })]]);
-    const output = await prepareImplementationDiffs({ ...h.input,
+    const output = await prepareReviewDiffs({ ...h.input,
       state: { ...h.input.state, superseded_production_results: refs } as never,
       prior_triage: { response: { decision: "revise", rationale: "Fix issues", reviewers: [{ reviewer_id: "general", request: "Check fix" }, { reviewer_id: "test", request: "Check tests" }] },
         source_review: { evidence: { schema_version: "4", previous_reports: [{ reviewer_id: "general", subject_digest: first }], reports: [{ reviewer_id: "test", subject_digest: second }] } } } as never,
@@ -180,7 +191,7 @@ describe("implementation review diff files", () => {
     }];
     const workspace = await materializeRepositoryViews(await createDispatchWorkspace("codex-cli", h.repository.path), repositories);
     workspaces.push(workspace);
-    const output = await prepareImplementationDiffs({ ...h.input, workspace, repositories,
+    const output = await prepareReviewDiffs({ ...h.input, workspace, repositories,
       runners: new Map([...h.input.runners, ["api", discovered.value]]) });
     const patch = await readFile(join(workspace.repository_view_root!, output.full.patch.path), "utf8");
     expect(patch).toContain("b/primary/same.ts");
@@ -193,18 +204,75 @@ describe("implementation review diff files", () => {
   it("reports a full-diff preparation failure without returning partial descriptors", async () => {
     const h = await fixture({ "source.ts": present("new code\n") });
     await writeFile(join(h.input.workspace.root, "review-diffs"), "occupied");
-    await expect(prepareImplementationDiffs(h.input)).rejects.toMatchObject({
+    await expect(prepareReviewDiffs(h.input)).rejects.toMatchObject({
       code: "IO_ERROR", diagnostic: { parameters: { operation: "review-diff-generation" } },
     });
   });
 
   it("reports an unavailable historical baseline and supplies an empty full diff when only workflow files changed", async () => {
     const h = await fixture({ ".archflow/tasks/diff-test/prd.md": present("private\n") });
-    const output = await prepareImplementationDiffs({ ...h.input, prior_triage: {
+    const output = await prepareReviewDiffs({ ...h.input, prior_triage: {
       response: { decision: "revise", rationale: "Recheck", reviewers: [{ reviewer_id: "general", request: "Check" }] },
     } as never });
     expect(await h.read(output.full.patch.path)).toBe("");
     expect(output.reviewers.get("general")).toMatchObject({ full: output.full, revision_unavailable: expect.any(String) });
     expect(output.reviewers.get("general")).not.toHaveProperty("revision");
+  });
+});
+
+describe("document review diffs", () => {
+  it("uses each reviewer's retained document baseline and includes governing document revisions without live drift", async () => {
+    const prefix = ".archflow/tasks/diff-test/";
+    const h = await fixture({}, {
+      [`${prefix}phases/1/design.md`]: "committed design\n",
+      [`${prefix}design.md`]: "committed architecture\n",
+      ".archflow/tasks/other/design.md": "OTHER TASK\n",
+    });
+    const first = digest("document-first"), second = digest("document-second");
+    const refs = [first, second].map((value, i) => ({ phase_instance: "phase-design-1", step: "produce", result_digest: value,
+      result_id: `result-${i}`, input_fingerprint: digest("input") }));
+    const projections = [
+      { path: "phases/1/design.md", bytes: bytes("current design\n"), digest: digest("current design\n") },
+      { path: "design.md", bytes: bytes("current architecture\n"), digest: digest("current architecture\n") },
+    ];
+    const oldPlans = new Map([[first, plan({ [`${prefix}phases/1/design.md`]: present("first design\n"), [`${prefix}design.md`]: present("first architecture\n") })],
+      [second, plan({ [`${prefix}phases/1/design.md`]: present("second design\n"), [`${prefix}design.md`]: present("second architecture\n") })]]);
+    h.repository.write(`${prefix}phases/1/design.md`, "UNREVIEWED LIVE DRIFT\n");
+    const output = await prepareReviewDiffs({ ...h.input,
+      subject: { ...h.input.subject, artifact: { artifact_kind: "document" } } as never,
+      document_projections: projections as never,
+      state: { ...h.input.state, phase_instance: "phase-design-1", superseded_production_results: refs } as never,
+      prior_triage: { response: { decision: "revise", reviewers: [{ reviewer_id: "general" }, { reviewer_id: "test" }] },
+        source_review: { evidence: { schema_version: "5", previous_reports: [{ reviewer_id: "general", subject_digest: first }],
+          reports: [{ reviewer_id: "test", subject_digest: second }] } } } as never,
+      dependencies: {
+        load_retained_manifest: async ref => ({ ok: true, value: { manifest: { value: { artifact_digest: ref.result_digest } } } }) as never,
+        load_retained_result: async ref => ({ ok: true, value: { prepared: { manifest: { value: { source_artifact: {
+          artifact_kind: "document", task_id: "diff-test", phase_instance: "phase-design-1",
+          document_path: "phases/1/design.md", projection_target: `${prefix}phases/1/design.md`,
+          additional_documents: [{ document_path: "design.md", projection_target: `${prefix}design.md` }],
+        } } } }, projection_plan: oldPlans.get(ref.result_digest) } }) as never,
+      },
+    });
+    expect(output.full.kind).toBe("document");
+    expect(output.full.patch.content).toContain("-committed design\n+current design");
+    for (const [reviewer, previous] of [["general", "first"], ["test", "second"]]) {
+      const diff = output.reviewers.get(reviewer!)!.revision!;
+      expect(diff.patch.content).toContain(`-${previous} design\n+current design`);
+      expect(diff.patch.content).toContain(`-${previous} architecture\n+current architecture`);
+      expect(await h.read(diff.patch.path)).toBe(diff.patch.content);
+      expect(diff.patch.content).not.toMatch(/OTHER TASK|UNREVIEWED LIVE DRIFT/);
+    }
+  });
+
+  it("keeps the current document reviewable when historical document bytes are unavailable", async () => {
+    const h = await fixture({});
+    const output = await prepareReviewDiffs({ ...h.input,
+      subject: { ...h.input.subject, artifact: { artifact_kind: "document" } } as never,
+      document_projections: [{ path: "design.md", bytes: bytes("current design\n"), digest: digest("current design\n") }] as never,
+      prior_triage: { response: { decision: "revise", reviewers: [{ reviewer_id: "general" }] } } as never,
+    });
+    expect(output.full.patch.content).toContain("+current design");
+    expect(output.reviewers.get("general")).toMatchObject({ full: output.full, revision_unavailable: expect.any(String) });
   });
 });

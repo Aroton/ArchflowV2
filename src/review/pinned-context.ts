@@ -3,7 +3,7 @@ import type { ReviewResponse } from "../contracts/triage.js";
 import { reviewFindings } from "../contracts/review.js";
 import { readFile } from "node:fs/promises";
 import type { SafeInteger } from "../contracts/evidence.js";
-import { join, posix } from "node:path";
+import { posix } from "node:path";
 
 import { canonicalJsonBytes, sha256Bytes } from "../contracts/canonical.js";
 import { decodeUtf8Strict, visibleContent } from "../contracts/utf8.js";
@@ -13,12 +13,6 @@ import { parseTaskPathClaim, userAskClaim } from "../contracts/path-claims.js";
 import { decodePhaseInstance, type PhaseInstanceId } from "../contracts/phase-instance.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { reviewFindingDisplayDetail, type ReviewEvidence } from "../contracts/review.js";
-import {
-  readCommitTreeBlob,
-  readCommitTreePathListing,
-  readGitBlobBytes,
-  readHeadCommit,
-} from "../repository/git.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
 import { openResolved, resolveTaskPath, resolveTaskWorkspacePath, verificationTranscriptClaim } from "../repository/paths.js";
 import type { TransactionAuthority } from "../state/authority.js";
@@ -66,9 +60,6 @@ const CAP_DROPPABLE_KINDS: ReadonlySet<PinnedContextKind> = new Set([
 
 /** Per-entry head budget for mechanical evidence; the full-file digest stays recorded. */
 const EXCERPT_BYTE_BUDGET = 24_576;
-
-/** Bounded number of mechanically resolved evidence targets per review. */
-const MECHANICAL_TARGET_LIMIT = 32;
 
 /** Pins evidence bytes whole, recording the digest of exactly those bytes. */
 export function pinnedContextEntry(
@@ -217,7 +208,7 @@ export async function assembleReviewContext(input: {
   if (phase.kind !== "prd") {
     const upstreams = await assembleUpstreamContext(input);
     if (!upstreams.ok) return upstreams;
-    let mechanical: readonly PinnedContextEntry[];
+    let mechanical: readonly PinnedContextEntry[] = [];
     if (input.subject.artifact.artifact_kind === "implementation-output") {
       const validationOverrides = await validationOverrideEvidence(input);
       if (!validationOverrides.ok) return validationOverrides;
@@ -225,14 +216,9 @@ export async function assembleReviewContext(input: {
         ...validationOverrides.value,
         ...await verificationTranscriptEvidence(input.runner, input.authority, input.state, input.subject),
       ];
-    } else {
-      const artifactText = decodeUtf8Strict(input.projection_bytes);
-      mechanical = artifactText === undefined
-        ? Object.freeze([])
-        : await documentMechanicalEvidence(input.runner, artifactText);
     }
-    const conventions = await conventionsEvidence(input.runner);
-    return ok(Object.freeze([...upstreams.value, ...priorTriage.value, ...mechanical, ...conventions]));
+    // Source, conventions, and navigation are already available in the pinned repository view.
+    return ok(Object.freeze([...upstreams.value, ...priorTriage.value, ...mechanical]));
   }
   if (input.subject.artifact.artifact_kind !== "document") {
     return ok(Object.freeze([...priorTriage.value]));
@@ -458,54 +444,6 @@ export function mentionedRepositoryPaths(text: string): readonly string[] {
     paths.add(token);
   }
   return [...paths];
-}
-
-const failedMechanicalEvidence = (kind: PinnedContextKind, label: string): PinnedContextEntry =>
-  unavailableContextEntry(kind, label, "mechanical evidence generation failed for this review");
-
-/**
- * Pins interface excerpts for the repository paths a document names, plus a generated repo map of
- * the directories those paths occupy, all read from the immutable HEAD commit tree so the digest
- * names reproducible bytes. Never fails closed: extraction misses and generation failures surface
- * as `unavailable` entries the rubric routes to `unverifiable-claims`.
- */
-async function documentMechanicalEvidence(
-  runner: RootBoundGitRunner,
-  artifactText: string,
-): Promise<readonly PinnedContextEntry[]> {
-  try {
-    const head = await readHeadCommit(runner);
-    const mentioned = mentionedRepositoryPaths(artifactText);
-    const bounded = mentioned.slice(0, MECHANICAL_TARGET_LIMIT);
-    const entries: PinnedContextEntry[] = [];
-    const pinnedDirectories = new Set<string>();
-    for (const path of bounded) {
-      const blob = await readCommitTreeBlob(runner, head, path);
-      if (blob === undefined) {
-        entries.push(unavailableContextEntry(
-          "interface-excerpt", path, `not found in the pinned tree ${head}`,
-        ));
-        continue;
-      }
-      entries.push(excerptContextEntry("interface-excerpt", path, await readGitBlobBytes(runner, blob.oid)));
-      pinnedDirectories.add(posix.dirname(path));
-    }
-    if (mentioned.length > bounded.length) {
-      entries.push(unavailableContextEntry(
-        "interface-excerpt",
-        "additional-mentions",
-        `${mentioned.length - bounded.length} further mentioned paths not pinned (mechanical evidence limit)`,
-      ));
-    }
-    if (pinnedDirectories.size > 0) {
-      const listing = await readCommitTreePathListing(runner, head, [...pinnedDirectories]);
-      const body = `${listing.paths.join("\n")}${listing.truncated ? "\n… listing truncated" : ""}\n`;
-      entries.push(pinnedContextEntry("repo-map", `tree ${head}`, new TextEncoder().encode(body)));
-    }
-    return entries;
-  } catch {
-    return [failedMechanicalEvidence("interface-excerpt", "document-mentions")];
-  }
 }
 
 /**
@@ -752,17 +690,6 @@ export async function priorTriageEvidence(
       ? []
       : [priorTriageContextEntry(record.value)],
   ));
-}
-
-/** Pins the repository's conventions document from the worktree; absent conventions pin nothing. */
-async function conventionsEvidence(runner: RootBoundGitRunner): Promise<readonly PinnedContextEntry[]> {
-  let bytes: Uint8Array;
-  try {
-    bytes = new Uint8Array(await readFile(join(runner.location.worktreeRoot, "CLAUDE.md")));
-  } catch {
-    return Object.freeze([]);
-  }
-  return [excerptContextEntry("conventions", "CLAUDE.md", bytes)];
 }
 
 function dropCandidateIndex(context: readonly PinnedContextEntry[]): number | undefined {

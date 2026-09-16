@@ -11,7 +11,7 @@ import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import { shareRepositoryViewWorkspace, projectRepositoryWorkspaceBinding, type DispatchRepositoryViewPlan } from "../../src/dispatch/workspace.js";
 import { createGitRunner } from "../../src/repository/git.js";
 import { discoverWorktree } from "../../src/repository/identity.js";
-import { prepareImplementationDiffs } from "../../src/review/diffs.js";
+import { prepareReviewDiffs } from "../../src/review/diffs.js";
 import { buildReviewEnvelope } from "../../src/review/envelopes.js";
 import { reviewAssignment } from "../../src/review/rubrics.js";
 import type { ProjectionPlan } from "../../src/state/snapshots.js";
@@ -53,7 +53,7 @@ describe.skipIf(!available)("real reviewer filesystem access", () => {
       const discovered = await discoverWorktree(createGitRunner({ cwd: repository.path }), task.services.authority.context);
       if (!discovered.ok) throw new Error(discovered.error.code);
       const subjectDigest = canonicalJsonDigest({ subject: randomUUID() });
-      const prepared = await prepareImplementationDiffs({
+      const prepared = await prepareReviewDiffs({
         workspace: await shared.acquire(), repositories, runners: new Map([["primary", discovered.value]]),
         subject: { artifact_digest: subjectDigest, artifact: { artifact_kind: "implementation-output" } } as never,
         state: { task_id: task.taskId, phase_instance: "phase-impl-1", authoritative_results: [] } as never,
@@ -61,9 +61,12 @@ describe.skipIf(!available)("real reviewer filesystem access", () => {
       });
       const rubric = parseRubricV1({ schema_version: "1", kind: "implementation", mode: "adversarial",
         criteria: [{ id: "file-access", text: "Verify filesystem access by quoting the requested exact values; report any access failure honestly.", blocking: true }] });
+      // Exercise the file-only fallback: inline text would bypass the access being tested.
+      const { content: _patchContent, ...patch } = prepared.full.patch;
+      const { content: _statContent, ...stat } = prepared.full.stat;
       const envelope = buildReviewEnvelope({
         artifact: "This is a filesystem-access acceptance test. Read context.ts from the repository view and the complete patch at diffs.full.patch.path. In your report quote the exact sourceToken string from context.ts and the exact deleted previousToken string from the patch. Neither value is supplied here. You must read both files; if tools or access are unavailable, explicitly report that failure. Also read diffs.full.stat.path and name the changed file. Do not infer values from metadata.",
-        diffs: { full: prepared.full }, context: [], rubric,
+        diffs: { full: { ...prepared.full, patch, stat } }, context: [], rubric,
         assignment: reviewAssignment("general", "general", "phase-impl", rubric, { expected_upstream_digests: [] }),
         workspace: projectRepositoryWorkspaceBinding(repositories),
         subject: { task_id: task.taskId, phase_instance: parsePhaseInstanceId("phase-impl-1"),

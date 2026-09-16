@@ -6531,7 +6531,7 @@
       "imports": []
     },
     "src/mcp/handlers/counter-review.ts": {
-      "bytes": 38855,
+      "bytes": 38782,
       "format": "esm",
       "imports": [
         {
@@ -7729,7 +7729,7 @@
       ]
     },
     "src/review/diffs.ts": {
-      "bytes": 11462,
+      "bytes": 13552,
       "format": "esm",
       "imports": [
         {
@@ -7774,8 +7774,18 @@
         },
         {
           "kind": "import-statement",
+          "original": "../contracts/utf8.js",
+          "path": "src/contracts/utf8.ts"
+        },
+        {
+          "kind": "import-statement",
           "original": "../repository/git.js",
           "path": "src/repository/git.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../state/produce-subject.js",
+          "path": "src/state/produce-subject.ts"
         },
         {
           "kind": "import-statement",
@@ -7790,7 +7800,7 @@
       "imports": []
     },
     "src/review/envelopes.ts": {
-      "bytes": 42859,
+      "bytes": 44814,
       "format": "esm",
       "imports": [
         {
@@ -7958,7 +7968,7 @@
       ]
     },
     "src/review/pinned-context.ts": {
-      "bytes": 35308,
+      "bytes": 32219,
       "format": "esm",
       "imports": [
         {
@@ -8010,11 +8020,6 @@
           "kind": "import-statement",
           "original": "../contracts/review.js",
           "path": "src/contracts/review.ts"
-        },
-        {
-          "kind": "import-statement",
-          "original": "../repository/git.js",
-          "path": "src/repository/git.ts"
         },
         {
           "kind": "import-statement",
@@ -10921,7 +10926,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2444481,
+      "bytes": 2444654,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12219,7 +12224,7 @@
           "bytesInOutput": 1897
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 2534
+          "bytesInOutput": 2707
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 27111
@@ -12362,7 +12367,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3779776,
+      "bytes": 3778373,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12959,6 +12964,11 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:buffer"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:fs/promises"
         },
         {
@@ -13000,16 +13010,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:buffer"
         }
       ],
       "inputs": {
@@ -13812,7 +13812,7 @@
           "bytesInOutput": 2638
         },
         "src/mcp/handlers/counter-review.ts": {
-          "bytesInOutput": 27218
+          "bytesInOutput": 27148
         },
         "src/mcp/handlers/errors.ts": {
           "bytesInOutput": 908
@@ -13854,7 +13854,7 @@
           "bytesInOutput": 8557
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 21320
+          "bytesInOutput": 20052
         },
         "src/repository/identity.ts": {
           "bytesInOutput": 6457
@@ -13875,13 +13875,13 @@
           "bytesInOutput": 27382
         },
         "src/review/diffs.ts": {
-          "bytesInOutput": 9041
+          "bytesInOutput": 10690
         },
         "src/review/effort-policy.ts": {
           "bytesInOutput": 1558
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 29450
+          "bytesInOutput": 30976
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 27852
@@ -13890,7 +13890,7 @@
           "bytesInOutput": 2107
         },
         "src/review/pinned-context.ts": {
-          "bytesInOutput": 21655
+          "bytesInOutput": 18424
         },
         "src/review/reviewer-tags.ts": {
           "bytesInOutput": 118

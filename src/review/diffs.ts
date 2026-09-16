@@ -2,17 +2,18 @@ import { isFeedbackReview } from "../contracts/review.js";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { chmod, lstat, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 import { createProjectError } from "../contracts/errors.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
+import { decodeUtf8Strict } from "../contracts/utf8.js";
 import type { DispatchRepositoryViewPlan, DispatchWorkspace } from "../dispatch/workspace.js";
 import { readCommitTreeBlob, readGitBlobBytes } from "../repository/git.js";
 import type { RootBoundGitRunner } from "../repository/identity.js";
-import type { CurrentProduceSubject } from "../state/produce-subject.js";
+import { documentProjectionDescriptors, type CurrentProduceSubject, type ProduceProjection } from "../state/produce-subject.js";
 import { retainedResultReferences } from "../state/retained-result-graph.js";
 import type { ProjectionDesired, ProjectionPlan } from "../state/snapshots.js";
 import type { TransactionDependencies, RetainedResultInstallation } from "../state/transaction.js";
@@ -29,6 +30,7 @@ type DiffInput = Readonly<{
   repositories: DispatchRepositoryViewPlan;
   runners: ReadonlyMap<string, RootBoundGitRunner>;
   subject: CurrentProduceSubject;
+  document_projections?: readonly ProduceProjection[];
   state: TaskStateV1;
   dependencies: Pick<TransactionDependencies, "load_retained_manifest" | "load_retained_result">;
   prior_triage?: PriorTriageRecord;
@@ -37,7 +39,9 @@ type DiffInput = Readonly<{
 
 const visiblePath = (path: string): boolean => path !== ".archflow" && !path.startsWith(".archflow/");
 const ordinal = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
-const UNAVAILABLE = "The previous reviewed implementation could not be reconstructed. Start with the complete implementation diff and the supplied prior feedback.";
+const UNAVAILABLE = "The previous reviewed subject could not be reconstructed. Start with the full patch, current artifact, and supplied prior feedback.";
+// Large patches remain complete on disk, without consuming the control envelope's byte budget.
+const INLINE_DIFF_BYTE_LIMIT = 131_072;
 
 /** Materialize only authenticated paths, without following repository-owned symlinks. */
 async function writeImage(root: string, path: string, image: ProjectionDesired): Promise<void> {
@@ -92,7 +96,10 @@ async function gitDiffFile(
   try {
     await Promise.all([exited, pipeline(child.stdout, createWriteStream(output, { flags: "wx", mode: 0o600 }))]);
     await chmod(output, 0o444);
-    return { content_digest: hash.digest("hex") as Sha256Digest, byte_count: bytes };
+    const content = bytes <= INLINE_DIFF_BYTE_LIMIT ? decodeUtf8Strict(await readFile(output)) : undefined;
+    return { content_digest: hash.digest("hex") as Sha256Digest, byte_count: bytes,
+      ...(content === undefined ? {} : { content }),
+    };
   } finally {
     clearTimeout(deadline);
     if (child.exitCode === null) child.kill("SIGKILL");
@@ -109,9 +116,18 @@ async function comparison(
   await mkdir(join(trees, "b"), { recursive: true });
   try {
     for (const repository of input.repositories) {
+      const document = input.subject.artifact.artifact_kind === "document";
+      if (document && repository.name !== "primary") continue;
+      const prefix = `.archflow/tasks/${input.state.task_id}/`;
+      if (document && input.document_projections === undefined) throw new TypeError("document projections are required");
       const before = new Map(previous?.plans.get(repository.name)?.entries.map(entry => [String(entry.path), entry.desired]));
-      const after = new Map(repository.projection_plan?.entries.map(entry => [String(entry.path), entry.desired]));
-      const paths = [...new Set([...before.keys(), ...after.keys()])].filter(visiblePath).sort(ordinal);
+      const after = document
+        ? new Map(input.document_projections!.map(projection => [`${prefix}${projection.path}`, {
+          state: "present", file_type: "regular", mode: "100644", bytes: projection.bytes,
+        } as ProjectionDesired]))
+        : new Map(repository.projection_plan?.entries.map(entry => [String(entry.path), entry.desired]));
+      const paths = [...new Set([...before.keys(), ...after.keys()])]
+        .filter(path => document ? path.startsWith(prefix) : visiblePath(path)).sort(ordinal);
       const runner = input.runners.get(repository.name);
       if (runner === undefined) throw new TypeError("review diff repository is unavailable");
       for (const path of paths) {
@@ -123,7 +139,8 @@ async function comparison(
             mode: blob.mode, bytes: await readGitBlobBytes(runner, blob.oid),
           } as ProjectionDesired;
         }
-        const display = input.repositories.length === 1 ? path : `${repository.name}/${path}`;
+        const display = document ? path.slice(prefix.length)
+          : input.repositories.length === 1 ? path : `${repository.name}/${path}`;
         await writeImage(join(trees, "a"), display, before.get(path) ?? baseline);
         await writeImage(join(trees, "b"), display, after.get(path) ?? baseline);
       }
@@ -134,7 +151,7 @@ async function comparison(
     const stat = await gitDiffFile(trees, statPath, ["--numstat", "--summary"], input.signal);
     const childPath = (path: string): string => relative(input.workspace.repository_view_root!, path);
     return {
-      kind: previous === undefined ? "implementation" : "revision",
+      kind: previous === undefined ? (input.subject.artifact.artifact_kind === "document" ? "document" : "implementation") : "revision",
       subject_digest: input.subject.artifact_digest,
       ...(previous === undefined ? {} : { base_subject_digest: previous.digest }),
       patch: { path: childPath(patchPath), ...patch },
@@ -160,6 +177,19 @@ async function previousPlans(input: DiffInput, digest: Sha256Digest): Promise<Re
   if (!loaded.ok) return undefined;
   const retained: RetainedResultInstallation = loaded.value;
   const artifact = retained.prepared.manifest.value.source_artifact;
+  if (input.subject.artifact.artifact_kind === "document") {
+    if (artifact.artifact_kind !== "document" || artifact.task_id !== input.state.task_id ||
+        artifact.phase_instance !== input.state.phase_instance) return undefined;
+    const documents = documentProjectionDescriptors(artifact);
+    const current = new Set(input.document_projections?.map(projection => String(projection.path)));
+    // A changed document set needs additional current authority for the omitted documents.
+    // Fall back explicitly instead of manufacturing removals or reading live task files.
+    if (documents.length !== current.size || documents.some(doc => !current.has(doc.document_path))) return undefined;
+    const targets = new Set(documents.map(doc => String(doc.projection_target)));
+    const entries = retained.projection_plan.entries.filter(entry => targets.has(String(entry.path)));
+    if (entries.length !== targets.size) return undefined;
+    return new Map([["primary", { ...retained.projection_plan, entries }]]);
+  }
   if (artifact.artifact_kind !== "implementation-output" || artifact.task_id !== input.state.task_id ||
       artifact.phase_instance !== input.state.phase_instance || artifact.base_commit !== input.repositories[0]?.commit) return undefined;
   const plans = new Map<string, ProjectionPlan>([["primary", retained.projection_plan]]);
@@ -172,9 +202,8 @@ async function previousPlans(input: DiffInput, digest: Sha256Digest): Promise<Re
   return plans;
 }
 
-/** Full implementation context plus one cached delta per distinct reviewer baseline. */
-export async function prepareImplementationDiffs(input: DiffInput): Promise<PreparedReviewDiffs> {
-  if (input.subject.artifact.artifact_kind !== "implementation-output") throw new TypeError("diffs require implementation output");
+/** Full subject diff plus one cached delta per distinct reviewer baseline. */
+export async function prepareReviewDiffs(input: DiffInput): Promise<PreparedReviewDiffs> {
   let full: ReviewDiff;
   try { full = await comparison(input, "full"); }
   catch {
