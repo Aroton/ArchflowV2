@@ -10,7 +10,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { TaskInitializationV1 } from "../../src/contracts/durable-task-initialization.js";
 import { parseSafeCode, parseTaskSlug, type TaskSlug } from "../../src/contracts/evidence.js";
@@ -139,9 +139,10 @@ export async function createTaskWorkspace(options: TaskWorkspaceOptions): Promis
       rmSync(join(root, ".archflow", "constitution"), { recursive: true, force: true });
       mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
       for (const [filename, bytes] of Object.entries(options.constitutionBytes)) {
-        if (!/^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(filename)) {
+        if (!/^(?:(?:default|custom)\/)?[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u.test(filename)) {
           throw new TypeError(`invalid constitution fixture filename: ${filename}`);
         }
+        mkdirSync(dirname(join(root, ".archflow", "constitution", filename)), { recursive: true });
         writeFileSync(join(root, ".archflow", "constitution", filename), bytes);
       }
     }

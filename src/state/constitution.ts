@@ -5,6 +5,7 @@ import {
 } from "../contracts/canonical.js";
 import {
   parseConstitutionRuleFiles,
+  CONSTITUTION_RULE_PATH,
   type ConstitutionRegistry,
   type ConstitutionRuleV1,
 } from "../contracts/constitution.js";
@@ -36,7 +37,6 @@ import type { RootBoundGitRunner } from "../repository/identity.js";
 import { resolveRepositoryPath } from "../repository/paths.js";
 
 const CONSTITUTION_DIRECTORY = ".archflow/constitution";
-const RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 export type ResolvedConstitution = Readonly<{
@@ -220,7 +220,7 @@ async function readConstitutionTreeFiles(
 ): Promise<readonly Readonly<{ path: ReturnType<typeof parseRepositoryPathClaim>; oid: GitOid }>[]> {
   const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
   return Object.freeze(listed
-    .filter((entry) => RULE_FILE.test(entry.path))
+    .filter((entry) => CONSTITUTION_RULE_PATH.test(entry.path))
     .map((entry) => Object.freeze({
       path: parseRepositoryPathClaim(entry.path),
       oid: parseGitOid(entry.oid),

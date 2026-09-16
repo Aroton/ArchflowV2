@@ -93,8 +93,8 @@ const createManifest = (): Record<string, unknown> => ({
     schemas: ["src/contracts/schemas/v1/release-manifest.schema.json"],
     workflow: "assets/workflow.yaml",
     constitution: [
-      "assets/constitution/00-process.md",
       "assets/constitution/README.md",
+      "assets/constitution/default/00-process.md",
     ],
   },
   build_entries: [

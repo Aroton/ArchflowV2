@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "936bca7916c50344f65941921f77139b3d3849c19b934c73af432692d6eacfba",
+      "digest": "a3691348f47cd5616b81b871b8df60981b29f9de5a5f1be5d9b9efc10c9d3063",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 2431932
+      "size": 2437344
     },
     {
-      "digest": "cd8079315e64489ec9da916f70d6d1bb824886664a124dfa0a26e596fb41311e",
+      "digest": "f5bb157207d8b427231f82787c4ffa5cc261a742c4b681b3ce9bf17b5a3155df",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3713933
+      "size": 3714991
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,10 +210,10 @@
       "role": "manifest"
     },
     {
-      "digest": "ae38ec616d228667ea6397d12b30397965141501631b3baa2e0fc8faf3b69832",
+      "digest": "4429793bc6fa35237e806e539dfdbf7560ed4dafe130707a3cb080a0b8cea188",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 388629
+      "size": 389613
     }
   ],
   "build_entries": [
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "cd8079315e64489ec9da916f70d6d1bb824886664a124dfa0a26e596fb41311e",
+  "bundle_digest": "f5bb157207d8b427231f82787c4ffa5cc261a742c4b681b3ce9bf17b5a3155df",
   "bundle_inputs": [
     {
       "bytes_in_output": 34870,
@@ -2541,14 +2541,14 @@
       "size": 6458
     },
     {
-      "bytes_in_output": 4560,
-      "digest": "c02b69b681d7db66fd10e837ebd1b5efedc8978fddbec26aa99da369c120057d",
+      "bytes_in_output": 6291,
+      "digest": "650f985dabf66a552b7cd39b0080ca565290fbdfd00621fba72b7ce3913cd7dd",
       "key": "src/contracts/constitution.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/constitution.ts"
       },
-      "size": 3940
+      "size": 5102
     },
     {
       "bytes_in_output": 6411,
@@ -3161,7 +3161,7 @@
       "size": 11691
     },
     {
-      "bytes_in_output": 10822,
+      "bytes_in_output": 10824,
       "digest": "75762b47ee3c19d72fd2794039b4406fe6a31dec4e1818238b6ed33d0b5a9530",
       "key": "src/dispatch/failure-observation.ts",
       "origin": {
@@ -3231,14 +3231,24 @@
       "size": 16984
     },
     {
-      "bytes_in_output": 7520,
-      "digest": "28208edc6d049177671b9f66368553ba1eb49492bdac7ac3814b5c0d22080a18",
+      "bytes_in_output": 9469,
+      "digest": "0ba6a9c3f581303965f7a76175cc33ec8acc3edf76e2a569a716f92421576fcd",
       "key": "src/init/assets.ts",
       "origin": {
         "kind": "repository",
         "path": "src/init/assets.ts"
       },
-      "size": 7117
+      "size": 9265
+    },
+    {
+      "bytes_in_output": 2740,
+      "digest": "23a66ac892ce6f0287a01d1b59d3bf47d6a0d9d495cbc926b7c9ac0ac648cc2a",
+      "key": "src/init/constitution.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/init/constitution.ts"
+      },
+      "size": 3526
     },
     {
       "bytes_in_output": 8378,
@@ -3341,14 +3351,14 @@
       "size": 23927
     },
     {
-      "bytes_in_output": 5110,
-      "digest": "b82b8a6b10c25237f0cae26810c08c2916ce35b2962d2137c73b6b14f557e9a2",
+      "bytes_in_output": 5167,
+      "digest": "d7af31b633ba30f096ce33b819ab58a4d5ebf4f79074e15b7b062cd254b0bb89",
       "key": "src/local/main.ts",
       "origin": {
         "kind": "repository",
         "path": "src/local/main.ts"
       },
-      "size": 5947
+      "size": 6004
     },
     {
       "bytes_in_output": 3988,
@@ -3531,14 +3541,14 @@
       "size": 11822
     },
     {
-      "bytes_in_output": 42074,
-      "digest": "256f585e104300936e2e8477fa47feb5481e55188a2690e7087b426385e4e84a",
+      "bytes_in_output": 42086,
+      "digest": "aa4587307a3d8ef4161f6d9da2ff69bb6dd3835ffececec5510da98c75a6fecb",
       "key": "src/repository/git.ts",
       "origin": {
         "kind": "repository",
         "path": "src/repository/git.ts"
       },
-      "size": 31991
+      "size": 32009
     },
     {
       "bytes_in_output": 12932,
@@ -3561,14 +3571,14 @@
       "size": 6606
     },
     {
-      "bytes_in_output": 37928,
-      "digest": "215fb73505e96f5bc13860452ceb26c86f836c4e7ddec3f504bbdb89477ce1a2",
+      "bytes_in_output": 37976,
+      "digest": "3e656202994bf94597764107eb71d1143520de6d3c261e7c7fcab42394c69fc3",
       "key": "src/repository/paths.ts",
       "origin": {
         "kind": "repository",
         "path": "src/repository/paths.ts"
       },
-      "size": 41542
+      "size": 41602
     },
     {
       "bytes_in_output": 11232,
@@ -3691,7 +3701,7 @@
       "size": 14840
     },
     {
-      "bytes_in_output": 12807,
+      "bytes_in_output": 12823,
       "digest": "26d23b3fb70946d71da828da92ebb586d2643a816b31b482e4c1cbe94ad18259",
       "key": "src/state/atomic.ts",
       "origin": {
@@ -3721,14 +3731,14 @@
       "size": 7150
     },
     {
-      "bytes_in_output": 19331,
-      "digest": "78bd8a3f2999abc1229de335a0cbcd3f94dc6a7b798fc72f91a8bad123e71dca",
+      "bytes_in_output": 19181,
+      "digest": "d48f6648bc1eae0f096cc9c253512a239d262ff2747b6fe78b0cf6b4ee9bc75c",
       "key": "src/state/constitution.ts",
       "origin": {
         "kind": "repository",
         "path": "src/state/constitution.ts"
       },
-      "size": 15122
+      "size": 15071
     },
     {
       "bytes_in_output": 5811,
@@ -3871,7 +3881,7 @@
       "size": 1788
     },
     {
-      "bytes_in_output": 4611,
+      "bytes_in_output": 4623,
       "digest": "e8526ff5c54bf25286605d84562ea400d3f89d72225249e9e2c34c46f0825683",
       "key": "src/state/lock.ts",
       "origin": {
@@ -3971,7 +3981,7 @@
       "size": 5648
     },
     {
-      "bytes_in_output": 31903,
+      "bytes_in_output": 31905,
       "digest": "f4be9d4a213a97495eb280dafbfd9f9b7141a9ef96484b713e66f13153118e1e",
       "key": "src/state/reconciliation-discovery.ts",
       "origin": {
@@ -4410,6 +4420,7 @@
     "src/dispatch/routing.ts",
     "src/dispatch/workspace.ts",
     "src/init/assets.ts",
+    "src/init/constitution.ts",
     "src/init/diagnostics.ts",
     "src/init/index.ts",
     "src/init/legacy-upgrade-stage.ts",
@@ -4504,18 +4515,19 @@
   ],
   "declared_content": {
     "constitution": [
-      "assets/constitution/00-process.md",
-      "assets/constitution/10-architecture.md",
-      "assets/constitution/15-dependencies.md",
-      "assets/constitution/20-data.md",
-      "assets/constitution/25-database.md",
-      "assets/constitution/30-product.md",
-      "assets/constitution/35-plan-changes.md",
-      "assets/constitution/40-authentication.md",
-      "assets/constitution/45-public-contracts.md",
-      "assets/constitution/50-cryptography.md",
-      "assets/constitution/60-control-plane.md",
-      "assets/constitution/README.md"
+      "assets/constitution/README.md",
+      "assets/constitution/custom/README.md",
+      "assets/constitution/default/00-process.md",
+      "assets/constitution/default/10-architecture.md",
+      "assets/constitution/default/15-dependencies.md",
+      "assets/constitution/default/20-data.md",
+      "assets/constitution/default/25-database.md",
+      "assets/constitution/default/30-product.md",
+      "assets/constitution/default/35-plan-changes.md",
+      "assets/constitution/default/40-authentication.md",
+      "assets/constitution/default/45-public-contracts.md",
+      "assets/constitution/default/50-cryptography.md",
+      "assets/constitution/default/60-control-plane.md"
     ],
     "schemas": [
       "src/contracts/schemas/v1/active-gate.schema.json",
@@ -5148,7 +5160,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "cd8079315e64489ec9da916f70d6d1bb824886664a124dfa0a26e596fb41311e",
+      "output_digest": "f5bb157207d8b427231f82787c4ffa5cc261a742c4b681b3ce9bf17b5a3155df",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5403,6 +5415,7 @@
         "src/dispatch/routing.ts",
         "src/dispatch/workspace.ts",
         "src/init/assets.ts",
+        "src/init/constitution.ts",
         "src/init/diagnostics.ts",
         "src/init/index.ts",
         "src/init/legacy-upgrade-stage.ts",
@@ -5476,7 +5489,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "936bca7916c50344f65941921f77139b3d3849c19b934c73af432692d6eacfba",
+      "output_digest": "a3691348f47cd5616b81b871b8df60981b29f9de5a5f1be5d9b9efc10c9d3063",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -5585,64 +5598,69 @@
       "size": 7167
     },
     {
+      "digest": "1668d3076c012035fa392042c8a662042fce4e3052ae1b9075829942e3d8070e",
+      "path": "assets/constitution/README.md",
+      "size": 4785
+    },
+    {
+      "digest": "de39264cdb4ca35e00162487c38893c429371d548276a3ffcb9b07dd3ab55379",
+      "path": "assets/constitution/custom/README.md",
+      "size": 678
+    },
+    {
       "digest": "3b6cdd5f3370c8455fd7ba443476215d78110eebc6ca6ccba085dbe84f0af8a1",
-      "path": "assets/constitution/00-process.md",
+      "path": "assets/constitution/default/00-process.md",
       "size": 523
     },
     {
       "digest": "07286a9d3768574ff886cfe9378683bd8765427687b2753b3dd755648c4cc6b0",
-      "path": "assets/constitution/10-architecture.md",
+      "path": "assets/constitution/default/10-architecture.md",
       "size": 776
     },
     {
       "digest": "adcd2e2eed6b1b71ebc71bf2ccaf5701be4a5c3c142bf60f947c4e48f86c642b",
-      "path": "assets/constitution/15-dependencies.md",
+      "path": "assets/constitution/default/15-dependencies.md",
       "size": 754
     },
     {
       "digest": "dd79dd310530c2ff5beead85fd4cda6f69f82df9b0605020da09907bcfbd2f0c",
-      "path": "assets/constitution/20-data.md",
+      "path": "assets/constitution/default/20-data.md",
       "size": 370
     },
     {
       "digest": "f32b6e3716fb227a6c398f47e5378ee1f2e8684c38a6be7811271d411db48f9c",
-      "path": "assets/constitution/25-database.md",
+      "path": "assets/constitution/default/25-database.md",
       "size": 1401
     },
     {
       "digest": "cc6bf5e01eacffa0d1fab83335386f0681f0ec548b005cb06332860bd605f1e8",
-      "path": "assets/constitution/30-product.md",
+      "path": "assets/constitution/default/30-product.md",
       "size": 343
     },
     {
       "digest": "49679745c499759b19652e95bf9437fcf6d79f188e8b0c9fe9fda2bb31efb9b2",
-      "path": "assets/constitution/35-plan-changes.md",
+      "path": "assets/constitution/default/35-plan-changes.md",
       "size": 1327
     },
     {
       "digest": "1bdf7f41032dc0a1d0a2f3dec1163e357c5d6629d348318ff75af87288dd1bf0",
-      "path": "assets/constitution/40-authentication.md",
+      "path": "assets/constitution/default/40-authentication.md",
       "size": 491
     },
     {
       "digest": "39531b1dafe0839825b7fc267b7babdae9406090c494dd9c310838e313d9f19a",
-      "path": "assets/constitution/45-public-contracts.md",
+      "path": "assets/constitution/default/45-public-contracts.md",
       "size": 715
     },
     {
       "digest": "9660a393a8f41e0b0b8f4da8555675d3e39bb3c61306bdece0c3f86f35661e28",
-      "path": "assets/constitution/50-cryptography.md",
+      "path": "assets/constitution/default/50-cryptography.md",
       "size": 574
     },
     {
       "digest": "c775010ff6b400350cab1fd05ba1ae5ed5f5df00ec935685b9bbb21a6fefc8c1",
-      "path": "assets/constitution/60-control-plane.md",
+      "path": "assets/constitution/default/60-control-plane.md",
       "size": 534
-    },
-    {
-      "digest": "dc62b5b9edc8b275a37fb3325faadc98e20abb9ae676cb450188950151ff7c11",
-      "path": "assets/constitution/README.md",
-      "size": 3528
     },
     {
       "digest": "2e9fa57f51b8c5fca438e7e09ec88cce2a01add89fcb472ac7e07a6262fe8885",
@@ -5785,9 +5803,9 @@
       "size": 610
     },
     {
-      "digest": "0d17fe88074f2d0c2677369192cc1f36465af6a0191a70c6882219adacd75646",
+      "digest": "779cbf2b9a8aa08d9fdf5ab5771d24c78aa7960629729d1ea46a69af9ca4db89",
       "path": "scripts/release-support.mjs",
-      "size": 56206
+      "size": 56336
     },
     {
       "digest": "ccfbcc8df639e93b98bf292de22364e20c3f45b6e8993d2db8606160d0aa7a8e",
@@ -5945,9 +5963,9 @@
       "size": 2730
     },
     {
-      "digest": "f2daa77e0f017a1ae067857b414a404534e06c3916aa1ff412ef4952819a8697",
+      "digest": "a6804ec0c38c488dee264f4380f0c1b73da624432539ab2872c4fce26ce28e2f",
       "path": "test/contracts/release-contracts.test.ts",
-      "size": 9560
+      "size": 9568
     },
     {
       "digest": "450633d5f1e07c31948ec38c80b057cdeabdd3df1a619ab0d9b0f06c1d2cd257",
@@ -5997,64 +6015,69 @@
       "size": 7167
     },
     {
+      "digest": "1668d3076c012035fa392042c8a662042fce4e3052ae1b9075829942e3d8070e",
+      "path": "assets/constitution/README.md",
+      "size": 4785
+    },
+    {
+      "digest": "de39264cdb4ca35e00162487c38893c429371d548276a3ffcb9b07dd3ab55379",
+      "path": "assets/constitution/custom/README.md",
+      "size": 678
+    },
+    {
       "digest": "3b6cdd5f3370c8455fd7ba443476215d78110eebc6ca6ccba085dbe84f0af8a1",
-      "path": "assets/constitution/00-process.md",
+      "path": "assets/constitution/default/00-process.md",
       "size": 523
     },
     {
       "digest": "07286a9d3768574ff886cfe9378683bd8765427687b2753b3dd755648c4cc6b0",
-      "path": "assets/constitution/10-architecture.md",
+      "path": "assets/constitution/default/10-architecture.md",
       "size": 776
     },
     {
       "digest": "adcd2e2eed6b1b71ebc71bf2ccaf5701be4a5c3c142bf60f947c4e48f86c642b",
-      "path": "assets/constitution/15-dependencies.md",
+      "path": "assets/constitution/default/15-dependencies.md",
       "size": 754
     },
     {
       "digest": "dd79dd310530c2ff5beead85fd4cda6f69f82df9b0605020da09907bcfbd2f0c",
-      "path": "assets/constitution/20-data.md",
+      "path": "assets/constitution/default/20-data.md",
       "size": 370
     },
     {
       "digest": "f32b6e3716fb227a6c398f47e5378ee1f2e8684c38a6be7811271d411db48f9c",
-      "path": "assets/constitution/25-database.md",
+      "path": "assets/constitution/default/25-database.md",
       "size": 1401
     },
     {
       "digest": "cc6bf5e01eacffa0d1fab83335386f0681f0ec548b005cb06332860bd605f1e8",
-      "path": "assets/constitution/30-product.md",
+      "path": "assets/constitution/default/30-product.md",
       "size": 343
     },
     {
       "digest": "49679745c499759b19652e95bf9437fcf6d79f188e8b0c9fe9fda2bb31efb9b2",
-      "path": "assets/constitution/35-plan-changes.md",
+      "path": "assets/constitution/default/35-plan-changes.md",
       "size": 1327
     },
     {
       "digest": "1bdf7f41032dc0a1d0a2f3dec1163e357c5d6629d348318ff75af87288dd1bf0",
-      "path": "assets/constitution/40-authentication.md",
+      "path": "assets/constitution/default/40-authentication.md",
       "size": 491
     },
     {
       "digest": "39531b1dafe0839825b7fc267b7babdae9406090c494dd9c310838e313d9f19a",
-      "path": "assets/constitution/45-public-contracts.md",
+      "path": "assets/constitution/default/45-public-contracts.md",
       "size": 715
     },
     {
       "digest": "9660a393a8f41e0b0b8f4da8555675d3e39bb3c61306bdece0c3f86f35661e28",
-      "path": "assets/constitution/50-cryptography.md",
+      "path": "assets/constitution/default/50-cryptography.md",
       "size": 574
     },
     {
       "digest": "c775010ff6b400350cab1fd05ba1ae5ed5f5df00ec935685b9bbb21a6fefc8c1",
-      "path": "assets/constitution/60-control-plane.md",
+      "path": "assets/constitution/default/60-control-plane.md",
       "size": 534
-    },
-    {
-      "digest": "dc62b5b9edc8b275a37fb3325faadc98e20abb9ae676cb450188950151ff7c11",
-      "path": "assets/constitution/README.md",
-      "size": 3528
     },
     {
       "digest": "2e9fa57f51b8c5fca438e7e09ec88cce2a01add89fcb472ac7e07a6262fe8885",

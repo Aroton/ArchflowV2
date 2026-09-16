@@ -210,12 +210,12 @@ const REPOSITORY_SAMPLES: readonly RepositorySample[] = [
   },
   {
     path_class: "shared-constitution",
-    claims: [".archflow/constitution/base.md"],
+    claims: [".archflow/constitution/base.md", ".archflow/constitution/default/00-process.md", ".archflow/constitution/custom/70-billing.md"],
     classifiesAs: "shared-constitution",
   },
   {
     path_class: "task-branch-constitution",
-    claims: [".archflow/constitution/base.md"],
+    claims: [".archflow/constitution/base.md", ".archflow/constitution/default/00-process.md", ".archflow/constitution/custom/70-billing.md"],
     classifiesAs: "shared-constitution",
   },
   {

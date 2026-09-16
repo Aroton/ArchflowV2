@@ -552,7 +552,7 @@ export async function readCommitTreeBlob(
 }
 
 /**
- * Lists the blob entries below one directory in an immutable commit tree.
+ * Recursively lists the blob entries below one directory in an immutable commit tree.
  *
  * A trailing slash makes the pathspec select the directory's contents rather than the tree entry
  * itself. Do not add `--literal-pathspecs`: it disables the pathspec magic used by other repository
@@ -572,7 +572,7 @@ export async function readCommitTreeEntries(
     if (cached !== undefined) return cached;
   }
   const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-z", commit, "--", prefix],
+    argv: ["ls-tree", "-r", "-z", commit, "--", prefix],
     operation: TREE_LIST_OPERATION,
   });
   if (fields.length > MAX_COMMIT_TREE_ENTRIES) {

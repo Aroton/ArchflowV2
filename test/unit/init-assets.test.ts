@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,7 +19,93 @@ function repository(): string {
   return root;
 }
 
+const customRule = (id = "billing", version = 1) =>
+  `---\nid: ${id}\nversion: ${version}\nstatus: active\nreview_trigger: Invoice totals change.\n---\nPreserve agreed pricing.\n`;
+
+function write(root: string, path: string, source: string): void {
+  mkdirSync(join(root, path, ".."), { recursive: true });
+  writeFileSync(join(root, path), source);
+}
+
 describe("repository asset scaffolding", () => {
+  it("preserves custom overrides and notes while force refreshes defaults and repository config", async () => {
+    const root = repository();
+    expect((await scaffoldRepositoryAssets({ working_directory: root })).ok).toBe(true);
+    const override = ".archflow/constitution/custom/90-public-contracts.md";
+    const source = customRule("human-approval-for-public-contracts", 3);
+    write(root, override, source);
+    write(root, ".archflow/constitution/custom/README.md", "My notes\n");
+    write(root, ".archflow/constitution/default/45-public-contracts.md", "outdated default\n");
+    write(root, ".archflow/config.yaml", "outdated config\n");
+    write(root, ".archflow/tasks/existing/config.yaml", "existing task config\n");
+    write(root, ".archflow/tasks/existing/state.json", "existing task state\n");
+
+    const result = await scaffoldRepositoryAssets({ working_directory: root, force: true });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.overwritten).toContain(".archflow/constitution/default/45-public-contracts.md");
+    expect(result.value.overwritten).toContain(".archflow/config.yaml");
+    expect(result.value.preserved_custom).toEqual([override, ".archflow/constitution/custom/README.md"]);
+    expect(readFileSync(join(root, override), "utf8")).toBe(source);
+    expect(readFileSync(join(root, ".archflow/constitution/custom/README.md"), "utf8")).toBe("My notes\n");
+    expect(readFileSync(join(root, ".archflow/tasks/existing/config.yaml"), "utf8")).toBe("existing task config\n");
+    expect(readFileSync(join(root, ".archflow/tasks/existing/state.json"), "utf8")).toBe("existing task state\n");
+    const refreshed = readFileSync(join(root, ".archflow/constitution/default/45-public-contracts.md"), "utf8");
+    expect(refreshed).not.toContain("review_trigger:");
+  });
+
+  it("requires explicit flat migration, refreshes shipped filenames, and preserves additional rules", async () => {
+    const root = repository();
+    const oldDefault = ".archflow/constitution/45-public-contracts.md";
+    const oldCustom = ".archflow/constitution/70-billing.md";
+    write(root, oldDefault, customRule("human-approval-for-public-contracts"));
+    write(root, oldCustom, customRule());
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    expect((await scaffoldRepositoryAssets({ working_directory: root })).ok).toBe(false);
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("explicit migration"));
+    expect(existsSync(join(root, ".archflow/config.yaml"))).toBe(false);
+    expect(existsSync(join(root, oldDefault))).toBe(true);
+
+    const result = await scaffoldRepositoryAssets({ working_directory: root, force: true });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.constitution_migration).toEqual({
+      replaced: [oldDefault], moved: [{ from: oldCustom, to: ".archflow/constitution/custom/70-billing.md" }],
+    });
+    expect(existsSync(join(root, oldDefault))).toBe(false);
+    expect(existsSync(join(root, oldCustom))).toBe(false);
+    expect(readFileSync(join(root, ".archflow/constitution/custom/70-billing.md"), "utf8")).toBe(customRule());
+    expect(readFileSync(join(root, ".archflow/constitution/default/45-public-contracts.md"), "utf8")).not.toContain("review_trigger:");
+    expect((await scaffoldRepositoryAssets({ working_directory: root, force: true })).ok).toBe(true);
+  });
+
+  it.each(["conflicting destination", "duplicate ID", "invalid rule"])("preflights %s before replacing any scaffold", async (failure) => {
+    const root = repository();
+    write(root, ".archflow/workflow.yaml", "keep this until preflight succeeds\n");
+    write(root, ".archflow/constitution/70-billing.md", customRule());
+    if (failure === "conflicting destination") {
+      write(root, ".archflow/constitution/custom/70-billing.md", customRule("different"));
+    } else if (failure === "duplicate ID") {
+      write(root, ".archflow/constitution/custom/80-billing.md", customRule());
+    } else {
+      write(root, ".archflow/constitution/custom/80-invalid.md", "invalid rule\n");
+    }
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    expect((await scaffoldRepositoryAssets({ working_directory: root, force: true })).ok).toBe(false);
+    expect(readFileSync(join(root, ".archflow/workflow.yaml"), "utf8")).toBe("keep this until preflight succeeds\n");
+    expect(existsSync(join(root, ".archflow/constitution/70-billing.md"))).toBe(true);
+    expect(existsSync(join(root, ".archflow/constitution/default"))).toBe(false);
+  });
+
+  it("resumes migration when a custom rule was already copied without overwriting it", async () => {
+    const root = repository();
+    write(root, ".archflow/constitution/70-billing.md", customRule());
+    write(root, ".archflow/constitution/custom/70-billing.md", customRule());
+    expect((await scaffoldRepositoryAssets({ working_directory: root, force: true })).ok).toBe(true);
+    expect(existsSync(join(root, ".archflow/constitution/70-billing.md"))).toBe(false);
+    expect(readFileSync(join(root, ".archflow/constitution/custom/70-billing.md"), "utf8")).toBe(customRule());
+  });
+
   it("writes exact shipped bytes and appends the attributes rule once", async () => {
     const root = repository();
     writeFileSync(join(root, ".gitattributes"), "* text=auto");
@@ -27,7 +113,7 @@ describe("repository asset scaffolding", () => {
     const first = await scaffoldRepositoryAssets({ working_directory: root });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
-    expect(first.value.created).toHaveLength(16);
+    expect(first.value.created).toHaveLength(17);
     expect(first.value.runtime_gitignore).toBe("created");
     expect(first.value.gitattributes_updated).toBe(true);
     expect(readFileSync(join(root, ".archflow", "workflow.yaml"))).toEqual(
@@ -40,8 +126,8 @@ describe("repository asset scaffolding", () => {
       readFileSync(new URL("../../assets/hazards.yaml", import.meta.url)),
     );
     for (const path of ["00-process.md", "10-architecture.md", "25-database.md", "35-plan-changes.md", "45-public-contracts.md"] as const) {
-      expect(readFileSync(join(root, ".archflow", "constitution", path))).toEqual(
-        readFileSync(new URL(`../../assets/constitution/${path}`, import.meta.url)),
+      expect(readFileSync(join(root, ".archflow", "constitution", "default", path))).toEqual(
+        readFileSync(new URL(`../../assets/constitution/default/${path}`, import.meta.url)),
       );
     }
     expect(readFileSync(join(root, ".archflow", ".gitignore"), "utf8")).toBe("/runtime/\n");

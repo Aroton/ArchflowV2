@@ -9,9 +9,9 @@ Treat the constitution as repository-owned policy for human trust boundaries and
 
 ## Explain the model
 
-When the user asks only for an explanation, describe the model and inspect the repository's existing rules when useful; do not edit files.
+When the user asks only for an explanation, describe the model and inspect the repository's existing rules in `.archflow/constitution/` when useful; do not edit files.
 
-Each numbered Markdown file in `.archflow/constitution/` defines one rule. Only files named `NN-name.md` are rules; `README.md` is explanatory and is not parsed as one. A rule has strict YAML frontmatter followed by non-empty normative prose:
+Numbered Markdown files in `.archflow/constitution/default/` provide shipped rules; files in `.archflow/constitution/custom/` add repository policy or replace a default by `id`. A deprecated custom replacement suppresses its default; precedence is by directory, not version. Historical flat constitutions remain readable, but do not mix flat and split rules. Only files named `NN-name.md` are rules; `README.md` is explanatory and is not parsed as one. A rule has strict YAML frontmatter followed by non-empty normative prose:
 
 ```md
 ---
@@ -27,21 +27,25 @@ State the repository-wide policy in direct, durable language.
 
 ## Configure rules
 
-Before editing, read `.archflow/constitution/README.md` and every numbered rule. If the directory is absent, direct the user to `archflow-init`; do not invent a parallel location.
+Before editing, read `.archflow/constitution/README.md` and every numbered rule in both directories (or the root for a legacy flat layout). Determine the effective rules after custom replacements. If the directory is absent, direct the user to `archflow-init`; do not invent a parallel location.
 
 Translate the requested policy into the smallest durable rule set:
 
 - Keep one independently reviewable policy per file.
 - Use a stable kebab-case ID beginning with a letter.
-- Choose an unused two-digit filename prefix and a descriptive filename.
+- Put new rules and default replacements in `custom/`, using an unused two-digit filename prefix and a descriptive filename. Keep shipped `default/` files intact for explicit refreshes. In a legacy flat repository, keep scoped edits in that layout until the user requests migration; a rule edit does not authorize a forced scaffold refresh.
 - Write normative prose that says what must remain true and why it matters.
 - Add a `review_trigger` only when the repository genuinely wants a human decision whenever that condition appears; without one, a failed rule is agent work first. Make it concrete and observable from the artifact, its co-produced documents, or the reviewed repository snapshot — never a restatement of the rule, and never workflow mechanics the server already enforces (gate authority, approvals, commits, dispatch outcomes), which a reviewer cannot observe and would only report as uncertain.
 - Name `enforced_by` mechanisms only when they exist and can be identified precisely.
 - Avoid repository-local formatting preferences, task-specific acceptance criteria, and instructions that compensate for current model weakness. Put those in ordinary project guidance, the PRD, or a phase design instead.
 
-For an existing ID, preserve its file and identity. If its text, status, trigger, or enforcement list changes, increment the positive integer version. If nothing changes, retain the version. Deprecate by changing `status` to `deprecated` and incrementing the version; never delete an ID, reuse it for another meaning, or reactivate a deprecated ID.
+For an existing custom ID, preserve its file and identity. To customize a default, create a custom file with the same ID and increment the effective rule version when changing its contents; the custom file replaces the entire rule, including its trigger. An unchanged override remains effective after default refreshes even if the shipped version becomes higher. If its text, status, trigger, or enforcement list changes, increment the positive integer version. If nothing changes, retain the version. Deprecate by changing `status` to `deprecated` and incrementing the version; never delete an ID, reuse it for another meaning, or reactivate a deprecated ID.
 
-After editing, inspect the complete rule set for duplicate IDs, invalid filenames, invalid frontmatter fields, empty prose, and evolution violations. Show the user the rule diff and explain its practical review effect in plain language.
+After editing, inspect the complete rule set for duplicate IDs within each layer, invalid filenames, invalid frontmatter fields, empty prose, and evolution violations. Show the user the rule diff and explain its practical review effect in plain language.
+
+## Refresh defaults
+
+`archflow-local init --force` adopts the running bundle's defaults and refreshes other scaffold files, including repository config; it preserves `custom/`. For a flat layout it replaces known shipped filenames and moves additional rules into `custom/`, refusing conflicts before writing. Explain that legacy edits to shipped filenames are reset and preserve any intentional replacements in `custom/` before a requested refresh. Run forced initialization only when the user has requested that broader replacement; a scoped rule edit does not authorize resetting config. Commit adopted policy before starting affected tasks. Existing tasks retain their pinned rules, task-local config, and pending gates.
 
 ## Preserve policy authority
 

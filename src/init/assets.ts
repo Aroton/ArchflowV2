@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, mkdir, open, readFile } from "node:fs/promises";
+import { access, mkdir, open, readFile, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,6 +8,7 @@ import {
   type ProjectError,
   type ProjectResult,
 } from "../contracts/errors.js";
+import { planConstitutionScaffold, type ConstitutionMigration } from "./constitution.js";
 
 const ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
 const ASSETS = Object.freeze([
@@ -15,17 +16,18 @@ const ASSETS = Object.freeze([
   ["workflow.yaml", ".archflow/workflow.yaml"],
   ["hazards.yaml", ".archflow/hazards.yaml"],
   ["constitution/README.md", ".archflow/constitution/README.md"],
-  ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
-  ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],
-  ["constitution/15-dependencies.md", ".archflow/constitution/15-dependencies.md"],
-  ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
-  ["constitution/25-database.md", ".archflow/constitution/25-database.md"],
-  ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
-  ["constitution/35-plan-changes.md", ".archflow/constitution/35-plan-changes.md"],
-  ["constitution/45-public-contracts.md", ".archflow/constitution/45-public-contracts.md"],
-  ["constitution/40-authentication.md", ".archflow/constitution/40-authentication.md"],
-  ["constitution/50-cryptography.md", ".archflow/constitution/50-cryptography.md"],
-  ["constitution/60-control-plane.md", ".archflow/constitution/60-control-plane.md"],
+  ["constitution/custom/README.md", ".archflow/constitution/custom/README.md"],
+  ["constitution/default/00-process.md", ".archflow/constitution/default/00-process.md"],
+  ["constitution/default/10-architecture.md", ".archflow/constitution/default/10-architecture.md"],
+  ["constitution/default/15-dependencies.md", ".archflow/constitution/default/15-dependencies.md"],
+  ["constitution/default/20-data.md", ".archflow/constitution/default/20-data.md"],
+  ["constitution/default/25-database.md", ".archflow/constitution/default/25-database.md"],
+  ["constitution/default/30-product.md", ".archflow/constitution/default/30-product.md"],
+  ["constitution/default/35-plan-changes.md", ".archflow/constitution/default/35-plan-changes.md"],
+  ["constitution/default/45-public-contracts.md", ".archflow/constitution/default/45-public-contracts.md"],
+  ["constitution/default/40-authentication.md", ".archflow/constitution/default/40-authentication.md"],
+  ["constitution/default/50-cryptography.md", ".archflow/constitution/default/50-cryptography.md"],
+  ["constitution/default/60-control-plane.md", ".archflow/constitution/default/60-control-plane.md"],
   ["config.template.yaml", ".archflow/config.yaml"],
 ] as const);
 
@@ -35,6 +37,9 @@ export type AssetScaffoldReport = {
   readonly unchanged: readonly string[];
   /** Diverged assets replaced with the shipped bytes; only ever non-empty under `force`. */
   readonly overwritten: readonly string[];
+  readonly preserved_custom: readonly string[];
+  readonly constitution_migration: ConstitutionMigration;
+  readonly policy_notice: string;
   readonly gitattributes_updated: boolean;
   readonly runtime_gitignore: "created" | "already-present";
 };
@@ -110,7 +115,8 @@ async function appendGitAttributes(workingDirectory: string): Promise<boolean> {
 
 /**
  * Scaffolds the repository-owned policy assets. Existing bytes are never overwritten unless
- * `force` is set, in which case every diverged asset is replaced with the shipped template.
+ * `force` is set, in which case shipped defaults and other scaffold assets are refreshed.
+ * Custom policy is preserved, and legacy flat rules migrate only on an explicit forced refresh.
  */
 export async function scaffoldRepositoryAssets(
   input: ScaffoldRepositoryAssetsInput,
@@ -119,16 +125,29 @@ export async function scaffoldRepositoryAssets(
     const sourceRoot = await assetRoot();
     const sources = await Promise.all(ASSETS.map(async ([source, destination]) =>
       Object.freeze({ source: new Uint8Array(await readFile(join(sourceRoot, source))), destination })));
+    let constitution;
+    try {
+      constitution = await planConstitutionScaffold(input.working_directory, sources, input.force === true);
+    } catch (error) {
+      process.stderr.write(`ArchFlow constitution preflight failed: ${error instanceof Error ? error.message : "unreadable rules"}\n`);
+      return fail(createProjectError("CONFIG_INVALID", { issue_code: "constitution-scaffold-invalid" }));
+    }
+    const plannedAssets = [...sources, ...constitution.additional_assets];
     const created: string[] = [];
     const unchanged: string[] = [];
     const overwritten: string[] = [];
+    const preservedCustom = [...constitution.preserved_custom];
 
     // Inspect every destination before writing any of them. A divergent scaffold is a refusal
     // unless forced, while an identical existing asset is already the desired state.
-    for (const asset of sources) {
+    for (const asset of plannedAssets) {
       const destination = join(input.working_directory, asset.destination);
       try {
         const existing = new Uint8Array(await readFile(destination));
+        if (asset.destination === ".archflow/constitution/custom/README.md") {
+          preservedCustom.push(asset.destination);
+          continue;
+        }
         if (Buffer.from(existing).equals(Buffer.from(asset.source))) {
           unchanged.push(asset.destination);
         } else if (input.force === true) {
@@ -144,8 +163,8 @@ export async function scaffoldRepositoryAssets(
       }
     }
 
-    for (const asset of sources) {
-      if (unchanged.includes(asset.destination)) continue;
+    for (const asset of plannedAssets) {
+      if (unchanged.includes(asset.destination) || preservedCustom.includes(asset.destination)) continue;
       const destination = join(input.working_directory, asset.destination);
       const replacing = overwritten.includes(asset.destination);
       await mkdir(dirname(destination), { recursive: true });
@@ -158,12 +177,21 @@ export async function scaffoldRepositoryAssets(
       if (!replacing) created.push(asset.destination);
     }
 
+    // Remove flat sources only after every destination exists. A retry can finish a partial
+    // migration without overwriting a custom destination with different bytes.
+    for (const path of [...constitution.migration.replaced, ...constitution.migration.moved.map(({ from }) => from)]) {
+      await unlink(join(input.working_directory, path));
+    }
+
     const gitattributesUpdated = await appendGitAttributes(input.working_directory);
     return ok(Object.freeze({
       schema_version: "1",
       created: Object.freeze(created),
       unchanged: Object.freeze(unchanged),
       overwritten: Object.freeze(overwritten),
+      preserved_custom: Object.freeze(preservedCustom.sort()),
+      constitution_migration: constitution.migration,
+      policy_notice: "Defaults come from the running bundle. Commit repository policy changes before starting affected tasks. Existing tasks keep their pinned policy, task-local config, and pending approvals. init --force also refreshes other scaffold files, including .archflow/config.yaml; custom/ is preserved.",
       gitattributes_updated: gitattributesUpdated,
       runtime_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present",
     }));

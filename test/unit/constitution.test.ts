@@ -10,7 +10,7 @@ const rule = (overrides: Partial<ConstitutionRuleV1> = {}): ConstitutionRuleV1 =
 
 describe("constitution Markdown", () => {
   it("loads every shipped numbered policy with unique IDs", async () => {
-    const directory = new URL("../../assets/constitution/", import.meta.url);
+    const directory = new URL("../../assets/constitution/default/", import.meta.url);
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     const files = Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, directory), "utf8")] as const)));
     const registry = parseConstitutionRuleFiles(files);
@@ -18,7 +18,7 @@ describe("constitution Markdown", () => {
   });
 
   it("ships review triggers on the intentional human-boundary seed rules", async () => {
-    const directory = new URL("../../assets/constitution/", import.meta.url);
+    const directory = new URL("../../assets/constitution/default/", import.meta.url);
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     const files = Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, directory), "utf8")] as const)));
     const triggered = [...parseConstitutionRuleFiles(files).entries()]
@@ -32,8 +32,8 @@ describe("constitution Markdown", () => {
   });
 
   it("ships byte-identical live and seed rules for the exact supported v3 profile", async () => {
-    const seedDirectory = new URL("../../assets/constitution/", import.meta.url);
-    const liveDirectory = new URL("../../.archflow/constitution/", import.meta.url);
+    const seedDirectory = new URL("../../assets/constitution/default/", import.meta.url);
+    const liveDirectory = new URL("../../.archflow/constitution/default/", import.meta.url);
     const selectedFiles = ["00-process.md", "10-architecture.md"] as const;
     const sources: Record<string, string> = {};
 
@@ -58,11 +58,11 @@ describe("constitution Markdown", () => {
   });
 
   it("keeps live policy identical to the seeds and evolves the former blanket triggers", async () => {
-    const directory = new URL("../../assets/constitution/", import.meta.url);
+    const directory = new URL("../../assets/constitution/default/", import.meta.url);
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     for (const path of paths) {
       const seed = await readFile(new URL(path, directory), "utf8");
-      expect(await readFile(new URL(`../../.archflow/constitution/${path}`, import.meta.url), "utf8")).toBe(seed);
+      expect(await readFile(new URL(`../../.archflow/constitution/default/${path}`, import.meta.url), "utf8")).toBe(seed);
     }
     for (const path of ["40-authentication.md", "45-public-contracts.md", "50-cryptography.md", "60-control-plane.md"]) {
       const current = parseConstitutionRuleMarkdown(await readFile(new URL(path, directory), "utf8"), path);

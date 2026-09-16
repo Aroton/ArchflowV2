@@ -66,7 +66,7 @@ It also creates `.archflow/.gitignore` with the single `/runtime/` rule and diag
 workspace is ignored and free of tracked files. It never edits the project root `.gitignore`.
 The init command creates no task or commit. The skill commits the requested scaffolded repository files automatically and reports any host trust steps that still require you.
 
-Use `/archflow-constitution` (or `$archflow-constitution` in Codex) to understand or configure the repository-wide rules in `.archflow/constitution/`. Configure policy on the repository's policy/base branch before starting affected tasks; existing tasks remain bound to the constitution at their pinned policy-base commit.
+Use `/archflow-constitution` (or `$archflow-constitution` in Codex) to understand or configure the repository-wide rules in `.archflow/constitution/`. Shipped rules live in `default/`; repository-specific rules and same-ID replacements live in `custom/`. `archflow-local init --force` refreshes defaults while preserving custom rules, and also resets other scaffold files including repository config. It migrates older flat constitutions by refreshing known shipped filenames and moving additional rules into `custom/`. Configure policy on the repository's policy/base branch before starting affected tasks; existing tasks remain bound to the constitution at their pinned policy-base commit.
 
 > **Self-hosting note:** Phase 19 ships and proves the legacy upgrade path, while this repository deliberately finishes its own `mcp-integration` task under the legacy system. For any in-flight legacy task, either finish it with the legacy tooling or run `archflow-upgrade` into a distinct new task. ArchFlow never performs a silent in-place conversion.
 
@@ -168,6 +168,8 @@ ArchFlow keeps tracked workflow authority and ignored local runtime data togethe
   config.yaml                       # Repository task-config template
   workflow.yaml                     # Canonical phase graph
   constitution/                     # Repository-owned policy rules
+    default/                        # Explicitly refreshed shipped rules
+    custom/                         # Preserved additions and ID-based replacements
   tasks/
     my-feature/                     # One directory per task
       config.yaml                   # Versioned task configuration

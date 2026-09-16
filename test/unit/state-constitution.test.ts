@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -26,6 +26,9 @@ import { acceptedNoWaitSettlement } from "../../src/state/restart-authority.js";
 import type { RuleSettlementV1, TaskStateV1 } from "../../src/contracts/durable-state.js";
 import { parseSha256Digest } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
+import { computePinnedConstitutionDigest } from "../../src/contracts/fingerprints.js";
+import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
+import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
 
 const roots: string[] = [];
 const context: RepositoryOperationContext = {
@@ -79,6 +82,7 @@ async function repository(files: Readonly<Record<string, string>>) {
   git(root, "init", "-q");
   mkdirSync(join(root, ".archflow", "constitution"), { recursive: true });
   for (const [name, source] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, ".archflow", "constitution", name)), { recursive: true });
     writeFileSync(join(root, ".archflow", "constitution", name), source);
   }
   git(root, "add", ".");
@@ -93,6 +97,100 @@ afterEach(() => {
 });
 
 describe("pinned constitution", () => {
+  it("refreshes the API default for future tasks without changing an older task's trigger", async () => {
+    const apiRule = "human-approval-for-public-contracts";
+    const repo = await repository({
+      "45-public-contracts.md": rule(apiRule).replace("status: active", "status: active\nreview_trigger: An API is added."),
+    });
+    const oldPolicy = await resolvePinnedConstitution(repo.runner, repo.base, context);
+    if (!oldPolicy.ok) throw new Error(oldPolicy.error.code);
+    expect(oldPolicy.value.rules.get(apiRule)?.review_trigger).toBe("An API is added.");
+    const refreshed = await scaffoldRepositoryAssets({ working_directory: repo.root, force: true });
+    expect(refreshed.ok).toBe(true);
+    git(repo.root, "add", ".");
+    git(repo.root, "commit", "-qm", "adopt current defaults");
+    const newPolicy = await resolvePinnedConstitution(repo.runner, parseGitOid(git(repo.root, "rev-parse", "HEAD")), context);
+    if (!newPolicy.ok) throw new Error(newPolicy.error.code);
+    expect(newPolicy.value.rules.get(apiRule)?.review_trigger).toBeUndefined();
+    expect(newPolicy.value.rules.get("human-approval-for-database-behavior")?.review_trigger).toBeDefined();
+    const stillPinned = await resolvePinnedConstitution(repo.runner, repo.base, context);
+    if (!stillPinned.ok) throw new Error(stillPinned.error.code);
+    expect(stillPinned.value.digest).toBe(oldPolicy.value.digest);
+    expect(stillPinned.value.rules.get(apiRule)?.review_trigger).toBe("An API is added.");
+  });
+
+  it("keeps historical flat digests and authority after the same rules move to default/", async () => {
+    const repo = await repository({
+      "00-process.md": supportedRuleSource("explicit-human-authority"),
+      "10-architecture.md": supportedRuleSource("approved-design-before-code"),
+    });
+    const before = await resolvePinnedConstitution(repo.runner, repo.base, context);
+    if (!before.ok) throw new Error(before.error.code);
+    const historicalDigest = computePinnedConstitutionDigest(["00-process.md", "10-architecture.md"].map((name) => ({
+      path: parseRepositoryPathClaim(`.archflow/constitution/${name}`),
+      oid: parseGitOid(git(repo.root, "rev-parse", `${repo.base}:.archflow/constitution/${name}`)),
+    })));
+    expect(before.value.digest).toBe(historicalDigest);
+    const directory = join(repo.root, ".archflow", "constitution");
+    mkdirSync(join(directory, "default"));
+    for (const name of ["00-process.md", "10-architecture.md"]) {
+      renameSync(join(directory, name), join(directory, "default", name));
+    }
+    git(repo.root, "add", ".");
+    git(repo.root, "commit", "-qm", "split constitution");
+    const head = parseGitOid(git(repo.root, "rev-parse", "HEAD"));
+    const after = await resolvePinnedConstitution(repo.runner, head, context);
+    if (!after.ok) throw new Error(after.error.code);
+    expect([...after.value.rules]).toEqual([...before.value.rules]);
+    expect(after.value.digest).not.toBe(historicalDigest);
+    expect(authenticateRuleAcceptancePolicy({
+      task_id: parseTaskSlug("split-policy"), policy_base_commit: head, constitution_digest: after.value.digest,
+    } as TaskStateV1, after.value)).toBeDefined();
+    const historical = await resolvePinnedConstitution(repo.runner, repo.base, context);
+    expect(historical.ok && historical.value.digest).toBe(historicalDigest);
+  });
+
+  it("pins both layers including overridden defaults and detects nested edits", async () => {
+    const repo = await repository({
+      "default/10-contract.md": rule("contract"),
+      "custom/90-contract.md": rule("contract", 2),
+      "custom/README.md": "Notes, not a rule.\n",
+    });
+    const before = await resolvePinnedConstitution(repo.runner, repo.base, context);
+    if (!before.ok) throw new Error(before.error.code);
+    expect(before.value.files).toHaveLength(2);
+    expect(before.value.rules.get("contract")?.version).toBe(2);
+    writeFileSync(join(repo.root, ".archflow/constitution/default/10-contract.md"), rule("contract", 3));
+    git(repo.root, "add", ".");
+    git(repo.root, "commit", "-qm", "refresh overridden default");
+    const after = await resolvePinnedConstitution(repo.runner, parseGitOid(git(repo.root, "rev-parse", "HEAD")), context);
+    if (!after.ok) throw new Error(after.error.code);
+    expect(after.value.digest).not.toBe(before.value.digest);
+    expect(after.value.rules.get("contract")?.version).toBe(2);
+    const edit = await detectTaskLocalConstitutionEdit(repo.runner, repo.base, before.value.digest, context);
+    expect(edit.ok && edit.value?.current_constitution_digest).toBe(after.value.digest);
+  });
+
+  it("does not authenticate automatic advancement through an unsupported custom core override", async () => {
+    const repo = await repository({
+      "default/00-process.md": supportedRuleSource("explicit-human-authority"),
+      "default/10-architecture.md": supportedRuleSource("approved-design-before-code"),
+      "custom/90-process.md": rule("explicit-human-authority", 4),
+    });
+    const resolved = await resolvePinnedConstitution(repo.runner, repo.base, context);
+    if (!resolved.ok) throw new Error(resolved.error.code);
+    expect(authenticateRuleAcceptancePolicy({
+      task_id: parseTaskSlug("custom-policy"), policy_base_commit: repo.base, constitution_digest: resolved.value.digest,
+    } as TaskStateV1, resolved.value)).toBeUndefined();
+  });
+
+  it("rejects a pinned tree mixing flat and split rules", async () => {
+    const repo = await repository({ "00-flat.md": rule("flat"), "default/10-split.md": rule("split") });
+    const resolved = await resolvePinnedConstitution(repo.runner, repo.base, context);
+    expect(resolved.ok).toBe(false);
+    if (!resolved.ok) expect(resolved.error.code).toBe("POLICY_BASE_INVALID");
+  });
+
   it("mints exact supported-v3 authority and refuses v1, divergent semantics, and plain objects", async () => {
     const exact = await repository({
       "00-process.md": supportedRuleSource("explicit-human-authority"),

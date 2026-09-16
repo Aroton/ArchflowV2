@@ -71,7 +71,7 @@ describe("task initialization staging", () => {
     const pinnedWorkflowDigest = staged.value.workflow_digest;
     const pinnedConstitutionDigest = staged.value.constitution_digest;
     writeFileSync(join(root, ".archflow", "workflow.yaml"), "dirty workflow\n");
-    writeFileSync(join(root, ".archflow", "constitution", "00-process.md"), "dirty constitution\n");
+    writeFileSync(join(root, ".archflow", "constitution", "default", "00-process.md"), "dirty constitution\n");
     const dirty = await stageTaskInitialization({ working_directory: root, task_id: "demo-task" });
     expect(dirty.ok).toBe(true);
     if (dirty.ok) {

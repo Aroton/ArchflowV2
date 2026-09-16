@@ -7,7 +7,7 @@
  * baseline-adoption decision instead of a dead end.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -80,9 +80,7 @@ approval_rules:
   // Same fixture constitution as the roundtrip suite — deliberately no active rules, so the
   // merged archflow_counter_review call runs a single dispatch, reports the constitution review
   // as not-run, and this suite stays about re-entry edit tolerance.
-  for (const name of readdirSync(join(root, ".archflow", "constitution"))) {
-    if (name.endsWith(".md") && name !== "README.md") rmSync(join(root, ".archflow", "constitution", name));
-  }
+  rmSync(join(root, ".archflow", "constitution", "default"), { recursive: true });
   writeFileSync(join(root, ".archflow", "constitution", "20-data.md"), `---
 id: task-and-evidence-isolation
 version: 1

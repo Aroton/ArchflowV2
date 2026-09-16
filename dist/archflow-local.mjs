@@ -25256,7 +25256,7 @@ var require_src = __commonJS({
 
 // src/local/main.ts
 init_canonical();
-import { readFile as readFile19 } from "node:fs/promises";
+import { readFile as readFile20 } from "node:fs/promises";
 import process3 from "node:process";
 import { parseArgs } from "node:util";
 
@@ -26147,7 +26147,7 @@ var REPOSITORY_CLASS_RULES = [
   { path_class: "repository-source", pattern: anchored("\\.archflow/config\\.yaml") },
   {
     path_class: "shared-constitution",
-    pattern: anchored(`\\.archflow/constitution/${PATH_SAFE_ID}\\.md`)
+    pattern: anchored(`\\.archflow/constitution/(?:(?:default|custom)/)?${PATH_SAFE_ID}\\.md`)
   }
 ];
 var ARCHFLOW_TREE = ".archflow";
@@ -26892,7 +26892,7 @@ async function readCommitTreeEntries(runner, commit, directory) {
     if (cached2 !== void 0) return cached2;
   }
   const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-z", commit, "--", prefix],
+    argv: ["ls-tree", "-r", "-z", commit, "--", prefix],
     operation: TREE_LIST_OPERATION
   });
   if (fields.length > MAX_COMMIT_TREE_ENTRIES) {
@@ -27441,31 +27441,165 @@ async function ensureTaskProjectionParent(authority, target4) {
 }
 
 // src/review/implementation-models.ts
-import { readFile as readFile2 } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { readFile as readFile3 } from "node:fs/promises";
+import { join as join5 } from "node:path";
 
 // src/init/assets.ts
 import { constants } from "node:fs";
-import { access, mkdir as mkdir2, open as open2, readFile } from "node:fs/promises";
-import { dirname as dirname2, join as join3 } from "node:path";
+import { access, mkdir as mkdir2, open as open2, readFile as readFile2, unlink } from "node:fs/promises";
+import { dirname as dirname2, join as join4 } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// src/init/constitution.ts
+import { readdir, readFile } from "node:fs/promises";
+import { join as join3 } from "node:path";
+
+// src/contracts/constitution.ts
+init_zod();
+init_plain_json();
+init_yaml();
+var CONSTITUTION_RULE_NAME = /^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
+var CONSTITUTION_RULE_PATH = /^\.archflow\/constitution\/(?:(?:default|custom)\/)?[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
+var frontmatterSchema = external_exports.object({
+  id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+  version: external_exports.number().int().positive().safe(),
+  status: external_exports.enum(["active", "deprecated"]),
+  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
+  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
+}).strict();
+var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
+function parseConstitutionRuleV1(value) {
+  assertPlainJson(value, "constitution rule");
+  const parsed = constitutionRuleV1Schema.parse(value);
+  return {
+    id: parsed.id,
+    version: parsed.version,
+    status: parsed.status,
+    text: parsed.text,
+    ...parsed.review_trigger === void 0 ? {} : { review_trigger: parsed.review_trigger },
+    ...parsed.enforced_by === void 0 ? {} : { enforced_by: parsed.enforced_by }
+  };
+}
+function parseConstitutionRuleMarkdown(source, label) {
+  const normalized = source.replaceAll("\r\n", "\n");
+  if (!normalized.startsWith("---\n")) throw new Error(`${label}: expected opening YAML frontmatter delimiter`);
+  const close = normalized.indexOf("\n---\n", 4);
+  if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
+  const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
+  const text4 = normalized.slice(close + 5).trim();
+  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
+}
+function registryFromRules(rules2) {
+  const registry2 = /* @__PURE__ */ new Map();
+  for (const candidate of rules2) {
+    const rule4 = parseConstitutionRuleV1(candidate);
+    if (registry2.has(rule4.id)) throw new Error(`Duplicate constitution rule id: ${rule4.id}`);
+    registry2.set(rule4.id, Object.freeze(rule4));
+  }
+  return registry2;
+}
+function parseConstitutionRuleFiles(files) {
+  const layers = {
+    legacy: [],
+    default: [],
+    custom: []
+  };
+  for (const path2 of Object.keys(files).sort()) {
+    const relative9 = path2.replace(/^\.archflow\/constitution\//u, "");
+    const layer = relative9.startsWith("default/") ? "default" : relative9.startsWith("custom/") ? "custom" : "legacy";
+    layers[layer].push(parseConstitutionRuleMarkdown(files[path2], path2));
+  }
+  if (layers.legacy.length > 0) {
+    if (layers.default.length > 0 || layers.custom.length > 0) {
+      throw new Error("Mixed flat and split constitution rules; migrate the flat rules with archflow-local init --force");
+    }
+    return registryFromRules(layers.legacy);
+  }
+  const defaults = registryFromRules(layers.default);
+  const custom2 = registryFromRules(layers.custom);
+  return new Map([...defaults, ...custom2]);
+}
+
+// src/init/constitution.ts
+var ROOT = ".archflow/constitution/";
+async function planConstitutionScaffold(workingDirectory, assets, force) {
+  const existing = /* @__PURE__ */ new Map();
+  for (const layer of ["", "default/", "custom/"]) {
+    let entries;
+    try {
+      entries = await readdir(join3(workingDirectory, ROOT, layer), { withFileTypes: true });
+    } catch (error51) {
+      if (error51.code === "ENOENT") continue;
+      throw error51;
+    }
+    for (const entry of entries) {
+      if (!CONSTITUTION_RULE_NAME.test(entry.name)) continue;
+      const path2 = `${ROOT}${layer}${entry.name}`;
+      if (!entry.isFile()) throw new Error(`${path2}: constitution rules must be regular files`);
+      existing.set(path2, new Uint8Array(await readFile(join3(workingDirectory, path2))));
+    }
+  }
+  const flat = [...existing.keys()].filter((path2) => !path2.slice(ROOT.length).includes("/")).sort();
+  if (flat.length > 0 && !force) {
+    throw new Error("Flat constitution rules require explicit migration: archflow-local init --force refreshes known shipped rules and moves additional rules to custom/. It also resets other scaffold files, including .archflow/config.yaml.");
+  }
+  const shippedNames = new Set(assets.filter((asset) => asset.destination.startsWith(`${ROOT}default/`)).map((asset) => asset.destination.slice(`${ROOT}default/`.length)));
+  const candidate = new Map(existing);
+  const replaced = [];
+  const moved = [];
+  const additionalAssets = [];
+  for (const from of flat) {
+    const name = from.slice(ROOT.length);
+    if (shippedNames.has(name)) {
+      replaced.push(from);
+    } else {
+      const to = `${ROOT}custom/${name}`;
+      const source = existing.get(from);
+      const destination = existing.get(to);
+      if (destination !== void 0 && !Buffer.from(destination).equals(source)) {
+        throw new Error(`Constitution migration conflicts at ${to}; preserve or reconcile the custom file before retrying`);
+      }
+      candidate.set(to, source);
+      additionalAssets.push({ source, destination: to });
+      moved.push({ from, to });
+    }
+    candidate.delete(from);
+  }
+  for (const asset of assets) {
+    if (asset.destination.startsWith(`${ROOT}default/`)) {
+      candidate.set(asset.destination, asset.source);
+    }
+  }
+  const decoder6 = new TextDecoder("utf-8", { fatal: true });
+  parseConstitutionRuleFiles(Object.fromEntries(
+    [...candidate].map(([path2, bytes]) => [path2, decoder6.decode(bytes)])
+  ));
+  return {
+    migration: { replaced, moved },
+    additional_assets: additionalAssets,
+    preserved_custom: [...existing.keys()].filter((path2) => path2.startsWith(`${ROOT}custom/`)).sort()
+  };
+}
+
+// src/init/assets.ts
 var ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
 var ASSETS = Object.freeze([
   ["archflow.gitignore", ".archflow/.gitignore"],
   ["workflow.yaml", ".archflow/workflow.yaml"],
   ["hazards.yaml", ".archflow/hazards.yaml"],
   ["constitution/README.md", ".archflow/constitution/README.md"],
-  ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
-  ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],
-  ["constitution/15-dependencies.md", ".archflow/constitution/15-dependencies.md"],
-  ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
-  ["constitution/25-database.md", ".archflow/constitution/25-database.md"],
-  ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
-  ["constitution/35-plan-changes.md", ".archflow/constitution/35-plan-changes.md"],
-  ["constitution/45-public-contracts.md", ".archflow/constitution/45-public-contracts.md"],
-  ["constitution/40-authentication.md", ".archflow/constitution/40-authentication.md"],
-  ["constitution/50-cryptography.md", ".archflow/constitution/50-cryptography.md"],
-  ["constitution/60-control-plane.md", ".archflow/constitution/60-control-plane.md"],
+  ["constitution/custom/README.md", ".archflow/constitution/custom/README.md"],
+  ["constitution/default/00-process.md", ".archflow/constitution/default/00-process.md"],
+  ["constitution/default/10-architecture.md", ".archflow/constitution/default/10-architecture.md"],
+  ["constitution/default/15-dependencies.md", ".archflow/constitution/default/15-dependencies.md"],
+  ["constitution/default/20-data.md", ".archflow/constitution/default/20-data.md"],
+  ["constitution/default/25-database.md", ".archflow/constitution/default/25-database.md"],
+  ["constitution/default/30-product.md", ".archflow/constitution/default/30-product.md"],
+  ["constitution/default/35-plan-changes.md", ".archflow/constitution/default/35-plan-changes.md"],
+  ["constitution/default/45-public-contracts.md", ".archflow/constitution/default/45-public-contracts.md"],
+  ["constitution/default/40-authentication.md", ".archflow/constitution/default/40-authentication.md"],
+  ["constitution/default/50-cryptography.md", ".archflow/constitution/default/50-cryptography.md"],
+  ["constitution/default/60-control-plane.md", ".archflow/constitution/default/60-control-plane.md"],
   ["config.template.yaml", ".archflow/config.yaml"]
 ]);
 var ok4 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
@@ -27486,7 +27620,7 @@ async function assetRoot() {
   ];
   for (const candidate of candidates) {
     try {
-      await access(join3(candidate, "workflow.yaml"), constants.R_OK);
+      await access(join4(candidate, "workflow.yaml"), constants.R_OK);
       return candidate;
     } catch (error51) {
       if (!errno(error51, "ENOENT")) throw error51;
@@ -27495,10 +27629,10 @@ async function assetRoot() {
   throw Object.assign(new Error("installed ArchFlow assets are missing"), { code: "ENOENT" });
 }
 async function appendGitAttributes(workingDirectory) {
-  const path2 = join3(workingDirectory, ".gitattributes");
+  const path2 = join4(workingDirectory, ".gitattributes");
   let current;
   try {
-    current = new Uint8Array(await readFile(path2));
+    current = new Uint8Array(await readFile2(path2));
   } catch (error51) {
     if (!errno(error51, "ENOENT")) throw error51;
     const handle2 = await open2(path2, "wx");
@@ -27525,14 +27659,28 @@ async function appendGitAttributes(workingDirectory) {
 async function scaffoldRepositoryAssets(input) {
   try {
     const sourceRoot = await assetRoot();
-    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile(join3(sourceRoot, source))), destination })));
+    const sources = await Promise.all(ASSETS.map(async ([source, destination]) => Object.freeze({ source: new Uint8Array(await readFile2(join4(sourceRoot, source))), destination })));
+    let constitution;
+    try {
+      constitution = await planConstitutionScaffold(input.working_directory, sources, input.force === true);
+    } catch (error51) {
+      process.stderr.write(`ArchFlow constitution preflight failed: ${error51 instanceof Error ? error51.message : "unreadable rules"}
+`);
+      return fail5(createProjectError("CONFIG_INVALID", { issue_code: "constitution-scaffold-invalid" }));
+    }
+    const plannedAssets = [...sources, ...constitution.additional_assets];
     const created = [];
     const unchanged = [];
     const overwritten = [];
-    for (const asset of sources) {
-      const destination = join3(input.working_directory, asset.destination);
+    const preservedCustom = [...constitution.preserved_custom];
+    for (const asset of plannedAssets) {
+      const destination = join4(input.working_directory, asset.destination);
       try {
-        const existing = new Uint8Array(await readFile(destination));
+        const existing = new Uint8Array(await readFile2(destination));
+        if (asset.destination === ".archflow/constitution/custom/README.md") {
+          preservedCustom.push(asset.destination);
+          continue;
+        }
         if (Buffer.from(existing).equals(Buffer.from(asset.source))) {
           unchanged.push(asset.destination);
         } else if (input.force === true) {
@@ -27548,9 +27696,9 @@ async function scaffoldRepositoryAssets(input) {
         if (!errno(error51, "ENOENT")) throw error51;
       }
     }
-    for (const asset of sources) {
-      if (unchanged.includes(asset.destination)) continue;
-      const destination = join3(input.working_directory, asset.destination);
+    for (const asset of plannedAssets) {
+      if (unchanged.includes(asset.destination) || preservedCustom.includes(asset.destination)) continue;
+      const destination = join4(input.working_directory, asset.destination);
       const replacing = overwritten.includes(asset.destination);
       await mkdir2(dirname2(destination), { recursive: true });
       const handle = await open2(destination, replacing ? "w" : "wx");
@@ -27561,12 +27709,18 @@ async function scaffoldRepositoryAssets(input) {
       }
       if (!replacing) created.push(asset.destination);
     }
+    for (const path2 of [...constitution.migration.replaced, ...constitution.migration.moved.map(({ from }) => from)]) {
+      await unlink(join4(input.working_directory, path2));
+    }
     const gitattributesUpdated = await appendGitAttributes(input.working_directory);
     return ok4(Object.freeze({
       schema_version: "1",
       created: Object.freeze(created),
       unchanged: Object.freeze(unchanged),
       overwritten: Object.freeze(overwritten),
+      preserved_custom: Object.freeze(preservedCustom.sort()),
+      constitution_migration: constitution.migration,
+      policy_notice: "Defaults come from the running bundle. Commit repository policy changes before starting affected tasks. Existing tasks keep their pinned policy, task-local config, and pending approvals. init --force also refreshes other scaffold files, including .archflow/config.yaml; custom/ is preserved.",
       gitattributes_updated: gitattributesUpdated,
       runtime_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present"
     }));
@@ -27580,7 +27734,7 @@ init_yaml();
 init_implementation_selection();
 async function loadImplementationSelectionInput(config2, root) {
   try {
-    const source = await readFile2(join4(root ?? await assetRoot(), "implementation-models.yaml"), "utf8");
+    const source = await readFile3(join5(root ?? await assetRoot(), "implementation-models.yaml"), "utf8");
     const catalog = implementationCatalogSchema.parse(parseSingleYamlDocument(source, "implementation-models.yaml"));
     return implementationSelectionInputSchema.parse({
       status: "ready",
@@ -29181,7 +29335,7 @@ init_review();
 
 // src/state/production.ts
 init_canonical();
-import { lstat as lstat7, readFile as readFile6, readlink as readlink3 } from "node:fs/promises";
+import { lstat as lstat7, readFile as readFile7, readlink as readlink3 } from "node:fs/promises";
 init_evidence();
 
 // src/contracts/mcp-tools.ts
@@ -30239,8 +30393,8 @@ async function resolveRepositorySet(primaryBinding, config2, context2) {
 
 // src/state/atomic.ts
 import { randomUUID } from "node:crypto";
-import { link, open as open3, rename, symlink, unlink } from "node:fs/promises";
-import { basename as basename2, dirname as dirname3, join as join5 } from "node:path";
+import { link, open as open3, rename, symlink, unlink as unlink2 } from "node:fs/promises";
+import { basename as basename2, dirname as dirname3, join as join6 } from "node:path";
 async function replaceTaskAsk(writer, path2, bytes) {
   if (path2.path_class !== "task-ask") throw new TypeError("task ask replacement requires task-ask authority");
   await writer.replaceTaskAsk(path2, bytes);
@@ -30275,7 +30429,7 @@ async function createExclusive(path2, bytes) {
     throw new TypeError("createExclusive requires an immutable resolved path");
   }
   const target4 = path2.absolute;
-  const temporary = join5(
+  const temporary = join6(
     dirname3(target4),
     `.${basename2(target4)}.${process.pid}.${randomUUID()}.tmp`
   );
@@ -30307,7 +30461,7 @@ async function createExclusive(path2, bytes) {
     if (handle !== void 0) {
       await handle.close().catch(() => void 0);
     }
-    await unlink(temporary).catch(() => void 0);
+    await unlink2(temporary).catch(() => void 0);
   }
 }
 async function replace(path2, bytes) {
@@ -30321,7 +30475,7 @@ async function removeGateInterface(path2) {
     throw new TypeError("removeGateInterface requires a gate-interface resolved path");
   }
   try {
-    await unlink(path2.absolute);
+    await unlink2(path2.absolute);
   } catch (error51) {
     if (errnoOf3(error51) !== "ENOENT") {
       throw new AtomicReplaceError({
@@ -30356,7 +30510,7 @@ function requireProjectable(path2) {
   if (!PROJECTABLE.has(path2.path_class)) throw new TypeError("projection requires a declared output path");
 }
 async function replaceRegularBytes(target4, bytes, mode) {
-  const temporary = join5(dirname3(target4), `.${basename2(target4)}.${process.pid}.${randomUUID()}.tmp`);
+  const temporary = join6(dirname3(target4), `.${basename2(target4)}.${process.pid}.${randomUUID()}.tmp`);
   let handle;
   let renameAttempted = false;
   try {
@@ -30376,7 +30530,7 @@ async function replaceRegularBytes(target4, bytes, mode) {
     });
   } finally {
     await handle?.close().catch(() => void 0);
-    await unlink(temporary).catch(() => void 0);
+    await unlink2(temporary).catch(() => void 0);
   }
 }
 async function replaceRegular(path2, bytes, executable) {
@@ -30385,7 +30539,7 @@ async function replaceRegular(path2, bytes, executable) {
 }
 async function replaceSymlink(path2, target4) {
   requireProjectable(path2);
-  const temporary = join5(dirname3(path2.absolute), `.${basename2(path2.absolute)}.${process.pid}.${randomUUID()}.tmp`);
+  const temporary = join6(dirname3(path2.absolute), `.${basename2(path2.absolute)}.${process.pid}.${randomUUID()}.tmp`);
   let created = false;
   try {
     await symlink(target4, temporary);
@@ -30400,13 +30554,13 @@ async function replaceSymlink(path2, target4) {
       errno: errnoOf3(error51)
     });
   } finally {
-    if (created) await unlink(temporary).catch(() => void 0);
+    if (created) await unlink2(temporary).catch(() => void 0);
   }
 }
 async function remove(path2) {
   requireProjectable(path2);
   try {
-    await unlink(path2.absolute);
+    await unlink2(path2.absolute);
   } catch (error51) {
     if (errnoOf3(error51) !== "ENOENT") {
       throw new AtomicReplaceError({
@@ -30424,7 +30578,7 @@ function createProjectionWriter() {
 
 // src/state/fingerprint-readers.ts
 init_canonical();
-import { lstat as lstat3, readFile as readFile4 } from "node:fs/promises";
+import { lstat as lstat3, readFile as readFile5 } from "node:fs/promises";
 init_phase_instance();
 
 // src/state/fingerprint.ts
@@ -30677,8 +30831,8 @@ init_phase_instance();
 
 // src/review/rubrics.ts
 init_canonical();
-import { readFile as readFile3 } from "node:fs/promises";
-import { join as join6 } from "node:path";
+import { readFile as readFile4 } from "node:fs/promises";
+import { join as join7 } from "node:path";
 
 // src/contracts/rubric.ts
 init_zod();
@@ -30739,7 +30893,7 @@ async function loadRubricFile(input) {
   const label = `assets/${input.file}`;
   let document2;
   try {
-    const bytes = await readFile3(join6(input.root, input.file));
+    const bytes = await readFile4(join7(input.root, input.file));
     document2 = parseSingleYamlDocument(new TextDecoder("utf-8", { fatal: true }).decode(bytes), label);
   } catch (error51) {
     if (error51 instanceof SyntaxError) {
@@ -30886,57 +31040,8 @@ function createInternalInputFingerprintResolver(input) {
 
 // src/state/constitution.ts
 init_canonical();
-
-// src/contracts/constitution.ts
-init_zod();
-init_plain_json();
-init_yaml();
-var frontmatterSchema = external_exports.object({
-  id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
-  version: external_exports.number().int().positive().safe(),
-  status: external_exports.enum(["active", "deprecated"]),
-  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
-  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
-}).strict();
-var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
-function parseConstitutionRuleV1(value) {
-  assertPlainJson(value, "constitution rule");
-  const parsed = constitutionRuleV1Schema.parse(value);
-  return {
-    id: parsed.id,
-    version: parsed.version,
-    status: parsed.status,
-    text: parsed.text,
-    ...parsed.review_trigger === void 0 ? {} : { review_trigger: parsed.review_trigger },
-    ...parsed.enforced_by === void 0 ? {} : { enforced_by: parsed.enforced_by }
-  };
-}
-function parseConstitutionRuleMarkdown(source, label) {
-  const normalized = source.replaceAll("\r\n", "\n");
-  if (!normalized.startsWith("---\n")) throw new Error(`${label}: expected opening YAML frontmatter delimiter`);
-  const close = normalized.indexOf("\n---\n", 4);
-  if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
-  const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
-  const text4 = normalized.slice(close + 5).trim();
-  return parseConstitutionRuleV1({ ...frontmatter, text: text4 });
-}
-function registryFromRules(rules2) {
-  const registry2 = /* @__PURE__ */ new Map();
-  for (const candidate of rules2) {
-    const rule4 = parseConstitutionRuleV1(candidate);
-    if (registry2.has(rule4.id)) throw new Error(`Duplicate constitution rule id: ${rule4.id}`);
-    registry2.set(rule4.id, Object.freeze(rule4));
-  }
-  return registry2;
-}
-function parseConstitutionRuleFiles(files) {
-  return registryFromRules(Object.keys(files).sort().map((path2) => parseConstitutionRuleMarkdown(files[path2], path2)));
-}
-
-// src/state/constitution.ts
 init_path_claims();
 var CONSTITUTION_DIRECTORY = ".archflow/constitution";
-var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
 var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3 = Object.freeze([
   Object.freeze({
@@ -31045,7 +31150,7 @@ var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail7 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function readConstitutionTreeFiles(runner, commit) {
   const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
-  return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
+  return Object.freeze(listed.filter((entry) => CONSTITUTION_RULE_PATH.test(entry.path)).map((entry) => Object.freeze({
     path: parseRepositoryPathClaim(entry.path),
     oid: parseGitOid(entry.oid)
   })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
@@ -31218,7 +31323,7 @@ async function identitiesFor(input, claims, missingIssue) {
     try {
       const stat5 = await lstat3(path2.absolute);
       if (!stat5.isFile()) return fail8(stateIssue(input, missingIssue));
-      bytes = new Uint8Array(await readFile4(path2.absolute));
+      bytes = new Uint8Array(await readFile5(path2.absolute));
     } catch (error51) {
       if (error51.code === "ENOENT") {
         return fail8(stateIssue(input, missingIssue));
@@ -31288,8 +31393,8 @@ function createProductionInputFingerprintResolver(readRetainedProduceArtifact) {
 
 // src/state/lock.ts
 import { AsyncLocalStorage } from "node:async_hooks";
-import { lstat as lstat4, mkdir as mkdir3, open as open4, readdir, realpath as realpath3, rename as rename2, rmdir } from "node:fs/promises";
-import { dirname as dirname4, join as join7 } from "node:path";
+import { lstat as lstat4, mkdir as mkdir3, open as open4, readdir as readdir2, realpath as realpath3, rename as rename2, rmdir } from "node:fs/promises";
+import { dirname as dirname4, join as join8 } from "node:path";
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 var TaskLockError = class extends Error {
@@ -31301,7 +31406,7 @@ var TaskLockError = class extends Error {
   stage;
 };
 var TASK_LOCK_POLICY = Object.freeze({
-  relativePath: join7("transient", ".transaction-lock"),
+  relativePath: join8("transient", ".transaction-lock"),
   pollIntervalMs: 10,
   deadlineMs: 250
 });
@@ -31327,7 +31432,7 @@ function createTaskLock() {
   async function runExclusive(taskRoot, work) {
     const inheritedRoots = heldRoots.getStore() ?? /* @__PURE__ */ new Set();
     if (inheritedRoots.has(taskRoot)) throw new TaskLockError("acquire");
-    const lockPath = join7(taskRoot, TASK_LOCK_POLICY.relativePath);
+    const lockPath = join8(taskRoot, TASK_LOCK_POLICY.relativePath);
     await acquire(lockPath);
     const scopedRoots = /* @__PURE__ */ new Set([...inheritedRoots, taskRoot]);
     let workResult;
@@ -36984,7 +37089,7 @@ init_plain_json();
 
 // src/state/implementation-manifest.ts
 init_canonical();
-import { lstat as lstat5, readFile as readFile5, readlink } from "node:fs/promises";
+import { lstat as lstat5, readFile as readFile6, readlink } from "node:fs/promises";
 import { resolve as resolvePath4 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
 init_evidence();
@@ -37624,7 +37729,7 @@ async function baseIdentity(runner, commit, path2) {
 async function readRegularBytes(path2, label) {
   const stat5 = await lstat5(path2.absolute);
   if (!stat5.isFile()) throw new TypeError(`${label} is not a regular file`);
-  return new Uint8Array(await readFile5(path2.absolute));
+  return new Uint8Array(await readFile6(path2.absolute));
 }
 async function readRenameSources(runner, baseCommit) {
   const fields = await runner.runNulFields({
@@ -38679,7 +38784,7 @@ async function readRetainedResult(runner, authority, reference, repositorySet) {
         if (projection.ok) {
           try {
             const metadata2 = await lstat7(projection.value.absolute);
-            restored = metadata2.isSymbolicLink() ? Buffer.from(await readlink3(projection.value.absolute), "utf8") : metadata2.isFile() ? new Uint8Array(await readFile6(projection.value.absolute)) : void 0;
+            restored = metadata2.isSymbolicLink() ? Buffer.from(await readlink3(projection.value.absolute), "utf8") : metadata2.isFile() ? new Uint8Array(await readFile7(projection.value.absolute)) : void 0;
             if (restored !== void 0 && (restored.byteLength !== output.payload_bytes || sha256Bytes(restored) !== output.payload_digest)) {
               restored = void 0;
             }
@@ -39070,7 +39175,7 @@ init_canonical();
 init_review();
 init_evidence();
 init_phase_instance();
-import { readFile as readFile7 } from "node:fs/promises";
+import { readFile as readFile8 } from "node:fs/promises";
 var feedbackSchema = external_exports.object({
   task_id: taskSlugV1Schema,
   phase_instance: phaseInstanceIdV1Schema,
@@ -39093,7 +39198,7 @@ async function readReceivedFeedback(authority, dependencies, state) {
   try {
     const path2 = await target(authority, dependencies, state);
     if (!path2.ok) return void 0;
-    const record2 = feedbackSchema.parse(JSON.parse(await readFile7(path2.value.absolute, "utf8")));
+    const record2 = feedbackSchema.parse(JSON.parse(await readFile8(path2.value.absolute, "utf8")));
     if (record2.task_id !== state.task_id || record2.phase_instance !== state.phase_instance || record2.attempt !== state.attempt || record2.input_fingerprint !== state.input_fingerprint) return void 0;
     return record2.reports;
   } catch {
@@ -39648,7 +39753,7 @@ init_phase_instance();
 
 // src/state/produce-subject.ts
 init_canonical();
-import { readFile as readFile8 } from "node:fs/promises";
+import { readFile as readFile9 } from "node:fs/promises";
 init_path_claims();
 init_phase_instance();
 
@@ -40102,7 +40207,7 @@ async function loadProduceUpstreamSubject(dependencies, authority, state, bindin
   if (!target4.ok) return target4;
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile8(target4.value.absolute));
+    bytes = new Uint8Array(await readFile9(target4.value.absolute));
   } catch {
     return fail14(state.phase_instance, "current-upstream-import-unavailable");
   }
@@ -40248,7 +40353,7 @@ async function readProduceProjection(runner, authority, subject, artifactPath) {
   if (retainedDigest === void 0) return fail14(authority.context.phase_instance, "produce-projection-not-retained");
   let bytes;
   try {
-    bytes = new Uint8Array(await readFile8(target4.value.absolute));
+    bytes = new Uint8Array(await readFile9(target4.value.absolute));
   } catch {
     return fail14(authority.context.phase_instance, "produce-projection-unavailable");
   }
@@ -40871,7 +40976,7 @@ async function loadCurrentReviewSet(dependencies, authority, phase_instance) {
 init_review();
 
 // src/dispatch/recovery.ts
-import { readFile as readFile10 } from "node:fs/promises";
+import { readFile as readFile11 } from "node:fs/promises";
 init_zod();
 init_plain_json();
 init_canonical();
@@ -40879,7 +40984,7 @@ init_path_claims();
 
 // src/dispatch/failure-observation.ts
 init_canonical();
-import { readFile as readFile9 } from "node:fs/promises";
+import { readFile as readFile10 } from "node:fs/promises";
 var supportedCodes = new Set(DISPATCH_FAILURE_CODES);
 var SAFE_MESSAGES = Object.freeze({
   CONFIG_INVALID: "The selected reviewer route configuration is invalid.",
@@ -40912,7 +41017,7 @@ async function readCurrentDispatchFailure(dependencies, authority, state) {
     });
     if (!target4.ok) return void 0;
     const parsed = dispatchFailureObservationV1Schema.parse(JSON.parse(
-      await readFile9(target4.value.absolute, "utf8")
+      await readFile10(target4.value.absolute, "utf8")
     ));
     return parsed.task_id === state.task_id && parsed.phase_instance === state.phase_instance && parsed.step === state.step && parsed.attempt === state.attempt && parsed.observed_at_revision === state.revision ? Object.freeze(parsed) : void 0;
   } catch {
@@ -41131,7 +41236,7 @@ async function target2(context2) {
 async function read(context2) {
   let bytes;
   try {
-    bytes = await readFile10((await target2(context2)).absolute);
+    bytes = await readFile11((await target2(context2)).absolute);
   } catch (error51) {
     if (error51 !== null && typeof error51 === "object" && "code" in error51 && error51.code === "ENOENT") {
       return { schema_version: "1", binding: binding(context2.state), entries: [] };
@@ -41171,7 +41276,7 @@ async function readDispatchRecovery(context2) {
 
 // src/state/status.ts
 init_canonical();
-import { readFile as readFile13 } from "node:fs/promises";
+import { readFile as readFile14 } from "node:fs/promises";
 init_phase_instance();
 init_review();
 
@@ -42841,7 +42946,7 @@ function deriveNextAction(input) {
 // src/state/phase-documents.ts
 init_canonical();
 init_phase_instance();
-import { readFile as readFile11 } from "node:fs/promises";
+import { readFile as readFile12 } from "node:fs/promises";
 var STATUS_RESOURCE_ROLES = Object.freeze([
   "current-artifact",
   "user-ask",
@@ -42939,7 +43044,7 @@ function phaseDocumentDefaults(taskId, phaseInstance5) {
 }
 async function validatePlanningRestartAskAppend(input) {
   if (input.target.path_class !== "task-ask") return false;
-  const existing = new Uint8Array(await readFile11(input.target.absolute));
+  const existing = new Uint8Array(await readFile12(input.target.absolute));
   const suffix = restartAskSuffix(input.restart_id, input.request);
   if (!bytesEndWith(existing, suffix)) return false;
   return sha256Bytes(existing.subarray(0, existing.byteLength - suffix.byteLength)) === input.expected_base_digest;
@@ -42970,7 +43075,7 @@ async function installPlanningRestartAskAppend(writer, input) {
     throw new TypeError("planning restart ask append requires the canonical ask document");
   }
   if (input.request.trim() === "") throw new TypeError("planning restart request must not be blank");
-  const existing = new Uint8Array(await readFile11(input.target.absolute));
+  const existing = new Uint8Array(await readFile12(input.target.absolute));
   const suffix = restartAskSuffix(input.restart_id, input.request);
   const existingDigest = sha256Bytes(existing);
   if (bytesEndWith(existing, suffix)) {
@@ -42999,8 +43104,8 @@ async function installPlanningRestartAskAppend(writer, input) {
 
 // src/state/workspace-cleanup.ts
 init_canonical();
-import { lstat as lstat8, readFile as readFile12, readdir as readdir2, rm, rmdir as rmdir2, stat, unlink as unlink2 } from "node:fs/promises";
-import { basename as basename3, dirname as dirname5, join as join8, relative as relative4, sep as sep4 } from "node:path";
+import { lstat as lstat8, readFile as readFile13, readdir as readdir3, rm, rmdir as rmdir2, stat, unlink as unlink3 } from "node:fs/promises";
+import { basename as basename3, dirname as dirname5, join as join9, relative as relative4, sep as sep4 } from "node:path";
 init_evidence();
 var ok15 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function io2(authority, operation) {
@@ -43017,8 +43122,8 @@ function inside(root, candidate) {
 async function filesBelow(root) {
   const output = [];
   const walk = async (directory) => {
-    for (const entry of await readdir2(directory, { withFileTypes: true })) {
-      const absolute = join8(directory, entry.name);
+    for (const entry of await readdir3(directory, { withFileTypes: true })) {
+      const absolute = join9(directory, entry.name);
       if (!inside(root, absolute)) throw new TypeError("workspace inventory escaped its root");
       if (entry.isSymbolicLink()) {
         const metadata2 = await lstat8(absolute);
@@ -43052,7 +43157,7 @@ function phaseNumber(phaseInstance5) {
 async function receiptIsRecoveryBuffer(entry, state) {
   if (!/^transient\/intents\/.+\.json$/u.test(entry.relative) || entry.relative.endsWith(".request.json")) return false;
   try {
-    const document2 = parseCanonicalDocument(await readFile12(entry.absolute), "intent receipt");
+    const document2 = parseCanonicalDocument(await readFile13(entry.absolute), "intent receipt");
     const receipt = parseIntentReceipt(document2.value);
     return receipt.prior_revision === state.revision && receipt.resulting_revision === state.revision + 1;
   } catch {
@@ -43067,7 +43172,7 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
     if (state.last_transition?.intent_id === intentId) return false;
     const receipt = entry.relative.replace(/\.request\.json$/u, ".json");
     try {
-      await lstat8(join8(entry.absolute, "..", basename3(receipt)));
+      await lstat8(join9(entry.absolute, "..", basename3(receipt)));
       return false;
     } catch (error51) {
       return error51.code === "ENOENT";
@@ -43086,7 +43191,7 @@ async function shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults
   return false;
 }
 async function referencedDecisionDigests(authority) {
-  const root = join8(authority.task_root, "authority", "decisions");
+  const root = join9(authority.task_root, "authority", "decisions");
   const digests = /* @__PURE__ */ new Set();
   let files;
   try {
@@ -43097,13 +43202,13 @@ async function referencedDecisionDigests(authority) {
   const pattern = /\b[0-9a-f]{64}\b/gu;
   for (const file2 of files) {
     if (file2.symlink) return /* @__PURE__ */ new Set(["*"]);
-    const text4 = await readFile12(file2.absolute, "utf8").catch(() => "");
+    const text4 = await readFile13(file2.absolute, "utf8").catch(() => "");
     for (const match of text4.matchAll(pattern)) digests.add(match[0]);
   }
   return digests;
 }
 async function decisionProtectedAuthorityResults(authority) {
-  const root = join8(authority.task_root, "authority", "results");
+  const root = join9(authority.task_root, "authority", "results");
   const decisionDigests = await referencedDecisionDigests(authority);
   let files;
   try {
@@ -43118,7 +43223,7 @@ async function decisionProtectedAuthorityResults(authority) {
     if (digest12 === void 0) continue;
     try {
       const document2 = parseCanonicalDocument(
-        await readFile12(file2.absolute),
+        await readFile13(file2.absolute),
         "result manifest"
       );
       const manifest = parseResultManifest(document2.value);
@@ -43137,7 +43242,7 @@ async function decisionProtectedAuthorityResults(authority) {
   return protectedResults;
 }
 async function unreferencedAuthorityResults(authority, state, decisionProtectedResults) {
-  const root = join8(authority.task_root, "authority", "results");
+  const root = join9(authority.task_root, "authority", "results");
   const live = retainedResultDigests(state);
   if (decisionProtectedResults.has("*")) return Object.freeze([]);
   let files;
@@ -43152,10 +43257,10 @@ async function unreferencedAuthorityResults(authority, state, decisionProtectedR
   }));
 }
 async function unreferencedAuthorityDecisions(authority, state) {
-  const root = join8(authority.task_root, "authority", "decisions");
+  const root = join9(authority.task_root, "authority", "decisions");
   let groups;
   try {
-    groups = await readdir2(root, { withFileTypes: true });
+    groups = await readdir3(root, { withFileTypes: true });
   } catch (error51) {
     return error51.code === "ENOENT" ? Object.freeze([]) : Object.freeze([]);
   }
@@ -43189,13 +43294,13 @@ async function unreferencedAuthorityDecisions(authority, state) {
     for (const gateId of [...live]) {
       let entries;
       try {
-        entries = await filesBelow(join8(root, gateId));
+        entries = await filesBelow(join9(root, gateId));
       } catch {
         return Object.freeze([]);
       }
       for (const entry of entries) {
         if (entry.symlink) return Object.freeze([]);
-        const text4 = await readFile12(entry.absolute, "utf8").catch(() => "");
+        const text4 = await readFile13(entry.absolute, "utf8").catch(() => "");
         for (const candidate of known) {
           if (!live.has(candidate) && text4.includes(`"${candidate}"`)) {
             live.add(candidate);
@@ -43209,7 +43314,7 @@ async function unreferencedAuthorityDecisions(authority, state) {
   for (const gateId of known) {
     if (live.has(gateId)) continue;
     try {
-      stale.push(...await filesBelow(join8(root, gateId)));
+      stale.push(...await filesBelow(join9(root, gateId)));
     } catch {
       return Object.freeze([]);
     }
@@ -43217,19 +43322,19 @@ async function unreferencedAuthorityDecisions(authority, state) {
   return Object.freeze(stale);
 }
 async function removeFile(entry) {
-  await unlink2(entry.absolute);
+  await unlink3(entry.absolute);
 }
 async function removeEmptyDirectories(root, preserve = /* @__PURE__ */ new Set()) {
   let directories = [];
   const walk = async (directory) => {
     let children;
     try {
-      children = await readdir2(directory, { withFileTypes: true });
+      children = await readdir3(directory, { withFileTypes: true });
     } catch (error51) {
       if (error51.code === "ENOENT") return;
       throw error51;
     }
-    for (const child of children) if (child.isDirectory() && !child.isSymbolicLink()) await walk(join8(directory, child.name));
+    for (const child of children) if (child.isDirectory() && !child.isSymbolicLink()) await walk(join9(directory, child.name));
     if (!preserve.has(directory)) directories.push(directory);
   };
   await walk(root);
@@ -43260,7 +43365,7 @@ async function inspectWorkspaceCleanup(dependencies, authority, state) {
   if (!target4.ok) return target4;
   try {
     const workspaceFiles = await filesBelow(target4.value.absolute);
-    const authorityFiles = await filesBelow(join8(authority.task_root, "authority"));
+    const authorityFiles = await filesBelow(join9(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
       ...await unreferencedAuthorityResults(authority, state, decisionProtectedResults),
@@ -43298,7 +43403,7 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
   if (!target4.ok) return target4;
   try {
     const workspaceFiles = await filesBelow(target4.value.absolute);
-    const authorityFiles = await filesBelow(join8(authority.task_root, "authority"));
+    const authorityFiles = await filesBelow(join9(authority.task_root, "authority"));
     const decisionProtectedResults = await decisionProtectedAuthorityResults(authority);
     const authorityCandidates = [
       ...await unreferencedAuthorityResults(authority, state, decisionProtectedResults),
@@ -43311,22 +43416,22 @@ async function cleanTaskWorkspace(dependencies, authority, state) {
     let retainedFiles = retainedAuthority.length;
     let retainedBytes = retainedAuthority.reduce((sum, entry) => sum + entry.byte_count, 0);
     for (const entry of [...workspaceFiles, ...authorityCandidates]) {
-      const authorityFile = entry.absolute.startsWith(join8(authority.task_root, "authority") + sep4);
+      const authorityFile = entry.absolute.startsWith(join9(authority.task_root, "authority") + sep4);
       if (!authorityFile && await shouldRetainWorkspaceEntry(entry, state, decisionProtectedResults)) {
         retainedFiles += 1;
         retainedBytes += entry.byte_count;
         continue;
       }
       await removeFile(entry);
-      await removeEmptyParents(dirname5(entry.absolute), authorityFile ? join8(authority.task_root, "authority") : target4.value.absolute);
+      await removeEmptyParents(dirname5(entry.absolute), authorityFile ? join9(authority.task_root, "authority") : target4.value.absolute);
       removedFiles += 1;
       removedBytes += entry.byte_count;
     }
     await removeEmptyDirectories(target4.value.absolute, /* @__PURE__ */ new Set([
-      join8(target4.value.absolute, "transient", ".transaction-lock")
+      join9(target4.value.absolute, "transient", ".transaction-lock")
     ]));
-    await removeEmptyDirectories(join8(authority.task_root, "authority", "results"));
-    await removeEmptyDirectories(join8(authority.task_root, "authority", "decisions"));
+    await removeEmptyDirectories(join9(authority.task_root, "authority", "results"));
+    await removeEmptyDirectories(join9(authority.task_root, "authority", "decisions"));
     return ok15(Object.freeze({
       removed_files: parseSafeInteger(removedFiles),
       removed_bytes: parseSafeInteger(removedBytes),
@@ -43363,10 +43468,10 @@ async function removeSupersededPhaseDocuments(dependencies, authority, targetPha
     const phase3 = Number(document2[1]);
     const superseded = document2[2] === "impl-notes" ? phase3 >= target4 : phase3 > target4;
     if (!superseded) continue;
-    const absolute = join8(authority.task_root, ...relative9.split("/"));
+    const absolute = join9(authority.task_root, ...relative9.split("/"));
     if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
-    await unlink2(absolute).catch(() => void 0);
-    await removeEmptyParents(dirname5(absolute), join8(authority.task_root, "phases"));
+    await unlink3(absolute).catch(() => void 0);
+    await removeEmptyParents(dirname5(absolute), join9(authority.task_root, "phases"));
     removed.push(relative9);
   }
   return Object.freeze(removed.sort());
@@ -43392,8 +43497,8 @@ async function cleanTerminalTaskWorkspace(dependencies, authority) {
 // src/state/reconciliation-discovery.ts
 init_canonical();
 import { constants as fsConstants5 } from "node:fs";
-import { lstat as lstat9, readdir as readdir3, readlink as readlink4 } from "node:fs/promises";
-import { join as join9 } from "node:path";
+import { lstat as lstat9, readdir as readdir4, readlink as readlink4 } from "node:fs/promises";
+import { join as join10 } from "node:path";
 init_evidence();
 var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var stateInvalid2 = (authority, issueCode) => Object.freeze({
@@ -43677,7 +43782,7 @@ async function discoverGateHead(dependencies, authority, state) {
 async function discoverIntent(dependencies, authority, state) {
   let names;
   try {
-    names = await readdir3(join9(authority.workspace_root, "transient", "intents"));
+    names = await readdir4(join10(authority.workspace_root, "transient", "intents"));
   } catch (error51) {
     if (error51.code === "ENOENT") return ok16(Object.freeze({}));
     return ioFailure2(authority, "discover-reconciliation-intents");
@@ -44275,7 +44380,7 @@ async function readActiveGateProjection(dependencies, authority) {
       context: authority.context
     });
     if (!target4.ok) return void 0;
-    const bytes = new Uint8Array(await readFile13(target4.value.absolute));
+    const bytes = new Uint8Array(await readFile14(target4.value.absolute));
     return parseActiveGate(parseCanonicalDocument(bytes, "active gate").value);
   } catch {
     return void 0;
@@ -44291,7 +44396,7 @@ async function readArchivedGateRequest(dependencies, authority, gateId) {
       context: authority.context
     });
     if (!target4.ok) return void 0;
-    const bytes = new Uint8Array(await readFile13(target4.value.absolute));
+    const bytes = new Uint8Array(await readFile14(target4.value.absolute));
     return parsePersistedGateRequest(parseCanonicalDocument(bytes, "gate request").value);
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
@@ -45692,7 +45797,7 @@ async function computeTaskStatus(dependencies, authority) {
 }
 async function recoverStatePosition(statePath) {
   try {
-    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile13(statePath))));
+    const raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(await readFile14(statePath))));
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return void 0;
     const candidate = raw;
     const position2 = Object.freeze({
@@ -46858,15 +46963,15 @@ init_evidence();
 init_phase_instance();
 
 // src/init/diagnostics.ts
-import { readFile as readFile15, stat as stat4 } from "node:fs/promises";
-import { join as join13 } from "node:path";
+import { readFile as readFile16, stat as stat4 } from "node:fs/promises";
+import { join as join14 } from "node:path";
 init_evidence();
 
 // src/dispatch/cli.ts
 init_review();
 init_canonical();
 import { stat as stat3, writeFile } from "node:fs/promises";
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 init_evidence();
 init_plain_json();
 
@@ -47187,7 +47292,7 @@ var CODEX_DISABLED_FEATURES = Object.freeze([
 function withLocalBinOnPath(workspace) {
   const home = workspace.env.HOME;
   if (home === void 0 || home === "") return workspace.env;
-  const localBin = join10(home, ".local", "bin");
+  const localBin = join11(home, ".local", "bin");
   const path2 = workspace.env.PATH;
   if (path2 === void 0) return Object.freeze({ ...workspace.env, PATH: localBin });
   if (path2.split(":").includes(localBin)) return workspace.env;
@@ -47597,9 +47702,9 @@ var claudeAdapter = Object.freeze({
     if (route2.effort === "ultra") {
       return fail17(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
-    const mcpConfigPath = join10(workspace.root, "empty-mcp.json");
+    const mcpConfigPath = join11(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 384 });
-    const diffDirectory = workspace.repository_view_root === void 0 ? void 0 : join10(workspace.repository_view_root, "..", "review-diffs");
+    const diffDirectory = workspace.repository_view_root === void 0 ? void 0 : join11(workspace.repository_view_root, "..", "review-diffs");
     const hasDiffs = diffDirectory !== void 0 && await stat3(diffDirectory).then((value) => value.isDirectory(), (error51) => {
       if (error51.code === "ENOENT") return false;
       throw error51;
@@ -47713,8 +47818,8 @@ var codexAdapter = Object.freeze({
       projection.subject,
       projection.assignment
     );
-    const schemaPath = join10(workspace.root, `${envelope.result_kind}.schema.json`);
-    const outputPath = join10(workspace.root, `${envelope.result_kind}-final-output.json`);
+    const schemaPath = join11(workspace.root, `${envelope.result_kind}.schema.json`);
+    const outputPath = join11(workspace.root, `${envelope.result_kind}-final-output.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const readTools = workspace.repository_view_root === void 0 ? [] : ["shell_tool", "unified_exec"];
@@ -47823,7 +47928,7 @@ var antigravityAdapter = Object.freeze({
       projection.subject,
       projection.assignment
     );
-    const schemaPath = join10(workspace.root, `${envelope.result_kind}.schema.json`);
+    const schemaPath = join11(workspace.root, `${envelope.result_kind}.schema.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}
 `, { encoding: "utf8", mode: 384 });
     const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes);
@@ -47901,7 +48006,7 @@ function preflightAdapter(adapterId, workspace) {
 init_config();
 import { chmod as chmod2, lstat as lstat10, mkdir as mkdir4, mkdtemp, realpath as realpath4, rm as rm2, symlink as symlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute4, join as join11, relative as relative5, resolve } from "node:path";
+import { isAbsolute as isAbsolute4, join as join12, relative as relative5, resolve } from "node:path";
 
 // src/review/envelopes.ts
 init_canonical();
@@ -47949,7 +48054,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
   if (isInside(realRepositoryRoot, realTemporaryRoot)) {
     throw new Error("dispatch temporary directory must be outside the repository");
   }
-  const root = await mkdtemp(join11(realTemporaryRoot, "archflow-dispatch-"));
+  const root = await mkdtemp(join12(realTemporaryRoot, "archflow-dispatch-"));
   try {
     const sourceHome = resolve(process.env.HOME ?? homedir());
     const env = {
@@ -47957,7 +48062,7 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
       TMPDIR: root,
       // A shared workspace serves both adapters of one review; each CLI ignores the other's
       // variable, and a single-adapter list produces exactly the env it produced before.
-      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join11(sourceHome, ".codex")) } : {},
+      ...adapters.includes("codex-cli") ? { CODEX_HOME: resolve(process.env.CODEX_HOME ?? join12(sourceHome, ".codex")) } : {},
       ...adapters.includes("claude-cli") && process.env.CLAUDE_CONFIG_DIR !== void 0 ? { CLAUDE_CONFIG_DIR: resolve(process.env.CLAUDE_CONFIG_DIR) } : {}
     };
     for (const name of FORWARDED_ENVIRONMENT) {
@@ -47979,8 +48084,8 @@ async function createDispatchWorkspace(adapter2, repositoryRoot = process.cwd())
 // src/init/registration.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir5, open as open6, readFile as readFile14, rename as rename3, unlink as unlink3 } from "node:fs/promises";
-import { basename as basename4, dirname as dirname6, join as join12 } from "node:path";
+import { mkdir as mkdir5, open as open6, readFile as readFile15, rename as rename3, unlink as unlink4 } from "node:fs/promises";
+import { basename as basename4, dirname as dirname6, join as join13 } from "node:path";
 var CLAUDE_MCP_TIMEOUT_MS = 36e5;
 var CODEX_TOOL_TIMEOUT_SEC = 3600;
 var CODEX_STARTUP_TIMEOUT_SEC = 30;
@@ -48059,14 +48164,14 @@ function runCommand(command, argv, cwd, environment) {
 }
 async function readOptional(path2) {
   try {
-    return await readFile14(path2, "utf8");
+    return await readFile15(path2, "utf8");
   } catch (error51) {
     if (error51.code === "ENOENT") return void 0;
     throw error51;
   }
 }
 async function replaceHostConfig(path2, source) {
-  const temporary = join12(dirname6(path2), `.${basename4(path2)}.${process.pid}.${randomUUID2()}.tmp`);
+  const temporary = join13(dirname6(path2), `.${basename4(path2)}.${process.pid}.${randomUUID2()}.tmp`);
   let handle;
   try {
     handle = await open6(temporary, "wx", 420);
@@ -48077,7 +48182,7 @@ async function replaceHostConfig(path2, source) {
     await rename3(temporary, path2);
   } finally {
     await handle?.close().catch(() => void 0);
-    await unlink3(temporary).catch(() => void 0);
+    await unlink4(temporary).catch(() => void 0);
   }
 }
 function parseMcpJson(source) {
@@ -48121,7 +48226,7 @@ function claudeGetDiagnostic(output) {
   };
 }
 async function registerClaudeProject(input) {
-  const path2 = join12(input.working_directory, ".mcp.json");
+  const path2 = join13(input.working_directory, ".mcp.json");
   try {
     const beforeSource = await readOptional(path2);
     const before = parseMcpJson(beforeSource);
@@ -48237,7 +48342,7 @@ function codexGetDiagnostic(output) {
   }
 }
 async function registerCodexProject(input) {
-  const path2 = join12(input.working_directory, ".codex", "config.toml");
+  const path2 = join13(input.working_directory, ".codex", "config.toml");
   try {
     const before = await readOptional(path2) ?? "";
     const range = managedBlockRange(before);
@@ -48284,8 +48389,8 @@ async function registerCodexProject(input) {
 async function registerAntigravityConfig(input) {
   const home = input.environment?.HOME ?? process.env.HOME ?? "";
   if (!home) return ioFailure3("antigravity-registration");
-  const configDir = join12(home, ".gemini", "config");
-  const path2 = join12(configDir, "mcp_config.json");
+  const configDir = join13(home, ".gemini", "config");
+  const path2 = join13(configDir, "mcp_config.json");
   try {
     const beforeSource = await readOptional(path2);
     const before = parseMcpJson(beforeSource);
@@ -48457,7 +48562,7 @@ function codexTimeoutFinding(source) {
 }
 async function readHostConfig(path2) {
   try {
-    return await readFile15(path2, "utf8");
+    return await readFile16(path2, "utf8");
   } catch {
     return void 0;
   }
@@ -48494,8 +48599,8 @@ async function collectInitDiagnostics(input) {
   const [claude, codex, claudeHostConfig, codexHostConfig, runtimeDirectory, ignoredAssets] = await Promise.all([
     diagnoseAdapter("claude-cli", input.working_directory),
     diagnoseAdapter("codex-cli", input.working_directory),
-    readHostConfig(join13(input.working_directory, ".mcp.json")),
-    readHostConfig(join13(input.working_directory, ".codex", "config.toml")),
+    readHostConfig(join14(input.working_directory, ".mcp.json")),
+    readHostConfig(join14(input.working_directory, ".codex", "config.toml")),
     diagnoseRuntimeDirectory(input.working_directory),
     diagnoseIgnoredGeneratedAssets(input.working_directory)
   ]);
@@ -48574,8 +48679,8 @@ async function runInit(input) {
 // src/init/legacy-upgrade.ts
 init_canonical();
 init_config();
-import { lstat as lstat11, readdir as readdir5, readFile as readFile18, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
-import { isAbsolute as isAbsolute6, join as join17, relative as relative7, sep as sep5 } from "node:path";
+import { lstat as lstat11, readdir as readdir6, readFile as readFile19, realpath as realpath5, rm as rm4, rmdir as rmdir3 } from "node:fs/promises";
+import { isAbsolute as isAbsolute6, join as join18, relative as relative7, sep as sep5 } from "node:path";
 init_evidence();
 init_path_claims();
 init_phase_instance();
@@ -48583,7 +48688,7 @@ init_phase_instance();
 // src/state/initialization.ts
 init_canonical();
 import { mkdir as mkdir6, mkdtemp as mkdtemp2, rename as rename4, rm as rm3, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname as dirname7, isAbsolute as isAbsolute5, join as join15, relative as relative6 } from "node:path";
+import { dirname as dirname7, isAbsolute as isAbsolute5, join as join16, relative as relative6 } from "node:path";
 init_evidence();
 init_phase_instance();
 init_path_claims();
@@ -48729,14 +48834,14 @@ function identifyTransactionRequest(call, authority, recomputedInputFingerprint)
 // src/state/legacy-stage.ts
 init_canonical();
 init_config();
-import { readFile as readFile16 } from "node:fs/promises";
-import { join as join14 } from "node:path";
+import { readFile as readFile17 } from "node:fs/promises";
+import { join as join15 } from "node:path";
 function importRoot(authority, initialization) {
-  return join14(authority.workspace_root, "cache", "imports", initialization.import_digest);
+  return join15(authority.workspace_root, "cache", "imports", initialization.import_digest);
 }
 async function readStagedLegacyConfig(authority, initialization) {
   try {
-    const bytes = new Uint8Array(await readFile16(join14(importRoot(authority, initialization), "config.yaml")));
+    const bytes = new Uint8Array(await readFile17(join15(importRoot(authority, initialization), "config.yaml")));
     const parsed = parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(bytes), "staged task config");
     const digest12 = sha256Bytes(bytes);
     if (digest12 !== initialization.config_digest) return void 0;
@@ -48747,7 +48852,7 @@ async function readStagedLegacyConfig(authority, initialization) {
 }
 async function readStagedLegacyPayload(authority, initialization, reference) {
   try {
-    const bytes = new Uint8Array(await readFile16(join14(importRoot(authority, initialization), "payload", reference.legacy_path)));
+    const bytes = new Uint8Array(await readFile17(join15(importRoot(authority, initialization), "payload", reference.legacy_path)));
     if (bytes.byteLength !== reference.byte_count || sha256Bytes(bytes) !== reference.digest) return void 0;
     return bytes;
   } catch {
@@ -48944,9 +49049,9 @@ async function installLegacyDestination(request, initialization, initializationB
   const references = new Map(initialization.staged_payload_refs.map((entry) => [entry.legacy_path, entry]));
   let temporary;
   try {
-    temporary = await mkdtemp2(join15(request.authority.workspace_root, ".adopt-"));
-    await mkdir6(join15(temporary, "authority"), { recursive: true });
-    await writeFile3(join15(temporary, "config.yaml"), config2.bytes, { flag: "wx", mode: 420 });
+    temporary = await mkdtemp2(join16(request.authority.workspace_root, ".adopt-"));
+    await mkdir6(join16(temporary, "authority"), { recursive: true });
+    await writeFile3(join16(temporary, "config.yaml"), config2.bytes, { flag: "wx", mode: 420 });
     for (const entry of initialization.mapping) {
       const reference = references.get(entry.legacy_path);
       if (reference === void 0) return contract("legacy-mapping-payload-missing");
@@ -48954,12 +49059,12 @@ async function installLegacyDestination(request, initialization, initializationB
       if (bytes === void 0) return contract("legacy-staged-payload-invalid");
       const prefix = `.archflow/tasks/${initialization.task_id}/`;
       const relativeDestination = entry.destination_path.slice(prefix.length);
-      const target4 = join15(temporary, relativeDestination);
+      const target4 = join16(temporary, relativeDestination);
       await mkdir6(dirname7(target4), { recursive: true });
       await writeFile3(target4, bytes, { flag: "wx", mode: 420 });
     }
-    await writeFile3(join15(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
-    await writeFile3(join15(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
+    await writeFile3(join16(temporary, "authority", "initialization.json"), initializationBytes, { flag: "wx", mode: 420 });
+    await writeFile3(join16(temporary, "state.json"), stateBytes, { flag: "wx", mode: 420 });
     await rename4(temporary, request.authority.task_root);
     temporary = void 0;
     return ok20(void 0);
@@ -49330,8 +49435,8 @@ init_evidence();
 init_path_claims();
 init_plain_json();
 init_phase_instance();
-import { readdir as readdir4, readFile as readFile17 } from "node:fs/promises";
-import { join as join16 } from "node:path";
+import { readdir as readdir5, readFile as readFile18 } from "node:fs/promises";
+import { join as join17 } from "node:path";
 var legacyUpgradeStageDescriptorV1Schema = external_exports.object({
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
@@ -49351,7 +49456,7 @@ function expectedManifestPath(taskId, digest12) {
 async function inspectLegacyUpgradeStage(importsRoot, taskId) {
   let digests;
   try {
-    digests = (await readdir4(importsRoot)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort(ordinal8);
+    digests = (await readdir5(importsRoot)).filter((entry) => /^[a-f0-9]{64}$/u.test(entry)).sort(ordinal8);
   } catch {
     return Object.freeze({ kind: "absent" });
   }
@@ -49360,7 +49465,7 @@ async function inspectLegacyUpgradeStage(importsRoot, taskId) {
   for (const digest12 of digests) {
     try {
       const descriptor = parseLegacyUpgradeStageDescriptor(
-        JSON.parse(await readFile17(join16(importsRoot, digest12, "stage.json"), "utf8"))
+        JSON.parse(await readFile18(join17(importsRoot, digest12, "stage.json"), "utf8"))
       );
       if (descriptor.task_id === taskId && descriptor.import_digest === digest12 && descriptor.manifest_path === expectedManifestPath(taskId, digest12)) {
         matches.push(descriptor);
@@ -49454,13 +49559,13 @@ async function enumerateSource(sourceRoot, excluded, context2) {
   const walk = async (directory) => {
     let entries;
     try {
-      entries = await readdir5(directory, { withFileTypes: true });
+      entries = await readdir6(directory, { withFileTypes: true });
     } catch {
       return fail22(ioError3(context2));
     }
     entries.sort((left, right) => ordinal9(left.name, right.name));
     for (const entry of entries) {
-      const absolute = join17(directory, entry.name);
+      const absolute = join18(directory, entry.name);
       const relativePath = relative7(sourceRoot, absolute).split(sep5).join("/");
       if (excluded.has(relativePath)) continue;
       if (entry.isDirectory()) {
@@ -49487,7 +49592,7 @@ async function enumerateSource(sourceRoot, excluded, context2) {
       const resolved = await resolveLegacySourcePath({ sourceRoot, claim, context: context2 });
       if (!resolved.ok) return resolved;
       try {
-        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile18(resolved.value.absolute)) }));
+        files.push(Object.freeze({ legacy_path: claim, bytes: new Uint8Array(await readFile19(resolved.value.absolute)) }));
       } catch {
         return fail22(ioError3(context2));
       }
@@ -49520,7 +49625,7 @@ async function stageLegacyUpgrade(input) {
         observed_digest: canonicalJsonDigest({ schema_version: "1", root: sourceRepository.value.location.worktreeRoot })
       }));
     }
-    const destinationRoot = join17(runner.location.worktreeRoot, ".archflow", "tasks", taskId);
+    const destinationRoot = join18(runner.location.worktreeRoot, ".archflow", "tasks", taskId);
     if (isInside2(sourceRoot, destinationRoot) || isInside2(destinationRoot, sourceRoot)) {
       return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-source-destination-overlap" }));
     }
@@ -49529,7 +49634,7 @@ async function stageLegacyUpgrade(input) {
     }
     let configBytes;
     try {
-      configBytes = new Uint8Array(await readFile18(join17(runner.location.worktreeRoot, ".archflow", "config.yaml")));
+      configBytes = new Uint8Array(await readFile19(join18(runner.location.worktreeRoot, ".archflow", "config.yaml")));
     } catch {
       return fail22(createProjectError("CONFIG_INVALID", { issue_code: "archflow-initialization-required" }));
     }
@@ -49744,28 +49849,28 @@ async function discardLegacyUpgrade(input) {
   if (!/^[a-f0-9]{64}$/u.test(digest12)) {
     return fail22(createProjectError("CONTRACT_INVALID", { issue_code: "legacy-import-digest-invalid" }));
   }
-  const destination = join17(root, ".archflow", "tasks", taskId);
-  if (await exists(join17(destination, "state.json"))) {
+  const destination = join18(root, ".archflow", "tasks", taskId);
+  if (await exists(join18(destination, "state.json"))) {
     return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-stage-already-adopted" }));
   }
   if (await exists(destination)) {
-    const entries = await readdir5(destination);
+    const entries = await readdir6(destination);
     if (entries.some((entry) => entry !== "config.yaml")) {
       return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-not-disposable" }));
     }
     if (entries.includes("config.yaml")) {
       const [actual, template] = await Promise.all([
-        readFile18(join17(destination, "config.yaml")),
-        readFile18(join17(root, ".archflow", "config.yaml"))
+        readFile19(join18(destination, "config.yaml")),
+        readFile19(join18(root, ".archflow", "config.yaml"))
       ]);
       if (!actual.equals(template)) {
         return fail22(createProjectError("TASK_INVALID", { task_id: taskId, issue_code: "legacy-destination-config-modified" }));
       }
-      await rm4(join17(destination, "config.yaml"));
+      await rm4(join18(destination, "config.yaml"));
       await rmdir3(destination).catch(() => void 0);
     }
   }
-  await rm4(join17(root, ".archflow", "runtime", "tasks", taskId, "cache", "imports", digest12), { recursive: true, force: true });
+  await rm4(join18(root, ".archflow", "runtime", "tasks", taskId, "cache", "imports", digest12), { recursive: true, force: true });
   return ok23(Object.freeze({ discarded: true }));
 }
 async function adoptLegacyUpgrade(input) {
@@ -49785,7 +49890,7 @@ async function adoptLegacyUpgrade(input) {
   const services2 = created.value;
   try {
     const inspected = await inspectLegacyUpgradeStage(
-      join17(services2.authority.workspace_root, "cache", "imports"),
+      join18(services2.authority.workspace_root, "cache", "imports"),
       taskId
     );
     if (inspected.kind !== "current") {
@@ -49795,8 +49900,8 @@ async function adoptLegacyUpgrade(input) {
       }));
     }
     const descriptor = inspected.descriptor;
-    const manifestBytes = new Uint8Array(await readFile18(
-      join17(services2.authority.workspace_root, "cache", "imports", descriptor.import_digest, "manifest.json")
+    const manifestBytes = new Uint8Array(await readFile19(
+      join18(services2.authority.workspace_root, "cache", "imports", descriptor.import_digest, "manifest.json")
     ));
     const manifest = parseCanonicalDocument(manifestBytes, "staged legacy import manifest");
     const initialization = parseLegacyImportInitialization(manifest.value);
@@ -50548,7 +50653,7 @@ function unreadableTaskAutomationStatusV3(taskId, unreadable) {
 // src/local/status-classification.ts
 init_evidence();
 init_phase_instance();
-import { join as join18 } from "node:path";
+import { join as join19 } from "node:path";
 var ok24 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function action2(code2, detail, human, commands, input) {
   return Object.freeze({ code: code2, detail, human_required: human, ...commands === void 0 ? {} : { commands }, ...input === void 0 ? {} : { input } });
@@ -50561,7 +50666,7 @@ async function stagedUpgradeStatus(input) {
     attempt: parseSafeInteger(1)
   });
   if (!discovered.ok) return void 0;
-  const imports = join18(discovered.value.location.worktreeRoot, ".archflow", "runtime", "tasks", input.task_id, "cache", "imports");
+  const imports = join19(discovered.value.location.worktreeRoot, ".archflow", "runtime", "tasks", input.task_id, "cache", "imports");
   const inspected = await inspectLegacyUpgradeStage(imports, input.task_id);
   if (inspected.kind === "absent") return void 0;
   if (inspected.kind === "current") {
@@ -52323,8 +52428,8 @@ async function refreshStaleBaselineGate(dependencies, authority, expectedRevisio
 
 // src/mcp/diagnostics.ts
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname as dirname8, join as join19 } from "node:path";
-var INTERNAL_ERROR_LOG = join19(".archflow", "runtime", "diagnostics", "internal-errors.log");
+import { dirname as dirname8, join as join20 } from "node:path";
+var INTERNAL_ERROR_LOG = join20(".archflow", "runtime", "diagnostics", "internal-errors.log");
 function reportInternalError(correlationId, error51) {
   const detail = error51 instanceof Error ? error51.stack ?? error51.message : String(error51);
   const record2 = `archflow INTERNAL_ERROR correlation_id=${correlationId}
@@ -54433,7 +54538,7 @@ async function runLocalCommand(input) {
 function usageText() {
   return [
     "usage: archflow-local <command> [--task <task>] [--repository <secondary>] [--input <json-file>] [--force]",
-    "       init --force overwrites every diverged .archflow scaffold file with the shipped template",
+    "       init --force refreshes shipped defaults and other scaffold files (including config.yaml), preserves custom/, and migrates flat constitution rules",
     "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
     "       input-free commands never read stdin",
     "commands (payload; --task):",
@@ -54453,7 +54558,7 @@ async function readInput(command, path2) {
     process3.stdin.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
     process3.stdin.once("end", () => resolve2(Buffer.concat(chunks)));
     process3.stdin.once("error", reject);
-  }) : await readFile19(path2);
+  }) : await readFile20(path2);
   if (bytes.byteLength === 0) throw missingPayload();
   try {
     return JSON.parse(bytes.toString("utf8"));

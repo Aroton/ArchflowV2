@@ -276,8 +276,8 @@ const WORKSPACE_CLASS_RULES: readonly ClassRule<WorkspacePathClass>[] = [
  * | Class                      | Template                                      | Required identifiers |
  * |----------------------------|-----------------------------------------------|----------------------|
  * | `shared-workflow`          | `.archflow/workflow.yaml`                     | — (read-only)        |
- * | `shared-constitution`      | `.archflow/constitution/<name>.md`            | name (read-only)     |
- * | `task-branch-constitution` | `.archflow/constitution/<name>.md`            | name                 |
+ * | `shared-constitution`      | `.archflow/constitution/[default/|custom/]<name>.md`            | name (read-only)     |
+ * | `task-branch-constitution` | `.archflow/constitution/[default/|custom/]<name>.md`            | name                 |
  * | `repository-source`        | any repository claim outside `.archflow/`, plus the repository seed `.archflow/config.yaml` | — |
  *
  * **`shared-constitution` and `task-branch-constitution` share one template deliberately.** They
@@ -296,7 +296,7 @@ const REPOSITORY_CLASS_RULES: readonly ClassRule<RepositoryPathClass>[] = [
   { path_class: "repository-source", pattern: anchored("\\.archflow/config\\.yaml") },
   {
     path_class: "shared-constitution",
-    pattern: anchored(`\\.archflow/constitution/${PATH_SAFE_ID}\\.md`),
+    pattern: anchored(`\\.archflow/constitution/(?:(?:default|custom)/)?${PATH_SAFE_ID}\\.md`),
   },
 ];
 

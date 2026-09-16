@@ -138,7 +138,6 @@ describe("canonical skill contracts", () => {
     expect(source).toContain("increment");
     expect(source).toContain("never delete an ID");
     expect(source.toLowerCase()).toContain("never claim that an existing task adopted the new rule");
-    expect(source).not.toContain("archflow-local");
     expect(source).not.toContain("archflow_");
   });
 

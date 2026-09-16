@@ -30,7 +30,7 @@ archflow-local <command> [--task <task>] [--input <json-file>]
 | `validate` | Run an artifact through its contract parser and echo the parsed value |
 | `hash` | SHA-256 of a value's canonical encoding |
 | `render` | Preview the canonical Markdown projection of a review or constitution-review result, with digest |
-| `init` | Set up the repository: `.archflow/` assets + MCP registrations for every host. Refuses a diverged scaffold file; `init --force` overwrites every diverged file with the shipped template instead |
+| `init` | Set up the repository: `.archflow/` assets + MCP registrations for every host. Refuses a diverged scaffold file; `init --force` refreshes shipped defaults and other scaffold files, including config, while preserving custom constitution rules |
 
 Initialization diagnostics also list generated ArchFlow assets hidden by an ancestor `.gitignore`. Init does not rewrite repository ignore policy; it names the affected paths so the human can review the rule and explicitly add the intended files.
 
@@ -125,3 +125,11 @@ Consumers map model IDs to their own CLI, API provider and model/slot settings.
 Catalog IDs and cost groups do not name installed API providers. An omitted effort
 must not be replaced with a guessed value. Existing recommendations may name profiles
 no longer in the current catalog; discovery is not launch authorization.
+
+## Constitution refresh during initialization
+
+`init` creates `constitution/default/` for shipped policy and `constitution/custom/` for repository additions or replacements by ID. `init --force` is an explicit refresh from the running bundle, including repository config; it never rewrites custom rules. Its asset report includes `preserved_custom`, `constitution_migration` (`replaced` legacy files and `moved` source/destination pairs), and a `policy_notice` explaining which tasks are affected.
+
+Older flat rules require explicit forced migration. Known shipped filenames are replaced with the current defaults; additional numbered rules move to `custom/`. A conflicting custom destination, duplicate ID within a layer, or invalid effective policy stops preflight before scaffold writes. Identical already-copied destinations are accepted on retry. The full scaffold is not a transactional filesystem update: an interrupted write may need the forced command repeated; flat sources are removed only after all destinations exist.
+
+Commit refreshed repository policy before starting affected tasks. Existing tasks retain their pinned constitution, task-local configuration, and pending decisions. Reinitialization never changes that authority.

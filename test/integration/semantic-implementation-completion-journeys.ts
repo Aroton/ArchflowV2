@@ -458,10 +458,10 @@ export function registerSemanticImplementationCompletionJourney(selected: string
   });
 
   scenario("preserves a repository custom human-review trigger alongside the shipped defaults", async () => {
-    const seed = new URL("../../assets/constitution/", import.meta.url);
+    const seed = new URL("../../assets/constitution/default/", import.meta.url);
     const constitutionBytes = Object.fromEntries(readdirSync(seed).filter(path => /^\d\d-.*\.md$/u.test(path))
-      .map(path => [path, readFileSync(new URL(path, seed))]));
-    constitutionBytes["70-billing.md"] = Buffer.from("---\nid: human-review-for-billing\nversion: 1\nstatus: active\nreview_trigger: The implementation changes invoice totals.\n---\nBilling calculations must match agreed pricing.\n");
+      .map(path => [`default/${path}`, readFileSync(new URL(path, seed))]));
+    constitutionBytes["custom/70-billing.md"] = Buffer.from("---\nid: human-review-for-billing\nversion: 1\nstatus: active\nreview_trigger: The implementation changes invoice totals.\n---\nBilling calculations must match agreed pricing.\n");
     const workspace = await createTaskWorkspace({ taskId: "default-custom-trigger", constitutionBytes });
     workspaces.push(workspace);
     excludeStubArtifacts(workspace);

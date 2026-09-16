@@ -110,7 +110,7 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **Digest / fingerprint** — SHA-256 identities. A *subject digest* names an artifact's exact bytes; an *input fingerprint* names everything a step depended on. Stale identity = invalid evidence.
 - **Request digest** (`src/local/call-envelope.ts`) — the internal authentication wrapper around one composed durable request; semantic offers bind the same derivation without exposing it to the caller.
 - **Dispatch envelope** (`src/review/envelopes.ts`) — the sealed, byte-capped evidence package handed to a child reviewer. *Same word, unrelated concepts* — a known naming collision.
-- **Constitution** — versioned repository policy rules (`.archflow/constitution/`) that the constitution review — dispatched inside the offered review action when active rules exist — judges every artifact against, pinned per task at an approved commit.
+- **Constitution** — versioned repository policy rules (`.archflow/constitution/default/` plus repository additions or ID-based replacements in `custom/`) that the constitution review — dispatched inside the offered review action when active rules exist — judges every artifact against, pinned per task at an approved commit.
 - **Waiver** — a human-granted exemption from one rule version, for one subject digest, for one task. Evaporates if the artifact or the rule changes.
 - **Validation override** — a human decision that exact named phase-implementation checks may remain not run. It is never a pass, approval, or waiver.
 - **Archived review push-through** — an attempts-exhausted decision over exact accepted finding occurrences after at least two completed review rounds. It settles review repetition, not policy or commit authority.

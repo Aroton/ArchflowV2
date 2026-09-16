@@ -3606,7 +3606,7 @@
       ]
     },
     "src/contracts/constitution.ts": {
-      "bytes": 3940,
+      "bytes": 5102,
       "format": "esm",
       "imports": [
         {
@@ -5541,7 +5541,7 @@
       ]
     },
     "src/init/assets.ts": {
-      "bytes": 7117,
+      "bytes": 9265,
       "format": "esm",
       "imports": [
         {
@@ -5568,6 +5568,32 @@
           "kind": "import-statement",
           "original": "../contracts/errors.js",
           "path": "src/contracts/errors.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./constitution.js",
+          "path": "src/init/constitution.ts"
+        }
+      ]
+    },
+    "src/init/constitution.ts": {
+      "bytes": 3526,
+      "format": "esm",
+      "imports": [
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/constitution.js",
+          "path": "src/contracts/constitution.ts"
         }
       ]
     },
@@ -6252,7 +6278,7 @@
       ]
     },
     "src/local/main.ts": {
-      "bytes": 5947,
+      "bytes": 6004,
       "format": "esm",
       "imports": [
         {
@@ -7289,7 +7315,7 @@
       ]
     },
     "src/repository/git.ts": {
-      "bytes": 31991,
+      "bytes": 32009,
       "format": "esm",
       "imports": [
         {
@@ -7367,7 +7393,7 @@
       ]
     },
     "src/repository/paths.ts": {
-      "bytes": 41542,
+      "bytes": 41602,
       "format": "esm",
       "imports": [
         {
@@ -7994,7 +8020,7 @@
       ]
     },
     "src/state/constitution.ts": {
-      "bytes": 15122,
+      "bytes": 15071,
       "format": "esm",
       "imports": [
         {
@@ -10568,7 +10594,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2431932,
+      "bytes": 2437344,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -10716,6 +10742,16 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:url"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
         },
         {
           "external": true,
@@ -11631,7 +11667,7 @@
           "bytesInOutput": 4559
         },
         "src/contracts/constitution.ts": {
-          "bytesInOutput": 2302
+          "bytesInOutput": 3205
         },
         "src/contracts/contexts.ts": {
           "bytesInOutput": 3121
@@ -11757,7 +11793,7 @@
           "bytesInOutput": 30556
         },
         "src/dispatch/failure-observation.ts": {
-          "bytesInOutput": 2430
+          "bytesInOutput": 2432
         },
         "src/dispatch/process.ts": {
           "bytesInOutput": 7822
@@ -11775,7 +11811,10 @@
           "bytesInOutput": 2231
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 5489
+          "bytesInOutput": 7163
+        },
+        "src/init/constitution.ts": {
+          "bytesInOutput": 2740
         },
         "src/init/diagnostics.ts": {
           "bytesInOutput": 8378
@@ -11808,7 +11847,7 @@
           "bytesInOutput": 18108
         },
         "src/local/main.ts": {
-          "bytesInOutput": 5110
+          "bytesInOutput": 5167
         },
         "src/local/status-classification.ts": {
           "bytesInOutput": 3988
@@ -11829,7 +11868,7 @@
           "bytesInOutput": 61550
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 20777
+          "bytesInOutput": 20783
         },
         "src/repository/identity.ts": {
           "bytesInOutput": 6475
@@ -11838,7 +11877,7 @@
           "bytesInOutput": 2813
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 19058
+          "bytesInOutput": 19082
         },
         "src/repository/repository-set.ts": {
           "bytesInOutput": 5175
@@ -11865,7 +11904,7 @@
           "bytesInOutput": 5951
         },
         "src/state/atomic.ts": {
-          "bytesInOutput": 6397
+          "bytesInOutput": 6413
         },
         "src/state/authority.ts": {
           "bytesInOutput": 3199
@@ -11874,7 +11913,7 @@
           "bytesInOutput": 3774
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 10397
+          "bytesInOutput": 10322
         },
         "src/state/evidence-results.ts": {
           "bytesInOutput": 28366
@@ -11913,7 +11952,7 @@
           "bytesInOutput": 1175
         },
         "src/state/lock.ts": {
-          "bytesInOutput": 2311
+          "bytesInOutput": 2323
         },
         "src/state/milestone-recovery.ts": {
           "bytesInOutput": 578
@@ -11940,7 +11979,7 @@
           "bytesInOutput": 2713
         },
         "src/state/reconciliation-discovery.ts": {
-          "bytesInOutput": 15971
+          "bytesInOutput": 15973
         },
         "src/state/reconciliation.ts": {
           "bytesInOutput": 10102
@@ -11990,7 +12029,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3713933,
+      "bytes": 3714991,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13158,7 +13197,7 @@
           "bytesInOutput": 3842
         },
         "src/contracts/constitution.ts": {
-          "bytesInOutput": 2258
+          "bytesInOutput": 3086
         },
         "src/contracts/contexts.ts": {
           "bytesInOutput": 3290
@@ -13365,7 +13404,7 @@
           "bytesInOutput": 11315
         },
         "src/init/assets.ts": {
-          "bytesInOutput": 2031
+          "bytesInOutput": 2306
         },
         "src/init/task-initialization.ts": {
           "bytesInOutput": 6636
@@ -13425,7 +13464,7 @@
           "bytesInOutput": 8075
         },
         "src/repository/git.ts": {
-          "bytesInOutput": 21297
+          "bytesInOutput": 21303
         },
         "src/repository/identity.ts": {
           "bytesInOutput": 6457
@@ -13434,7 +13473,7 @@
           "bytesInOutput": 2782
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 18870
+          "bytesInOutput": 18894
         },
         "src/repository/repository-set.ts": {
           "bytesInOutput": 6057
@@ -13482,7 +13521,7 @@
           "bytesInOutput": 3779
         },
         "src/state/constitution.ts": {
-          "bytesInOutput": 8934
+          "bytesInOutput": 8859
         },
         "src/state/document-artifact.ts": {
           "bytesInOutput": 5811

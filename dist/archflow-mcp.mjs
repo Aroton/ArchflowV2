@@ -59323,7 +59323,7 @@ var REPOSITORY_CLASS_RULES = [
   { path_class: "repository-source", pattern: anchored("\\.archflow/config\\.yaml") },
   {
     path_class: "shared-constitution",
-    pattern: anchored(`\\.archflow/constitution/${PATH_SAFE_ID}\\.md`)
+    pattern: anchored(`\\.archflow/constitution/(?:(?:default|custom)/)?${PATH_SAFE_ID}\\.md`)
   }
 ];
 var ARCHFLOW_TREE = ".archflow";
@@ -60046,7 +60046,7 @@ async function readCommitTreeEntries(runner, commit, directory) {
     if (cached2 !== void 0) return cached2;
   }
   const fields = await runner.runNulFields({
-    argv: ["ls-tree", "-z", commit, "--", prefix],
+    argv: ["ls-tree", "-r", "-z", commit, "--", prefix],
     operation: TREE_LIST_OPERATION
   });
   if (fields.length > MAX_COMMIT_TREE_ENTRIES) {
@@ -68997,6 +68997,7 @@ async function loadAuthenticatedGateDecisionArchive(dependencies, authority, gat
 }
 
 // src/contracts/constitution.ts
+var CONSTITUTION_RULE_PATH = /^\.archflow\/constitution\/(?:(?:default|custom)\/)?[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 var frontmatterSchema = external_exports.object({
   id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
   version: external_exports.number().int().positive().safe(),
@@ -69036,12 +69037,29 @@ function registryFromRules(rules2) {
   return registry2;
 }
 function parseConstitutionRuleFiles(files) {
-  return registryFromRules(Object.keys(files).sort().map((path2) => parseConstitutionRuleMarkdown(files[path2], path2)));
+  const layers = {
+    legacy: [],
+    default: [],
+    custom: []
+  };
+  for (const path2 of Object.keys(files).sort()) {
+    const relative9 = path2.replace(/^\.archflow\/constitution\//u, "");
+    const layer = relative9.startsWith("default/") ? "default" : relative9.startsWith("custom/") ? "custom" : "legacy";
+    layers[layer].push(parseConstitutionRuleMarkdown(files[path2], path2));
+  }
+  if (layers.legacy.length > 0) {
+    if (layers.default.length > 0 || layers.custom.length > 0) {
+      throw new Error("Mixed flat and split constitution rules; migrate the flat rules with archflow-local init --force");
+    }
+    return registryFromRules(layers.legacy);
+  }
+  const defaults = registryFromRules(layers.default);
+  const custom2 = registryFromRules(layers.custom);
+  return new Map([...defaults, ...custom2]);
 }
 
 // src/state/constitution.ts
 var CONSTITUTION_DIRECTORY = ".archflow/constitution";
-var RULE_FILE = /^\.archflow\/constitution\/[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
 var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3 = Object.freeze([
   Object.freeze({
@@ -69150,7 +69168,7 @@ var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function readConstitutionTreeFiles(runner, commit) {
   const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
-  return Object.freeze(listed.filter((entry) => RULE_FILE.test(entry.path)).map((entry) => Object.freeze({
+  return Object.freeze(listed.filter((entry) => CONSTITUTION_RULE_PATH.test(entry.path)).map((entry) => Object.freeze({
     path: parseRepositoryPathClaim(entry.path),
     oid: parseGitOid(entry.oid)
   })).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
@@ -73152,7 +73170,7 @@ function parseRubricV1(value) {
 
 // src/init/assets.ts
 import { constants } from "node:fs";
-import { access, mkdir as mkdir3, open as open4, readFile as readFile3 } from "node:fs/promises";
+import { access, mkdir as mkdir3, open as open4, readFile as readFile3, unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname5, join as join7 } from "node:path";
 import { fileURLToPath } from "node:url";
 var ASSETS = Object.freeze([
@@ -73160,17 +73178,18 @@ var ASSETS = Object.freeze([
   ["workflow.yaml", ".archflow/workflow.yaml"],
   ["hazards.yaml", ".archflow/hazards.yaml"],
   ["constitution/README.md", ".archflow/constitution/README.md"],
-  ["constitution/00-process.md", ".archflow/constitution/00-process.md"],
-  ["constitution/10-architecture.md", ".archflow/constitution/10-architecture.md"],
-  ["constitution/15-dependencies.md", ".archflow/constitution/15-dependencies.md"],
-  ["constitution/20-data.md", ".archflow/constitution/20-data.md"],
-  ["constitution/25-database.md", ".archflow/constitution/25-database.md"],
-  ["constitution/30-product.md", ".archflow/constitution/30-product.md"],
-  ["constitution/35-plan-changes.md", ".archflow/constitution/35-plan-changes.md"],
-  ["constitution/45-public-contracts.md", ".archflow/constitution/45-public-contracts.md"],
-  ["constitution/40-authentication.md", ".archflow/constitution/40-authentication.md"],
-  ["constitution/50-cryptography.md", ".archflow/constitution/50-cryptography.md"],
-  ["constitution/60-control-plane.md", ".archflow/constitution/60-control-plane.md"],
+  ["constitution/custom/README.md", ".archflow/constitution/custom/README.md"],
+  ["constitution/default/00-process.md", ".archflow/constitution/default/00-process.md"],
+  ["constitution/default/10-architecture.md", ".archflow/constitution/default/10-architecture.md"],
+  ["constitution/default/15-dependencies.md", ".archflow/constitution/default/15-dependencies.md"],
+  ["constitution/default/20-data.md", ".archflow/constitution/default/20-data.md"],
+  ["constitution/default/25-database.md", ".archflow/constitution/default/25-database.md"],
+  ["constitution/default/30-product.md", ".archflow/constitution/default/30-product.md"],
+  ["constitution/default/35-plan-changes.md", ".archflow/constitution/default/35-plan-changes.md"],
+  ["constitution/default/45-public-contracts.md", ".archflow/constitution/default/45-public-contracts.md"],
+  ["constitution/default/40-authentication.md", ".archflow/constitution/default/40-authentication.md"],
+  ["constitution/default/50-cryptography.md", ".archflow/constitution/default/50-cryptography.md"],
+  ["constitution/default/60-control-plane.md", ".archflow/constitution/default/60-control-plane.md"],
   ["config.template.yaml", ".archflow/config.yaml"]
 ]);
 function errno(error51, code2) {
@@ -74108,7 +74127,7 @@ async function createProductionServices(input) {
 }
 
 // src/state/workspace-cleanup.ts
-import { lstat as lstat9, readFile as readFile7, readdir as readdir3, rm, rmdir as rmdir2, stat, unlink as unlink2 } from "node:fs/promises";
+import { lstat as lstat9, readFile as readFile7, readdir as readdir3, rm, rmdir as rmdir2, stat, unlink as unlink3 } from "node:fs/promises";
 import { basename as basename3, dirname as dirname6, join as join9, relative as relative4, sep as sep4 } from "node:path";
 var ok16 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function io2(authority, operation) {
@@ -74325,7 +74344,7 @@ async function unreferencedAuthorityDecisions(authority, state) {
   return Object.freeze(stale);
 }
 async function removeFile(entry) {
-  await unlink2(entry.absolute);
+  await unlink3(entry.absolute);
 }
 async function removeEmptyDirectories(root, preserve = /* @__PURE__ */ new Set()) {
   let directories = [];
@@ -74473,7 +74492,7 @@ async function removeSupersededPhaseDocuments(dependencies, authority, targetPha
     if (!superseded) continue;
     const absolute = join9(authority.task_root, ...relative9.split("/"));
     if (!inside(authority.task_root, absolute)) throw new TypeError("superseded document escaped its task root");
-    await unlink2(absolute).catch(() => void 0);
+    await unlink3(absolute).catch(() => void 0);
     await removeEmptyParents(dirname6(absolute), join9(authority.task_root, "phases"));
     removed.push(relative9);
   }

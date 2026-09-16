@@ -24,6 +24,8 @@ A fresh PRD finishes with a recoverable task-local Git commit before design begi
   config.yaml
   workflow.yaml
   constitution/
+    default/                         # shipped policy, explicitly refreshed
+    custom/                          # repository additions and ID-based replacements
   tasks/<task>/
     config.yaml
     state.json
@@ -211,3 +213,9 @@ Status authenticates currency before projecting the recorded model, effort when 
 ## Governing document comparisons
 
 With the material-plan-change rule active, review pins changed governing documents beside the most recent eligible human-approved baseline. The loader authenticates the task's approval archives and matching content-addressed production manifests, then reads the original Git blob by its recorded identity and checks its content digest. This avoids comparing only against the previous automatic amendment and silently accumulating a material change. An unavailable original baseline is reported as unavailable evidence, never treated as a non-material change. The comparison is carried in the sealed review artifact, so the independent constitution verdict and its trigger evidence remain bound to the exact reviewed subject.
+
+### Constitution layers and pinned policy
+
+New repositories commit shipped rules in `.archflow/constitution/default/` and repository rules in `custom/`. Resolution reads both directories from the task's immutable policy-base commit, validates each layer, then replaces defaults by matching custom IDs. A deprecated custom rule suppresses the default; version numbers do not select precedence. Duplicate IDs within a layer and mixed flat/split rule trees are invalid. Historical flat trees remain readable with their original digest calculation.
+
+The pinned digest covers every selected numbered rule path and Git blob, including overridden defaults. Moving rules therefore creates a new policy digest for future tasks without changing historical pins. The effective core rules still have to match a supported authority profile for automatic advancement; custom overrides cannot bypass that check. Worktree edits and forced initialization never repin existing tasks.

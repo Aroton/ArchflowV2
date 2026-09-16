@@ -10,7 +10,7 @@ import { INPUT_FREE_COMMANDS, LOCAL_COMMAND_CONTRACTS, LOCAL_COMMANDS, runLocalC
 function usageText(): string {
   return [
     "usage: archflow-local <command> [--task <task>] [--repository <secondary>] [--input <json-file>] [--force]",
-    "       init --force overwrites every diverged .archflow scaffold file with the shipped template",
+    "       init --force refreshes shipped defaults and other scaffold files (including config.yaml), preserves custom/, and migrates flat constitution rules",
     "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
     "       input-free commands never read stdin",
     "commands (payload; --task):",

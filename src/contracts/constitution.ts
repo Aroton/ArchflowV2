@@ -15,6 +15,9 @@ export interface ConstitutionRuleV1 {
 
 export type ConstitutionRegistry = ReadonlyMap<string, ConstitutionRuleV1>;
 
+export const CONSTITUTION_RULE_NAME = /^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
+export const CONSTITUTION_RULE_PATH = /^\.archflow\/constitution\/(?:(?:default|custom)\/)?[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
+
 const frontmatterSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
   version: z.number().int().positive().safe(),
@@ -59,7 +62,26 @@ function registryFromRules(rules: readonly ConstitutionRuleV1[]): Map<string, Co
 }
 
 export function parseConstitutionRuleFiles(files: Readonly<Record<string, string>>): ConstitutionRegistry {
-  return registryFromRules(Object.keys(files).sort().map((path) => parseConstitutionRuleMarkdown(files[path]!, path)));
+  const layers: Record<"legacy" | "default" | "custom", ConstitutionRuleV1[]> = {
+    legacy: [], default: [], custom: [],
+  };
+  for (const path of Object.keys(files).sort()) {
+    const relative = path.replace(/^\.archflow\/constitution\//u, "");
+    const layer = relative.startsWith("default/") ? "default"
+      : relative.startsWith("custom/") ? "custom" : "legacy";
+    layers[layer].push(parseConstitutionRuleMarkdown(files[path]!, path));
+  }
+  if (layers.legacy.length > 0) {
+    if (layers.default.length > 0 || layers.custom.length > 0) {
+      throw new Error("Mixed flat and split constitution rules; migrate the flat rules with archflow-local init --force");
+    }
+    return registryFromRules(layers.legacy);
+  }
+  // Validate duplicates within each layer before merging. Location, not version or filename,
+  // determines precedence, so a later default refresh cannot displace a custom override.
+  const defaults = registryFromRules(layers.default);
+  const custom = registryFromRules(layers.custom);
+  return new Map([...defaults, ...custom]);
 }
 
 export function validateConstitutionEvolution(previous: ConstitutionRegistry, candidate: readonly ConstitutionRuleV1[]): ConstitutionRegistry {
