@@ -1,6 +1,6 @@
 # contracts/CONTRACTS
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
 
 The semantic review response includes `decision: "revise-minor"` with a rationale and no reviewer list. Its subsequent succeeded work result requires `review_revision: {classification: "minor" | "significant", rationale: string}`; ordinary submissions omit this field. Document and implementation artifacts retain the declaration. Minor revisions carry a server-derived `editorial_predecessor` linking the reviewed artifact, review fingerprint, and authorizing triage result; significant revisions cannot carry that link. Public status exposes the declaration and explains when prior review is reused. Existing archived shapes remain readable without rewriting.
 
@@ -65,7 +65,7 @@ flowchart LR
 ## The file clusters
 
 - **Foundation** — `plain-json.ts`, `canonical.ts`, `yaml.ts` (one strict YAML door), `versions.ts`.
-- **Vocabulary & primitives** — closed lists of phases/steps/gate policies; branded string types (`Sha256Digest`, `TaskSlug`, …); path-claim safety rules (no `..`, no pathspec magic); the four durable low-level tool names (durable-record vocabulary for existing state) and the two-name advertised catalogue.
+- **Vocabulary & primitives** — closed lists of phases/steps/gate policies; branded string types (`Sha256Digest`, `TaskSlug`, …); path-claim safety rules (no `..`, no pathspec magic); the four durable low-level tool names (durable-record vocabulary for existing state) and the three-name advertised catalogue.
 - **Validation machinery** — `validators.ts`, now just the shared error class and the three set predicates (`isSortedUniqueBy`, `tupleKey`, `hasUniqueObjectPropertyValues`) every ordering `.refine()` calls. The Ajv compiler and its custom-keyword registry moved to the test tree (`test/helpers/json-schema.ts`); production never compiles a JSON Schema.
 - **Fingerprints** — all derived identity computation in one module.
 - **Evidence & trust semantics** — review/constitution-review/triage shapes in three assurance flavors (`agent-declared`, `server-attested`, `degraded`), the trust brands, secret-scan shapes, fresh V4 readable reports and finish/revise/escalate responses, archived structured triage dispositions with their original machine-enforced partition counts and position restrictions, and renderers that escape control characters so rendered evidence can't spoof its own headers.
@@ -113,3 +113,7 @@ Commit-authorization requests retain truthful primary scalar facts and add order
 ## Automation responsibility
 
 Automation status v3 adds explicit manual-transition responsibility and a progress projection. The strict v1/v2 parsers retain their historical shapes. `authority-recovery` is a server-owned task path class, excluded from declared implementation outputs, for the bounded dispatch journal; it grants no review, approval or commit authority.
+
+## Standalone review contracts
+
+`simple-review-input` and `simple-review-result` are versioned public contracts for `archflow_review`. They are independent of persisted workflow roots: no task, phase instance, result archive, offer, or approval is implied. The transport boundary validates inputs and outputs and keeps the advertised input root a plain object. Reports bind to the captured subject and policy digests; `ok` represents completed reviewer coverage. Constitution judgments use existing exact-slot validation before server-derived rule identities enter the response.

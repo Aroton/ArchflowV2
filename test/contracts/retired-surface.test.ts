@@ -24,8 +24,8 @@ const schema = (name: string): unknown =>
  * readable history — retirement removes advertisement and dispatch, not the records.
  */
 describe("retired workflow surface", () => {
-  it("advertises exactly the semantic pair with plain object roots", () => {
-    expect([...ADVERTISED_TOOL_NAMES]).toEqual(["archflow_status", "archflow_apply"]);
+  it("advertises the workflow pair and standalone review tool with plain object roots", () => {
+    expect([...ADVERTISED_TOOL_NAMES]).toEqual(["archflow_status", "archflow_apply", "archflow_review"]);
     expect(ADVERTISED_TOOL_CATALOGUE.map((descriptor) => descriptor.name)).toEqual([...ADVERTISED_TOOL_NAMES]);
     for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
       expect(descriptor.description.length).toBeGreaterThan(0);

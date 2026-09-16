@@ -1,6 +1,6 @@
 # ArchFlow integration guide for orchestration applications
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/contracts/schemas/v1/automation-status-v3.schema.json`, `src/contracts/semantic-workflow.ts`, `src/contracts/evidence.ts`, `src/contracts/workflow-progress.ts`, `src/contracts/dispatch-failure.ts`, `src/contracts/effort-review.ts`, `src/dispatch/recovery.ts`, `src/state/semantic-*.ts`, `src/mcp/`, `src/repository/git.ts`, `src/init/`, `skills/`, `test/integration/automation-status-*.test.ts`, `package.json`
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `src/review/simple-*.ts`, `src/contracts/simple-review.ts`, `src/local/`, `src/contracts/automation-status.ts`, `src/contracts/schemas/v1/automation-status-v3.schema.json`, `src/contracts/semantic-workflow.ts`, `src/contracts/evidence.ts`, `src/contracts/workflow-progress.ts`, `src/contracts/dispatch-failure.ts`, `src/contracts/effort-review.ts`, `src/dispatch/recovery.ts`, `src/state/semantic-*.ts`, `src/mcp/`, `src/repository/git.ts`, `src/init/`, `skills/`, `test/integration/automation-status-*.test.ts`, `package.json`
 
 This is a self-contained integration brief for an application that orchestrates ArchFlow tasks. It describes the implemented interface, the controller behavior to build around it, and the boundaries that preserve human decisions. You can pass this file to an agent building that application. Source paths at the end are optional verification references; the architecture and operating rules are explained here.
 
@@ -265,7 +265,7 @@ Omit flags to use task configuration and shipped defaults. Each flag can appear 
 
 ## 7. What happens inside the producer
 
-The controller integrates at the skill boundary. Each skill may perform many semantic actions before returning control. To understand or debug that inner loop, the MCP server advertises exactly two tools:
+The controller integrates at the skill boundary. Each skill may perform many semantic actions before returning control. To understand or debug that inner loop, the initialized-workflow interface uses two tools (the separate `archflow_review` tool serves standalone work):
 
 - `archflow_status`: read the reconciled view; a supported producing invocation may receive an opaque offer for its current action. Generic status receives no mutation offer.
 - `archflow_apply`: apply exactly one issued offer with the expected submission and return a fresh view.
@@ -371,3 +371,9 @@ Consumers map model IDs to their own CLI, API provider and model/slot settings.
 Catalog IDs and cost groups do not name installed API providers. An omitted effort
 must not be replaced with a guessed value. Existing recommendations may name profiles
 no longer in the current catalog; discovery is not launch authorization.
+
+## Standalone simple-task integration
+
+Use `archflow_review` for a single review pass outside durable workflows. Send `schema_version: "1"`, `stage: "plan" | "implementation"`, `ask`, `plan`, `base_commit` (the full starting HEAD), and `paths` (repository-relative files, including intended additions and deletions). Implementation also requires `verification`. Optional `review_routes` accepts counter-reviewer, test-reviewer, and adjudicator routes using the ordinary model/effort/provider shape. Carry the returned `policy_digest` into implementation as `expected_policy_digest`.
+
+The call returns reports and policy judgments directly. Honor `human_review_reasons` conversationally, fix supported findings, and run relevant checks without automatically calling reviewers again. A successful response certifies completion of review coverage, not acceptance, execution, or human approval. `ok:false` can include partial reports. After a dispatch failure, an explicitly requested fresh call reruns reviewers; there is no resumable job or persisted sibling cache. Existing automation status and controller launch loops apply only to initialized workflows.

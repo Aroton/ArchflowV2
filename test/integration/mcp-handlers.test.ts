@@ -16,9 +16,10 @@ afterEach(async () => {
 });
 
 describe("live MCP handlers", () => {
-  it("registers exactly the two semantic workflow tools", () => {
+  it("registers the workflow pair and standalone review tool", () => {
     expect(Object.keys(createToolHandlers()).sort()).toEqual([
       "archflow_apply",
+      "archflow_review",
       "archflow_status",
     ]);
   });

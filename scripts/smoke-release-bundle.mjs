@@ -132,6 +132,7 @@ function assertCallTranscript(bytes, initialize, calls) {
   assert.deepEqual(lines[2]?.result?.tools?.map((tool) => tool.name), [
     "archflow_status",
     "archflow_apply",
+    "archflow_review",
   ]);
   assert.deepEqual(lines[3], {
     jsonrpc: "2.0",

@@ -1,12 +1,14 @@
 # OVERVIEW
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** the whole repository
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** the whole repository
 
 Fresh reviews return readable reports to the working AI, which chooses finish, revision with selected verification reviewers, a localized minor correction without repeat review, or human escalation. Minor corrections may clarify established intent; coordinated rewrites and new requirements need fresh review. Applicable automated checks, constitution requirements, and final-byte human and commit approval remain in force.
 
-ArchFlow is a governed development workflow for AI coding agents. A *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, with Claude, Codex, and Antigravity routes available by configuration). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
+ArchFlow is a governed development workflow for AI coding agents. An initialized *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, with Claude, Codex, and Antigravity routes available by configuration). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
 
 > **Nothing an agent says is trusted until the server has re-derived it.** The only authority is durable state on disk, written and verified by the server.
+
+For smaller work, `archflow-simple` completes plan → one MCP review and fixes → implementation → one MCP review and fixes in the same session. Test and constitution review remain; workflow state, implementation-agent advice, reviewer iteration, and automatic commits are absent. This path can use shipped routing and policy defaults without repository initialization. Explicit human decisions remain conversational, so the durable-authority guarantees below apply to initialized workflows.
 
 This documentation set describes the system as built, aimed at humans auditing and iterating on the workflow. Caps-named files (like this one) are the maintained, human-readable documentation, produced and refreshed by `/archflow-explore`. The one exception is `docs/validation/`: point-in-time validation evidence and benchmark data, not kept current by explore.
 
@@ -18,7 +20,7 @@ The system is one codebase with three faces. Understanding which face does what 
 |---|---|---|
 | **Skills** (`skills/archflow-*`) | Prose playbooks the agent follows (`/archflow-prd`, `/archflow-phase-impl`, …) | Nothing. They are instructions, not enforcement. |
 | **`archflow-local` CLI** (`src/local/`) | Narrow local adapters: repository bootstrap, legacy-upgrade staging and atomic adoption, diagnostics, degraded human status, and a versioned read-only controller observation | Deriving mechanical fields correctly. Its writes are bounded recovery and diagnostics; automation status is strictly observational. |
-| **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server advertising two purpose-described semantic workflow tools | Everything. It is the sole writer of durable state and the sole judge of validity. |
+| **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server advertising two semantic workflow tools and a stateless review tool | Everything. It is the sole writer of durable state and the sole judge of validity. |
 
 A subtlety worth naming immediately: the `archflow-mcp` binary has **no CLI mode** — it is always a stdio MCP server. The word "CLI" appears in two other senses: `archflow-local` (the helper above), and `src/dispatch/cli.ts`, which spawns the *external* `claude`, `codex`, and `agy` command-line tools as child processes to run counter-reviews.
 

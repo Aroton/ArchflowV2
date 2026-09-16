@@ -1,6 +1,6 @@
 # mcp/DISPATCH
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
 
 Review delivery continues to use the existing CLI adapters. Fresh child output prefers one report string, and locally extracted JSON with other shapes is preserved as feedback. Successful extracted bytes are retained before server evidence construction; failures there retain bounded validation diagnostics rather than triggering another model call.
 
@@ -100,3 +100,9 @@ Shipped counter-review defaults use Astra low (`gpt-6-astra`) for Claude produce
 Route validation rejects `gpt-6-astra` at `max` effort before dispatch, including configured, invocation-declared, and substitution routes. The error explains that Astra max is disabled; no silent downgrade occurs. An invalid effort-selector route still takes its bounded-reasoning advice fallback. Astra low/high are valid Codex routes. Implementation recommendations remain separate from these dispatch routes.
 
 Structured-output failures preserve specific safe explanations in both recovery records and status: missing CLI structured output, invalid JSON, unexpected fields, incomplete rule judgments, or an invalid response schema. These messages are selected from server-defined issue codes; raw model output and arbitrary exception text are never copied. An unknown issue receives a neutral validation-failure message. This identifies what failed without claiming that the model is incompatible or that the contract must change. Existing records keep the message recorded at the time of failure.
+
+## Stateless dispatch reuse
+
+`createReviewDispatcher` owns the common CLI preflight, invocation, process execution, output extraction, and temporary workspace lifecycle. The workflow coordinator wraps it with authenticated task authority and task-scoped failure diagnostics. Standalone review calls it directly without fabricated task identity, transaction dependencies, or persisted diagnostics.
+
+Simple review supplies two views of the connected repository: `primary` contains captured current files and `baseline` contains the starting commit. Both are disposable, use the existing snapshot hygiene, and exclude other task storage. Declared output paths define review scope; unrelated dirty files are context. Symlink parents in captured paths are rejected. The 25 MiB changed-file limit bounds materialization inputs. All children share the same captured view; any detected post-review change invalidates the result.

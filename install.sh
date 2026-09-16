@@ -169,12 +169,12 @@ echo "ArchFlow bundle installed to $BUNDLE_DIR/"
 echo "ArchFlow launchers installed to $ARCHFLOW_BIN_DIR/"
 echo ""
 if [ "$install_claude" = true ]; then
-  echo "Claude Code: /archflow-init, /archflow-constitution, /archflow-upgrade, /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase-design, /archflow-phase-impl, /archflow-status"
+  echo "Claude Code: /archflow-init, /archflow-constitution, /archflow-upgrade, /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase-design, /archflow-phase-impl, /archflow-status, /archflow-simple"
 fi
 if [ "$install_codex" = true ]; then
-  echo 'Codex: $archflow-init, $archflow-constitution, $archflow-upgrade, $archflow-explore, $archflow-prd, $archflow-design, $archflow-phase-design, $archflow-phase-impl, $archflow-status'
+  echo 'Codex: $archflow-init, $archflow-constitution, $archflow-upgrade, $archflow-explore, $archflow-prd, $archflow-design, $archflow-phase-design, $archflow-phase-impl, $archflow-status, $archflow-simple'
   echo "Restart Codex if the skills do not appear immediately."
 fi
 if [ "$install_antigravity" = true ]; then
-  echo "Antigravity: /archflow-init, /archflow-constitution, /archflow-upgrade, /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase-design, /archflow-phase-impl, /archflow-status"
+  echo "Antigravity: /archflow-init, /archflow-constitution, /archflow-upgrade, /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase-design, /archflow-phase-impl, /archflow-status, /archflow-simple"
 fi

@@ -1,3 +1,4 @@
+import { simpleReviewInputSchema, simpleReviewResultSchema } from "../contracts/simple-review.js";
 import evidenceSlotsSchema from "../contracts/schemas/v1/evidence-slots.schema.json" with { type: "json" };
 import documentArtifactSchema from "../contracts/schemas/v1/document-artifact.schema.json" with { type: "json" };
 import durablePrimitivesSchema from "../contracts/schemas/v1/durable-primitives.schema.json" with { type: "json" };
@@ -159,7 +160,7 @@ function embedSchema(entry: JsonObject, sourceKey: string): { fragment: JsonObje
   return { fragment: embed(entry, sourceKey) as JsonObject, definitions };
 }
 
-function standaloneSchema(name: AdvertisedToolName, member: "input" | "result"): Readonly<JsonObject> {
+function standaloneSchema(name: SemanticToolName, member: "input" | "result"): Readonly<JsonObject> {
   const { fragment, definitions } = embedSchema(semanticSchemaFragment(name, member), "semantic-workflow");
   return deepFreeze({
     $schema: JSON_SCHEMA_2020_12,
@@ -178,10 +179,12 @@ function deepFreeze<T>(value: T): T {
 export const ADVERTISED_TOOL_CATALOGUE: readonly AdvertisedToolDescriptor[] = deepFreeze(
   ADVERTISED_TOOL_NAMES.map((name) => ({
     name,
-    description: name === "archflow_status"
+    description: name === "archflow_review"
+      ? "Run one standalone plan or implementation review with counter-review, test review, and applicable constitution review. No task, workflow state, approval authority, or automatic remediation rounds. Returns reports and conversational human-review reasons."
+      : name === "archflow_status"
       ? "Read durable ArchFlow status for one task and optional producing-skill invocation without mutation; returns one reconciled workflow view and at most one bounded offer for the current document owner."
       : "Apply exactly one supplied server offer using only its expected semantic submission; never chooses or loops to another action and returns the newly authenticated workflow view.",
-    inputSchema: standaloneSchema(name, "input"),
-    outputSchema: standaloneSchema(name, "result")
+    inputSchema: name === "archflow_review" ? simpleReviewInputSchema.toJSONSchema({ target: "draft-2020-12" }) : standaloneSchema(name, "input"),
+    outputSchema: name === "archflow_review" ? simpleReviewResultSchema.toJSONSchema({ target: "draft-2020-12" }) : standaloneSchema(name, "result")
   }))
 );

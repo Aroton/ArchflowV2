@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `skills/archflow-simple/`, `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 Review V4 deliberately does not prove that every reported concern was addressed. The working AI interprets reports and may finish with explained disagreement. Server-attested provenance identifies who reviewed which subject; it does not attest correctness. Partial and previous-version reports are not current completed review authority.
 
@@ -264,3 +264,9 @@ Public-contract and governing-amendment materiality are independent reviewer jud
 ### Observed Antigravity workspace mismatch
 
 The 2026-09-11 real-host investigation observed `agy` advertising the supplied temporary repository snapshot as its cwd while its `run_command` tool actually started in the machine-global Antigravity scratch directory. The reviewer searched outside the snapshot, located the source fixture and read the test itself before reporting the seeded defect. A passing assertion from that run is contaminated evidence, not proof of an independent review. Passing a process cwd and disabling slash commands do not isolate Antigravity tool execution or inherited context. The adapter needs a verified workspace binding before this route can support a clean repository-scope validation claim. See [investigation evidence](validation/real-host-investigation-2026-09-11.md).
+
+## Simple-task guarantees
+
+Standalone simple tasks deliberately have no durable state, authenticated human-decision archive, resume cursor, or server-enforced sequencing. The skill owns plan-before-code and conversational approvals. MCP results describe one inspected snapshot; they neither authorize workflow advancement nor certify fixes applied afterward. A lost response cannot be recovered from task storage, and a new call spends a fresh review pass.
+
+The first version supports one connected Git repository with an existing HEAD, requires that HEAD to remain at the starting baseline, and accepts declared file paths rather than directories. Current uncommitted files are included as context, so the session must distinguish pre-existing edits from its own outputs. Snapshot capture rejects symlink parents and unsupported file types and caps changed bytes at 25 MiB. Existing reviewer sandbox limitations still apply. Required CLIs and authentication are necessary even when repository initialization is skipped.

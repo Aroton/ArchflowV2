@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** the whole repository
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** the whole repository
 
 The fresh review loop uses reports and a working-AI response instead of finding taxonomy, exact alignment census, and disposition-ledger enforcement. Legacy readers remain only for archived evidence; no interpretation-model pass is added.
 
@@ -99,3 +99,7 @@ For balance — machinery that directly implements the trust boundaries and shou
 Fresh review evidence is version 4: readable reports with server-bound reviewer provenance. The working AI submits a rationale and chooses finish, revision with named verification reviewers, or human escalation. Finding taxonomies, exact alignment censuses, and disposition ledgers remain in strict readers for archived evidence; they are no longer requirements on new reviewer output. This removes fresh-path coordination work without discarding historical authority. Keep archive compatibility isolated when modifying review behavior, so a new report does not accidentally re-enter legacy finding enforcement.
 
 The effort assessment is another deliberate narrow boundary: the reviewer returns difficulty and reasoning, while a pure selector uses captured benchmark scores, enabled profiles, thresholds, and cost priorities. Failed assessments use bounded reasoning; missing eligible profiles or unusable data yields unavailable advice. Data-driven catalog entries avoid model-specific selector branches. Immutable completed evidence and disposable retry snapshots keep settings changes from silently rewriting recommendations. No second architecture-review subsystem is needed.
+
+## Standalone review
+
+Simple tasks add a separate request/result contract and a small orchestration path, because constructing pretend workflow authority would undermine both simplicity and existing trust boundaries. The common CLI dispatcher, routing, report parsing, constitution slots, and temporary views are reused. No new state machine, retained-result graph, recovery archive, or gate resolver exists. The main maintenance cost is keeping standalone input capture and policy interpretation aligned with the shared review contracts.

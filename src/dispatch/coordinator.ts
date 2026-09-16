@@ -189,6 +189,16 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
     runner: input.dependencies.runner,
     environment: input.dependencies.environment,
   });
+  return createReviewDispatcher(input, (attemptId, route, preflight, error, telemetry) =>
+    writeAttemptRecord(input, attemptId, route, preflight, error, telemetry));
+}
+
+/** CLI execution and disposable snapshots, independent of workflow authority or persistence. */
+export function createReviewDispatcher(
+  input: Pick<DispatchCoordinatorInput, "host" | "repository_root" | "signal" | "cancellation_source" | "repository_views" | "shared_workspace">,
+  observeFailure?: (attemptId: string, route: DispatchRoute, preflight: CliPreflight | undefined,
+    error: unknown, telemetry: AttemptTelemetry) => Promise<void>,
+): ReturnType<typeof createDispatchCoordinator> {
   if (input.shared_workspace !== undefined && input.repository_views !== undefined) {
     throw new TypeError("shared_workspace replaces repository_views; pass one, not both");
   }
@@ -264,12 +274,12 @@ export function createDispatchCoordinator(input: DispatchCoordinatorInput): (
     } finally {
       if (ownsWorkspace) await workspace?.dispose().catch(() => undefined);
       if (primaryError !== undefined) {
-        await writeAttemptRecord(input, attemptId, route, preflight, primaryError, {
+        await observeFailure?.(attemptId, route, preflight, primaryError, {
           started_at: startedAt.toISOString(),
           duration_ms: Date.now() - startedAt.getTime(),
           failure_stage: failureStage,
           child_result: childResult,
-        }).catch(() => undefined);
+        })?.catch(() => undefined);
       }
     }
   };

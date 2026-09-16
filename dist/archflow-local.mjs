@@ -25786,7 +25786,7 @@ var SEMANTIC_TOOL_NAMES = Object.freeze([
   "archflow_status",
   "archflow_apply"
 ]);
-var ADVERTISED_TOOL_NAMES = Object.freeze([...SEMANTIC_TOOL_NAMES]);
+var ADVERTISED_TOOL_NAMES = Object.freeze([...SEMANTIC_TOOL_NAMES, "archflow_review"]);
 function isToolName(value) {
   return typeof value === "string" && TOOL_NAMES.includes(value);
 }
@@ -31043,6 +31043,24 @@ init_canonical();
 init_path_claims();
 var CONSTITUTION_DIRECTORY = ".archflow/constitution";
 var decoder2 = new TextDecoder("utf-8", { fatal: true });
+var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V4 = Object.freeze([
+  Object.freeze({
+    id: "approved-design-before-code",
+    version: 4,
+    status: "active",
+    text: "In an initialized workflow, implementation starts only from a phase design that either passed its triggered human gate or advanced by rule after counter-review completed; the workflow server withholds the implementation window until then. The PRD, architecture design, and phase design stay truthful as work proceeds: a result that departs from its own phase design updates that phase design in the same reviewed result, and a result that departs from the architecture design or PRD updates those documents in the same result, where the project's approval rules decide whether a human approves the change. A departure from an approved upstream document is reported as a drift finding against that document, not as a failure of this rule. A standalone simple task instead starts implementation after its plan review and material fixes, maintains that plan in conversation, and honors explicit human-review triggers without phase records.",
+    review_trigger: "",
+    enforced_by: Object.freeze([])
+  }),
+  Object.freeze({
+    id: "explicit-human-authority",
+    version: 4,
+    status: "active",
+    text: "In an initialized workflow, required human decisions are explicit and bound to the exact artifact or code subject at gates opened by an approval rule or safety condition. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, or advances the workflow. Commits are not human-gated by default. The workflow server enforces this at its gates; an artifact complies unless it asserts, records, or relies on a human decision the workflow did not record. For a standalone simple task, explicit decisions are made in conversation for the presented work and reasons; no durable gate is required.",
+    review_trigger: "",
+    enforced_by: Object.freeze([])
+  })
+]);
 var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3 = Object.freeze([
   Object.freeze({
     id: "approved-design-before-code",
@@ -31079,7 +31097,7 @@ var SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2 = Object.freeze([
     enforced_by: Object.freeze([])
   })
 ]);
-var SUPPORTED_RULE_ACCEPTANCE_PROFILES = Object.freeze([SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3, SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2]);
+var SUPPORTED_RULE_ACCEPTANCE_PROFILES = Object.freeze([SUPPORTED_RULE_ACCEPTANCE_PROFILE_V4, SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3, SUPPORTED_RULE_ACCEPTANCE_PROFILE_V2]);
 var authenticResolvedConstitutions = /* @__PURE__ */ new WeakSet();
 var resolvedConstitutionCache = /* @__PURE__ */ new Map();
 var MAX_CACHED_CONSTITUTIONS = 32;

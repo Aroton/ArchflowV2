@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseConstitutionRuleFiles, parseConstitutionRuleMarkdown, validateConstitutionEvolution, type ConstitutionRuleV1 } from "../../src/contracts/constitution.js";
 import { parseConstitutionRuleV1 } from "../../src/contracts/constitution.js";
 import { PlainJsonError } from "../../src/contracts/plain-json.js";
-import { SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3 } from "../../src/state/constitution.js";
+import { SUPPORTED_RULE_ACCEPTANCE_PROFILE_V4 } from "../../src/state/constitution.js";
 
 const rule = (overrides: Partial<ConstitutionRuleV1> = {}): ConstitutionRuleV1 => ({ id: "stable-rule", version: 1, status: "active", text: "Preserve the invariant.", ...overrides });
 
@@ -31,7 +31,7 @@ describe("constitution Markdown", () => {
     ]);
   });
 
-  it("ships byte-identical live and seed rules for the exact supported v3 profile", async () => {
+  it("ships byte-identical live and seed rules for the exact supported v4 profile", async () => {
     const seedDirectory = new URL("../../assets/constitution/default/", import.meta.url);
     const liveDirectory = new URL("../../.archflow/constitution/default/", import.meta.url);
     const selectedFiles = ["00-process.md", "10-architecture.md"] as const;
@@ -45,7 +45,7 @@ describe("constitution Markdown", () => {
     }
 
     const registry = parseConstitutionRuleFiles(sources);
-    const normalized = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3.map(({ id }) => {
+    const normalized = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V4.map(({ id }) => {
       const parsed = registry.get(id);
       expect(parsed).toBeDefined();
       return {
@@ -54,7 +54,7 @@ describe("constitution Markdown", () => {
         enforced_by: [...new Set(parsed!.enforced_by ?? [])].sort(),
       };
     }).sort((left, right) => left.id.localeCompare(right.id));
-    expect(normalized).toEqual(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V3);
+    expect(normalized).toEqual(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V4);
   });
 
   it("keeps live policy identical to the seeds and evolves the former blanket triggers", async () => {

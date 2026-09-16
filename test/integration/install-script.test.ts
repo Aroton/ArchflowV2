@@ -151,6 +151,13 @@ describe("installer", () => {
     expect(await readFile(join(claudeSkillRoot, "archflow-init", "SKILL.md"), "utf8")).toBeDefined();
     expect(await readFile(join(codexSkillRoot, "archflow-init", "SKILL.md"), "utf8")).toBeDefined();
     expect(await readFile(join(antigravitySkillRoot, "archflow-init", "SKILL.md"), "utf8")).toBeDefined();
+    const simpleSkill = await readFile(join(root, "skills", "archflow-simple", "SKILL.md"), "utf8");
+    for (const skillRoot of [claudeSkillRoot, codexSkillRoot, antigravitySkillRoot]) {
+      expect(await readFile(join(skillRoot, "archflow-simple", "SKILL.md"), "utf8")).toBe(simpleSkill);
+      expect(await readFile(join(skillRoot, ".archflow-installed"), "utf8")).toContain("archflow-simple/SKILL.md");
+    }
+    expect(installed.stdout).toContain("$archflow-simple");
+    expect(installed.stdout).toContain("/archflow-simple");
   });
 
   it("installs a verified offline bundle and prunes only previously owned skill files", async () => {

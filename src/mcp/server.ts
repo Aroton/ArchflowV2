@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { parseSimpleReviewInput, parseSimpleReviewResult, type SimpleReviewInput, type SimpleReviewResult } from "../contracts/simple-review.js";
+
 import { assertAuthenticInvocationContext, type InvocationContext } from "../contracts/contexts.js";
 import { createProtocolError, describeValidationIssues, parseProtocolError, type ProtocolError } from "../contracts/errors.js";
 import {
@@ -9,7 +11,7 @@ import {
   type SemanticResultV1,
   type SemanticToolContractMap,
 } from "../contracts/semantic-workflow.js";
-import { isAdvertisedToolName, type SemanticToolName } from "../contracts/tool-names.js";
+import { isAdvertisedToolName, type SemanticToolName, type AdvertisedToolName } from "../contracts/tool-names.js";
 import { reportInternalError } from "./diagnostics.js";
 
 export type SemanticToolHandler<K extends SemanticToolName> = (
@@ -19,7 +21,7 @@ export type SemanticToolHandler<K extends SemanticToolName> = (
 
 export type ToolHandlerRegistry = Readonly<Partial<{
   [K in SemanticToolName]: SemanticToolHandler<K>;
-}>>;
+}> & { archflow_review?: (input: SimpleReviewInput, context: InvocationContext) => unknown | Promise<unknown> }>;
 
 declare const authenticatedProtocolErrorBrand: unique symbol;
 export type AuthenticatedProtocolError = Readonly<{
@@ -37,6 +39,7 @@ export type SemanticToolOutcome = {
 
 export type ToolBoundaryOutcome =
   | SemanticToolOutcome
+  | Readonly<{ kind: "review-result"; tool: "archflow_review"; result: SimpleReviewResult }>
   | Readonly<{
       readonly kind: "protocol-error";
       readonly error: AuthenticatedProtocolError;
@@ -111,7 +114,7 @@ function copyRegistry(handlers: ToolHandlerRegistry): ToolHandlerRegistry {
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError("the handler registry must have a plain prototype");
   }
-  const copied: Partial<Record<SemanticToolName, (...args: never[]) => unknown>> = {};
+  const copied: Partial<Record<AdvertisedToolName, (...args: never[]) => unknown>> = {};
   for (const key of Reflect.ownKeys(handlers)) {
     if (typeof key !== "string" || !isAdvertisedToolName(key)) throw new TypeError("the handler registry contains an unknown tool");
     const descriptor = Object.getOwnPropertyDescriptor(handlers, key);
@@ -144,12 +147,34 @@ export function createToolBoundary(handlers: ToolHandlerRegistry): ToolBoundary 
       if (typeof name !== "string") throw new TypeError("a string tool name is required");
       assertAuthenticInvocationContext(context);
 
-      // The retired low-level names are no longer advertised or dispatched: every non-semantic
+      // The retired low-level names are no longer advertised or dispatched: every unadvertised
       // name fails closed here with the digest-only TOOL_NOT_FOUND view, whether it was never a
       // tool or is durable vocabulary in existing state records.
       if (!isAdvertisedToolName(name)) {
         const toolNameDigest = createHash("sha256").update(name, "utf8").digest("hex");
         return protocolOutcome(createProtocolError("TOOL_NOT_FOUND", { tool_name_digest: toolNameDigest }));
+      }
+
+      if (name === "archflow_review") {
+        const handler = registry.archflow_review;
+        if (handler === undefined) return protocolOutcome(createProtocolError("TOOL_DISABLED", { tool: name, lifecycle_state: "inert-no-handler" }));
+        let result: SimpleReviewResult;
+        let input: SimpleReviewInput;
+        try { input = parseSimpleReviewInput(args); }
+        catch (error) {
+          result = { schema_version: "1", ok: false, error: { code: "CONTRACT_INVALID", message: describeValidationIssues(error)?.join("; ") ?? "Invalid review input.", retryable: false } };
+          const outcome = deepFreeze({ kind: "review-result" as const, tool: name, result });
+          outcomes.add(outcome);
+          return outcome;
+        }
+        try { result = parseSimpleReviewResult(await handler(input, context)); }
+        catch (error) {
+          reportInternalError(context.invocation_id, error);
+          result = { schema_version: "1", ok: false, error: { code: "INTERNAL_ERROR", message: `Internal error (${context.invocation_id}).`, retryable: false } };
+        }
+        const outcome = deepFreeze({ kind: "review-result" as const, tool: name, result });
+        outcomes.add(outcome);
+        return outcome;
       }
 
       const classified = parseSemanticInput(name, args);

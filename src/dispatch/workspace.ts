@@ -99,6 +99,10 @@ export async function createDispatchWorkspace(
 const GIT_OID = /^[0-9a-f]{40}$/u;
 const SHA256_DIGEST = /^[0-9a-f]{64}$/u;
 
+export type ReviewProjectionPlan = Readonly<{
+  entries: readonly Pick<ProjectionPlan["entries"][number], "path" | "desired">[];
+}>;
+
 export type DispatchRepositoryView = Readonly<{
   name: "primary" | RepositoryName;
   member_kind: "primary" | "secondary";
@@ -106,8 +110,8 @@ export type DispatchRepositoryView = Readonly<{
   repository_root: string;
   repository_identity_digest: Sha256Digest;
   commit: GitOid;
-  /** Authenticated retained after-images for this repository's proposed tree. */
-  projection_plan?: ProjectionPlan;
+  /** Server-captured after-images for the proposed tree; retained and authenticated for workflows. */
+  projection_plan?: ReviewProjectionPlan;
   /** Digest of the authenticated projection represented by projection_plan. */
   snapshot_digest?: Sha256Digest;
 }>;
@@ -343,8 +347,8 @@ async function removeLeaf(target: string): Promise<void> {
   }
 }
 
-/** Applies only authenticated retained after-images to the archived baseline checkout. */
-async function applyProducedProjection(view: string, projectionPlan: ProjectionPlan): Promise<void> {
+/** Applies server-captured after-images to the archived baseline checkout. */
+async function applyProducedProjection(view: string, projectionPlan: ReviewProjectionPlan): Promise<void> {
   for (const entry of projectionPlan.entries) {
     if (entry.path === ".archflow/tasks" || entry.path.startsWith(".archflow/tasks/")) {
       continue;

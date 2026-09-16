@@ -8,7 +8,7 @@ This repo contains one portable Agent Skills source of truth in `skills/`. The i
 
 ## Skills
 
-The canonical set contains nine portable skills:
+The canonical set contains ten portable skills:
 
 | Skill | Purpose |
 |---------|---------|
@@ -20,9 +20,10 @@ The canonical set contains nine portable skills:
 | `/archflow-design <task>` | Design architecture + phases for a task |
 | `/archflow-phase-design <task> N` | Design phase N and run its automatic counter-review |
 | `/archflow-phase-impl <task> N` | Implement, verify, review, and commit phase N (fresh session) |
+| `/archflow-simple <ask>` | Plan, MCP-review, execute, and MCP-review standalone work in one session |
 | `/archflow-status [task]` | Check status and next action |
 
-In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, and `$archflow-status`.
+In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, `$archflow-status`, and `$archflow-simple`.
 
 ## When ArchFlow applies
 
@@ -81,7 +82,7 @@ docs/
   TESTING.md               # test layout and validation matrix
   LIMITATIONS.md           # honest reliability/security boundaries
   workflow/LIFECYCLE.md    # phase graph, pipeline, gates, trust boundaries
-  workflow/SKILLS.md       # the nine skills
+  workflow/SKILLS.md       # the ten skills
   mcp/SERVER.md            # MCP server, two semantic tools, protocol plumbing
   mcp/DISPATCH.md          # child reviewer dispatch, sandbox, repo views
   cli/COMMANDS.md          # archflow-local adapters, upgrade adoption, degraded mode

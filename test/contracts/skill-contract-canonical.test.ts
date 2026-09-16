@@ -13,6 +13,7 @@ import { classifyTaskPath } from "../../src/repository/paths.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const skillNames = [
+  "archflow-simple",
   "archflow-init",
   "archflow-upgrade",
   "archflow-explore",
@@ -52,9 +53,9 @@ function skill(name: typeof skillNames[number]): string {
 }
 
 /**
- * With the catalogue at exactly the two semantic names, the allow-lists are the global
+ * With the catalogue including the semantic pair and standalone review, the allow-lists are the global
  * enforcement: any skill naming a retired tool or a retired helper command fails the
- * contract, no cohort carve-outs. Every workflow — normal lifecycle, status reporting,
+ * contract, no cohort carve-outs. Every initialized workflow — normal lifecycle, status reporting,
  * and legacy adoption — runs through `archflow_status`/`archflow_apply` plus the retained
  * local adapters, so the pinned vocabulary below is exhaustive, not per-cohort.
  */
@@ -79,8 +80,8 @@ function frontmatter(source: string): Readonly<Record<string, string>> {
 }
 
 describe("canonical skill contracts", () => {
-  it("advertises exactly the two semantic workflow tools", () => {
-    expect([...ADVERTISED_TOOL_NAMES]).toEqual(["archflow_status", "archflow_apply"]);
+  it("advertises the workflow pair and standalone review tool", () => {
+    expect([...ADVERTISED_TOOL_NAMES]).toEqual(["archflow_status", "archflow_apply", "archflow_review"]);
   });
 
   it("names only shipped local commands, MCP tools, and project errors", () => {

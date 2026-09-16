@@ -1,3 +1,4 @@
+import { simpleReviewSchemaGroup } from "./schema-generation-simple-review.js";
 import { z, type ZodType } from "zod";
 
 import { durableSchemaGroup } from "./schema-generation-durable.js";
@@ -42,7 +43,7 @@ export type SchemaDocumentPlan = {
 };
 
 export type SchemaGenerationGroup = {
-  readonly group: "leaf" | "durable" | "gate" | "errors" | "mcp-tools" | "semantic-workflow" | "automation-status";
+  readonly group: "leaf" | "durable" | "gate" | "errors" | "mcp-tools" | "semantic-workflow" | "automation-status" | "simple-review";
   readonly documents: readonly SchemaDocumentPlan[];
 };
 
@@ -64,6 +65,7 @@ export const SCHEMA_GENERATION_GROUPS: readonly SchemaGenerationGroup[] = Object
   mcpToolsSchemaGroup,
   semanticWorkflowSchemaGroup,
   automationStatusSchemaGroup,
+  simpleReviewSchemaGroup,
 ]);
 
 /** Keeps annotation order while dropping the per-schema envelope Zod stamps on every emission. */

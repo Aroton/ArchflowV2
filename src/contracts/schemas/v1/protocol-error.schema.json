@@ -22,7 +22,8 @@
       "type": "string",
       "enum": [
         "archflow_status",
-        "archflow_apply"
+        "archflow_apply",
+        "archflow_review"
       ]
     },
     "notFound": {

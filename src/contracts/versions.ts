@@ -1,6 +1,8 @@
 export const SCHEMA_VERSION = "1" as const;
 
 export const SCHEMA_IDS = {
+  simpleReviewInput: "urn:archflow:schema:v1:simple-review-input",
+  simpleReviewResult: "urn:archflow:schema:v1:simple-review-result",
   implementationProfiles: "urn:archflow:schema:v1:implementation-profiles",
   primitives: "urn:archflow:schema:v1:primitives",
   phaseInstance: "urn:archflow:schema:v1:phase-instance",

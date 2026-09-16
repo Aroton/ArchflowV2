@@ -8,7 +8,7 @@ import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 describe("advertised MCP tool catalogue", () => {
   it("advertises every current recommendation profile with optional explanation", () => {
-    for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
+    for (const descriptor of ADVERTISED_TOOL_CATALOGUE.filter(({ name }) => name !== "archflow_review")) {
       const output = descriptor.outputSchema as { $defs: Record<string, object> };
       const { validate } = createJsonSchemaValidator(output.$defs.implementationRecommendation!);
       for (const { model, effort } of Object.values(SELECTOR_PROFILES)) {
@@ -27,9 +27,9 @@ describe("advertised MCP tool catalogue", () => {
     expect(ADVERTISED_TOOL_CATALOGUE.map(({ name }) => name)).toEqual(ADVERTISED_TOOL_NAMES);
   });
 
-  it("keeps both tool inputs on plain object roots within the advertisement byte budget", () => {
-    expect(ADVERTISED_TOOL_NAMES).toEqual(["archflow_status", "archflow_apply"]);
-    expect(ADVERTISED_TOOL_CATALOGUE.map(({ description }) => description)).toEqual([
+  it("keeps all tool inputs on plain object roots within the advertisement byte budget", () => {
+    expect(ADVERTISED_TOOL_NAMES).toEqual(["archflow_status", "archflow_apply", "archflow_review"]);
+    expect(ADVERTISED_TOOL_CATALOGUE.filter(({ name }) => name !== "archflow_review").map(({ description }) => description)).toEqual([
       "Read durable ArchFlow status for one task and optional producing-skill invocation without mutation; returns one reconciled workflow view and at most one bounded offer for the current document owner.",
       "Apply exactly one supplied server offer using only its expected semantic submission; never chooses or loops to another action and returns the newly authenticated workflow view.",
     ]);
@@ -43,6 +43,6 @@ describe("advertised MCP tool catalogue", () => {
     // to current, prior, and partial reports plus producer responses. The ceiling retains about
     // 3% headroom so accidental recursive growth still fails.
     // Input roots and their host-compatibility constraints remain unchanged.
-    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(82_000);
+    expect(JSON.stringify({ tools: ADVERTISED_TOOL_CATALOGUE }).length).toBeLessThan(94_000);
   });
 });

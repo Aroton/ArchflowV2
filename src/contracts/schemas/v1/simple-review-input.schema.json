@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:simple-review-input",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "plan",
+        "implementation"
+      ]
+    },
+    "ask": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "plan": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "base_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Full HEAD commit recorded before this simple task; HEAD must still match."
+    },
+    "paths": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:archflow:schema:v1:path-claim"
+      },
+      "description": "Declared output file paths, including planned additions and deletions; no directories or other task storage."
+    },
+    "verification": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "review_routes": {
+      "type": "object",
+      "properties": {
+        "counter-reviewer": {
+          "$ref": "urn:archflow:schema:v1:config#/$defs/route"
+        },
+        "test-reviewer": {
+          "$ref": "urn:archflow:schema:v1:config#/$defs/route"
+        },
+        "adjudicator": {
+          "$ref": "urn:archflow:schema:v1:config#/$defs/route"
+        }
+      },
+      "additionalProperties": false
+    },
+    "expected_policy_digest": {
+      "description": "For implementation, carry the policy_digest returned by plan review to detect policy drift before dispatch.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "stage",
+    "ask",
+    "plan",
+    "base_commit",
+    "paths"
+  ],
+  "additionalProperties": false
+}

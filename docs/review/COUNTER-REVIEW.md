@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review supplies independent feedback to the working AI. The initial review runs the configured general and test reviewers, alongside separate constitution review when rules are active. Reviewers return readable reports; the working AI interprets them, makes worthwhile revisions, and selects previous reviewers to verify the changes. Useful feedback and economical follow-up matter more than agreement on every suggestion.
 
@@ -240,3 +240,11 @@ Archived V1 assessments and V2/V3/V4-policy selections remain readable with thei
 Matched `review_trigger` conditions are configured approvals when compliance passes; uncertain triggers and failed or uncertain compliance remain exceptional. SQL-file matching remains deterministic. The database constitution trigger extends coverage to embedded queries, ORM operations, schemas, and migrations using independent reviewer judgment over the actual changed behavior. Those semantic judgments can be mistaken; they are not a language parser or a proof of complete detection. Access-control, public-contract, cryptography/secrets, and control-plane rules retain automatic compliance review without default human triggers; their historical IDs remain stable. The material-plan-change rule uses server-pinned human-approved before-images of governing documents; the existing independent constitution reviewer judges the amendment and records its rationale. No extra reviewer is added and no producer-only classification can clear the boundary.
 
 Uncertain approval triggers are first returned to the producer with the rule and missing evidence named. They use the completed-review-round budget; only a positively matched trigger opens its configured approval immediately. Unresolved uncertainty at the budget limit remains an explicit exception.
+
+## One-pass standalone reviews
+
+Simple tasks reuse MCP reviewer routing, CLI adapters, readable report contracts, test assignments, and constitution slot validation through `archflow_review`. Plan review uses the design rubric without phase decomposition or implementation-agent selection; implementation uses the existing implementation rubric. The ask and current plan establish intent without claiming upstream approval. Each configured general reviewer, the test reviewer, and the applicable constitution child run once per call, concurrently under the existing dispatch queue.
+
+Configuration comes from the repository when present and shipped defaults otherwise. Plan routes use phase-design settings; implementation routes use phase-impl settings. Invocation flags retain existing role-local precedence. Constitution files use the same default/custom resolution; missing directories use shipped policy while invalid existing files fail. Explicitly empty or fully deprecated policy produces a not-applicable constitution result.
+
+There is no fixed point, retained evidence, triage submission, or automatic follow-up. The session fixes supported findings and reruns useful tests, then reports what changed after review. Constitution triggers and applicable configured subject/path approvals become conversational human-review reasons rather than durable gates. Failing or uncertain judgments remain visible for remediation or explicit human resolution. A completed pass does not attest to later fixes.

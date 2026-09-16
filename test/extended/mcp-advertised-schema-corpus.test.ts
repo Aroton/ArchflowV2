@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseToolCall, validateProjectFailureStructure, validateProjectResultStructure } from "../../src/contracts/mcp-tools.js";
 import { parseSha256Digest } from "../../src/contracts/evidence.js";
-import { SEMANTIC_TOOL_NAMES, TOOL_NAMES, type ToolName } from "../../src/contracts/tool-names.js";
+import { ADVERTISED_TOOL_NAMES, SEMANTIC_TOOL_NAMES, TOOL_NAMES, type ToolName } from "../../src/contracts/tool-names.js";
 import { ADVERTISED_TOOL_CATALOGUE } from "../../src/mcp/tools.js";
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import { ordinaryApprovalFacts } from "../helpers/ordinary-approval.js";
@@ -389,21 +389,25 @@ describe("advertised MCP tool catalogue", () => {
       };
       const { $defs, ...fragment } = schema;
       walk(fragment);
-      expect([...Object.keys($defs as object)].sort(), label).toEqual([...reachable].sort());
+      expect([...Object.keys(($defs ?? {}) as object)].sort(), label).toEqual([...reachable].sort());
     };
 
     for (const descriptor of ADVERTISED_TOOL_CATALOGUE) {
-      expect((SEMANTIC_TOOL_NAMES as readonly string[]).includes(descriptor.name), descriptor.name).toBe(true);
+      expect((ADVERTISED_TOOL_NAMES as readonly string[]).includes(descriptor.name), descriptor.name).toBe(true);
       assertExactReachableClosure(descriptor.inputSchema, `${descriptor.name} input`);
       assertExactReachableClosure(descriptor.outputSchema, `${descriptor.name} output`);
       // The error union is a result-envelope concern; no semantic tool schema reaches it, and
       // the flat def names never leave a document-key grouping level behind.
-      expect(Object.keys(descriptor.inputSchema.$defs as object)).not.toContain("project-error");
-      expect(Object.keys(descriptor.outputSchema.$defs as object)).not.toContain("project-error");
-      expect(Object.keys(descriptor.outputSchema.$defs as object)).toContain("workflowView");
+      expect(Object.keys((descriptor.inputSchema.$defs ?? {}) as object)).not.toContain("project-error");
+      expect(Object.keys((descriptor.outputSchema.$defs ?? {}) as object)).not.toContain("project-error");
+      if (descriptor.name === "archflow_review") {
+        expect(Object.keys((descriptor.outputSchema.$defs ?? {}) as object)).not.toContain("workflowView");
+      } else {
+        expect(Object.keys((descriptor.outputSchema.$defs ?? {}) as object)).toContain("workflowView");
+      }
       for (const documentKey of ["mcp-tools", "primitives", "semantic-workflow", "project-error"]) {
-        expect(Object.keys(descriptor.inputSchema.$defs as object), `${descriptor.name} input ${documentKey} group`).not.toContain(documentKey);
-        expect(Object.keys(descriptor.outputSchema.$defs as object), `${descriptor.name} output ${documentKey} group`).not.toContain(documentKey);
+        expect(Object.keys((descriptor.inputSchema.$defs ?? {}) as object), `${descriptor.name} input ${documentKey} group`).not.toContain(documentKey);
+        expect(Object.keys((descriptor.outputSchema.$defs ?? {}) as object), `${descriptor.name} output ${documentKey} group`).not.toContain(documentKey);
       }
     }
 

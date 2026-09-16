@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:archflow:schema:v1:simple-review-result",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "value": {
+      "type": "object",
+      "properties": {
+        "stage": {
+          "type": "string",
+          "enum": [
+            "plan",
+            "implementation"
+          ]
+        },
+        "subject_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "policy_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "config_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "constitution_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "counter-reviewer",
+                  "test-reviewer",
+                  "adjudicator"
+                ]
+              },
+              "reviewer_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "route": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "effort": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "adapter": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "family": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "model",
+                  "effort",
+                  "adapter",
+                  "family"
+                ],
+                "additionalProperties": false
+              },
+              "report": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "role",
+              "reviewer_id",
+              "route",
+              "report"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "constitution": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "not-applicable",
+                "failed"
+              ]
+            },
+            "judgments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "compliance": {
+                    "type": "string",
+                    "enum": [
+                      "pass",
+                      "fail",
+                      "uncertain"
+                    ]
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "trigger": {
+                    "type": "string",
+                    "enum": [
+                      "not-matched",
+                      "matched",
+                      "uncertain"
+                    ]
+                  },
+                  "trigger_evidence": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "rule_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "rule_version": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "compliance",
+                  "rationale",
+                  "trigger",
+                  "trigger_evidence",
+                  "rule_id",
+                  "rule_version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "status",
+            "judgments"
+          ],
+          "additionalProperties": false
+        },
+        "human_review_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "counter-reviewer",
+                  "test-reviewer",
+                  "adjudicator"
+                ]
+              },
+              "reviewer_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "route": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "effort": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh",
+                      "max",
+                      "ultra"
+                    ]
+                  },
+                  "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "adapter": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "family": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "model",
+                  "effort",
+                  "adapter",
+                  "family"
+                ],
+                "additionalProperties": false
+              },
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            },
+            "required": [
+              "role",
+              "reviewer_id",
+              "route",
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "stage",
+        "subject_digest",
+        "policy_digest",
+        "config_digest",
+        "constitution_digest",
+        "reports",
+        "constitution",
+        "human_review_reasons",
+        "failures"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "ok"
+  ],
+  "additionalProperties": false
+}

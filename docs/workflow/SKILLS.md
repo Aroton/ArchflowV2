@@ -1,10 +1,10 @@
 # workflow/SKILLS
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `skills/`, `src/init/`, `src/contracts/config.ts`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/mcp/handlers/semantic.ts`, `src/state/semantic-*.ts`, `assets/`
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `skills/`, `src/init/`, `src/contracts/config.ts`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/mcp/handlers/semantic.ts`, `src/state/semantic-*.ts`, `assets/`
 
 Producing skills interpret `review_reports` directly and submit a `triage.response`. They check concerns against existing code and tests, use plans as context, and finish when no supported material issue remains. They select relevant previous reviewers for verification, explain residual concerns when finishing, and follow separate constitution and human approval actions. No extra AI parsing call or per-finding census is required.
 
-The nine skills are the human-facing entry points. They are thin judgment and trust-boundary playbooks: the MCP owns durable state, legal transitions, canonical task resource paths, and immutable review policy. Every workflow runs through the semantic status/apply pair; the one purpose-specific local adapter is the legacy upgrade's preview/stage/adopt, which exists only because the destination task does not exist yet at adoption time. In Codex the same skills are invoked with `$` instead of `/`.
+The ten skills are the human-facing entry points. They are thin judgment and trust-boundary playbooks: the MCP owns durable state, legal transitions, canonical task resource paths, and immutable review policy. Every initialized workflow runs through the semantic status/apply pair; the one purpose-specific local adapter is the legacy upgrade's preview/stage/adopt, which exists only because the destination task does not exist yet at adoption time. In Codex the same skills are invoked with `$` instead of `/`.
 
 ## The set at a glance
 
@@ -79,7 +79,7 @@ When later planning corrects the architecture or requirements, the phase documen
 
 This skill uses the semantic status/apply pair: the client implements, verifies, triages, converses at gates, stages, and commits, while the server offers and applies exactly one bounded action per call and derives every manifest, digest, and evidence fact from a small client-owned declaration.
 
-The only skill that writes production code. It requires durable `phase-impl-<n>` authority, runs the phase design's verification, and records commands, outcomes, failures and coverage gaps in implementation notes. Raw logs are optional supporting evidence under ignored runtime, pinned with bounded excerpts at review time. While review is pending, compact or replace the log and retry the offered review to repin it without replacing the implementation result. `impl-notes.md` records decisions, deviations, patterns, gotchas, interfaces, and evidence. If implementation reveals a false plan assumption, changed governing documents become authenticated co-produced outputs; larger corrections use the explicit planning-restart path.
+The initialized-workflow skill that writes production code. It requires durable `phase-impl-<n>` authority, runs the phase design's verification, and records commands, outcomes, failures and coverage gaps in implementation notes. Raw logs are optional supporting evidence under ignored runtime, pinned with bounded excerpts at review time. While review is pending, compact or replace the log and retry the offered review to repin it without replacing the implementation result. `impl-notes.md` records decisions, deviations, patterns, gotchas, interfaces, and evidence. If implementation reveals a false plan assumption, changed governing documents become authenticated co-produced outputs; larger corrections use the explicit planning-restart path.
 
 Implementation may explore every returned repository for context. Its result declares outputs for the primary and every writable secondary; context-only members are never implementation targets. The reviewer receives changed members at their authenticated proposed trees. Declared outputs and their current behavior are the review subject. Unchanged files, unchanged writable members, and context-only repositories are evidence only, so phase review cannot fan out into a general code review.
 
@@ -132,3 +132,11 @@ Producer skills continue through the exact authenticated commit, then report the
 ## Model recommendations
 
 Architecture and phase design recommend Astra high for the producing session. This does not switch models or change workflow authority. The implementation selector uses configurable Terminal-Bench v4.0 thresholds of 19/30/40/50 percent for routine/bounded/hard/exceptional reasoning. Defaults select GLM Flash/GLM Flash/GLM max/Astra high; users can change enabled profiles, cost priorities, and thresholds. Existing recommendations remain fixed. Astra max is never recommended and is rejected for reviewer dispatch. There are no additive scores, automatic hazard floors, or strongest-component aggregation. Planning guidance and calibration limits are documented in `../research/effort-research.md`. Reviewer defaults use Astra low and Fable 5.1 medium for counter-review, Sol medium for test review, Luna/xhigh for effort selection, and Gemini 3.8 Flash High at high effort for adjudication.
+
+## Standalone simple tasks
+
+`archflow-simple <ask>` is the tenth portable skill and runs outside initialized tasks. One session plans, calls `archflow_review`, fixes the plan, implements and verifies, calls `archflow_review` for implementation, then fixes and verifies again. Counter-review, test review, and applicable constitution review run once at each stage. No effort reviewer, model recommendation, task documents, state file, commit, or successor launch is produced.
+
+The original ask, evolving plan, review feedback, and explicit human decisions remain in conversation. The implementation call carries the plan review's policy digest so changed configuration or constitution cannot silently take effect between stages. Human-review reasons are explicit conversational stops; incomplete review coverage and unresolved material findings remain blockers. Fixes after the single review are disclosed as not independently re-reviewed.
+
+The skill needs a connected MCP server and Git repository, not `archflow-init`. Repository configuration and rules take precedence over shipped defaults; malformed existing policy does not fall back. An explicitly empty constitution has no applicable constitution child. Work already owned by an initialized task continues through the durable workflow.

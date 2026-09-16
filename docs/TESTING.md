@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
 
 Report-workflow coverage exercises irregular extracted JSON, explicit producer interpretation, selective follow-up, partial-feedback visibility, sibling reuse, and independent constitution/approval boundaries. Archived structured-review tests remain for old evidence.
 
@@ -168,3 +168,7 @@ Automation regressions cover bounded transient retries, persistence across produ
 Verification evidence regressions cover optional logs during implementation capture, historical manifests with changed or missing caches, bounded UTF-8 log excerpts, and review retry after replacing a log without changing the implementation result. The retry journey also checks that subsequent cache changes do not mutate completed review authority.
 
 Constitution coverage checks default/custom precedence, deprecated overrides, within-layer duplicate rejection, migration conflicts, custom preservation under forced refresh, and unchanged historical policy pins. The Git-backed tests prove unchanged core rules still authenticate automatic advancement after moving into `default/`, while unsupported custom core overrides cannot. Existing semantic journeys continue to exercise automatic API changes and retained database/custom approval triggers.
+
+## Simple-task review coverage
+
+`test/unit/simple-review.test.ts` drives both stages with fake reviewer responses in disposable Git repositories. It covers one pass per role, configuration fallback and explicit routing, test assignments, constitution/path triggers, partial output failure, transient retry bounds, cancellation, branch and policy drift, path rejection, dirty/add/delete snapshots, cleanup, and public MCP validation. `test/integration/simple-review-dispatch.test.ts` invokes the public boundary and real CLI runner with a fake executable, checking all roles, byte-identical snapshots, and cleanup. Existing dispatch coordinator integration tests guard workflow behavior through the extracted runner. The portable skill specifies post-review fixes without reviewer re-checks; real model judgment remains distinct from deterministic test coverage.

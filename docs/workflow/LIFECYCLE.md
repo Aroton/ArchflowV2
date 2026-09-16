@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -208,3 +208,7 @@ Five total completed review rounds are allowed by default. Production entries, t
 Shipped defaults require human review for initial PRDs and overall designs, material amendments, and SQL/database changes. Every changed `.sql` path matches deterministically; a constitution trigger also covers changed embedded queries, ORM behavior, schema definitions, and migrations in any writable repository. Access-control, public-contract, cryptography/secrets, and workflow-control rules remain automatic compliance checks without blanket human triggers. Repositories can add their own observable `review_trigger` conditions, which still require human judgment. Meaning-preserving PRD/architecture maintenance is independently assessed against the last human-approved bytes; material decisions still need approval. Explicit project content rules continue to match even a small edit.
 
 Uncertain approval triggers are first returned to the producer with the rule and missing evidence named. They use the completed-review-round budget; only a positively matched trigger opens its configured approval immediately. Unresolved uncertainty at the budget limit remains an explicit exception.
+
+## Standalone work outside this graph
+
+`archflow-simple` does not create a task or enter this lifecycle. It uses plan → one MCP review and fixes → implementation and verification → one MCP review and fixes. Test and constitution reviewers remain present; effort assessment and reviewer iteration are absent. Explicit policy-triggered human decisions happen in conversation. It never converts or bypasses an initialized task's durable authority.

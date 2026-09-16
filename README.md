@@ -213,3 +213,18 @@ only a cache and may be regenerated or cleaned with `archflow-local clean --task
 ## Detailed Process Documentation
 
 See [docs/OVERVIEW.md](docs/OVERVIEW.md) for the maintained documentation set — the whole-system map, the workflow lifecycle and gates (`docs/workflow/`), and per-subsystem pages for the MCP server, CLI, review pipeline, contracts, and durable state.
+
+## Simple tasks
+
+Use `$archflow-simple <ask>` in Codex or `/archflow-simple <ask>` in Claude Code and Antigravity for a small change completed in one session:
+
+```mermaid
+flowchart LR
+  A[Ask → plan] --> B[MCP review → plan fixes]
+  B --> C[Implement → verify]
+  C --> D[MCP review → fixes → verify]
+```
+
+Each review pass includes the configured counter-reviewer, a test reviewer, and constitution review when active rules exist. There are no reviewer re-checks, workflow records, implementation-agent recommendations, or automatic commits. Explicit policy triggers still require a human answer in conversation. The final summary distinguishes reviewed work from later fixes.
+
+Connect the ArchFlow MCP server; repository initialization is unnecessary. With no repository configuration, reviewer routing comes from `assets/config.template.yaml` and the connected client identity. Codex defaults to Claude counter-review; test and constitution routes use their shipped settings. Reviewer CLIs still need installation and authentication. Optional `--counter-reviewer`, `--test-reviewer`, and `--adjudicator` flags select routes for that invocation. A missing required reviewer blocks completion rather than silently falling back.
