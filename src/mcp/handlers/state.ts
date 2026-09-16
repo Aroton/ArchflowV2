@@ -1055,12 +1055,15 @@ export async function handleState(
         const decodedCurrent = decodePhaseInstance(current.value.phase_instance);
         const crossesPhase = call.input.phase_instance !== current.value.phase_instance;
         const planningRestartSignal = restartInput !== undefined;
+        // Minor revisions can settle at produce. Authenticate both exit positions, but do not
+        // require milestone proof for a same-phase request that reopens production instead.
         const completionSignal =
           !planningRestartSignal &&
           artifact === undefined &&
           decodedCurrent.kind === "phase-impl" &&
-          current.value.step === "triage" &&
-          current.value.status === "succeeded";
+          (current.value.step === "triage" || current.value.step === "produce") &&
+          current.value.status === "succeeded" &&
+          (crossesPhase || (call.input.step === current.value.step && call.input.status === current.value.status));
         const artifactPhaseExitSignal =
           !planningRestartSignal && artifact === undefined && crossesPhase && decodedCurrent.kind !== "phase-impl";
         let currentProduce: CurrentProduceSubject | undefined;
@@ -1327,13 +1330,16 @@ export async function handleState(
             // Mirrors `legalMovement`: a retry of a failed step and any re-opening of the
             // produce window from elsewhere in the phase both spend an attempt. The produce
             // door counts whatever the position it leaves — succeeded, failed, or a step
-            // still running whose terminal result cannot be recorded.
+            // still running whose terminal result cannot be recorded. Final-task completion
+            // retains the succeeded cursor and its attempt; it does not reopen production.
             attempt: call.input.phase_instance !== current.value.phase_instance
               ? parseSafeInteger(1)
-              : (current.value.status === "failed" && call.input.step === current.value.step) ||
+              : call.input.status === "running" && (
+                  (current.value.status === "failed" && call.input.step === current.value.step) ||
                   (call.input.step === "produce" && (
                     current.value.step !== "produce" || current.value.status === "succeeded"
                   ))
+                )
                 ? parseSafeInteger(current.value.attempt + 1)
                 : current.value.attempt,
             input_fingerprint: call.input.input_fingerprint,

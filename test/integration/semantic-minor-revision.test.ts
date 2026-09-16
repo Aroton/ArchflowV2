@@ -1,15 +1,19 @@
 import { clientCommit } from "../helpers/semantic-journeys.js";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ApplySubmissionV1, WorkflowInvocationV1, WorkflowViewV1 } from "../../src/contracts/semantic-workflow.js";
 import { installSemanticReviewStub, reachImplementationHandoff, reachPhaseDesignReviewOffer, semanticJourneyHarness, withImplementationComponents, type SemanticJourneyHarness } from "../helpers/semantic-journeys.js";
 import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
 import { createProductionServices } from "../../src/state/production.js";
-import { parseSafeCode } from "../../src/contracts/evidence.js";
+import { parseSafeCode, parseSafeInteger, parseSha256Digest } from "../../src/contracts/evidence.js";
 import { derivePendingEditorialPredecessor, validateEditorialPredecessorDeclaration } from "../../src/state/evidence-results.js";
 import { loadCurrentProduceSubject } from "../../src/state/produce-subject.js";
+import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
+import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
+import { loadAuthenticatedGateApproval } from "../../src/state/gate-approvals.js";
+import { planStateTransition, type TransitionPlanInput } from "../../src/state/transitions.js";
 
 const workspaces: TaskWorkspace[] = [];
 const restorers: (() => void)[] = [];
@@ -57,13 +61,20 @@ describe("minor review revisions", { timeout: 180_000 }, () => {
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe(count);
   });
 
-  it("keeps implementation checks and final commit authority while reusing review for a comment correction", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "minor-implementation" });
+  it.each([
+    { authority: "autonomous", phaseCount: 1 },
+    { authority: "autonomous", phaseCount: 2 },
+    { authority: "human", phaseCount: 1 },
+    { authority: "human", phaseCount: 2 },
+  ] as const)("advances a minor implementation revision with $authority authority and $phaseCount planned phases", async ({ authority, phaseCount }) => {
+    const workspace = await createTaskWorkspace({ taskId: `minor-implementation-${authority}-${phaseCount}` });
     workspaces.push(workspace);
     writeFileSync(join(workspace.root, ".git/info/exclude"), "semantic-stub-bin/\nsemantic-stub-home/\nsemantic-review-count\n");
     restorers.push(installSemanticReviewStub(workspace.root, [[], [], [], suggestion]));
     const h = semanticJourneyHarness(workspace);
-    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, { phaseCount: 1 });
+    const { invocation, handoff } = await reachImplementationHandoff(workspace, h, {
+      phaseCount, ...(authority === "human" ? { contentRules: ["**/*.js"] } : {}),
+    });
     let view = await apply(h, invocation, handoff);
     const artifact = view.resources.find(resource => resource.role === "current-artifact")!.path;
     const transcript = view.resources.find(resource => resource.role === "verification-transcript")!.path;
@@ -84,9 +95,65 @@ describe("minor review revisions", { timeout: 180_000 }, () => {
     writeFileSync(join(workspace.root, source), "// The task state (its workflow stage).\nexport const state = 'ready';\n");
     execFileSync(process.execPath, ["--check", source], { cwd: workspace.root });
     view = await apply(h, invocation, view, { kind: "work-result", outcome: "succeeded", implementation, review_revision: { classification: "minor", rationale: "Expanded one comment; node --check passed again." } });
+    const readState = () => taskStateV1Schema.parse(JSON.parse(readFileSync(workspace.services.authority.state.absolute, "utf8")));
+    expect(readState()).toMatchObject({ phase_instance: "phase-impl-1", step: "produce", status: "succeeded" });
+    let openGate;
+    if (authority === "human") {
+      view = await apply(h, invocation, view, { kind: "gate-summary", summary: "The comment correction is ready for commit authorization." });
+      openGate = readState().open_gate;
+      expect(openGate).toBeDefined();
+      view = await apply(h, invocation, view, {
+        kind: "decision", choice: "authorize-commit", reason: "Commit the corrected, verified output.",
+      });
+    }
     expect(view.next_action.kind).toBe("commit");
     expect(view.next_action.commit?.paths).toContain(source);
     expect(view.detail).toContain("has not received another AI review");
+    expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe(count);
+    const settled = readState();
+    await clientCommit(workspace, view);
+    if (authority === "human" && phaseCount === 2) {
+      // Exercise the planner with real authenticated authority, then remove one required fact.
+      const services = await createProductionServices({ working_directory: workspace.root, task_id: workspace.taskId, operation: parseSafeCode("check-implementation-exit") });
+      if (!services.ok) throw new Error("production services unavailable");
+      const reference = settled.approvals.find(entry => entry.gate_kind === "commit-authorization")!;
+      const approval = await loadAuthenticatedGateApproval(services.value.dependencies, services.value.authority, reference);
+      if (!approval.ok) throw new Error("commit approval unavailable");
+      const input: TransitionPlanInput = {
+        current: settled,
+        target: { phase_instance: parsePhaseInstanceId("phase-design-2"), step: "produce", status: "running", attempt: parseSafeInteger(1), input_fingerprint: settled.input_fingerprint },
+        recomputed_input_fingerprint: settled.input_fingerprint,
+        completion_subject_digest: reference.subject_digest,
+        authenticated_gate_approvals: [approval.value],
+        commit_observed: true,
+      };
+      expect(planStateTransition(input).ok).toBe(true);
+      for (const override of [
+        { authenticated_gate_approvals: [] },
+        { commit_observed: false },
+        { completion_subject_digest: parseSha256Digest("0".repeat(64)) },
+        { current: { ...settled, open_gate: openGate! } },
+        { target: { ...input.target, phase_instance: parsePhaseInstanceId("phase-design-3") } },
+      ] satisfies Partial<TransitionPlanInput>[]) {
+        expect(planStateTransition({ ...input, ...override })).toMatchObject({ ok: false, error: { code: "TRANSITION_INVALID" } });
+      }
+    }
+    if (phaseCount === 1) {
+      view = await h.status(invocation);
+      expect(view.next_action.kind).toBe("finish-task");
+      await apply(h, invocation, view);
+      expect(readState()).toMatchObject({ terminal: "complete", attempt: settled.attempt });
+    } else {
+      const successor = { skill: "archflow-phase-design", phase: 2, intent: "resume" } as const;
+      view = await h.status(successor);
+      expect(view.next_action.kind).toBe("start-next-skill");
+      view = await apply(h, successor, view);
+      expect(view.next_action.kind).toBe("submit-work");
+      expect(readState()).toMatchObject({ phase_instance: "phase-design-2", step: "produce", status: "running", attempt: 1 });
+      expect(existsSync(join(workspace.services.authority.task_root, "phases/2/design.md"))).toBe(false);
+    }
+    expect(readState().authoritative_results).toEqual(settled.authoritative_results);
+    expect(readState().revision).toBe(settled.revision + 1);
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe(count);
   });
 

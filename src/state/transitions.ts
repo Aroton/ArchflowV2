@@ -500,14 +500,14 @@ function legalMovement(input: TransitionPlanInput): boolean {
 }
 
 /**
- * Gate recovery can leave a document cursor at `produce: succeeded`. Once the exact current
- * subject has authenticated human approval, admit only the ordinary document-phase successor
- * edge. Implementation exits keep their distinct commit-authorization boundary.
+ * Gate recovery and review-preserving revisions can settle at `produce: succeeded`. Admit only
+ * the ordinary successor edge; the planner separately authenticates the phase's exit authority,
+ * including exact commit proof for implementation output.
  */
-function legalSettledDocumentProduceExitMovement(input: TransitionPlanInput): boolean {
+function legalSettledProduceExitMovement(input: TransitionPlanInput): boolean {
   const { current, target } = input;
   if (
-    phaseKind(current.phase_instance) === "phase-impl" ||
+    current.terminal !== undefined || current.open_gate !== undefined ||
     current.step !== "produce" ||
     current.status !== "succeeded" ||
     target.status !== "running"
@@ -627,7 +627,7 @@ function hasAuthenticatedCommittedOutput(input: TransitionPlanInput): boolean {
   const decoded = decodePhaseInstance(input.current.phase_instance);
   if (
     decoded.kind !== "phase-impl" ||
-    input.current.step !== "triage" ||
+    (input.current.step !== "triage" && input.current.step !== "produce") ||
     input.current.status !== "succeeded" ||
     input.current.terminal !== undefined ||
     input.current.open_gate !== undefined ||
@@ -708,9 +708,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
   }
   if (
     decodedCurrent.kind === "phase-impl" &&
-    input.current.step === "triage" &&
-    input.current.status === "succeeded" &&
-    input.target.phase_instance !== input.current.phase_instance &&
+    crossesPhase &&
     !committedOutput
   ) return invalid(input, from, to);
   if (
@@ -733,7 +731,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     input.derived_planned_final_phase === undefined
   ) return invalid(input, from, to);
   const legalMovementFromCurrentCursor = legalMovement(input) || (
-    crossesPhase && legalSettledDocumentProduceExitMovement(input)
+    crossesPhase && legalSettledProduceExitMovement(input)
   );
   if (
     !legalMovementFromCurrentCursor ||

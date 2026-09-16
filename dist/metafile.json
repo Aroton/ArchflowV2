@@ -6874,7 +6874,7 @@
       ]
     },
     "src/mcp/handlers/state.ts": {
-      "bytes": 71355,
+      "bytes": 71886,
       "format": "esm",
       "imports": [
         {
@@ -10408,7 +10408,7 @@
       ]
     },
     "src/state/transitions.ts": {
-      "bytes": 39655,
+      "bytes": 39545,
       "format": "esm",
       "imports": [
         {
@@ -10594,7 +10594,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2437344,
+      "bytes": 2437545,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11865,7 +11865,7 @@
           "bytesInOutput": 18161
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 61550
+          "bytesInOutput": 61845
         },
         "src/repository/git.ts": {
           "bytesInOutput": 20783
@@ -12015,7 +12015,7 @@
           "bytesInOutput": 50783
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 27192
+          "bytesInOutput": 27098
         },
         "src/state/validation-overrides.ts": {
           "bytesInOutput": 5986
@@ -12029,7 +12029,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3714991,
+      "bytes": 3715192,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13443,7 +13443,7 @@
           "bytesInOutput": 18096
         },
         "src/mcp/handlers/state.ts": {
-          "bytesInOutput": 61310
+          "bytesInOutput": 61605
         },
         "src/mcp/process-runner.ts": {
           "bytesInOutput": 3941
@@ -13638,7 +13638,7 @@
           "bytesInOutput": 50729
         },
         "src/state/transitions.ts": {
-          "bytesInOutput": 27759
+          "bytesInOutput": 27665
         },
         "src/state/validation-overrides.ts": {
           "bytesInOutput": 5966
