@@ -1,0 +1,31 @@
+test/fixtures/dispatch/plumbing-claude.mjs
+  s_60a6d893d412e3::t_29ce5e39141faf 13-14
+docs/DEPENDENCIES.md
+  s_60a6d893d412e3::t_29ce5e39141faf 168
+test/integration/dispatch-plumbing.test.ts
+  s_60a6d893d412e3::t_29ce5e39141faf 181-185,196-208
+  s_60a6d893d412e3::t_d989be2f39be55 209-210
+scripts/test-release-integrity.mjs
+  s_60a6d893d412e3::t_29ce5e39141faf 2,64-66,68-69
+  s_60a6d893d412e3::t_f9ce9063e79f31 4,67
+scripts/release-support.mjs
+  s_60a6d893d412e3::t_29ce5e39141faf 491,493-494
+dist/manifest.json
+  s_60a6d893d412e3::t_cd9a3f8c43eeca 4736,6007,6009,6022,6024
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3564cd6d70d4136ed624bbd30ece7acc3203e143",
+  "prompts": {},
+  "sessions": {
+    "s_60a6d893d412e3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0b0ee-8079-7042-813a-513bb22c8b2d",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Ryan <ryan@itsavail.com>"
+    }
+  }
+}
