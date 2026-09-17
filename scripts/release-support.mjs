@@ -488,7 +488,10 @@ async function collectDependencyProvenance(repositoryRoot, metafile, contributin
   for (const packageName of packageNames) {
     const packageRoot = `node_modules/${packageName}`;
     const version = await readPackageVersion(repositoryRoot, packageName);
+    const packageEntries = new Set(await readdir(resolve(repositoryRoot, packageRoot)));
     for (const packagePath of ["package.json", "LICENSE", "LICENSE.md", "license.md", "LICENSE.txt", "LICENSE.BSD", "NOTICE"]) {
+      // Case-insensitive lookups must not invent paths that fail on Linux.
+      if (!packageEntries.has(packagePath)) continue;
       try {
         const bytes = await readRegularFile(repositoryRoot, `${packageRoot}/${packagePath}`);
         records.set(`${packageName}:${packagePath}`, {

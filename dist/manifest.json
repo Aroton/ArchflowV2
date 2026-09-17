@@ -4733,7 +4733,7 @@
     ],
     "workflow": "assets/workflow.yaml"
   },
-  "dependency_inventory_digest": "ac23a3274c0b56c4af8fb36fc5d483e62f928996f269f8a9df8659fdf071ecc2",
+  "dependency_inventory_digest": "911fdae73d57f66c6adc3ac9271a944de1fe20c82fba4106a192f5212a656955",
   "dependency_provenance_inputs": [
     {
       "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
@@ -4886,14 +4886,6 @@
       "package_version": "4.4.3",
       "purpose": "package-manifest",
       "size": 1479
-    },
-    {
-      "digest": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801",
-      "package_name": "ms",
-      "package_relative_path": "LICENSE.md",
-      "package_version": "2.1.3",
-      "purpose": "license",
-      "size": 1079
     },
     {
       "digest": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801",
@@ -6012,9 +6004,9 @@
       "size": 610
     },
     {
-      "digest": "f9f3d9aa38b8c74e75f98533dd9854ca2239c9f8655527b81378010b2e440249",
+      "digest": "b2ba95123c3f859541050b13863df11a9b477d36bad3539c94ebb2a8e7014c6e",
       "path": "scripts/release-support.mjs",
-      "size": 56538
+      "size": 56757
     },
     {
       "digest": "ccfbcc8df639e93b98bf292de22364e20c3f45b6e8993d2db8606160d0aa7a8e",
@@ -6027,9 +6019,9 @@
       "size": 15696
     },
     {
-      "digest": "d30feb0ff7dcb64517a3859f4f3fbfe130e746eef7d46f86f98fa1d4657b9263",
+      "digest": "eebce2f579344b70861b138cf9e3c39330984d89aca92fdda22c0586516f41a1",
       "path": "scripts/test-release-integrity.mjs",
-      "size": 14058
+      "size": 14541
     },
     {
       "digest": "594a118045a89acf3b33bcca4c8bfd3d0022beed13aeef897174ce4b10c90f97",

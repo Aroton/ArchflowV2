@@ -165,7 +165,7 @@ No formatter or source linter is configured. Formatting/import style is conventi
 - `src/main.ts` -> `dist/archflow-mcp.mjs` (`mcp-stdio`).
 - `src/local/main.ts` -> `dist/archflow-local.mjs` (`local-cli`).
 
-The release is not published by automation. `dist/` is tracked and validated against `dist/manifest.json`, `dist/metafile.json`, dependency provenance, the repository `THIRD_PARTY_NOTICES.md`, and retained upstream license texts. The release copies notices and licenses directly, hashes every payload artifact, and verifies source-to-payload byte equality. Reproduction materializes a clean source set, performs isolated `npm ci`, rebuilds, and byte-compares the candidate.
+The release is not published by automation. `dist/` is tracked and validated against `dist/manifest.json`, `dist/metafile.json`, dependency provenance, the repository `THIRD_PARTY_NOTICES.md`, and retained upstream license texts. The release copies notices and licenses directly, hashes every payload artifact, and verifies source-to-payload byte equality. Dependency provenance uses exact directory-entry casing so macOS builds do not record duplicate license paths that fail on Linux. Reproduction materializes a clean source set, performs isolated `npm ci`, rebuilds, and byte-compares the candidate.
 
 `install.sh` verifies the tracked payload, installs it beneath `${ARCHFLOW_HOME:-$HOME/.archflow}/bundle`, writes `archflow-mcp` and `archflow-local` launchers beneath `${ARCHFLOW_BIN:-$HOME/.local/bin}`, and copies skills to `~/.claude/skills/`, `~/.agents/skills/`, and/or `~/.gemini/config/skills/`. It requires Node in `^24.15.0` and requires the launcher directory to be on `PATH`.
 

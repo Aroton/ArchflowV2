@@ -178,7 +178,11 @@ describe("dispatch plumbing proof", () => {
         ...(adapter.id === "claude-cli" ? ["CLAUDE_CONFIG_DIR"] : ["CODEX_HOME"]),
         "HOME", "HTTPS_PROXY", "HTTP_PROXY", "LANG", "LC_ALL", "NODE_EXTRA_CA_CERTS", "NO_PROXY", "PATH", "TMPDIR", "USER",
       ].sort();
-      expect(Object.keys(seen.env).sort()).toEqual(expectedKeys);
+      // CoreFoundation may add this variable after spawn on macOS.
+      const observedKeys = Object.keys(seen.env).filter((name) =>
+        process.platform !== "darwin" || name !== "__CF_USER_TEXT_ENCODING");
+      expect(observedKeys.sort()).toEqual(expectedKeys);
+      expect(seen.env.USER).toBe("plumbing-user");
       expect(seen.env.HOME).toBe(workspace.env.HOME);
       expect(seen.env[adapter.id === "claude-cli" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME"])
         .toBe(workspace.env[adapter.id === "claude-cli" ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME"]);
@@ -187,6 +191,21 @@ describe("dispatch plumbing proof", () => {
       await workspace.dispose();
     }
     await expect(access(workspace.root)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("preserves USER for Claude authentication preflight", async () => {
+    const adapter = selectCliAdapter("codex");
+    const { workspace } = await fixtureWorkspace(adapter.id, "user-auth");
+    try {
+      const env = { ...workspace.env };
+      delete env.USER;
+      await expect(adapter.preflight({ ...workspace, env })).rejects.toMatchObject({
+        project_error: { code: "AUTH_UNAVAILABLE" },
+      });
+      await expect(adapter.preflight(workspace)).resolves.toMatchObject({ cli_version: "2.1.220" });
+    } finally {
+      await workspace.dispose();
+    }
   });
 
   it("keeps workspaces caller-disposable after child failure and abort", async () => {
