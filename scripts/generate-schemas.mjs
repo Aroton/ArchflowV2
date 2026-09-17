@@ -16,6 +16,7 @@ async function renderGeneratedSchemas() {
     await build({
       bundle: true,
       platform: "node",
+  loader: { ".yaml": "text" },
       format: "esm",
       target: "node24",
       sourcemap: false,

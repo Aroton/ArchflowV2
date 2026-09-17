@@ -1,6 +1,6 @@
 # OVERVIEW
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** the whole repository
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** the whole repository
 
 Fresh reviews return readable reports to the working AI, which chooses finish, revision with selected verification reviewers, a localized minor correction without repeat review, or human escalation. Minor corrections may clarify established intent; coordinated rewrites and new requirements need fresh review. Applicable automated checks, constitution requirements, and final-byte human and commit approval remain in force.
 
@@ -98,7 +98,7 @@ Editing the artifact changes its digest, which automatically invalidates every d
 - **MCP server** — validates every request, owns all writes, and treats even the MCP SDK as untrusted for framing and output fidelity. See `mcp/SERVER.md`.
 - **Dispatch** — runs the configured reviewer (opposite family by default, optionally through a cc-switch provider) as a locked-down child process so review evidence is something the producer *cannot author*. See `mcp/DISPATCH.md`.
 - **Local CLI** — the retained adapters: repository bootstrap, legacy-upgrade staging and atomic adoption, diagnostics, the degraded human classifier, and the strict read-only automation observation. Every workflow action itself is composed server-side from one semantic offer, so the CLI never derives a durable request by hand. See `cli/COMMANDS.md` and `contracts/AUTOMATION.md`.
-- **Review & constitution checks** — sealed 1 MiB envelopes, pinned context, the constitution review, waivers. See `review/COUNTER-REVIEW.md`.
+- **Review & constitution checks** — readable prompts and complete referenced files, authenticated server-side bindings, constitution review, waivers. See `review/COUNTER-REVIEW.md`.
 - **Integration** — the current host/client contract, semantic loop, and controller responsibilities. See `INTEGRATION.md`.
 - **Contracts** — canonical JSON, digests, plain-JSON validation, trust brands: the vocabulary everything else is written in. See `contracts/CONTRACTS.md`.
 - **Durable state** — the `.archflow/` layout, the state machine, transactions, and recovery. See `state/DURABLE-STATE.md`.
@@ -137,3 +137,5 @@ This split defines recovery honestly. A fresh clone reconstructs status, current
 ## Automation responsibility
 
 A producer invocation normally runs through review, remediation and its authenticated commit. The user launches the next skill at the explicit handoff. Automation v3 distinguishes that handoff from configured plan/SQL/database approvals and custom repository triggers and genuine exceptions; transient dispatch retries and five completed review rounds have separate budgets.
+
+Review inputs are inspectable in the build-owned `assets/review-inputs.yaml` and `assets/review-documents.yaml`. The former configures reviewer instructions, rubric selection, input lists, and file-use guidance; the latter explicitly distinguishes each stage’s primary subject from approved governing documents. Readable final prompt fixtures live in `test/fixtures/review-prompts/`. `archflow-local review-preview` renders authenticated current-task inputs without invoking a model. See [counter-review](review/COUNTER-REVIEW.md).

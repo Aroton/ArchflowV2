@@ -236,7 +236,7 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(failed.ok).toBe(false);
     const firstEnvelope = JSON.parse(readFileSync(capture, "utf8"));
     expect(firstEnvelope.context.find((entry: { kind: string }) => entry.kind === "verification-transcript"))
-      .toMatchObject({ status: "truncated", total_byte_count: expect.any(Number) });
+      .toMatchObject({ status: "pinned", content: expect.any(String) });
     expect(readTaskState(workspace)).toMatchObject({ step: "counter_review", status: "running" });
 
     // Repair the stub and compact only the optional log. The same review offer can repin it.

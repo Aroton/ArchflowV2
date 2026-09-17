@@ -57,7 +57,7 @@ function installEnvelopeCapture(workspace: TaskWorkspace): string {
   const capture = join(workspace.root, "captured-review-envelopes.jsonl");
   const stub = join(workspace.root, "semantic-stub-bin", "codex");
   const source = readFileSync(stub, "utf8");
-  const needle = "const envelope = JSON.parse(Buffer.concat(chunks).toString(\"utf8\"));";
+  const needle = source.split("\n").find(line => line.includes("const envelope =") && line.includes("readReviewFixtureInputs")) ?? "";
   if (!source.includes(needle)) throw new Error("semantic codex stub shape changed");
   writeFileSync(stub, source.replace(
     needle,
@@ -234,16 +234,11 @@ describe("semantic implementation validation override", { timeout: TIMEOUT }, ()
       validation_overrides: readState(workspace).validation_overrides,
       context: implementationReview?.context,
     })).toMatchObject({ status: "pinned", encoding: "utf8" });
-    const disclosure = JSON.parse(String(pinned.content));
-    expect(disclosure).toMatchObject({
-      evidence_kind: "validation-overrides",
-      overrides: [{
-        status: "not-run",
-        human_reason: "Human chose grant-validation-exception.",
-        displaced_validations: VALIDATIONS,
-      }],
-    });
-    expect(disclosure.interpretation).toContain("not passing evidence");
+    const disclosure = String(pinned.content);
+    expect(disclosure).toContain("not-run");
+    expect(disclosure).toContain("Human chose grant-validation-exception.");
+    for (const validation of VALIDATIONS) expect(disclosure).toContain(validation);
+    expect(disclosure).toContain("not passing evidence");
 
     const decisionPath = join(
       workspace.services.authority.task_root,

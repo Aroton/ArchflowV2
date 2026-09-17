@@ -1,6 +1,6 @@
 # contracts/CONTRACTS
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `src/contracts/`, `src/local/automation-status.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/request.ts`, `src/state/semantic-*.ts`
 
 The semantic review response includes `decision: "revise-minor"` with a rationale and no reviewer list. Its subsequent succeeded work result requires `review_revision: {classification: "minor" | "significant", rationale: string}`; ordinary submissions omit this field. Document and implementation artifacts retain the declaration. Minor revisions carry a server-derived `editorial_predecessor` linking the reviewed artifact, review fingerprint, and authorizing triage result; significant revisions cannot carry that link. Public status exposes the declaration and explains when prior review is reused. Existing archived shapes remain readable without rewriting.
 
@@ -117,3 +117,7 @@ Automation status v3 adds explicit manual-transition responsibility and a progre
 ## Standalone review contracts
 
 `simple-review-input` and `simple-review-result` are versioned public contracts for `archflow_review`. They are independent of persisted workflow roots: no task, phase instance, result archive, offer, or approval is implied. The transport boundary validates inputs and outputs and keeps the advertised input root a plain object. Reports bind to the captured subject and policy digests; `ok` represents completed reviewer coverage. Constitution judgments use existing exact-slot validation before server-derived rule identities enter the response.
+
+## Review input binding
+
+`envelope_input_digest` retains its durable provenance role. Fresh dispatch hashes the server-only authority record together with bundled review recipes, document mappings, and the exact rendered prompt/file manifest. Changing a recipe, rendering, assignment, source version or referenced content changes the binding and prevents stale sibling-output reuse. The canonical JSON carrier is internal; reviewer processes receive a Markdown prompt and local file references. Archived result readers and approval contracts are unchanged.

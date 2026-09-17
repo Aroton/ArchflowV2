@@ -1,4 +1,5 @@
 import { captureImplementationSelectionInput, loadImplementationSelectionInput } from "../../review/implementation-models.js";
+import type { RunCounterReviewDependencies, RunCounterReviewInput } from "../../review/counter-review.js";
 import { prepareReviewDiffs } from "../../review/diffs.js";
 import { writeReceivedFeedback } from "../../dispatch/review-feedback.js";
 import { governingDocumentComparisons } from "../../state/governing-document-comparison.js";
@@ -47,8 +48,6 @@ import { rulesForEnvelope, ruleSlotsForEnvelope } from "../../review/adjudicatio
 import { runCounterReview, type ConstitutionReviewPlan, type EffortReviewPlan } from "../../review/counter-review.js";
 import { loadCanonicalRubricForPhaseKind } from "../../review/rubrics.js";
 import {
-  REVIEW_ENVELOPE_BYTE_CAP,
-  ReviewEnvelopeError,
   type AdjudicationUpstreamInput,
 } from "../../review/envelopes.js";
 import { requireApprovedUpstreamDigests } from "../../review/fixed-point.js";
@@ -118,39 +117,6 @@ async function readHazardRegistryBytes(
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     return undefined;
   }
-}
-
-/**
- * Translates a residual byte-cap failure — after cap relief exhausted every droppable context
- * entry — into `ENVELOPE_OVERFLOW` naming the largest compact output declarations. Source bodies
- * live in the sealed repository view and cannot cause this failure. Returns `undefined` (caller
- * rethrows) for any other failure, or when no output path can be named — the parameter schema
- * requires at least one path.
- */
-export function envelopeOverflowError(
-  error: unknown,
-  subject: CurrentProduceSubject,
-): ReturnType<typeof createProjectError> | undefined {
-  if (!(error instanceof ReviewEnvelopeError)) return undefined;
-  const parameters: Readonly<Record<string, unknown>> = error.project_error.diagnostic.parameters;
-  if (parameters.issue_code !== "envelope-byte-cap") return undefined;
-  if (subject.artifact.artifact_kind !== "implementation-output") return undefined;
-  const encoder = new TextEncoder();
-  const taskPrefix = `.archflow/tasks/${subject.artifact.task_id}/`;
-  const coProduced = subject.artifact.outputs.filter((entry) => entry.path.startsWith(taskPrefix));
-  const candidates = coProduced.length === 0 ? subject.artifact.outputs : coProduced;
-  const offending = candidates
-    .map((entry) => ({ path: entry.path, byte_count: encoder.encode(JSON.stringify(entry)).byteLength }))
-    .sort((left, right) => right.byte_count - left.byte_count)
-    .slice(0, 5)
-    .map((contributor) => contributor.path)
-    .sort((left, right) => left.localeCompare(right));
-  if (offending.length === 0) return undefined;
-  return createProjectError("ENVELOPE_OVERFLOW", {
-    offending_paths: offending,
-    current_bytes: error.envelope_byte_count ?? 0,
-    byte_cap: REVIEW_ENVELOPE_BYTE_CAP,
-  });
 }
 
 /**
@@ -428,27 +394,17 @@ async function reobserveDispatchSubject(
   );
 }
 
-export async function handleCounterReview(
-  call: Extract<ParsedToolCall, { name: "archflow_counter_review" }>,
-  context: InvocationContext,
+export async function prepareCounterReviewRequest(
+  call: Extract<ParsedToolCall, { name: "archflow_counter_review" }>, context: InvocationContext,
   dispatchAlreadySerialized = false,
-): Promise<ProjectResult<ToolSuccess<"archflow_counter_review">>> {
-  return mapHandlerErrors<"archflow_counter_review">(context.invocation_id, async () => {
+  readOnly = false,
+) {
     const session = asRepositoryViewFailure(await openHandlerSession(call, context));
     if (!session.ok) return session;
     const { services } = session.value;
     const state = services.state;
     if (state === undefined) {
-      return fail(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
-    }
-    const replay = await resolvePreDispatchReplay(
-      services.dependencies,
-      services.authority,
-      call,
-    );
-    if (!replay.ok) return replay;
-    if (replay.value !== undefined) {
-      return Object.freeze({ schema_version: "1", ok: true, value: replay.value });
+      return fail<never>(createProjectError("STATE_MISSING", { phase_instance: "prd" }));
     }
 
     const produce = await loadCurrentProduceSubject(services.dependencies, state.value);
@@ -461,15 +417,13 @@ export async function handleCounterReview(
       services.runner, services.authority, produce.value, call.input.artifact_path,
     );
     if (!projections.ok) return projections;
-    let artifact: string;
-    try {
-      artifact = renderProduceReviewMaterial(produce.value, projection.value, projections.value);
-    } catch {
-      return fail(createProjectError("CONTRACT_INVALID", {
-        tool: call.name,
-        issue_code: "artifact-not-utf8",
-      }));
-    }
+    const documents = projections.value.map(item => ({
+      path: String(item.path), content: new TextDecoder("utf-8", { fatal: true }).decode(item.bytes),
+      source_version: produce.value.artifact_digest,
+    }));
+    const artifact = produce.value.artifact.artifact_kind === "document"
+      ? new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes)
+      : `# Implementation output\n\nDeclared changes:\n${[...produce.value.artifact.outputs.map(output => `- primary/${output.path}: ${output.operation}`), ...(produce.value.artifact.secondary_repositories ?? []).flatMap(section => section.outputs.map(output => `- ${section.repository}/${output.path}: ${output.operation}`))].join("\n")}\n\nReview the complete changes and implementation notes supplied as separate files.`;
 
     // Effort selection is phase-design-only. It consumes the plan and a one-read hazard snapshot;
     // it never requires the producer to author a component manifest.
@@ -480,7 +434,7 @@ export async function handleCounterReview(
       try {
         phaseDesignArtifact = new TextDecoder("utf-8", { fatal: true }).decode(projection.value.bytes);
       } catch (error) {
-        return fail(effortInputContractError("phase-design-artifact-invalid", error));
+        return fail<never>(effortInputContractError("phase-design-artifact-invalid", error));
       }
       try {
         const repositoryNames = session.value.repository_set.members.map((member) => member.name);
@@ -515,14 +469,8 @@ export async function handleCounterReview(
       services.runner, state.value.policy_base_commit, services.authority.context,
     );
     if (!constitution.ok) return constitution;
-    if (constitution.value.rules.get("human-approval-for-material-plan-changes")?.status === "active") {
-      const comparisons = await governingDocumentComparisons(services.dependencies, services.authority, state.value, produce.value);
-      if (comparisons.length > 0) artifact = JSON.stringify({
-        produced_artifact: artifact,
-        governing_document_comparisons: comparisons,
-        comparison_instruction: "Compare proposed governing documents against these exact human-approved baselines. Preserve approved requirements, architecture, external interfaces, trust boundaries and verification commitments. Wording, formatting and implementation-detail updates that preserve those decisions are non-material. Missing baseline evidence is uncertain, never evidence of a harmless amendment.",
-      });
-    }
+    const comparisons = constitution.value.rules.get("human-approval-for-material-plan-changes")?.status === "active"
+      ? await governingDocumentComparisons(services.dependencies, services.authority, state.value, produce.value) : [];
     const activeRules = [...constitution.value.rules.values()]
       .some((rule) => rule.status === "active");
     const repositoryViewCommit = await resolveRepositoryViewCommit(
@@ -546,7 +494,7 @@ export async function handleCounterReview(
       const retained = secondaryPlans.get(member.name as never);
       if (retained !== undefined &&
           (retained.repository_identity_digest !== member.identity.digest || retained.base_commit !== member.head)) {
-        return fail(createProjectError("STATE_INVALID", {
+        return fail<never>(createProjectError("STATE_INVALID", {
           phase_instance: state.value.phase_instance,
           issue_code: "counter-review-subject-not-current",
         }));
@@ -599,7 +547,7 @@ export async function handleCounterReview(
           phase_instance: state.value.phase_instance, attempt: state.value.attempt,
           intent_id: call.input.intent_id, subject_digest: produce.value.artifact_digest,
           input_fingerprint: call.input.input_fingerprint,
-        }), () => loadImplementationSelectionInput(session.value.config.implementation)),
+        }), () => loadImplementationSelectionInput(session.value.config.implementation), readOnly),
         hazard_registry: hazardRegistry,
         repositories: reviewedRepositories,
       });
@@ -683,7 +631,7 @@ export async function handleCounterReview(
       ...(call.input.route_override === undefined ? {} : { retry_authorization: canonicalJsonDigest({ intent_id: call.input.intent_id, override: call.input.route_override } as unknown as PlainJsonValue) }) });
     const diagnosticObserver = createDispatchFailureObserver({ authority: services.authority, dependencies: services.dependencies,
       phase_instance: state.value.phase_instance, attempt: state.value.attempt, observed_at_revision: state.value.revision });
-    const result = await runCounterReview({
+    const dependencies: RunCounterReviewDependencies = {
       prepare_diffs: async () => prepareReviewDiffs({
         workspace: await sharedWorkspace.acquire(), repositories: repositoryViews,
         runners: new Map(session.value.repository_set.members.map(member => [member.name, member.binding.runner])),
@@ -717,7 +665,8 @@ export async function handleCounterReview(
         session.value.repository_set.digest,
         headPins,
       ),
-    }, {
+    };
+    const input: RunCounterReviewInput = {
       authority: services.authority,
       call,
       config: session.value.config,
@@ -727,7 +676,7 @@ export async function handleCounterReview(
       measured_at_revision: session.value.measured_at_revision,
       repositories: reviewedRepositories,
       envelope: {
-        artifact,
+        artifact, documents, governing_document_comparisons: comparisons,
         rubric: canonicalRubric.rubric,
         context: context_entries.value,
         workspace: workspaceBinding,
@@ -751,17 +700,27 @@ export async function handleCounterReview(
       ...(priorTriage.value === undefined ? {} : { prior_triage: priorTriage.value }),
       ...(constitutionPlan === undefined ? {} : { constitution: constitutionPlan }),
       ...(effortPlan === undefined ? {} : { effort: effortPlan }),
-    }).catch((error: unknown) => {
-      const overflow = envelopeOverflowError(error, produce.value);
-      if (overflow !== undefined) return fail<never>(overflow);
-      throw error;
-    }).finally(() => sharedWorkspace.dispose());
+    };
+    return { schema_version: "1" as const, ok: true as const, value: { dependencies, input, sharedWorkspace, produce: produce.value } };
+}
+
+export async function handleCounterReview(
+  call: Extract<ParsedToolCall, { name: "archflow_counter_review" }>, context: InvocationContext,
+  dispatchAlreadySerialized = false,
+): Promise<ProjectResult<ToolSuccess<"archflow_counter_review">>> {
+  return mapHandlerErrors<"archflow_counter_review">(context.invocation_id, async () => {
+    const session = asRepositoryViewFailure(await openHandlerSession(call, context));
+    if (!session.ok) return session;
+    const { services } = session.value;
+    const replay = await resolvePreDispatchReplay(services.dependencies, services.authority, call);
+    if (!replay.ok) return replay;
+    if (replay.value !== undefined) return { schema_version: "1", ok: true, value: replay.value };
+    const prepared = await prepareCounterReviewRequest(call, context, dispatchAlreadySerialized);
+    if (!prepared.ok) return prepared;
+    const { dependencies, input, sharedWorkspace } = prepared.value;
+    const result = await runCounterReview(dependencies, input).finally(() => sharedWorkspace.dispose());
     if (!result.ok) return result;
-    return Object.freeze({
-      schema_version: "1",
-      ok: true,
-      value: result.value.transaction.outcome,
-    });
+    return { schema_version: "1", ok: true, value: result.value.transaction.outcome };
   });
 }
 

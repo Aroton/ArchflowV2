@@ -131,7 +131,7 @@ const route = (kind: "claude" | "codex"): DispatchRoute => kind === "claude"
   : { adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "high" };
 
 const envelope = (resultKind: DispatchEnvelope["result_kind"]): DispatchEnvelope => {
-  const bytes = Buffer.from('{"schema_version":"1"}\n');
+  const bytes = Buffer.from('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n');
   return Object.freeze({
     result_kind: resultKind,
     bytes,

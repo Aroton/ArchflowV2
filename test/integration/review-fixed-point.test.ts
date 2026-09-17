@@ -1802,7 +1802,7 @@ describe("partial review round retry", () => {
     const fingerprint = computeInputFingerprint(fingerprintSubject(0));
     const base = canonicalJsonDigest({ artifact: "previous" });
     const descriptor = (name: string) => ({
-      path: `../review-diffs/${name}`,
+      path: `review-diffs/${name}`,
       content_digest: canonicalJsonDigest({ file: name }),
       byte_count: 12,
     });

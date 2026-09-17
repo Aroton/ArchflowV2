@@ -1,3 +1,5 @@
+import { loadReviewDocumentConfiguration } from "./documents.js";
+import { loadReviewInputConfiguration, prepareReviewInputs, renderReviewPrompt, type ReviewDocument } from "./inputs.js";
 import { canonicalJsonDigest, parseGitOid, sha256Bytes, type GitOid } from "../contracts/canonical.js";
 import { REPOSITORY_NAME_PATTERN } from "../contracts/config.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
@@ -19,10 +21,8 @@ import {
 import { parseRubricV1, type RubricV1 } from "../contracts/rubric.js";
 import { parseEffortEnvelopeV3, type EffortEnvelopeV3 } from "../contracts/effort-review.js";
 
-export const REVIEW_ENVELOPE_BYTE_CAP = 1_048_576;
-
 /**
- * The complete counter-review binding sent to the child. Gate counter-review is a later
+ * The complete server-only counter-review binding. Gate counter-review is a later
  * extension point: it needs a binding-only gate_id and must not be widened into this shape.
  */
 export type DispatchSubject = {
@@ -65,7 +65,7 @@ export type PinnedContextKind = (typeof PINNED_CONTEXT_KINDS)[number];
  * evidence dropped to fit the envelope byte cap while retaining its digest. A reviewer records
  * gaps under the rubric's `unverifiable-claims` criterion instead of guessing.
  */
-export type PinnedContextEntry =
+export type PinnedContextEntry = { readonly source_version?: string } & (
   | {
       readonly kind: PinnedContextKind;
       readonly label: string;
@@ -95,23 +95,24 @@ export type PinnedContextEntry =
       readonly status: "omitted-cap";
       readonly content_digest: Sha256Digest;
       readonly note: string;
-    };
+    }
+);
 
 /**
  * The one fixed sentence the envelope may say about the reviewer's working directory. The note is
  * a literal, never caller prose: prepending free text to stdin would break byte-provenance, and a
- * variable note would reopen the instruction channel this envelope deliberately closes.
+ * variable note would reopen the instruction channel this binding deliberately closes.
  */
 export const REPOSITORY_VIEW_NOTE =
-  "Your working directory is a read-only checkout of the repository at this commit, excluding .archflow/tasks. It is evidence for claims about the review subject, not a separate review subject. The artifact and pinned context take precedence on conflict.";
+  "The repository snapshot is at repositories/primary/, excluding .archflow/tasks. Inspect it without modifying files. It is evidence for claims about the review subject, not a separate review subject. The artifact and pinned context take precedence on conflict.";
 
 /** Fixed child-visible explanation of the retained implementation snapshot. */
 export const PRODUCED_REPOSITORY_VIEW_NOTE =
-  "Your working directory is a sealed read-only post-change repository snapshot reconstructed from the authenticated implementation output, excluding .archflow/tasks. Review the declared outputs and their current post-change behavior. Unchanged files are supporting evidence only.";
+  "The repository snapshot at repositories/primary/ contains the authenticated implementation output, excluding .archflow/tasks. Inspect it without modifying files. Review the declared outputs and their current post-change behavior. Unchanged files are supporting evidence only.";
 
 /** Fixed child-visible navigation and authority boundary for a named repository set. */
 export const MULTI_REPOSITORY_VIEW_NOTE =
-  "Your working directory contains read-only repository snapshots at `./<name>`; cite files as `<name>/<path>`. An entry with `snapshot_digest` is a sealed post-change tree reconstructed from authenticated implementation output; review only its declared outputs and their current post-change behavior. Every other file and every entry without `snapshot_digest` is supporting evidence only. The artifact and pinned context take precedence on conflict.";
+  "Repository snapshots are at repositories/<name>/; cite files as <name>/<path>. Changed repositories contain the authenticated proposed output; review only their declared outputs and their current post-change behavior. Every other file is supporting evidence only. The artifact and pinned context take precedence on conflict.";
 
 export type MultiRepositoryWorkspaceEntry = {
   readonly name: string;
@@ -150,8 +151,6 @@ export type ReviewDiffFile = {
   readonly path: string;
   readonly content_digest: Sha256Digest;
   readonly byte_count: number;
-  /** Complete small text files are included up front; the file remains available either way. */
-  readonly content?: string;
 };
 export type ReviewDiff = {
   readonly kind: "implementation" | "document" | "revision";
@@ -166,11 +165,13 @@ export type ReviewDiffContext = {
   readonly revision_unavailable?: string;
 };
 
-const DIFF_REVIEW_INSTRUCTION = "Start with the supplied changed-file statistics, complete patch, and governing documents together. A diff file's content field already contains its complete text; do not reread that file. On follow-up, start with the revision patch when available; the full patch remains available for context. If content is absent, read the named file, in sections only when too large for one read. Batch independent reads and searches in the same turn. Then inspect surrounding code, callers and tests as needed to assess concrete concerns. Implementation patches exclude .archflow/; document patches cover only this task's reviewed documents. Governing documents and verification evidence are supplied separately.";
 
 export type ReviewEnvelopeInput = {
+  readonly phase_kind?: "prd" | "design" | "phase-design" | "phase-impl";
   readonly diffs?: ReviewDiffContext;
   readonly artifact: string;
+  readonly documents?: readonly ReviewDocument[];
+  readonly governing_document_comparisons?: PlainJsonValue;
   readonly rubric: RubricV1;
   /** Server-owned reviewer scope. Absent only for legacy/tests that exercise the pre-assignment envelope. */
   readonly assignment?: ReviewAssignmentV1;
@@ -200,35 +201,7 @@ export type ReviewEnvelopeSeed = Readonly<
   Omit<ReviewEnvelopeInput, "subject"> & { readonly subject: Omit<DispatchSubject, "attempt"> }
 >;
 
-/**
- * Fixed document-review framing. Implementation rubrics use the narrower implementation literal.
- * Both are server-owned so caller prose cannot enter the instruction channel.
- */
-export const REVIEW_INSTRUCTION =
-  "Review the submitted work for consequential bugs, design flaws, unsafe behavior, and meaningful verification gaps. Treat the PRD, design, and rubric as context for intent and constraints, not a checklist to enforce mechanically. A plan discrepancy matters when it causes a concrete problem; a real defect matters even when the plan never mentioned it. Keep feedback free-form and evidence-based: explain what can go wrong, where, and why it matters. Check existing code and tests before claiming something is missing; absence from a document is not proof of absence in the system. Request extra verification only for an identified failure that existing checks would not detect, and accept equivalent behavioral evidence. Avoid speculative risks, optional polish, and preferred alternatives without a material consequence. Scale investigation to the importance and likelihood of the concern. Use the supplied artifact, governing documents, and diff together before requesting more evidence. Batch independent file reads and searches in the same turn. Read relevant code and tests to resolve concrete concerns; stop when the evidence supports a decision. This is guidance, not a read quota. Return only actionable feedback: where the issue is, what can fail, and why it matters. Do not reproduce source files, narrate the investigation, restate the design, enumerate everything that is correct, or write a separate review document. Return exactly one JSON object with outcome and feedback. Use outcome=issues_found with nonblank actionable feedback, or outcome=no_issues_found with a short explicit confirmation that the reviewed changes have no remaining actionable issues. Never manufacture a concern to fill the response. No finding taxonomy, IDs, or ordering are required.";
-
-export const GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION =
-  "Use the assigned criteria to focus on the changed work, design soundness, interfaces, unsafe behavior, and verification where assigned. Treat them as investigation guidance, not a checklist.";
-
-export const TEST_REVIEW_ASSIGNMENT_INSTRUCTION =
-  "Focus on meaningful verification gaps. Inspect the implementation, existing tests and assertions, and supplied verification evidence before claiming a check is missing or ineffective. Name the concrete failure that could escape detection and suggest the cheapest credible way to catch it; equivalent coverage at another layer is sufficient.";
-
-/** Review framing used only for implementation outputs. */
-export const IMPLEMENTATION_REVIEW_INSTRUCTION =
-  `${REVIEW_INSTRUCTION} Review the implementation output declared by this phase and its current behavior. Use unchanged files as supporting evidence for problems introduced, exposed, or materially worsened by the changes; this is not a general code review.`;
-
-/**
- * The fixed remediation instruction the envelope adds as `instructions.prior_triage` when a
- * `prior-triage` context entry is pinned. It owns all remediation scope so rubrics stay identical
- * between initial and later rounds.
- */
-export const PRIOR_TRIAGE_INSTRUCTION =
-  "Verify the revisions against the earlier feedback and the working AI's request. Check whether the concrete problems are resolved and whether the changes introduce consequential regressions. Do not demand the earlier suggested solution when a different solution works. Start with the revision diff when supplied, the previous feedback, and the working AI's verification request; read current code and tests as needed to validate the fix. Keep follow-up scoped to the changes and their consequential regressions. Return only unresolved actionable issues or regressions; do not repeat resolved findings or explain everything that is correct. When no actionable issue remains, return outcome=no_issues_found and a short explicit confirmation. Agreement on every earlier suggestion is unnecessary.";
-
-/** Additional constitution-review scope when the artifact is an implementation output. */
-export const CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION =
-  "For this implementation phase, judge rule compliance and triggers only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, or triggered result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.";
-
+/** Canonical server-only binding. Never send these bytes to a reviewer process. */
 export type DispatchEnvelope = Readonly<{
   readonly result_kind: "review" | "effort-review" | "adjudication";
   readonly bytes: Uint8Array;
@@ -237,9 +210,9 @@ export type DispatchEnvelope = Readonly<{
 }>;
 
 /** Seals the already server-derived, phase-design-only effort input for dispatch. */
-export function buildEffortEnvelope(value: EffortEnvelopeV3): DispatchEnvelope {
+export function buildEffortEnvelope(value: EffortEnvelopeV3, context: readonly PinnedContextEntry[] = []): DispatchEnvelope {
   const envelope = parseEffortEnvelopeV3(value);
-  return finishEnvelope("effort-review", envelope as PlainJsonValue, "dispatch-envelope");
+  return finishEnvelope("effort-review", { ...envelope, context: validateContext(context) } as PlainJsonValue, "dispatch-envelope");
 }
 
 export type AdjudicationSubject = {
@@ -270,26 +243,17 @@ export type AdjudicationUpstreamInput = {
 };
 
 export type AdjudicationEnvelopeInput = {
+  readonly phase_kind?: "prd" | "design" | "phase-design" | "phase-impl";
   readonly diffs?: ReviewDiffContext;
   readonly artifact: string;
+  readonly documents?: readonly ReviewDocument[];
+  readonly context?: readonly PinnedContextEntry[];
+  readonly governing_document_comparisons?: PlainJsonValue;
   readonly rules: readonly AdjudicationRuleInput[];
   readonly source_review_envelope_digest: Sha256Digest;
   readonly workspace?: ReviewWorkspaceBinding;
   readonly subject: AdjudicationSubject;
 };
-
-export class ReviewEnvelopeError extends Error {
-  public readonly project_error: ProjectError;
-  /** The serialized size that failed the byte cap, when that is what failed. */
-  public readonly envelope_byte_count?: number;
-
-  public constructor(projectError: ProjectError, envelopeByteCount?: number) {
-    super(`review envelope failed: ${projectError.code}`);
-    this.name = "ReviewEnvelopeError";
-    this.project_error = projectError;
-    if (envelopeByteCount !== undefined) this.envelope_byte_count = envelopeByteCount;
-  }
-}
 
 const EVIDENCE_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const utf8 = new TextEncoder();
@@ -565,6 +529,14 @@ function parseEncoding(value: unknown): "utf8" | "base64" {
 }
 
 function validateContext(values: readonly PinnedContextEntry[]): readonly PinnedContextEntry[] {
+  return values.map(entry => {
+    const { source_version, ...content } = entry;
+    const checked = validateContextContent([content])[0]!;
+    return source_version === undefined ? checked : { ...checked, source_version: parseNonBlank(source_version, "context source version") };
+  });
+}
+
+function validateContextContent(values: readonly PinnedContextEntry[]): readonly PinnedContextEntry[] {
   return values.map((value) => {
     if (!(PINNED_CONTEXT_KINDS as readonly string[]).includes(value.kind)) {
       throw new TypeError("pinned context kind is not in the closed vocabulary");
@@ -652,40 +624,27 @@ function validateUpstreams(values: readonly AdjudicationUpstreamInput[]): readon
   return upstreams;
 }
 
-function finishEnvelope(
-  resultKind: DispatchEnvelope["result_kind"],
-  envelope: PlainJsonValue,
-  digestKind: "dispatch-envelope" | "adjudication-envelope",
+export function sealDispatchInput(
+  resultKind: DispatchEnvelope["result_kind"], envelope: unknown,
+  digestKind: "dispatch-envelope" | "adjudication-envelope" = resultKind === "adjudication" ? "adjudication-envelope" : "dispatch-envelope",
 ): DispatchEnvelope {
-  let bytes = utf8.encode(`${JSON.stringify(envelope, null, 2)}\n`);
-  const record = envelope as Readonly<Record<string, PlainJsonValue>>;
-  // Inline text is a convenience. Keep complete file references before dropping any evidence.
-  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP && record.diffs !== undefined) {
-    const diffs = record.diffs as ReviewDiffContext;
-    envelope = { ...record, diffs: {
-      ...diffs, full: diffReferences(diffs.full),
-      ...(diffs.revision === undefined ? {} : { revision: diffReferences(diffs.revision) }),
-    } };
-    bytes = utf8.encode(`${JSON.stringify(envelope, null, 2)}\n`);
-  }
-  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) {
-    throw new ReviewEnvelopeError(
-      createProjectError("CONTRACT_INVALID", { issue_code: "envelope-byte-cap" }),
-      bytes.byteLength,
-    );
-  }
-  const digest = canonicalJsonDigest({
-    ...(envelope as Readonly<Record<string, PlainJsonValue>>),
-    digest_kind: digestKind,
-  });
+  assertPlainJson(envelope, "server review input");
+  const record = structuredClone(envelope) as Readonly<Record<string, PlainJsonValue>>;
+  const sealed = { ...record, review_configuration: loadReviewInputConfiguration(), document_configuration: loadReviewDocumentConfiguration() };
+  const provisionalBytes = utf8.encode(`${JSON.stringify(sealed)}\n`);
+  const prepared = prepareReviewInputs({ result_kind: resultKind, bytes: provisionalBytes, digest: "" as Sha256Digest, byte_count: provisionalBytes.byteLength });
+  const rendered = {
+    prompt: renderReviewPrompt(prepared, `review-inputs/${prepared.reviewer_id}`),
+    files: prepared.files.map(({ content: _content, encoding: _encoding, ...file }) => file),
+  };
+  const finalRecord = { ...sealed, rendered_inputs: rendered };
+  const bytes = utf8.encode(`${JSON.stringify(finalRecord)}\n`);
+  const binding = { ...finalRecord, digest_kind: digestKind };
+  assertPlainJson(binding);
+  const digest = canonicalJsonDigest(binding);
   return Object.freeze({ result_kind: resultKind, bytes, digest, byte_count: bytes.byteLength });
 }
-
-function diffReferences(diff: ReviewDiff): ReviewDiff {
-  const { content: _patch, ...patch } = diff.patch;
-  const { content: _stat, ...stat } = diff.stat;
-  return { ...diff, patch, stat };
-}
+const finishEnvelope = sealDispatchInput;
 
 function validateDiffs(value: ReviewDiffContext, subjectDigest: Sha256Digest): ReviewDiffContext {
   exactFields(value, ["full", ...(value.revision === undefined ? [] : ["revision"]),
@@ -697,45 +656,28 @@ function validateDiffs(value: ReviewDiffContext, subjectDigest: Sha256Digest): R
         parseSha256Digest(diff.subject_digest) !== subjectDigest) throw new TypeError("review diff subject mismatch");
     if (kind === "revision") parseSha256Digest(diff.base_subject_digest);
     for (const [extension, file] of [["patch", diff.patch], ["stat", diff.stat]] as const) {
-      exactFields(file, ["path", "content_digest", "byte_count", ...(file.content === undefined ? [] : ["content"])], "review diff file");
+      exactFields(file, ["path", "content_digest", "byte_count"], "review diff file");
       const name = kind === "full" ? "full" : `since-${diff.base_subject_digest}`;
-      if (file.path !== `../review-diffs/${name}.${extension}`) throw new TypeError("invalid review diff path");
+      if (file.path !== `review-diffs/${name}.${extension}`) throw new TypeError("invalid review diff path");
       parseSha256Digest(file.content_digest);
       parseSafeInteger(file.byte_count);
-      if (file.content !== undefined && (typeof file.content !== "string" ||
-          utf8.encode(file.content).byteLength !== file.byte_count || sha256Bytes(utf8.encode(file.content)) !== file.content_digest)) {
-        throw new TypeError("inline review diff content mismatch");
-      }
+
     }
   }
   if (value.revision_unavailable !== undefined && (value.revision !== undefined || typeof value.revision_unavailable !== "string" || !value.revision_unavailable.trim())) {
     throw new TypeError("invalid revision diff availability");
   }
-  // A follow-up starts with its delta; avoid preloading the whole change again.
-  return value.revision === undefined ? value : { ...value, full: diffReferences(value.full) };
+  return value;
 }
 
-/**
- * Builds the sole counter-review child input. The closed input and subject shells deliberately make
- * free-form producer history and agent instructions unrepresentable. `context` is the one
- * sanctioned channel for repository-derived evidence, and it admits only mechanically assembled,
- * digest-recorded entries in the closed `PINNED_CONTEXT_KINDS` vocabulary — never free-form
- * instructions or author-curated material. The one piece of round history that is representable is
- * the `prior-triage` kind: the previous round's triage record for this same phase instance,
- * assembled by the server from retained triage and review manifests — admissible because every
- * field restates durable authority (reviewer-authored findings and their recorded dispositions),
- * never producer-curated prose. The only prose the child receives is server-owned literals:
- * {@link REVIEW_INSTRUCTION} always, plus {@link PRIOR_TRIAGE_INSTRUCTION} exactly when such an
- * entry is pinned. The optional `workspace` binding names the read-only
- * repository checkout the dispatcher materializes; its note is a fixed literal so the field can
- * never smuggle caller prose.
- */
+/** Validates and seals server-derived review inputs; rendering is shared with preview. */
 export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelope {
   const snapshot = materialize(value);
   exactFields(
     snapshot,
     [
       "artifact", "rubric", "context", "subject",
+      ...["phase_kind", "documents", "governing_document_comparisons"].filter(key => key in snapshot),
       ...(snapshot.diffs === undefined ? [] : ["diffs"]),
       ...(snapshot.assignment === undefined ? [] : ["assignment"]),
       ...(snapshot.workspace === undefined ? [] : ["workspace"]),
@@ -764,19 +706,13 @@ export function buildReviewEnvelope(value: ReviewEnvelopeInput): DispatchEnvelop
   const envelope = {
     schema_version: "1",
     artifact: snapshot.artifact,
+    ...(snapshot.phase_kind === undefined ? {} : { phase_kind: snapshot.phase_kind }),
+    ...(snapshot.documents === undefined ? {} : { documents: snapshot.documents }),
+    ...(snapshot.governing_document_comparisons === undefined ? {} : { governing_document_comparisons: snapshot.governing_document_comparisons }),
     ...(snapshot.diffs === undefined ? {} : { diffs: validateDiffs(snapshot.diffs, snapshot.subject.subject_digest) }),
     rubric,
     ...(assignment === undefined ? {} : { assignment }),
     context,
-    // Both instructions are fixed literals. The review framing is always present; the remediation
-    // literal appears exactly when a prior-triage record is pinned, and its presence is derived
-    // from validated context, never a caller switch.
-    instructions: {
-      ...(snapshot.diffs === undefined ? {} : { changes: DIFF_REVIEW_INSTRUCTION }),
-      review: parsedRubric.kind === "implementation" ? IMPLEMENTATION_REVIEW_INSTRUCTION : REVIEW_INSTRUCTION,
-      ...(assignment === undefined ? {} : { assignment: assignment.focus === "tests" ? TEST_REVIEW_ASSIGNMENT_INSTRUCTION : GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION }),
-      ...(context.some(entry => entry.kind === "prior-triage") ? { prior_triage: PRIOR_TRIAGE_INSTRUCTION } : {}),
-    },
     ...(workspace === undefined ? {} : { workspace }),
     subject: validateSubject(snapshot.subject),
   } as const satisfies PlainJsonValue;
@@ -797,6 +733,7 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
   exactFields(
     snapshot,
     ["artifact", "rules", "source_review_envelope_digest", "subject",
+      ...["phase_kind", "documents", "context", "governing_document_comparisons"].filter(key => key in snapshot),
       ...(workspace === undefined ? [] : ["workspace"]),
       ...(snapshot.diffs === undefined ? [] : ["diffs"])],
     "adjudication envelope input",
@@ -811,22 +748,14 @@ export function buildAdjudicationEnvelope(value: AdjudicationEnvelopeInput): Dis
   const envelope = {
     schema_version: "2",
     artifact: snapshot.artifact,
+    ...(snapshot.phase_kind === undefined ? {} : { phase_kind: snapshot.phase_kind }),
+    ...(snapshot.documents === undefined ? {} : { documents: snapshot.documents }),
+    ...(snapshot.governing_document_comparisons === undefined ? {} : { governing_document_comparisons: snapshot.governing_document_comparisons }),
     ...(snapshot.diffs === undefined ? {} : { diffs: validateDiffs(snapshot.diffs, subject.subject_digest) }),
     rules,
     source_review_envelope_digest: sourceEvidenceSetDigest,
     ...(workspace === undefined ? {} : { workspace }),
-    instructions: {
-      rule_coverage: "Return exactly one judgment for every supplied opaque rule slot. Use each slot exactly once as a judgments object key; do not omit, duplicate, or invent slots, and do not return rule identity or rollups.",
-      ...(snapshot.diffs === undefined ? {} : { changes: DIFF_REVIEW_INSTRUCTION }),
-      enforcement_context: "A rule's enforced_by labels name where that rule is mechanically enforced in the repository. They are context for your judgment, not evidence you are asked to verify or report on. Judge every rule the same way: from the artifact and the evidence supplied here.",
-      uncertainty: "Report uncertain compliance only when the artifact and supplied repository snapshot leave the question genuinely open. Absence of runtime-only evidence is not by itself a reason to be uncertain.",
-      trigger: "A rule's review_trigger names a condition the repository wants a human to look at. Report trigger=matched only when that condition is directly evidenced by the artifact, its co-produced documents, or the supplied repository snapshot, and trigger=uncertain only when those genuinely leave it open. Workflow mechanics the server owns—gate authority, approvals, commits, and dispatch outcomes—are never evidence for a trigger; report not-matched. A rule with no review_trigger is always not-matched, with trigger_evidence stating that the rule declares no trigger.",
-      ...(workspace !== undefined && (
-        workspace.kind === "read-only-produced-repository-snapshot" ||
-        (workspace.kind === "read-only-multi-repository-view" &&
-          workspace.repositories.some((repository) => repository.snapshot_digest !== undefined))
-      ) ? { implementation_scope: CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION } : {}),
-    },
+    ...(snapshot.context === undefined ? {} : { context: validateContext(snapshot.context) }),
     subject,
   } as const satisfies PlainJsonValue;
   return finishEnvelope("adjudication", envelope, "adjudication-envelope");

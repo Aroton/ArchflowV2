@@ -41,7 +41,6 @@ const visiblePath = (path: string): boolean => path !== ".archflow" && !path.sta
 const ordinal = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 const UNAVAILABLE = "The previous reviewed subject could not be reconstructed. Start with the full patch, current artifact, and supplied prior feedback.";
 // Large patches remain complete on disk, without consuming the control envelope's byte budget.
-const INLINE_DIFF_BYTE_LIMIT = 131_072;
 
 /** Materialize only authenticated paths, without following repository-owned symlinks. */
 async function writeImage(root: string, path: string, image: ProjectionDesired): Promise<void> {
@@ -96,9 +95,7 @@ async function gitDiffFile(
   try {
     await Promise.all([exited, pipeline(child.stdout, createWriteStream(output, { flags: "wx", mode: 0o600 }))]);
     await chmod(output, 0o444);
-    const content = bytes <= INLINE_DIFF_BYTE_LIMIT ? decodeUtf8Strict(await readFile(output)) : undefined;
     return { content_digest: hash.digest("hex") as Sha256Digest, byte_count: bytes,
-      ...(content === undefined ? {} : { content }),
     };
   } finally {
     clearTimeout(deadline);
@@ -149,7 +146,7 @@ async function comparison(
     const statPath = join(directory, `${label}.stat`);
     const patch = await gitDiffFile(trees, patchPath, ["--patch"], input.signal);
     const stat = await gitDiffFile(trees, statPath, ["--numstat", "--summary"], input.signal);
-    const childPath = (path: string): string => relative(input.workspace.repository_view_root!, path);
+    const childPath = (path: string): string => relative(input.workspace.root, path);
     return {
       kind: previous === undefined ? (input.subject.artifact.artifact_kind === "document" ? "document" : "implementation") : "revision",
       subject_digest: input.subject.artifact_digest,

@@ -1,6 +1,6 @@
 # DEPENDENCIES
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, `src/contracts/config.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/read.ts`, `src/dispatch/`, release tooling
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, `src/contracts/config.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/read.ts`, `src/dispatch/`, release tooling
 
 ## Runtime and package baseline
 
@@ -182,4 +182,4 @@ The repository has no hosted CI/CD workflow. Maintainers run `npm run check` for
 - The executable authorities for the dependency surface are `package.json`, `package-lock.json`, and the release provenance derived from the build — not narrative documents.
 - Real-host tests are capability probes that can spend provider quota and depend on installed CLI login state; they are not part of ordinary `npm test` or `npm run check`.
 
-Review envelopes travel on stdin or through workspace files, never as a single unbounded argv element. The process layer rejects oversized individual arguments before spawning; this protects all three adapters from Linux’s per-argument limit. See [Dispatch](mcp/DISPATCH.md) for each transport.
+Review instructions and local file references travel in a bounded argv prompt with empty stdin. Complete documents, diffs, and evidence stay in the review workspace; server-only bindings never become CLI payloads. The process layer rejects oversized individual arguments before spawning; this protects all three adapters from Linux’s per-argument limit. See [Dispatch](mcp/DISPATCH.md) for each transport.

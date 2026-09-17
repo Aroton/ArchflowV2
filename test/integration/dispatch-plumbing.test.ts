@@ -42,7 +42,7 @@ afterEach(async () => {
   await Promise.all(scratchRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-function envelope(text = '{"schema_version":"1"}\n'): DispatchEnvelope {
+function envelope(text = '{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'): DispatchEnvelope {
   const bytes = Buffer.from(text);
   return Object.freeze({
     result_kind: "review",
@@ -156,7 +156,7 @@ describe("dispatch plumbing proof", () => {
     const adapter = selectCliAdapter(host);
     expect(adapter.id).toBe(expectedAdapter);
     const { workspace } = await fixtureWorkspace(adapter.id, "observe-input");
-    const input = envelope('{"schema_version":"1","artifact":"envelope-only"}\n');
+    const input = envelope('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"artifact":"envelope-only"}\n');
     try {
       const result = await dispatch(adapter, workspace, input);
       expect(adapter.classifyFailure(result)).toBeUndefined();
@@ -167,9 +167,9 @@ describe("dispatch plumbing proof", () => {
       expect(seen.parent_pid).toBe(process.pid);
       if (process.platform === "linux") expect(seen.session_id).toBe(seen.pid);
       expect(seen.cwd).toBe(workspace.root);
-      expect(Buffer.from(seen.stdin_base64!, "base64")).toEqual(Buffer.from(input.bytes));
+      expect(Buffer.from(seen.stdin_base64!, "base64")).toHaveLength(0);
       expect(seen.argv).toEqual(expect.arrayContaining(adapter.id === "claude-cli"
-        ? ["--tools", "", "--setting-sources", ""]
+        ? ["--tools", "Read,Grep,Glob", "--setting-sources", ""]
         : ["--ignore-user-config", "--ignore-rules", "project_doc_max_bytes=0"]));
 
       const expectedKeys = [
@@ -250,7 +250,7 @@ describe("dispatch plumbing proof", () => {
     const { workspace } = await fixtureWorkspace(adapter.id, "success");
     const canaries = ["credential-canary-7429", "routing-sentinel-1836"];
     try {
-      const result = await dispatch(adapter, workspace, envelope(`{"schema_version":"1","artifact":"${canaries.join(" ")}"}\n`));
+      const result = await dispatch(adapter, workspace, envelope(`{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"artifact":"${canaries.join(" ")}"}\n`));
       expect(scanDispatchOutput(result, canaries)).toEqual([]);
       const diagnostics = await readFile(join(workspace.root, "plumbing-observation.json"));
       expect(scanDispatchOutput({ stdout: diagnostics, stderr: Buffer.alloc(0) }, canaries)).toEqual([]);
@@ -287,11 +287,11 @@ describe("dispatch plumbing proof", () => {
         writeFile(join(workspace.root, ".codex", "skills", "planted", "SKILL.md"), excluded[1]!)),
       writeFile(join(workspace.root, "AGENTS.md"), excluded[2]!),
     ]);
-    const input = envelope('{"schema_version":"1","artifact":"prompt-envelope"}\n');
+    const input = envelope('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"artifact":"prompt-envelope"}\n');
     try {
       await dispatch(adapter, workspace, input);
       const rendered = await readFile(join(workspace.root, "prompt-input.json"), "utf8");
-      expect(JSON.parse(rendered)).toEqual({ messages: [{ role: "user", content: Buffer.from(input.bytes).toString("utf8") }] });
+      expect(JSON.parse(rendered).messages[0].content).toContain("@review-inputs/");
       for (const value of excluded) expect(rendered).not.toContain(value);
       // This fixture models `codex debug prompt-input`: it inspects input messages, not tools[].
       // Codex exposes no corresponding tool-surface inspection command, so this is not such a proof.

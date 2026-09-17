@@ -95,8 +95,8 @@ describe("standalone simple review", () => {
     let workspaceRoot = "";
     try {
       const workspace = await shared.acquire(); workspaceRoot = workspace.root;
-      const primary = join(workspace.root, "repos", "primary");
-      const baseline = join(workspace.root, "repos", "baseline");
+      const primary = join(workspace.root, "review", "repositories", "primary");
+      const baseline = join(workspace.root, "review", "repositories", "baseline");
       expect(await readFile(join(primary, "new.txt"), "utf8")).toBe("added\n");
       expect(await readFile(join(primary, "app.txt"), "utf8")).toBe("pre-existing edit\n");
       await expect(readFile(join(primary, "deleted.txt"))).rejects.toMatchObject({ code: "ENOENT" });

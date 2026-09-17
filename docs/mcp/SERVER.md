@@ -1,6 +1,6 @@
 # mcp/SERVER
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `src/review/simple-*.ts`, `src/contracts/simple-review.ts`, `src/main.ts`, `src/mcp/`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/state/status.ts`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `src/review/simple-*.ts`, `src/contracts/simple-review.ts`, `src/main.ts`, `src/mcp/`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/state/status.ts`, `src/state/semantic-*.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`
 
 `archflow-mcp` is a stdio MCP server speaking newline-delimited JSON-RPC. It is the system's sole authority: the only writer of durable state and the only judge of request validity. It takes no arguments and has no other mode — `src/main.ts` is 28 lines that either print usage or start the runtime.
 
@@ -16,7 +16,7 @@ The host catalogue contains three tools with purpose descriptions and plain-obje
 | `archflow_status` | Mechanically read-only common view of one task. An optional supported producing invocation can receive at most one opaque current-action offer; generic status never can. |
 | `archflow_apply` | Applies exactly one server-issued offer with only the expected semantic submission, then returns a newly authenticated view. It neither chooses the next action nor runs a workflow loop. |
 
-The four low-level names (`archflow_state`, `archflow_counter_review`, `archflow_gate`, `archflow_waiver`) remain durable-record vocabulary: `TOOL_NAMES` still names them for reading and writing existing state — last-transition records, gate archives, receipts — but nothing advertises or dispatches them. Behind the semantic handler, `handleState` still runs pipeline transactions, and `handleCounterReview` selects the rubric, authenticates approved upstreams, seals separate general/test/constitution envelopes, and dispatches the role set. General reviewers assess consequential plan alignment as ordinary feedback; phase design/implementation always have a dedicated test route; constitution dispatch is conditional on active rules.
+The four low-level names (`archflow_state`, `archflow_counter_review`, `archflow_gate`, `archflow_waiver`) remain durable-record vocabulary: `TOOL_NAMES` still names them for reading and writing existing state — last-transition records, gate archives, receipts — but nothing advertises or dispatches them. Behind the semantic handler, `handleState` still runs pipeline transactions, and `handleCounterReview` selects the rubric, authenticates approved upstreams, seals separate server-side general/test/constitution input bindings and dispatches readable prompts with local file references. General reviewers assess consequential plan alignment as ordinary feedback; phase design/implementation always have a dedicated test route; constitution dispatch is conditional on active rules.
 
 ## The semantic workflow surface
 

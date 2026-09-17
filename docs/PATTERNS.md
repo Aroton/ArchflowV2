@@ -1,6 +1,6 @@
 # PATTERNS
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `src/`, `test/`, `scripts/`, repository policy
 
 This is a strict TypeScript/Node package whose conventions are enforced primarily by the type checker, runtime validators, and tests. There is no configured linter or formatter. Match the surrounding file: contract registries intentionally use dense declarations, while state, repository, and MCP algorithms favor expanded control flow and rationale-heavy comments.
 
@@ -239,6 +239,6 @@ npm run check:deep
 - Match the array consumer’s comparator: gate-context paths use `localeCompare`, while durable records use code-unit ordinal ordering. A producer’s default sort is not interchangeable with either schema.
 - Revalidate a Git proof’s symbolic target as well as commit OIDs, ancestry, and candidate selection after inspection. Switching branches at the same commit must not preserve authority accidentally.
 - Authenticate retained bytes before reading a narrow accounting slice, but do not require unrelated historical artifact fields to satisfy today’s full schema merely to total retained bytes.
-- Keep unbounded prompts, envelopes, and schemas out of argv. Use stdin or workspace files; `src/dispatch/process.ts` guards individual argument size.
+- Keep unbounded prompts, envelopes, and schemas out of argv. Use workspace files for review evidence and pass only bounded instructions/references on argv; review stdin stays empty. `src/dispatch/process.ts` guards individual argument size.
 - Advertise MCP tools with plain object roots. Keep unions below the root so hosts do not collapse an unresolved root union into a zero-field tool.
 - Fresh reviewer text is feedback, not identity or verdict authority. Bind provenance from the authenticated dispatch; the producer supplies an explicit finish/revise/escalate response. Historical finding parsers exist for archived evidence and must not impose their taxonomy on fresh reports.

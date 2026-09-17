@@ -42,6 +42,7 @@ export async function captureImplementationSelectionInput(
   context: RetainedChildOutputContext,
   binding: Sha256Digest,
   load: () => Promise<ImplementationSelectionInput>,
+  readOnly = false,
 ): Promise<ImplementationSelectionInput> {
   const writer = context.dependencies.projection_writer;
   if (writer === undefined) return load();
@@ -57,6 +58,7 @@ export async function captureImplementationSelectionInput(
     if (record.binding === binding && canonicalJsonDigest(input) === record.input_digest) return input;
   } catch { /* Missing or corrupt runtime data causes a fresh capture, never a workflow failure. */ }
   const input = await load();
+  if (readOnly) return input;
   try {
     await ensureAttemptDirectory(context.authority, context.phase_instance);
     await writer.replaceRegular(target.value, canonicalJsonBytes({ binding, input_digest: canonicalJsonDigest(input), input }), false);

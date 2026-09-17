@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** the whole repository
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** the whole repository
 
 The fresh review loop uses reports and a working-AI response instead of finding taxonomy, exact alignment census, and disposition-ledger enforcement. Legacy readers remain only for archived evidence; no interpretation-model pass is added.
 
@@ -103,3 +103,7 @@ The effort assessment is another deliberate narrow boundary: the reviewer return
 ## Standalone review
 
 Simple tasks add a separate request/result contract and a small orchestration path, because constructing pretend workflow authority would undermine both simplicity and existing trust boundaries. The common CLI dispatcher, routing, report parsing, constitution slots, and temporary views are reused. No new state machine, retained-result graph, recovery archive, or gate resolver exists. The main maintenance cost is keeping standalone input capture and policy interpretation aligned with the shared review contracts.
+
+## Review input assembly
+
+Fresh reviewers use one file renderer shared by dispatch and preview. Build-owned YAML names the primary subject, governing documents, rubric split, round-specific inputs, and per-file usage guidance. This replaces child-visible JSON prompt construction, inline diff duplication, and size-based context dropping. Canonical server-only bindings remain because authenticated evidence and retry identity still require them. The two configuration files describe policy and document meaning; they are neither a user extension system nor a second workflow authority.

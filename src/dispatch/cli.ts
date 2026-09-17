@@ -1,3 +1,4 @@
+import { dispatchInputRecord, materializeReviewInputs } from "../review/inputs.js";
 import type { DispatchUsage } from "../contracts/dispatch-usage.js";
 import { reviewReportOutputSchema } from "../contracts/review.js";
 import { stat, writeFile } from "node:fs/promises";
@@ -318,12 +319,7 @@ export function projectCliOutputSchema(
   return adapter === "codex-cli" ? codexStrictNode(root) : root;
 }
 
-function envelopeDocument(envelope: DispatchEnvelope): Readonly<Record<string, PlainJsonValue>> {
-  const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes));
-  assertPlainJson(decoded, "dispatch envelope");
-  if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) throw new TypeError("dispatch envelope must be an object");
-  return decoded as Readonly<Record<string, PlainJsonValue>>;
-}
+const envelopeDocument = dispatchInputRecord;
 
 function envelopeProjection(envelope: DispatchEnvelope): Readonly<{
   subject: Readonly<Record<string, PlainJsonValue>>;
@@ -690,6 +686,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("claude-cli", route);
+    const reviewInputs = await materializeReviewInputs(envelope, workspace);
     const projection = envelopeProjection(envelope);
     const schema = projectCliOutputSchema(
       outputSchema, envelope.result_kind, "claude-cli", projection.subject, projection.assignment,
@@ -699,18 +696,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
     }
     const mcpConfigPath = join(workspace.root, "empty-mcp.json");
     await writeFile(mcpConfigPath, '{"mcpServers":{}}\n', { encoding: "utf8", mode: 0o600 });
-    // A dispatch workspace with a materialized repository view runs the child inside the view with
-    // exactly the read-only tools (no write, bash, or network tools). `--setting-sources ""`,
-    // `--disable-slash-commands`, and the empty strict MCP config stay pinned so the view's own
-    // CLAUDE.md and settings never become instructions. Without a view, every tool stays disabled.
-    // Patches are siblings of the repository view, outside Claude's default read boundary.
-    const diffDirectory = workspace.repository_view_root === undefined ? undefined
-      : join(workspace.repository_view_root, "..", "review-diffs");
-    const hasDiffs = diffDirectory !== undefined &&
-      await stat(diffDirectory).then(value => value.isDirectory(), (error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return false;
-        throw error;
-      });
+    // The generated input directory is separate from the repository snapshot and explicitly readable.
     const serializedSchema = JSON.stringify(schema);
     if (Buffer.byteLength(serializedSchema, "utf8") >= MAX_ARGV_ELEMENT_BYTES) {
       return fail(createProjectError("PROCESS_FAILED", {
@@ -720,8 +706,8 @@ const claudeAdapter: CliAdapter = Object.freeze({
     const argv = Object.freeze([
       "-p",
       "--safe-mode",
-      "--tools", workspace.repository_view_root === undefined ? "" : "Read,Grep,Glob",
-      ...(hasDiffs ? ["--add-dir", diffDirectory!] : []),
+      "--tools", "Read,Grep,Glob",
+      "--add-dir", reviewInputs.directory,
       "--disable-slash-commands",
       "--strict-mcp-config",
       "--mcp-config", mcpConfigPath,
@@ -731,6 +717,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
       "--json-schema", serializedSchema,
       "--model", route.model,
       "--effort", route.effort,
+      "--", reviewInputs.prompt,
     ]);
     // A cc-switch provider id wraps the launch as `cc-switch start claude <provider> -- <argv>`:
     // cc-switch supplies the claude binary and runs it with the provider's settings file without
@@ -740,18 +727,16 @@ const claudeAdapter: CliAdapter = Object.freeze({
         adapter: "claude-cli",
         command: "claude",
         argv,
-        cwd: workspace.repository_view_root ?? workspace.root,
+        cwd: workspace.review_root ?? workspace.root,
         env: workspace.env,
-        stdin: envelope.bytes,
       });
     }
     return Object.freeze({
       adapter: "claude-cli",
       command: "cc-switch",
       argv: Object.freeze(["start", "claude", route.provider, "--", ...argv]),
-      cwd: workspace.repository_view_root ?? workspace.root,
+      cwd: workspace.review_root ?? workspace.root,
       env: withLocalBinOnPath(workspace),
-      stdin: envelope.bytes,
     });
   },
   parseOutput(result: DispatchChildResult) {
@@ -811,6 +796,7 @@ const codexAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("codex-cli", route);
+    const reviewInputs = await materializeReviewInputs(envelope, workspace);
     if (route.provider !== undefined) {
       // cc-switch wraps only the claude CLI; routing already rejects this pairing.
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
@@ -826,7 +812,7 @@ const codexAdapter: CliAdapter = Object.freeze({
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     // Codex reads text through shell tools. A repository-backed reviewer needs them;
     // the read-only sandbox remains the authority for filesystem mutations.
-    const readTools = workspace.repository_view_root === undefined ? [] : ["shell_tool", "unified_exec"];
+    const readTools = ["shell_tool", "unified_exec"];
     const disabled = CODEX_DISABLED_FEATURES.filter(feature => !readTools.includes(feature))
       .flatMap((feature) => ["--disable", feature]);
     return Object.freeze({
@@ -842,7 +828,7 @@ const codexAdapter: CliAdapter = Object.freeze({
         "-s", "read-only",
         // The already read-only sandbox targets the repository view when one is materialized;
         // schema and output files deliberately stay in workspace.root, outside the view.
-        "-C", workspace.repository_view_root ?? workspace.root,
+        "-C", workspace.review_root ?? workspace.root,
         "--json",
         "--output-schema", schemaPath,
         "-o", outputPath,
@@ -852,10 +838,10 @@ const codexAdapter: CliAdapter = Object.freeze({
         "-c", `model_reasoning_effort=${JSON.stringify(route.effort)}`,
         ...disabled,
         ...readTools.flatMap(feature => ["--enable", feature]),
+        reviewInputs.prompt,
       ]),
-      cwd: workspace.root,
+      cwd: workspace.review_root ?? workspace.root,
       env: workspace.env,
-      stdin: envelope.bytes,
       final_output_path: outputPath,
     });
   },
@@ -930,6 +916,7 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("antigravity-cli", route);
+    const reviewInputs = await materializeReviewInputs(envelope, workspace);
     if (route.provider !== undefined) {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
@@ -937,23 +924,13 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     const schema = projectCliOutputSchema(
       outputSchema, envelope.result_kind, "antigravity-cli", projection.subject, projection.assignment,
     );
-    // The envelope and the schema never ride on argv: `agy -p` accepts the prompt only as one
-    // argv element, and Linux caps a single element at MAX_ARG_STRLEN (128 KiB) regardless of
-    // ARG_MAX, so a large pinned design made execve fail with E2BIG. The prompt instead travels
-    // as one NDJSON `user` message on stdin (`--input-format stream-json`), the schema as a
-    // workspace file, and the child's final `result` event carries the same wrapper that
-    // `--output-format json` prints.
+    // Only bounded instructions and references ride on argv; full inputs and schemas are files.
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    const promptString = new TextDecoder("utf-8", { fatal: true }).decode(envelope.bytes);
-    const stdin = new TextEncoder().encode(
-      `${JSON.stringify({ event: "user", message: { role: "user", content: promptString } })}\n`,
-    );
     const argv = Object.freeze([
-      "-p", "",
+      "-p", reviewInputs.prompt,
       // agy's five-minute default can truncate a working review before our process deadline.
       "--print-timeout", `${String(DISPATCH_TIMEOUT_MS / 1000)}s`,
-      "--input-format", "stream-json",
       "--output-format", "stream-json",
       "--json-schema", schemaPath,
       "--model", route.model,
@@ -965,9 +942,8 @@ const antigravityAdapter: CliAdapter = Object.freeze({
       adapter: "antigravity-cli",
       command: "agy",
       argv,
-      cwd: workspace.repository_view_root ?? workspace.root,
+      cwd: workspace.review_root ?? workspace.root,
       env: withLocalBinOnPath(workspace),
-      stdin,
     });
   },
   parseOutput(result: DispatchChildResult) {

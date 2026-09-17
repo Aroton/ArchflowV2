@@ -88,6 +88,7 @@ import {
 } from "./adjudication.js";
 import {
   buildAdjudicationEnvelope,
+  buildReviewEnvelope,
   buildEffortEnvelope,
   type AdjudicationEnvelopeInput,
   type DispatchEnvelope,
@@ -96,7 +97,7 @@ import {
   type ReviewWorkspaceBinding,
   type ReviewEnvelopeSeed,
 } from "./envelopes.js";
-import { buildReviewEnvelopeWithCap, priorTriageContextEntry, type PriorTriageRecord } from "./pinned-context.js";
+import { priorTriageContextEntry, type PriorTriageRecord } from "./pinned-context.js";
 import {
   taggedFindingId,
 } from "./reviewer-tags.js";
@@ -445,14 +446,10 @@ async function planCounterReviewCommit(
  * so a reviewer CLI outage does not strand the task. The pinned config is never amended; the
  * override is validated exactly like a pinned route and recorded on the evidence it produces.
  */
-export async function runCounterReview(
-  dependencies: RunCounterReviewDependencies,
+export async function prepareCounterReviewDispatch(
+  dependencies: Pick<RunCounterReviewDependencies, "prepare_diffs" | "observe_failure" | "retry_dispatch" | "serialize_dispatch" | "serialize_dispatch_all">,
   input: RunCounterReviewInput,
-): Promise<ProjectResult<Readonly<{
-  transaction: TransactionOutcome<"archflow_counter_review">;
-  evidence: ReviewEvidence;
-  constitution_evidence?: AdjudicationEvidence;
-}>>> {
+) {
   const envelopeRubricDigest = canonicalJsonDigest(input.envelope.rubric as never);
   if (
     input.producer_family !== input.envelope.subject.producer_family ||
@@ -611,7 +608,7 @@ export async function runCounterReview(
   const response = priorTriage?.response;
   const selected = response?.decision === "revise" ? response.reviewers : undefined;
   if (selected !== undefined && selected.some(reviewer => !taggedRoutes.some(route => route.assignment.reviewer_id === reviewer.reviewer_id))) {
-    return fail(createProjectError("STATE_INVALID", { phase_instance: input.authority.context.phase_instance, issue_code: "follow-up-reviewer-unavailable" }));
+    return fail<never>(createProjectError("STATE_INVALID", { phase_instance: input.authority.context.phase_instance, issue_code: "follow-up-reviewer-unavailable" }));
   }
   const reviewRoutes = selected === undefined ? taggedRoutes
     : taggedRoutes.filter(route => selected.some(reviewer => reviewer.reviewer_id === route.assignment.reviewer_id));
@@ -621,7 +618,7 @@ export async function runCounterReview(
     const assignment = assignmentFor(routeEntry);
     const context = input.envelope.context.map(entry => entry.kind === "prior-triage" && priorTriage !== undefined
       ? priorTriageContextEntry(priorTriage, undefined, assignment.reviewer_id) : entry);
-    return buildReviewEnvelopeWithCap({ ...input.envelope, assignment, subject, context,
+    return buildReviewEnvelope({ ...input.envelope, phase_kind: phaseKind, assignment, subject, context,
       ...(preparedDiffs === undefined ? {} : { diffs: preparedDiffs.reviewers.get(assignment.reviewer_id) ?? { full: preparedDiffs.full } }),
     });
   };
@@ -650,13 +647,32 @@ export async function runCounterReview(
     ? undefined
     : buildAdjudicationEnvelope({
       artifact: input.envelope.artifact,
+      phase_kind: phaseKind,
+      ...(input.envelope.documents === undefined ? {} : { documents: input.envelope.documents }),
+      ...(input.envelope.governing_document_comparisons === undefined ? {} : { governing_document_comparisons: input.envelope.governing_document_comparisons }),
+      context: input.envelope.context.filter(entry => entry.kind !== "prior-triage"),
       ...(preparedDiffs === undefined ? {} : { diffs: { full: preparedDiffs.full } }),
       rules: plan.rules,
       source_review_envelope_digest: envelope.digest,
       workspace: plan.workspace,
       subject: constitutionSubject,
     });
-  const effortEnvelope = parsedEffortEnvelope === undefined ? undefined : buildEffortEnvelope(parsedEffortEnvelope);
+  const effortEnvelope = parsedEffortEnvelope === undefined ? undefined : buildEffortEnvelope(parsedEffortEnvelope, input.envelope.context.filter(entry => entry.kind === "approved-upstream" || entry.kind === "imported-reference"));
+
+  return { schema_version: "1" as const, ok: true as const, value: { subject, reviewOverride, testReviewOverride, dispatchObserved, activeAssignments, reviewRoutes, reviewEnvelopes, plan, constitutionRoute, constitutionSubject, constitutionEnvelope, effortPlan, parsedEffortEnvelope, effortEnvelope, effortRoute, overrideRecordFor, serializeAll, priorTriage, envelope } };
+}
+
+export async function runCounterReview(
+  dependencies: RunCounterReviewDependencies,
+  input: RunCounterReviewInput,
+): Promise<ProjectResult<Readonly<{
+  transaction: TransactionOutcome<"archflow_counter_review">;
+  evidence: ReviewEvidence;
+  constitution_evidence?: AdjudicationEvidence;
+}>>> {
+  const preparation = await prepareCounterReviewDispatch(dependencies, input);
+  if (!preparation.ok) return preparation;
+  const { subject, reviewOverride, testReviewOverride, dispatchObserved, activeAssignments, reviewRoutes, reviewEnvelopes, plan, constitutionRoute, constitutionSubject, constitutionEnvelope, effortPlan, parsedEffortEnvelope, effortEnvelope, effortRoute, overrideRecordFor, serializeAll, priorTriage, envelope } = preparation.value;
 
   // Each child dispatches, validates, and retains its own output, and never rejects: the round
   // settles only after every child has finished, so one failure cannot discard its siblings'

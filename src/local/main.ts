@@ -1,3 +1,4 @@
+import { renderReviewPreview } from "./review-preview.js";
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { parseArgs } from "node:util";
@@ -13,6 +14,7 @@ function usageText(): string {
     "       init --force refreshes shipped defaults and other scaffold files (including config.yaml), preserves custom/, and migrates flat constitution rules",
     "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
     "       input-free commands never read stdin",
+    "       review-preview --task <task> --producer <claude|codex|antigravity> [--reviewer <id>] [--format text|json]",
     "commands (payload; --task):",
     ...LOCAL_COMMANDS.map((command) => {
       const contract = LOCAL_COMMAND_CONTRACTS[command];
@@ -47,7 +49,7 @@ async function readInput(command: LocalCommand, path: string | undefined): Promi
 async function main(): Promise<void> {
   const parsed = parseArgs({
     args: process.argv.slice(2), allowPositionals: true, strict: true,
-    options: { task: { type: "string" }, repository: { type: "string" }, input: { type: "string" }, force: { type: "boolean" }, help: { type: "boolean", short: "h" } },
+    options: { producer: { type: "string" }, reviewer: { type: "string" }, format: { type: "string" }, task: { type: "string" }, repository: { type: "string" }, input: { type: "string" }, force: { type: "boolean" }, help: { type: "boolean", short: "h" } },
   });
   if (parsed.values.help || parsed.positionals.length === 0) {
     process.stdout.write(usageText());
@@ -73,8 +75,10 @@ async function main(): Promise<void> {
   if (parsed.values.force === true && command !== "init") {
     throw new TypeError(`--force is supported only by init`);
   }
+  if (command !== "review-preview" && [parsed.values.producer, parsed.values.reviewer, parsed.values.format].some(value => value !== undefined)) throw new TypeError("--producer, --reviewer and --format are supported only by review-preview");
+  if (parsed.values.format !== undefined && !["text", "json"].includes(parsed.values.format)) throw new TypeError("--format must be text or json");
   const value = INPUT_FREE_COMMANDS.has(command) ? undefined : await readInput(command, parsed.values.input);
-  const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(parsed.values.repository === undefined ? {} : { repository_name: parsed.values.repository }), ...(value === undefined ? {} : { value }), ...(parsed.values.force === true ? { force: true } : {}) });
+  const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.producer === undefined ? {} : { producer: parsed.values.producer }), ...(parsed.values.reviewer === undefined ? {} : { reviewer: parsed.values.reviewer }), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(parsed.values.repository === undefined ? {} : { repository_name: parsed.values.repository }), ...(value === undefined ? {} : { value }), ...(parsed.values.force === true ? { force: true } : {}) });
   assertPlainJson(result, "local command result");
   if (result !== null && typeof result === "object" && !Array.isArray(result) && (result as Record<string, unknown>).ok === false) {
     process.exitCode = 1;
@@ -84,7 +88,7 @@ async function main(): Promise<void> {
       : "PROJECT_ERROR";
     process.stderr.write(`${command} failed: ${code}\n`);
   }
-  process.stdout.write(canonicalJsonBytes(result as PlainJsonValue));
+  process.stdout.write(command === "review-preview" && parsed.values.format !== "json" ? renderReviewPreview(result) : canonicalJsonBytes(result as PlainJsonValue));
 }
 
 function failureMessage(error: unknown): string {

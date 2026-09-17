@@ -5,7 +5,7 @@ import { CliAdapterError } from "../../src/dispatch/cli.js";
 import { DispatchProcessError } from "../../src/dispatch/process.js";
 import { DispatchRoutingError } from "../../src/dispatch/routing.js";
 import { mapHandlerErrors } from "../../src/mcp/handlers/errors.js";
-import { ReviewEnvelopeError } from "../../src/review/envelopes.js";
+import { ReviewInputError } from "../../src/review/inputs.js";
 
 describe("mapHandlerErrors", () => {
   afterEach(() => {
@@ -16,9 +16,7 @@ describe("mapHandlerErrors", () => {
     new DispatchRoutingError(createProjectError("UNSUPPORTED_HOST", { host: "unknown" })),
     new CliAdapterError(createProjectError("AUTH_UNAVAILABLE", { adapter: "codex-cli" })),
     new DispatchProcessError(createProjectError("CANCELLED", { source: "client", attempt: 1 })),
-    new ReviewEnvelopeError(createProjectError("MODEL_OUTPUT_INVALID", {
-      adapter: "codex-cli", attempt: 1, issue_code: "envelope-too-large",
-    })),
+    new ReviewInputError("Invalid review input"),
   ])("preserves the classified project error carried by %s", async (error) => {
     const result = await mapHandlerErrors<"archflow_state">("correlation-1", async () => {
       throw error;

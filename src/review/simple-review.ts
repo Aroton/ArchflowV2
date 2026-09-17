@@ -15,7 +15,7 @@ import { isTransientDispatchFailure } from "../dispatch/recovery.js";
 import { selectDispatchRouteCandidates, validateSelectedDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { projectRepositoryWorkspaceBinding, shareRepositoryViewWorkspace } from "../dispatch/workspace.js";
 import { approvalRuleMatchSummary, evaluateApprovalRules } from "../state/approval-rules.js";
-import { REVIEW_ENVELOPE_BYTE_CAP, REVIEW_INSTRUCTION, TEST_REVIEW_ASSIGNMENT_INSTRUCTION, type DispatchEnvelope } from "./envelopes.js";
+import { sealDispatchInput, type DispatchEnvelope } from "./envelopes.js";
 import { loadCanonicalRubricForPhaseKind, reviewAssignment } from "./rubrics.js";
 import { captureSimpleContext, SimpleReviewError } from "./simple-context.js";
 
@@ -30,12 +30,7 @@ function jsonSchema(schema: { toJSONSchema: (options: { target: "draft-2020-12" 
   assertPlainJson(value);
   return structuredClone(value);
 }
-function envelope(result_kind: DispatchEnvelope["result_kind"], value: unknown): DispatchEnvelope {
-  assertPlainJson(value, "review envelope");
-  const bytes = canonicalJsonBytes(structuredClone(value));
-  if (bytes.byteLength > REVIEW_ENVELOPE_BYTE_CAP) throw new SimpleReviewError("INPUT_TOO_LARGE", "Simple review envelope exceeds the review byte limit.");
-  return { result_kind, bytes, byte_count: bytes.byteLength, digest: sha256Bytes(bytes) };
-}
+const envelope = sealDispatchInput;
 
 /** One stateless pass. Reports describe inspected bytes, never authorization or a workflow transition. */
 export async function runSimpleReview(raw: SimpleReviewInput, context: InvocationContext, dependencies: SimpleReviewDependencies = {}): Promise<SimpleReviewResult> {
@@ -92,7 +87,7 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
               ...(rule.review_trigger === undefined ? {} : { review_trigger: rule.review_trigger }), enforced_by: [...(rule.enforced_by ?? [])] })),
           })
           : envelope("review", { ...common, assignment: assignment!, rubric,
-            instructions: `${REVIEW_INSTRUCTION} ${role === "test-reviewer" ? TEST_REVIEW_ASSIGNMENT_INSTRUCTION : "Focus on the assigned general criteria. Leave test-owned criteria to the test reviewer."}` });
+             });
         const schema = role === "adjudicator" ? constitutionSchema! : reviewReportOutputSchema;
         let returned;
         for (let attempt = 0; ; attempt++) {

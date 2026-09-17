@@ -29,7 +29,7 @@ export function buildAutomationLocalBundle(repositoryRoot: string, outfile: stri
     entryPoints: ["src/local/main.ts"],
     outfile: bundled,
     bundle: true,
-    platform: "node",
+    platform: "node", loader: { ".yaml": "text" },
     format: "esm",
     target: "node24",
     banner: {

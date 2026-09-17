@@ -1,6 +1,6 @@
 # cli/COMMANDS
 
-**Explored:** 2026-09-12 · **Commit:** `7f97fe0` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
 Fresh report triage accepts `response` with `decision` and `rationale`; revise also supplies reviewer IDs and verification requests. Archived per-finding `dispositions` remain accepted only for archived structured review evidence. Fresh review feedback carries an explicit issues/no-issues outcome; historical prose keeps its original shape. Requests continue to derive bindings from current authority.
 
@@ -17,8 +17,8 @@ archflow-local <command> [--task <task>] [--input <json-file>]
 ```
 
 - Payload commands read JSON from `--input <file>`, or stdin when `--input` is omitted. If stdin is a TTY and no `--input` was given, the command fails immediately rather than hanging.
-- Input-free commands (`automation-status`, `manual-status`, `init`, `clean`, and `upgrade adopt`) never read stdin at all.
-- Output is always canonical JSON on stdout. **Failures exit nonzero** and now include thrown argument/handler failures as one structured `{"ok": false, ...}` envelope on stdout plus a concise stderr reason. A classified `automation-status` document—including `blocked`—is successful and exits zero.
+- Input-free commands (`automation-status`, `manual-status`, `init`, `clean`, `review-preview`, and `upgrade adopt`) never read stdin at all.
+- Output is canonical JSON on stdout, except `review-preview`, which defaults to readable text and accepts `--format json`. **Failures exit nonzero** and now include thrown argument/handler failures as one structured `{"ok": false, ...}` envelope on stdout plus a concise stderr reason. A classified `automation-status` document—including `blocked`—is successful and exits zero.
 - `--help` is generated from the same command table that drives dispatch (`LOCAL_COMMAND_CONTRACTS` in `src/local/commands.ts`), so help can't drift from behavior.
 
 ## The command surface
@@ -39,6 +39,7 @@ Initialization diagnostics also list generated ArchFlow assets hidden by an ance
 | Command | Purpose |
 |---|---|
 | `automation-status` | Emit strict automation status v3: reconcile one task, classify its condition, expose authenticated implementation advice, and identify exactly one skill, human, operator, or terminal actor without mutation |
+| `review-preview` | Preview the exact prepared review prompts, referenced file sizes and originating versions; requires `--producer claude\|codex\|antigravity`, optionally `--reviewer <id>` and `--format text\|json`. Uses authenticated current-task material, never invokes a model or advances state |
 | `manual-status` | Read-only mode classifier: `normal`, `degraded`, `repair-required`, `upgrade-staged` (one strictly validated current import waits for MCP), or `upgrade-restart-required` (old, malformed, incompatible, or ambiguous staging must be explicitly discarded) |
 
 In its normal classification, `manual-status` carries the same `TaskStatusV1.repositories` projection as semantic status: implicit writable `primary` first, then configured secondaries in ordinal name order, with resolved absolute location, resolved mode, current commit, and `last_reviewed_commit` only when current-position server-attested review evidence names that member. Relative declarations are rooted at the primary worktree, absolute declarations are accepted, omitted mode resolves to `context-only`, and `primary` is reserved. Repository config edits and moved-HEAD review notices remain informational and nonblocking.

@@ -256,7 +256,7 @@ if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cl
 else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const envelope = (await import(${JSON.stringify(new URL("../fixtures/dispatch/read-review-inputs.mjs", import.meta.url).href)})).readReviewFixtureInputs(argv);
   const output = generateOutput(envelope, ${JSON.stringify(findings)});
   await writeFile(argv[argv.indexOf("-o") + 1], JSON.stringify(output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output) + "\\n");
   process.stdout.write('{"type":"turn.completed"}\\n');
@@ -270,7 +270,7 @@ if (argv.length === 1 && argv[0] === "--version") process.stdout.write("2.1.220 
 else if (argv[0] === "auth" && argv[1] === "status") process.stdout.write(JSON.stringify({ loggedIn: true }) + "\\n");
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const envelope = (await import(${JSON.stringify(new URL("../fixtures/dispatch/read-review-inputs.mjs", import.meta.url).href)})).readReviewFixtureInputs(argv);
   const output = generateOutput(envelope, ${JSON.stringify(findings)});
   process.stdout.write(JSON.stringify({ structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output }) + "\\n");
 }`);
@@ -284,9 +284,7 @@ else if (argv[0] === "models") process.stdout.write("gemini-3.7-flash-high\\n");
 else {
   // The envelope arrives as one stream-json user message on stdin, never on argv.
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const firstLine = Buffer.concat(chunks).toString("utf8").split("\\n").find((line) => line.trim() !== "");
-  const message = JSON.parse(firstLine);
-  const envelope = message.event === "user" ? JSON.parse(message.message.content) : message;
+  const envelope = (await import(${JSON.stringify(new URL("../fixtures/dispatch/read-review-inputs.mjs", import.meta.url).href)})).readReviewFixtureInputs(argv);
   const output = generateOutput(envelope, ${JSON.stringify(findings)});
   process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS", structured_output: output.step === "counter_review" ? { outcome: output.findings?.length ? "issues_found" : "no_issues_found", feedback: JSON.stringify(output) } : output } }) + "\\n");
 }`);

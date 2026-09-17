@@ -36,7 +36,7 @@ if (scenario === "prompt-input") {
   // Models codex debug prompt-input's message-list output. It intentionally says nothing
   // about the separate, uninspectable request tools[] surface.
   await writeFile(join(process.cwd(), "prompt-input.json"), JSON.stringify({
-    messages: [{ role: "user", content: input.toString("utf8") }],
+    messages: [{ role: "user", content: argv.at(-1) }],
   }));
 }
 if (scenario === "hang") await new Promise(() => undefined);

@@ -169,7 +169,7 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
-  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const envelope = (await import(${JSON.stringify(new URL("../fixtures/dispatch/read-review-inputs.mjs", import.meta.url).href)})).readReviewFixtureInputs(argv);
   const subject = envelope.subject;
   const assignment = envelope.assignment;
   const legacyConfirmations = assignment?.legacy_confirmations?.map((confirmation) => ({

@@ -5,7 +5,7 @@ import { CliAdapterError } from "../../dispatch/cli.js";
 import { DispatchProcessError } from "../../dispatch/process.js";
 import { DispatchRoutingError } from "../../dispatch/routing.js";
 import { AdjudicationServiceError } from "../../review/adjudication.js";
-import { ReviewEnvelopeError } from "../../review/envelopes.js";
+import { ReviewInputError } from "../../review/inputs.js";
 import { reportInternalError } from "../diagnostics.js";
 
 type TypedProjectError =
@@ -13,7 +13,7 @@ type TypedProjectError =
   | CliAdapterError
   | DispatchProcessError
   | AdjudicationServiceError
-  | ReviewEnvelopeError;
+  | ReviewInputError;
 
 function carried(error: unknown): ProjectError | undefined {
   if (
@@ -21,7 +21,7 @@ function carried(error: unknown): ProjectError | undefined {
     error instanceof CliAdapterError ||
     error instanceof DispatchProcessError ||
     error instanceof AdjudicationServiceError ||
-    error instanceof ReviewEnvelopeError
+    error instanceof ReviewInputError
   ) return error.project_error;
   try {
     return parseProjectError(error);

@@ -34,7 +34,7 @@ const result = (value: Partial<DispatchChildResult> = {}): DispatchChildResult =
 });
 const envelope: DispatchEnvelope = Object.freeze({
   result_kind: "review",
-  bytes: bytes('{"schema_version":"1","subject":{}}\n'),
+  bytes: bytes('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"subject":{}}\n'),
   digest: "d".repeat(64) as never,
   byte_count: 36,
 });
@@ -125,14 +125,14 @@ describe("CLI invocation construction", () => {
     const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
     const invocation = await selectCliAdapter("codex")
       .buildInvocation(envelope, route, target, reviewSchema);
-    expect(invocation.argv.slice(0, 5)).toEqual(["-p", "--safe-mode", "--tools", "", "--disable-slash-commands"]);
+    expect(invocation.argv.slice(0, 5)).toEqual(["-p", "--safe-mode", "--tools", "Read,Grep,Glob", "--add-dir"]);
     expect(invocation.argv).toContain("--setting-sources");
     expect(invocation.argv).not.toContain("--bare");
     expect(invocation.argv).not.toContain("--permission-mode");
     const schema = invocation.argv[invocation.argv.indexOf("--json-schema") + 1]!;
     expect(schema.startsWith("/")).toBe(false);
     expect(() => JSON.parse(schema)).not.toThrow();
-    expect(invocation.stdin).toEqual(envelope.bytes);
+    expect(invocation.stdin).toBeUndefined();
   });
 
   it("wraps the Claude launch through cc-switch only when a route names a provider", async () => {
@@ -174,25 +174,25 @@ describe("CLI invocation construction", () => {
     expect(invocation.argv).toContain('model_reasoning_effort="xhigh"');
     expect(invocation.argv).not.toContain("forced_login_method");
     expect(invocation.argv).not.toContain("view_image");
-    expect(invocation.argv.filter((item) => item === "--disable")).toHaveLength(14);
+    expect(invocation.argv.filter((item) => item === "--disable")).toHaveLength(12);
     expect(JSON.parse(await readFile(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]!, "utf8"))).toMatchObject({ type: "object" });
     expect(invocation.final_output_path).toBe(invocation.argv[invocation.argv.indexOf("-o") + 1]);
   });
 
   it("runs the Claude child inside the repository view with only read-only tools", async () => {
     const target = await workspace();
-    const viewed: DispatchWorkspace = Object.freeze({ ...target, repository_view_root: join(target.root, "repo") });
+    const viewed: DispatchWorkspace = Object.freeze({ ...target, review_root: join(target.root, "review"), repository_view_root: join(target.root, "review", "repositories", "primary") });
     const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
     const adapter = selectCliAdapter("codex");
 
     const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
     expect(bare.cwd).toBe(target.root);
-    expect(bare.argv).not.toContain("--add-dir");
-    expect(bare.argv[bare.argv.indexOf("--tools") + 1]).toBe("");
+    expect(bare.argv).toContain("--add-dir");
+    expect(bare.argv[bare.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
 
     const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewSchema);
-    expect(invocation.cwd).toBe(viewed.repository_view_root);
-    expect(invocation.argv).not.toContain("--add-dir");
+    expect(invocation.cwd).toBe(viewed.review_root);
+    expect(invocation.argv).toContain("--add-dir");
     expect(invocation.argv[invocation.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
     for (const pinned of ["--safe-mode", "--disable-slash-commands", "--strict-mcp-config", "--no-session-persistence"]) {
       expect(invocation.argv).toContain(pinned);
@@ -203,18 +203,18 @@ describe("CLI invocation construction", () => {
 
   it("points the Codex sandbox at the repository view while outputs stay outside it", async () => {
     const target = await workspace();
-    const viewed: DispatchWorkspace = Object.freeze({ ...target, repository_view_root: join(target.root, "repo") });
+    const viewed: DispatchWorkspace = Object.freeze({ ...target, review_root: join(target.root, "review"), repository_view_root: join(target.root, "review", "repositories", "primary") });
     const route: DispatchRoute = { adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "high" };
     const adapter = selectCliAdapter("claude");
 
     const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
     expect(bare.argv[bare.argv.indexOf("-C") + 1]).toBe(target.root);
     for (const feature of ["shell_tool", "unified_exec"]) {
-      expect(bare.argv[bare.argv.indexOf(feature) - 1]).toBe("--disable");
+      expect(bare.argv[bare.argv.indexOf(feature) - 1]).toBe("--enable");
     }
 
     const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewSchema);
-    expect(invocation.argv[invocation.argv.indexOf("-C") + 1]).toBe(viewed.repository_view_root);
+    expect(invocation.argv[invocation.argv.indexOf("-C") + 1]).toBe(viewed.review_root);
     for (const feature of ["shell_tool", "unified_exec"]) {
       expect(invocation.argv[invocation.argv.indexOf(feature) - 1]).toBe("--enable");
     }
@@ -555,7 +555,7 @@ describe("CLI output contracts and failure classification", () => {
 
   it("returns exact Codex final-output bytes and rejects missing/invalid files", () => {
     const adapter = selectCliAdapter("claude");
-    const final = bytes('{"schema_version":"1"}\n');
+    const final = bytes('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n');
     expect(Buffer.from(adapter.parseOutput(result({ final_output: final })))).toEqual(final);
     expect(projectError(() => adapter.parseOutput(result()))).toMatchObject({ code: "MODEL_OUTPUT_INVALID", diagnostic: { parameters: { issue_code: "final-output-missing" } } });
     expect(projectError(() => adapter.parseOutput(result({ final_output: bytes("bad") })))).toMatchObject({ code: "MODEL_OUTPUT_INVALID" });
@@ -695,7 +695,7 @@ describe("CLI output contracts and failure classification", () => {
     expect(inv.command).toBe("agy");
     expect(inv.argv[inv.argv.indexOf("--print-timeout") + 1]).toBe("900s");
     expect(inv.argv).toContain("-p");
-    expect(inv.argv).toContain("--input-format");
+    expect(inv.argv).not.toContain("--input-format");
     expect(inv.argv).toContain("stream-json");
     expect(inv.argv).toContain("--output-format");
     expect(inv.argv).toContain("--json-schema");
@@ -710,9 +710,8 @@ describe("CLI output contracts and failure classification", () => {
     // a workspace file. Neither can then grow past the per-element argv limit.
     const promptText = envelope.bytes.toString();
     expect(inv.argv.some((element) => element.includes(promptText))).toBe(false);
-    const lines = Buffer.from(inv.stdin ?? new Uint8Array()).toString("utf8").split("\n").filter((line) => line !== "");
-    expect(lines).toHaveLength(1);
-    expect(JSON.parse(lines[0]!)).toEqual({ event: "user", message: { role: "user", content: promptText } });
+    expect(inv.stdin).toBeUndefined();
+    expect(inv.argv[1]).toContain("@review-inputs/");
     const schemaPath = inv.argv[inv.argv.indexOf("--json-schema") + 1]!;
     expect(schemaPath.startsWith(ws.root)).toBe(true);
     expect(JSON.parse(await readFile(schemaPath, "utf8"))).toMatchObject({ type: "object" });
@@ -726,7 +725,7 @@ describe("CLI output contracts and failure classification", () => {
     const adapter = selectCliAdapter("claude", route);
     const large: DispatchEnvelope = Object.freeze({
       ...envelope,
-      bytes: bytes(JSON.stringify({ schema_version: "1", subject: {}, artifact: "x".repeat(300 * 1024) })),
+      bytes: bytes(JSON.stringify({ schema_version: "1", subject: {}, rubric: { criteria: [{ id: "correctness", text: "Check correctness", blocking: true }] }, artifact: "x".repeat(300 * 1024) })),
       byte_count: 300 * 1024 + 48,
     });
     const inv = await adapter.buildInvocation(
@@ -736,15 +735,14 @@ describe("CLI output contracts and failure classification", () => {
       reviewSchema as PlainJsonValue,
     );
     expect(inv.argv.every((element) => Buffer.byteLength(element, "utf8") < MAX_ARGV_ELEMENT_BYTES)).toBe(true);
-    expect(inv.stdin?.byteLength ?? 0).toBeGreaterThan(300 * 1024);
-    const promptText = new TextDecoder().decode(large.bytes);
-    expect(inv.argv.some((element) => element.includes(promptText))).toBe(false);
-    if (route.adapter === "antigravity-cli") {
-      const line = Buffer.from(inv.stdin!).toString("utf8").trim();
-      expect(JSON.parse(line)).toEqual({ event: "user", message: { role: "user", content: promptText } });
-    } else {
-      expect(inv.stdin).toEqual(large.bytes);
-    }
+    expect(inv.stdin).toBeUndefined();
+    const prompt = route.adapter === "antigravity-cli" ? inv.argv[1]! : inv.argv.at(-1)!;
+    expect(prompt).toContain("@review-inputs/");
+    expect(prompt).not.toContain("x".repeat(100));
+    const ref = prompt.split("\n").find(line => line.endsWith("phase-design.md"))!.slice(1);
+    const cwd = route.adapter === "codex-cli" ? inv.argv[inv.argv.indexOf("-C") + 1]! : inv.cwd;
+    expect(await readFile(join(cwd, ref), "utf8")).toBe("x".repeat(300 * 1024));
+
   });
 
   it("fails an oversized Claude-only inline schema before spawn with a named error", async () => {

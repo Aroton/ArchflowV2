@@ -157,11 +157,11 @@ if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cl
 else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const raw = Buffer.concat(chunks).toString("utf8"); const envelope = JSON.parse(raw);
+  const raw = JSON.stringify((await import(${JSON.stringify(new URL("../fixtures/dispatch/read-review-inputs.mjs", import.meta.url).href)})).readReviewFixtureInputs(argv)); const envelope = JSON.parse(raw);
   const target = argv[argv.indexOf("-C") + 1];
   writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ envelope, target,
-    entries: readdirSync(target).sort(), primary: existsSync(join(target, "primary.ts")),
-    api: existsSync(join(target, "api", "api.ts")), apiAuthority: existsSync(join(target, "api", ".archflow")) }));
+    entries: readdirSync(join(target, "repositories")).sort(), primary: existsSync(join(target, "repositories", "primary", "primary.ts")),
+    api: existsSync(join(target, "repositories", "api", "api.ts")), apiAuthority: existsSync(join(target, "repositories", "api", ".archflow")) }));
   ${options.remove === true && secondary !== undefined ? `rmSync(${JSON.stringify(secondary.path)}, { recursive: true, force: true });` : ""}
   ${options.drift === true && secondary !== undefined ? `writeFileSync(${JSON.stringify(join(secondary.path, "drift.txt"))}, "drift\\n"); execFileSync("git", ["add", "."], { cwd: ${JSON.stringify(secondary.path)} }); execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "drift"], { cwd: ${JSON.stringify(secondary.path)} });` : ""}
   const subject = envelope.subject; const assignment = envelope.assignment;
@@ -233,19 +233,20 @@ describe("multi-repository counter-review handler", () => {
     expect(observed.api).toBe(true);
     expect(observed.apiAuthority).toBe(false);
     expect(observed.envelope.workspace).toEqual({
-      kind: "read-only-multi-repository-view", note: MULTI_REPOSITORY_VIEW_NOTE,
+      note: expect.stringContaining(MULTI_REPOSITORY_VIEW_NOTE),
       repositories: [
-        expect.objectContaining({ name: "primary", path: "primary", commit: h.primary.git("rev-parse", "HEAD") }),
-        expect.objectContaining({ name: "api", path: "api", commit: h.secondary!.git("rev-parse", "HEAD") }),
+        expect.objectContaining({ name: "primary", path: "repositories/primary" }),
+        expect.objectContaining({ name: "api", path: "repositories/api" }),
       ],
     });
     const artifact = reviewManifest(h).source_artifact;
     expect(artifact.artifact_kind).toBe("review-evidence");
     if (artifact.artifact_kind !== "review-evidence") throw new Error("unexpected artifact");
     if (artifact.evidence.assurance !== "server-attested") throw new Error("unexpected assurance");
-    expect(artifact.evidence).toMatchObject({ assurance: "server-attested", repositories: observed.envelope.workspace.repositories.map((entry: any) => ({
-      name: entry.name, repository_identity_digest: entry.repository_identity_digest, commit: entry.commit,
-    })) });
+    expect(artifact.evidence).toMatchObject({ assurance: "server-attested", repositories: [
+      { name: "primary", repository_identity_digest: expect.any(String), commit: h.primary.git("rev-parse", "HEAD") },
+      { name: "api", repository_identity_digest: expect.any(String), commit: h.secondary!.git("rev-parse", "HEAD") },
+    ] });
   });
 
   it("preserves the legacy single-repository checkout binding and child cwd", async () => {
@@ -253,10 +254,10 @@ describe("multi-repository counter-review handler", () => {
     const result = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invoke("single-review"));
     expect(result).toMatchObject({ ok: true, value: { reports: expect.any(Array) } });
     const observed = capture(h);
-    expect(observed.entries).toContain("primary.ts");
+    expect(observed.entries).toContain("primary");
     expect(observed.primary).toBe(true);
     expect(observed.envelope.workspace).toEqual({
-      kind: "read-only-repository-checkout", commit: h.primary.git("rev-parse", "HEAD"), note: REPOSITORY_VIEW_NOTE,
+      note: expect.stringContaining(REPOSITORY_VIEW_NOTE), repositories: [],
     });
     const artifact = reviewManifest(h).source_artifact;
     if (artifact.artifact_kind !== "review-evidence") throw new Error("unexpected artifact");

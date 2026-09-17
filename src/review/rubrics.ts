@@ -1,3 +1,4 @@
+import { loadReviewInputConfiguration } from "./inputs.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -22,11 +23,6 @@ export type CanonicalRubric = Readonly<{
   rubric: RubricV1;
 }>;
 
-const TEST_CRITERIA: Readonly<Partial<Record<CounterReviewPhaseKind, readonly string[]>>> = Object.freeze({
-  "phase-design": Object.freeze(["test-strategy"]),
-  "phase-impl": Object.freeze(["verification-evidence", "test-quality"]),
-});
-
 export function reviewCriterionIds(
   phaseKind: CounterReviewPhaseKind,
   rubric: RubricV1,
@@ -34,7 +30,7 @@ export function reviewCriterionIds(
   _specialistActive?: boolean,
 ): readonly string[] {
   const all = rubric.criteria.map((criterion) => criterion.id);
-  const tests = TEST_CRITERIA[phaseKind] ?? [];
+  const tests = loadReviewInputConfiguration().phases[phaseKind].rubric.test_criteria;
   if (focus === "tests") return Object.freeze(all.filter((criterion) => tests.includes(criterion)));
   // Scope is a property of the phase and rubric, never of route availability. Otherwise an
   // unavailable specialist silently widens the general review and changes the same assignment's
@@ -84,16 +80,6 @@ export function reviewAssignment(
       }))) }),
   });
 }
-
-const PHASE_KIND_RUBRIC_FILES: Readonly<Record<CounterReviewPhaseKind, Readonly<{
-  file: string;
-  rubric_id: CanonicalRubricId;
-}>>> = Object.freeze({
-  prd: Object.freeze({ file: "rubrics/prd.yaml", rubric_id: "prd-v1" }),
-  design: Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v3" }),
-  "phase-design": Object.freeze({ file: "rubrics/design.yaml", rubric_id: "design-v3" }),
-  "phase-impl": Object.freeze({ file: "rubrics/implementation.yaml", rubric_id: "implementation-v1" }),
-});
 
 function canonicalRubric(rubricId: CanonicalRubricId, rubric: RubricV1): CanonicalRubric {
   const frozen = Object.freeze({
@@ -172,7 +158,7 @@ export async function loadRubricFile(input: Readonly<{
 export async function loadCanonicalRubricForPhaseKind(
   phaseKind: CounterReviewPhaseKind,
 ): Promise<ProjectResult<CanonicalRubric>> {
-  const expected = PHASE_KIND_RUBRIC_FILES[phaseKind];
+  const expected = loadReviewInputConfiguration().phases[phaseKind].rubric;
   let root: string;
   try {
     root = await assetRoot();
@@ -181,5 +167,5 @@ export async function loadCanonicalRubricForPhaseKind(
       `assets/rubrics: installed ArchFlow assets are missing (${error instanceof Error ? error.message : "unknown error"})`,
     ]);
   }
-  return loadRubricFile({ root, file: expected.file, expected_id: expected.rubric_id });
+  return loadRubricFile({ root, file: expected.file, expected_id: expected.id });
 }

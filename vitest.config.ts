@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { availableParallelism, cpus } from "node:os";
 import { defineConfig } from "vitest/config";
 
@@ -5,6 +6,16 @@ import { defineConfig } from "vitest/config";
 const responsiveCoreCount = Math.max(1, (typeof availableParallelism === "function" ? availableParallelism() : cpus().length) - 2);
 
 export default defineConfig({
+  plugins: [{
+    name: "bundled-review-yaml",
+    enforce: "pre",
+    load(id) {
+      if (/[/\\]assets[/\\]review-(inputs|documents)\.yaml$/u.test(id)) {
+        return `export default ${JSON.stringify(readFileSync(id, "utf8"))};`;
+      }
+      return undefined;
+    },
+  }],
   esbuild: {
     sourcemap: false,
     target: "node24"

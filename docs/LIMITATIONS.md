@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `skills/archflow-simple/`, `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `skills/archflow-simple/`, `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 Review V5 deliberately does not prove that every reported concern was addressed. The working AI interprets reports and may finish with explained disagreement. Server-attested provenance identifies who reviewed which subject; it does not attest correctness. Partial and previous-version reports are not current completed review authority.
 
@@ -52,9 +52,9 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Child repository reads
 
-**Not protected:** A dispatched Claude or Codex process is not prevented by the operating system from locating and reading the repository. Running it from a temporary directory outside the repository and omitting repository content from the review envelope do not revoke the child process's filesystem permissions. Every configured repository is copied into a named, commit-pinned review snapshot with secondary `.archflow/` content removed, and changed writable members are reconstructed at their retained proposed trees; this improves relevance and keeps task state out of the intended view, but it remains best-effort context hygiene, and the child may still read outside its cwd.
+**Not protected:** A dispatched Claude or Codex process is not prevented by the operating system from locating and reading the repository. Running it from a temporary directory outside the repository and omitting repository content from the server-side review binding do not revoke the child process's filesystem permissions. Every configured repository is copied into a named, commit-pinned review snapshot with secondary `.archflow/` content removed, and changed writable members are reconstructed at their retained proposed trees; this improves relevance and keeps task state out of the intended view, but it remains best-effort context hygiene, and the child may still read outside its cwd.
 
-**Existing mitigation:** Dispatch uses a non-repository temporary working directory, an explicit environment allowlist, and CLI flags intended to suppress project instructions, user configuration, skills, and tools. Authentication remains in the caller's canonical CLI home and is not treated as an instruction-isolation mechanism. The envelope is versioned, size-bounded, hashed, and structurally limited to the declared review inputs. Planted-canary scans detect values that reach child output or persisted diagnostics, including a leaking negative control that proves the scanner works.
+**Existing mitigation:** Dispatch uses a non-repository temporary working directory, an explicit environment allowlist, and CLI flags intended to suppress project instructions, user configuration, skills, and tools. Authentication remains in the caller's canonical CLI home and is not treated as an instruction-isolation mechanism. The server hashes a versioned binding of declared inputs, bundled configuration, and the rendered prompt/file manifest. Only the instruction/reference prompt is size-bounded; referenced evidence files remain complete. Planted-canary scans detect values that reach child output or persisted diagnostics, including a leaking negative control that proves the scanner works.
 
 **Why accepted:** ArchFlow is currently operated by a developer on their own trusted workstation, and the immediate goal is independent review context rather than hostile-code confinement. The product therefore treats repository non-discovery as best-effort hygiene and does not claim that repository canaries are unreadable.
 
@@ -76,7 +76,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Codex tool-surface control
 
-**Not protected:** Repository-backed Codex reviews intentionally expose shell execution so reviewers can read source and patches. ArchFlow cannot prove that an envelope-only Codex process has an empty model-visible tool surface. Codex has no disable-all-tools flag or command that reports the effective `tools[]` for an invocation; its prompt-input debugger shows messages only. The current suppression list is a denylist against a tool and feature registry that can change between CLI versions, and `-s read-only` constrains generated shell commands rather than the Codex parent process's read access.
+**Not protected:** Repository-backed Codex reviews intentionally expose shell execution so reviewers can read source and patches. All file-based Codex reviews need text readers; ArchFlow does not claim an empty model-visible tool surface. Codex has no disable-all-tools flag or command that reports the effective `tools[]` for an invocation; its prompt-input debugger shows messages only. The current suppression list is a denylist against a tool and feature registry that can change between CLI versions, and `-s read-only` constrains generated shell commands rather than the Codex parent process's read access.
 
 **Existing mitigation:** ArchFlow requires a minimum tested CLI version, uses strict configuration, disables unrelated features and enables shell execution only for repository-backed reads under the read-only sandbox, supplies the canonical `CODEX_HOME` for authentication, ignores user configuration and rules, disables project instructions and skill content, skips repository discovery, and requests read-only command behavior. The exact invocation is covered by fixtures, and model output must satisfy the strict result schema before it can become evidence.
 
@@ -226,7 +226,7 @@ These limitations assume a trusted developer account and a filesystem not being 
 
 ## Legacy adjudication evidence fails the round binding closed
 
-**Not provided:** Adjudication evidence from tasks created before the constitution subject bound the review envelope's digest (previously the retained review set's digest) does not parse or stay current under the new strict checks. There is no shim, translation, or dual read.
+**Not provided:** Adjudication evidence from tasks created before the constitution subject bound the server-side review binding's digest (previously the retained review set's digest) does not parse or stay current under the new strict checks. There is no shim, translation, or dual read.
 
 **Existing mitigation:** The fixed point treats an unreadable or non-current constitution slot like any other stale slot: the next action is a fresh review round, whose new adjudication carries the new binding. Retained review evidence is unaffected — its `envelope_input_digest` predates and outlives this change.
 
@@ -274,3 +274,7 @@ The first version supports one connected Git repository with an existing HEAD, r
 ## Dispatch usage accounting
 
 Installed bundles keep private, best-effort per-dispatch records beside `bundle/` in `<ARCHFLOW_HOME>/usage/`. The central log survives task cleanup and reinstall, but deletes records older than seven days on the next dispatch; there is no idle background cleanup. It contains numeric usage and dispatch identity/status, not transcripts. Claude token/cost values are CLI-reported estimates; missing measurements, including interrupted calls without a terminal wrapper or adapters without token extraction, remain unknown. A successful dispatch record does not itself establish completed review or approval. Source runs do not automatically write shared-installation state.
+
+## File references are not universal immediate inclusion
+
+The tested Claude safe-mode print invocation preloaded small direct references, did not recursively expand a reference inside an ordinary document, and omitted a roughly 404 KB file. Codex exec and Antigravity print required model tool reads. ArchFlow supplies complete files with usage guidance and explicit read instructions, but does not claim the CLI or model consumed every byte immediately. Nearby-instruction suppression is adapter-specific, and Antigravity retains host context. Preview separates exactly supplied inputs from those CLI behaviors; see the recorded file-reference probes.

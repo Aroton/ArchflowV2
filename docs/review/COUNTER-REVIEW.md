@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review supplies independent feedback to the working AI. The initial review runs the configured general and test reviewers, alongside separate constitution review when rules are active. Reviewers return concise feedback with an explicit outcome; the working AI interprets them, makes worthwhile revisions, and selects previous reviewers to verify the changes. Useful feedback and economical follow-up matter more than agreement on every suggestion.
 
@@ -23,35 +23,44 @@ Successful sibling feedback remains visible as `partial_review_reports` after a 
 Gemini's CLI can retain an earlier capacity error in its terminal wrapper after a completed native finish. The [dispatch adapter](../mcp/DISPATCH.md#completed-gemini-output-after-a-temporary-service-error) accepts only the narrowly proven recovered case and forwards the final structured bytes through normal validation. This does not grant review authority to partial responses or conversation history, and does not relax constitution slot coverage or human gates.
 
 
-## The dispatch envelope
+## Review recipes and readable inputs
 
-The control envelope is a single JSON document — serialized, hashed, and byte-capped at 1 MiB. It arrives on stdin with nothing prepended. Source bytes are not transported through that JSON: the server separately materializes the configured repository set as sealed, read-only snapshots. One repository preserves the historical `repo` cwd and binding arm; multiple repositories appear beneath `repos/<name>`, and citations use `<name>/<path>`. The envelope declares and binds every snapshot.
+Two build-owned files describe what a reviewer receives. They are bundled into the executable; neither is a project or task override:
 
-```mermaid
-flowchart TB
-    subgraph ENV["Sealed envelope (≤ 1 MiB, digested)"]
-        A["artifact<br/>document bytes, or compact<br/>implementation metadata"]
-        R["rubric<br/>{id, text, blocking} triples"]
-        C["context — pinned evidence:<br/>user-ask · approved-upstream ·<br/>verification-transcript · prior-triage"]
-        S["subject — the binding:<br/>task, phase, attempt, digests,<br/>fingerprint, producer family"]
-        W["workspace (optional)<br/>baseline checkout or sealed<br/>post-change snapshot"]
-    end
-    ENV -->|stdin| Child["Reviewer CLI<br/>+ sealed read-only repository view"]
-    Child -->|readable report| Server
-    Server -->|reports and provenance| Producer[Working AI]
+- `assets/review-documents.yaml` names the **primary review subject** and the approved governing documents for PRD, Design, Phase Design, and Phase Impl. Each governing document explains how to use it. The submitted PRD itself is the primary PRD-review subject; a diff never substitutes for that document.
+- `assets/review-inputs.yaml` selects the rubric file, assigns test-owned criteria, and lists instructions and named inputs separately for each reviewer and initial/follow-up mode. It also supplies the usage guidance printed beside every file reference.
+
+General and test reviewers receive `rubric.md`, with the source rubric and only their assigned criteria. Preparation refuses a missing rubric or a recipe that omits its reference/use instruction. Constitution reviewers receive pinned rule text, required result slots, and triggers; effort reviewers receive difficulty instructions. Neither inherits another reviewer's responsibility when a route is unavailable.
+
+The reviewer prompt is ordinary Markdown: it identifies the primary subject, explains the review assignment, and introduces each referenced file with its purpose and how to use it. Supplied files are the entire base context, read as fully as practical before investigation. Additional independent reads can be batched. The server retains the canonical binding of authority, configuration, rendered prompt, filenames, sizes, hashes, and originating versions; this JSON binding is not sent to the CLI. Structured results still pass the existing schema and provenance checks.
+
+```text
+review/                         # reviewer working directory
+├── review-inputs/
+│   ├── general/                # general-1/general-2 when there are multiple
+│   │   ├── prd.md              # complete primary subject for PRD review
+│   │   ├── ask.md
+│   │   ├── rubric.md
+│   │   └── changes.patch
+│   └── constitution/
+└── repositories/
+    ├── primary/                # .git and task state excluded
+    └── <secondary>/            # all secondary .archflow state excluded
 ```
 
-The shape is closed: validation rejects unknown keys, so producer-authored history and instructions cannot enter the request. Server-owned instructions define how to apply the rubric. Document review traces the reviewed artifact and its commitments. Implementation review is narrower: inspect declared outputs and their current post-change behavior, using unchanged files only to verify dependencies, interfaces, and consequences. It is not a general code review. The subject names the durable attempt, and the envelope digest makes the input reproducible as bytes without claiming deterministic model judgment.
+References such as `@review-inputs/general/prd.md` resolve below the reviewer cwd. Control files and child outputs remain outside `review/`. Inputs are materialized from authenticated retained/approved bytes, separately from repository snapshots, and verified before launch. Live files never substitute for unavailable historical evidence. Reviewer-specific directory names keep concurrent assignments separate.
+
+`archflow-local review-preview --task <task> --producer <claude|codex|antigravity>` shares the live preparation and rendering path. It prints the exact prompt, files, sizes, originating versions, selected route, and CLI-loading caveats without invoking a model or advancing state. Use `--reviewer <id>` to select one reviewer or `--format json` for structured output. Readable examples for every phase, reviewer, and round mode are maintained under `test/fixtures/review-prompts/`.
 
 ## Diffs and initial review material
 
-Reviewers receive the current artifact, governing documents, prior feedback, changed-file statistics, and a complete patch together. The server includes complete UTF-8 patches and statistics up to 128 KiB each directly in the prompt, so the reviewer can start reasoning without a discovery turn. The same read-only files remain available beside the repository snapshot. Larger or non-UTF-8 patches are supplied through file references; reviewers read large patches in sections without silent truncation. If inline text would exceed the 1 MiB envelope cap, it falls back to those complete files before any optional evidence is dropped. File paths, byte counts, content digests, and subject identities are bound into the envelope, and inline bytes must match those identities.
+Full files are always available. The CLI receives bounded instructions and explicit references on argv, with empty stdin. The 16 KiB prompt limit bounds instructions and references, not document or patch size; exceeding it fails explicitly. The old JSON-envelope cap, inline diff copies, and context-dropping/excerpt logic are removed.
 
-Implementation patches compare authenticated retained outputs with their Git baselines. Text changes, deletions, renames, modes, and symlinks use ordinary Git presentation; binary files have change markers. All `.archflow/` paths are excluded. Document patches compare only the current task's reviewed documents, including co-produced governing documents, against their pinned Git versions. The complete current documents remain in the prompt even when that initial patch is empty because the documents were already committed.
+Claude's tested noninteractive safe-mode invocation expands direct small-file references before model tool calls, but did not expand a nested reference and omitted a roughly 404 KB file in a narrow probe. Codex exec and Antigravity print left references as text and required tool reads. The prompt therefore tells each reviewer to read any referenced content the CLI has not already included. Do not equate a supplied reference with guaranteed immediate inclusion. See [the recorded probes](../validation/review-file-reference-probes.md).
 
-A follow-up gets a patch from that reviewer's last reviewed subject to the current subject, for both documents and implementations. Reviewers that skip rounds keep their own baseline. Only the revision patch is preloaded on follow-up; the full patch remains accessible as a file. Missing historical material, or a changed document set that cannot be compared completely, produces an explicit fallback to the full patch and current artifact. Comparisons use authenticated retained bytes, never live historical files. No session persistence is needed.
+Implementation patches compare authenticated retained outputs with pinned Git baselines and exclude `.archflow/`. Document patches cover only this task's reviewed documents, including co-produced governing documents. All complete current documents remain supplied even when an initial patch is empty. File statistics help navigation; they do not replace the patch or the subject.
 
-Prompts no longer preload source-file excerpts, generated repository listings, or conventions files. Those remain available in the pinned codebase for inspection as needed. The reviewer considers the supplied documents and diff together, batches independent reads and searches in the same turn, and follows code, callers, and tests where a concrete concern needs more evidence. This reduces repeated discovery without imposing a read quota or guaranteeing a particular turn count.
+Follow-up general/test reviews receive previous feedback, the working agent's verification request, and a revision patch from that reviewer's own last reviewed subject. A reviewer that skipped rounds keeps its own baseline. The full patch also remains available on disk; on follow-ups it is listed without an @ reference, avoiding duplicate native preloading. A chain of intermediate patches is not supplied. Missing history or an uncomparable historical document set is explained explicitly; no current live file is passed off as the old version. Constitution and effort reviews continue their full current-subject assessment under the existing scheduling rules.
 
 ## Feedback and verification
 
@@ -79,37 +88,30 @@ A validation override is deliberately outside this evidence loop. It is requeste
 
 ## Pinned context: evidence, not narrative
 
-"Pinning" means the **server itself** reads the evidence bytes from an immutable, authenticated source and records their SHA-256 — never the model, never a summary. Each context entry declares its status so no gap is silent:
+Primary documents, approved governing documents, and imported references come from the exact authenticated versions selected by the existing task authority loaders. The user ask is checked against its declared digest. Co-produced governing documents are proposed review subjects; their original human-approved baselines, where available, are separate comparison evidence. Another task's state is never a context source.
 
-- `pinned` — full bytes plus digest.
-- `truncated` — a bounded excerpt plus the full-file digest and byte count.
-- `unavailable` — a named gap the server could not fill.
-- `omitted-cap` — dropped to fit the byte cap; digest retained.
+Current pinned inputs are complete or explicitly unavailable. Historical `truncated` and `omitted-cap` records remain recognizable as evidence gaps, but fresh preparation neither generates excerpts nor drops files to meet a prompt budget. Prior feedback is filtered to the assigned reviewer and binds its producing evidence; skipped-round revision baselines remain reviewer-specific.
 
-The policy split is the key idea: absence that **contradicts durable authority** (the PRD's declared ask drifted; an upstream lost its approval; bytes don't match the retained projection or parent-document binding) **fails closed** — no review happens. Document reviews authenticate their selected file against the retained result projection. A task-design review additionally authenticates the `prd.md` projection in that result; a phase-design review authenticates both `design.md` and `prd.md`. The reviewer and later approval therefore judge the complete document set rather than a primary file beside unbound parent edits. Implementation reviews authenticate `impl-notes.md` against the retained implementation output's parent-document digest, while declared changed files come from that result's retained projection plan. When implementation also changes the PRD, task design, phase design, or log, those task paths are retained outputs and their exact current bytes become `co_produced_documents` in the authenticated implementation review subject; both review children see them, while unchanged upstreams remain separately pinned to their approved owner. If that approved owner is a compound planning result, its other projections are still authenticated together except for paths the implementation now co-produces: the current implementation owns those bytes, so a surviving sibling binding cannot reintroduce the owner's superseded projection. Other missing context becomes a named `unavailable` entry. A fresh V5 reviewer explains consequential uncertainty in its report, and the working AI decides whether additional evidence is needed; it does not manufacture a finding ID or mandatory rejection rationale. Repair recurring context gaps in envelope assembly or repository access.
+Implementation notes retain their normal produced-document authority. The optional workspace verification transcript is different: it is agent-written supporting evidence captured in full at review preparation, with its bytes and digest bound to that review. Human-granted validation overrides disclose checks that were **not run**, never passing evidence. Missing logs remain explicit supporting-context gaps.
 
-When the cap is hit, inline diffs first fall back to complete files. Droppable context is then replaced lowest-priority-first (legacy `repo-map`, `conventions`, and `interface-excerpt` entries, then optional verification-log content); fresh workflow reviews no longer generate the first three. A dropped log keeps its digest and, for an excerpt, original byte count as metadata. The user ask, approved upstreams, and latest accepted remediation intents are never droppable; if they do not fit, review fails closed.
-
-For implementation subjects, `impl-notes.md` carries the concise verification record: commands, exit statuses, outcomes, relevant failures and reruns, and unverified coverage. An optional raw log lives at ignored `.archflow/runtime/tasks/<task>/cache/phases/<n>/verification.txt`. Review pins its current bytes independently of implementation authority. Logs up to 24 KiB appear whole; larger logs contribute up to 12 KiB from each end plus an explicit omission marker, the full-log SHA-256 digest, and original byte count. These excerpts preserve final output without making raw log volume an envelope blocker. Omitted output is not proof of success; reviewers assess the notes, supplied evidence, code, and tests. A missing log is visible supporting-context absence, not invalid implementation authority. The log path labels local evidence; it does not promise reviewer access to the producer's runtime directory.
-
-While review is pending, the producer can compact or replace the optional log and retry the offered `review`. Each dispatch preparation reads it afresh and pins a new envelope; retained child outputs are reusable only against the same envelope binding. There is no separate repin operation or new implementation result. This also recovers older results carrying `verification_evidence`: that field remains readable as historical metadata but no longer constrains the live cache. Finished reviews and approvals retain their original evidence binding; changing a log cannot replace them. Changes to code or verification claims in implementation notes still require normal revision. Do not change logs during a running dispatch: that dispatch continues to concern the bytes it captured.
+While review is pending, a producer may replace the optional transcript and retry the offered review. The new captured bytes change the review binding, preventing reuse of results from the old transcript. This does not replace implementation authority, finished reviews, or approvals. Code and implementation-note changes still require normal revision.
 
 ## The sealed implementation snapshot
 
-An implementation envelope carries the compact `ImplementationOutputV1`: baseline commit, declared operations and paths, snapshot and diff identities, verification binding, and undeclared-change report. It does not preload whole source files. Small complete diffs can be included up front, with file fallback at the envelope cap, so source size cannot by itself exhaust the 1 MiB control-envelope budget.
+The server binds the complete `ImplementationOutputV1` internally. Reviewers receive a readable declared-output summary, implementation notes, proposed governing documents, full patches, and approved context files; repository source stays in the sealed snapshot.
 
-Before either child runs, `workspace.ts` archives every plan member at its exact commit. Primary snapshots remove `.archflow/tasks`; secondaries remove `.archflow` entirely. For an implementation, it applies every authenticated retained primary after-image, deletion, rename endpoint, symlink, and executable mode. A secondary without an authenticated implementation section stays commit-only context at observed HEAD, even if configured `writable`. The child starts in these snapshots and navigates with read-only tools.
+Before either child runs, `workspace.ts` archives every plan member at its exact commit. Primary snapshots remove `.archflow/tasks`; secondaries remove `.archflow` entirely. For an implementation, it applies every authenticated retained primary after-image, deletion, rename endpoint, symlink, and executable mode. A secondary without an authenticated implementation section stays commit-only context at observed HEAD, even if configured `writable`. The child starts in the review sandbox and navigates snapshots under `repositories/` with the adapter’s existing tools.
 
 The snapshot is evidence, not the subject. Declared outputs, co-produced documents, and their current behavior define implementation-review scope. Unchanged files may be inspected only to trace a changed output's dependencies, interfaces, and effects; unchanged writable members and context-only repositories remain context. A finding is valid only when it identifies a material defect introduced, exposed, or worsened by the current implementation change.
 
 The workspace declaration binds the baseline and declared snapshot digest; the review subject already binds the complete retained implementation artifact. Materialization omits retained `.archflow/tasks` projections just as it removes those paths from the baseline, while rejecting path escape, symlink-parent traversal, and file/directory collisions. This matters for implementation results that also retain their tracked implementation log: the log remains authenticated workflow evidence but is not repository source exposed to the child. The temporary archive has no `.git`, so removed task blobs and unrelated worktree edits are unreachable.
 
-The 1 MiB cap remains a control-plane safeguard. An overflow now means compact declarations, co-produced governing documents, or mandatory pinned context are themselves excessive; it is not evidence that ordinary source files are too large. A phase split is a product/design judgment about review scope, not an automatic response to source transport size.
+Review scope is a product/design judgment. Large evidence files remain complete and readable; only the instruction/reference prompt is bounded.
 
 ## The flow, end to end
 
 1. Record the produced work and verification evidence. Its identity becomes the reviewed subject.
-2. Assemble the bounded context and read-only repository snapshots from durable authority.
+2. Assemble complete referenced context and read-only repository snapshots from durable authority.
 3. Dispatch the configured roster initially, or the working AI’s selected previous reviewers for verification. Run required constitution and effort work alongside them.
 4. Retain extracted feedback before constructing server-owned report evidence. After the group settles, expose successful reports even when a sibling failed; retries reuse successful outputs for unchanged inputs.
 5. Recheck subject currency and atomically record the complete report and constitution result set. Reports do not themselves mean the work passed.

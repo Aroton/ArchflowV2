@@ -172,7 +172,7 @@ describe("dispatch workspace", () => {
     const base = await createDispatchWorkspace("codex-cli", repository);
     const workspace = await materializeRepositoryViews(base, primaryPlan(repository, commit));
     const view = workspace.repository_view_root!;
-    expect(view).toBe(join(workspace.root, "repo"));
+    expect(view).toBe(join(workspace.root, "review", "repositories", "primary"));
     await expect(readFile(join(view, "src", "index.ts"), "utf8")).resolves.toBe("export {};\n");
     await expect(readFile(join(view, ".archflow", "context", "map.md"), "utf8")).resolves.toBe("# context\n");
     await expect(lstat(join(view, ".git"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -255,7 +255,7 @@ describe("dispatch workspace", () => {
       plan,
     );
 
-    expect(workspace.repository_view_root).toBe(join(workspace.root, "repos"));
+    expect(workspace.repository_view_root).toBe(join(workspace.root, "review", "repositories"));
     await expect(readFile(join(workspace.repository_view_root!, "primary", "tracked.txt"), "utf8")).resolves.toBe("primary\n");
     await expect(lstat(join(workspace.repository_view_root!, "primary", ".archflow", "constitution"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(join(workspace.repository_view_root!, "primary", ".archflow", "tasks"))).rejects.toMatchObject({ code: "ENOENT" });

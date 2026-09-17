@@ -1,3 +1,4 @@
+import { previewReview } from "../../src/local/review-preview.js";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 
@@ -274,7 +275,7 @@ else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logg
 else {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
-  const raw = Buffer.concat(chunks).toString("utf8");
+  const raw = JSON.stringify((await import(${JSON.stringify(new URL("../fixtures/dispatch/read-review-inputs.mjs", import.meta.url).href)})).readReviewFixtureInputs(argv));
   await writeFile(${JSON.stringify(envelopePath)}, raw);
   const envelope = JSON.parse(raw);
   const subject = envelope.subject;
@@ -332,6 +333,7 @@ else {
 }
 
 function capturedEnvelope(path: string): {
+  prompt: string;
   context: readonly Record<string, unknown>[];
   workspace?: Record<string, unknown>;
   subject?: Record<string, unknown>;
@@ -371,6 +373,20 @@ describe("counter-review pinned context integration", () => {
     if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;
   });
 
+  it("previews the exact dispatched prompt without models or task-state mutation", async () => {
+    const h = await fixture({ phase: "prd", declareAsk: true });
+    const statePath = join(h.repository.path, ".archflow", "tasks", TASK, "state.json");
+    const before = readFileSync(statePath);
+    const preview = await previewReview({ working_directory: h.repository.path, task_id: TASK, producer: "claude" }) as { ok: boolean; value: { reviews: { prompt: string; files: { name: string; byte_count: number; source_version: string }[] }[] } };
+    expect(preview.ok, JSON.stringify(preview)).toBe(true);
+    expect(readFileSync(statePath)).toEqual(before);
+    expect(preview.value.reviews[0]!.files.find(file => file.name === "ask.md")?.byte_count).toBe(ASK_BYTES.byteLength);
+    activateFixtureCli(h);
+    const actual = await handleCounterReview(parseToolCall("archflow_counter_review", h.args), h.invocation("preview-dispatch"));
+    expect(actual.ok, JSON.stringify(actual)).toBe(true);
+    expect(capturedEnvelope(h.envelopePath).prompt).toBe(preview.value.reviews[0]!.prompt);
+  });
+
   it("pins the declared verbatim ask into the PRD review envelope", async () => {
     const h = await fixture({ phase: "prd", declareAsk: true });
     activateFixtureCli(h);
@@ -393,13 +409,10 @@ describe("counter-review pinned context integration", () => {
       encoding: "utf8",
       content: new TextDecoder().decode(ASK_BYTES),
     }]);
-    expect(envelope.workspace).toEqual({
-      kind: "read-only-repository-checkout",
-      commit: h.repository.git("rev-parse", "HEAD"),
-      note: REPOSITORY_VIEW_NOTE,
-    });
+    expect(envelope.workspace?.note).toContain(REPOSITORY_VIEW_NOTE);
     // The server stamped the durable attempt counter into the child-visible subject.
-    expect(envelope.subject).toMatchObject({ attempt: 1 });
+    expect(envelope.prompt).toContain("Review prd.md as the primary subject");
+    expect(envelope.prompt).not.toContain("subject_digest");
   });
 
   it("reviews against pinned policy when the task branch commits a constitution edit", async () => {
@@ -426,10 +439,7 @@ Future tasks should use this revised policy.
         constitution: { status: "not-run", reason: "no-active-constitution-rules" },
       },
     });
-    expect(capturedEnvelope(h.envelopePath).workspace).toMatchObject({
-      kind: "read-only-repository-checkout",
-      commit: h.repository.git("rev-parse", "HEAD"),
-    });
+    expect(capturedEnvelope(h.envelopePath).workspace?.note).toContain(REPOSITORY_VIEW_NOTE);
   });
 
   it("routes the reviewer checkout to the implementation base commit, not HEAD", async () => {
@@ -476,10 +486,7 @@ Future tasks should use this revised policy.
     expect(evidence.reports).toHaveLength(1);
     expect(evidence).not.toHaveProperty("upstream_alignment");
     const envelope = capturedEnvelope(h.envelopePath);
-    expect(envelope.workspace).toMatchObject({
-      kind: "read-only-repository-checkout",
-      commit: h.repository.git("rev-parse", "HEAD"),
-    });
+    expect(envelope.workspace?.note).toContain(REPOSITORY_VIEW_NOTE);
     const context = envelope.context;
     expect(context.map((entry) => [entry.kind, entry.label, entry.status])).toEqual([
       ["approved-upstream", "prd.md", "pinned"],

@@ -43,7 +43,7 @@ async function fixture(changes: Record<string, ProjectionDesired>, before: Recor
     state: { task_id: "diff-test", phase_instance: "phase-impl-1", authoritative_results: [] } as never,
     dependencies: {}, signal: new AbortController().signal,
   };
-  const read = (path: string) => readFile(join(workspace.repository_view_root!, path), "utf8");
+  const read = (path: string) => readFile(join(workspace.root, path), "utf8");
   return { input, read, repository, commit, projection };
 }
 
@@ -73,8 +73,8 @@ describe("implementation review diff files", () => {
     expect(patch).not.toMatch(/PRIVATE|\.archflow|unreviewed live drift|unrelated.txt/);
     expect(result.full.patch.byte_count).toBe(Buffer.byteLength(patch));
     expect(result.full.patch.content_digest).toBe(sha256Bytes(bytes(patch)));
-    expect(result.full.patch.content).toBe(patch);
-    expect((await lstat(join(h.input.workspace.repository_view_root!, result.full.patch.path))).mode & 0o222).toBe(0);
+    expect(result.full.patch).not.toHaveProperty("content");
+    expect((await lstat(join(h.input.workspace.root, result.full.patch.path))).mode & 0o222).toBe(0);
   });
 
   it.each<DispatchRoute>([
@@ -95,7 +95,7 @@ describe("implementation review diff files", () => {
         subject_digest: h.input.subject.artifact_digest, input_fingerprint: digest("input"), rubric_digest: digest("rubric"),
         producer_family: "claude", invocation_id: "invocation-1", result_id: "result-1" },
     } as never);
-    expect(envelope.byte_count).toBeLessThan(10_000);
+    // Server-side binding size is not a transport limit; only the rendered argv prompt is bounded.
     expect(new TextDecoder().decode(envelope.bytes)).not.toContain("FINAL PATCH LINE");
 
     // The coordinator puts per-child output files below children/<attempt>, while the
@@ -105,27 +105,27 @@ describe("implementation review diff files", () => {
     const invocation = await selectCliAdapter("codex", route).buildInvocation(
       envelope, route, { ...h.input.workspace, root: childRootForOutputs }, reviewSchema,
     );
-    const stdin = new TextDecoder().decode(invocation.stdin);
-    const delivered = JSON.parse(route.adapter === "antigravity-cli" ? JSON.parse(stdin).message.content : stdin);
-    expect(delivered.diffs).toEqual({ full: result.full });
-    expect(delivered.instructions.changes).toContain("complete patch");
+    expect(invocation.stdin).toBeUndefined();
+    const prompt = route.adapter === "antigravity-cli" ? invocation.argv[1]! : invocation.argv.at(-1)!;
+    expect(Buffer.byteLength(prompt)).toBeLessThanOrEqual(16 * 1024);
     const childRoot = route.adapter === "codex-cli"
       ? invocation.argv[invocation.argv.indexOf("-C") + 1]!
       : invocation.cwd;
-    expect(childRoot).toBe(h.input.workspace.repository_view_root);
+    expect(childRoot).toBe(h.input.workspace.review_root);
     // Resolve only paths actually delivered to the child, from its actual working directory.
     // A valid descriptor in a parent envelope is insufficient if the child cannot locate it.
     for (const kind of ["patch", "stat"] as const) {
-      const descriptor = delivered.diffs.full[kind];
-      const content = await readFile(join(childRoot, descriptor.path));
+      const descriptor = result.full[kind];
+      const path = prompt.split("\n").find(line => line.endsWith(`changes.${kind}`))!.slice(1);
+      const content = await readFile(join(childRoot, path));
       expect(content.byteLength).toBe(descriptor.byte_count);
       expect(sha256Bytes(content)).toBe(descriptor.content_digest);
       expect(content.toString()).toContain(kind === "patch" ? "+FINAL PATCH LINE\n" : "large.txt");
     }
-    expect(await readFile(join(childRoot, "large.txt"), "utf8")).toBe(text);
+    expect(await readFile(join(childRoot, "repositories", "primary", "large.txt"), "utf8")).toBe(text);
     if (route.adapter === "claude-cli") {
       expect(invocation.argv[invocation.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
-      expect(invocation.argv[invocation.argv.indexOf("--add-dir") + 1]).toBe(join(h.input.workspace.root, "review-diffs"));
+      expect(invocation.argv[invocation.argv.indexOf("--add-dir") + 1]).toContain(join(h.input.workspace.review_root!, "review-inputs"));
       if (route.provider !== undefined) expect(invocation.command).toBe("cc-switch");
     }
     if (route.adapter === "codex-cli") {
@@ -139,7 +139,7 @@ describe("implementation review diff files", () => {
   it("keeps non-UTF-8 patch bytes in the complete file instead of injecting replacement characters", async () => {
     const h = await fixture({ "legacy.txt": { ...present(""), bytes: new Uint8Array([0xff, 10]) } as ProjectionDesired });
     const output = await prepareReviewDiffs(h.input);
-    const patch = await readFile(join(h.input.workspace.repository_view_root!, output.full.patch.path));
+    const patch = await readFile(join(h.input.workspace.root, output.full.patch.path));
     expect(patch.includes(0xff)).toBe(true);
     expect(output.full.patch).not.toHaveProperty("content");
     expect(output.full.patch.content_digest).toBe(sha256Bytes(patch));
@@ -193,12 +193,12 @@ describe("implementation review diff files", () => {
     workspaces.push(workspace);
     const output = await prepareReviewDiffs({ ...h.input, workspace, repositories,
       runners: new Map([...h.input.runners, ["api", discovered.value]]) });
-    const patch = await readFile(join(workspace.repository_view_root!, output.full.patch.path), "utf8");
+    const patch = await readFile(join(workspace.root, output.full.patch.path), "utf8");
     expect(patch).toContain("b/primary/same.ts");
     expect(patch).toContain("b/api/same.ts");
     expect(patch).toContain("-secondary baseline\n+secondary change");
     expect(patch).not.toMatch(/OTHER TASK|\.archflow/);
-    expect(output.full.patch.path).toBe("../review-diffs/full.patch");
+    expect(output.full.patch.path).toBe("review-diffs/full.patch");
   });
 
   it("reports a full-diff preparation failure without returning partial descriptors", async () => {
@@ -255,13 +255,13 @@ describe("document review diffs", () => {
       },
     });
     expect(output.full.kind).toBe("document");
-    expect(output.full.patch.content).toContain("-committed design\n+current design");
+    expect(await h.read(output.full.patch.path)).toContain("-committed design\n+current design");
     for (const [reviewer, previous] of [["general", "first"], ["test", "second"]]) {
       const diff = output.reviewers.get(reviewer!)!.revision!;
-      expect(diff.patch.content).toContain(`-${previous} design\n+current design`);
-      expect(diff.patch.content).toContain(`-${previous} architecture\n+current architecture`);
-      expect(await h.read(diff.patch.path)).toBe(diff.patch.content);
-      expect(diff.patch.content).not.toMatch(/OTHER TASK|UNREVIEWED LIVE DRIFT/);
+      expect(await h.read(diff.patch.path)).toContain(`-${previous} design\n+current design`);
+      expect(await h.read(diff.patch.path)).toContain(`-${previous} architecture\n+current architecture`);
+      expect(diff.patch).not.toHaveProperty("content");
+      expect(await h.read(diff.patch.path)).not.toMatch(/OTHER TASK|UNREVIEWED LIVE DRIFT/);
     }
   });
 
@@ -272,7 +272,7 @@ describe("document review diffs", () => {
       document_projections: [{ path: "design.md", bytes: bytes("current design\n"), digest: digest("current design\n") }] as never,
       prior_triage: { response: { decision: "revise", reviewers: [{ reviewer_id: "general" }] } } as never,
     });
-    expect(output.full.patch.content).toContain("+current design");
+    expect(await h.read(output.full.patch.path)).toContain("+current design");
     expect(output.reviewers.get("general")).toMatchObject({ full: output.full, revision_unavailable: expect.any(String) });
   });
 });

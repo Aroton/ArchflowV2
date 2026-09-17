@@ -1,6 +1,6 @@
 # TESTING
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
+**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
 
 Report-workflow coverage exercises irregular extracted JSON, explicit producer interpretation, selective follow-up, partial-feedback visibility, sibling reuse, and independent constitution/approval boundaries. Archived structured-review tests remain for old evidence.
 
@@ -172,3 +172,9 @@ Constitution coverage checks default/custom precedence, deprecated overrides, wi
 ## Simple-task review coverage
 
 `test/unit/simple-review.test.ts` drives both stages with fake reviewer responses in disposable Git repositories. It covers one pass per role, configuration fallback and explicit routing, test assignments, constitution/path triggers, partial output failure, transient retry bounds, cancellation, branch and policy drift, path rejection, dirty/add/delete snapshots, cleanup, and public MCP validation. `test/integration/simple-review-dispatch.test.ts` invokes the public boundary and real CLI runner with a fake executable, checking all roles, byte-identical snapshots, and cleanup. Existing dispatch coordinator integration tests guard workflow behavior through the extracted runner. The portable skill specifies post-review fixes without reviewer re-checks; real model judgment remains distinct from deterministic test coverage.
+
+## Inspectable review prompts
+
+`review-prompt-snapshots.test.ts` drives every phase, applicable reviewer, and initial/follow-up mode through the production file materializer. Its 24 checked-in Markdown outputs in `test/fixtures/review-prompts/` show the exact final prompts, including per-file usage guidance and local references. Review these diffs when changing either bundled YAML configuration; a snapshot update is not a substitute for inspecting the result. General/test snapshots require the explicit rubric reference and every assigned criterion in its materialized file.
+
+`review-inputs.test.ts` checks missing-rubric failures, configuration selection, complete large files, source/materialization tampering, instruction limits and preview/adapter equality. Diff tests preserve skipped-round baselines and explicit missing history. Offline CLI fixtures read actual referenced files. The preview integration checks that preparing a preview leaves durable task state unchanged and matches subsequent dispatch. Amendment examples distinguish proposed task-design bytes from the authenticated baseline comparison; they never relabel a proposal as approved context. Real-host probes remain narrowly scoped and opt-in; their recorded observations are in `validation/review-file-reference-probes.md`.

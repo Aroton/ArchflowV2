@@ -1,0 +1,44 @@
+# Build-owned definition of primary review subjects AND governing documents. Paths are relative to THIS task only.
+# {phase} means the current numbered implementation phase; no other interpolation exists.
+# These are evidence inputs, not repository instruction files such as AGENTS.md or CLAUDE.md.
+schema_version: "1"
+version: >-
+  Use the exact retained document owner authenticated by a human approval, rule-based
+  settlement, or migration audit. Never substitute the latest live file for that version.
+  A document co-produced by the current subject is supplied separately as proposed work;
+  its prior human-approved baseline is supplied for material-change comparison when applicable.
+documents:
+  prd:
+    path: prd.md
+    filename: prd.md
+    description: Product requirements, user intent, scope, and acceptance criteria.
+    use: Use this approved PRD to check that the primary subject preserves the intended behavior, scope, and acceptance criteria.
+  task-design:
+    path: design.md
+    filename: task-design.md
+    description: Task architecture, interfaces, constraints, and phase plan.
+    use: Use this approved task design to check architecture, interfaces, cross-phase dependencies, and constraints relevant to the primary subject.
+  phase-design:
+    path: phases/{phase}/design.md
+    filename: phase-design.md
+    description: Approved design and verification strategy for this implementation phase.
+    use: Use this approved phase design to assess whether the implementation delivers the specified behavior and verification commitments. Investigate consequential deviations rather than treating every plan detail as mandatory.
+# The primary is always supplied in full from the current authenticated produced result.
+# Governing documents supply approved intent and constraints; diffs are supporting evidence.
+phases:
+  prd:
+    primary: prd
+    review: Review prd.md as the primary subject. It is the submitted requirements document. The original user ask defines the requested intent.
+    governing: []
+  design:
+    primary: task-design
+    review: Review task-design.md as the primary subject. It contains the submitted architecture and phase plan.
+    governing: [prd]
+  phase-design:
+    primary: phase-design
+    review: Review phase-design.md as the primary subject. It contains the submitted implementation design and verification strategy.
+    governing: [task-design, prd]
+  phase-impl:
+    primary: implementation
+    review: Review the declared implementation changes and their current behavior in the repository snapshots as the primary subject. changes.patch shows the complete changes; implementation notes explain the work and verification. Review any co-produced governing documents as proposed changes too.
+    governing: [phase-design, task-design, prd]

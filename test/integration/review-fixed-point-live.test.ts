@@ -587,7 +587,7 @@ if (argv.length === 1 && argv[0] === "--version") process.stdout.write("codex-cl
 else if (argv[0] === "login" && argv[1] === "status") process.stdout.write("Logged in using ChatGPT\\n");
 else {
   const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk);
-  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8")); const subject = envelope.subject;
+  const envelope = (await import(${JSON.stringify(new URL("../fixtures/dispatch/read-review-inputs.mjs", import.meta.url).href)})).readReviewFixtureInputs(argv); const subject = envelope.subject;
   const assignment = envelope.assignment;
   const output = subject.role === "counter-review" ? {
     schema_version: "3",

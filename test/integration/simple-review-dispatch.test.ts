@@ -36,13 +36,13 @@ else {
   let input = '';
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => { input += chunk; });
-  process.stdin.on('end', () => {
-    const envelope = JSON.parse(input);
+  process.stdin.on('end', async () => {
+    const envelope = (await import(${JSON.stringify(new URL("../fixtures/dispatch/read-review-inputs.mjs", import.meta.url).href)})).readReviewFixtureInputs(args);
     const cwd = args[args.indexOf('-C') + 1];
-    const current = fs.readFileSync(path.join(cwd, 'primary', 'app.txt'), 'utf8');
-    const baseline = fs.readFileSync(path.join(cwd, 'baseline', 'app.txt'), 'utf8');
+    const current = fs.readFileSync(path.join(cwd, 'repositories', 'primary', 'app.txt'), 'utf8');
+    const baseline = fs.readFileSync(path.join(cwd, 'repositories', 'baseline', 'app.txt'), 'utf8');
     if (current !== 'after' || baseline !== 'before') process.exit(3);
-    fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ cwd, args, role: envelope.assignment?.focus ?? 'constitution' }) + '\\n');
+    fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ cwd, args, role: envelope.rules ? 'constitution' : envelope.assignment.focus }) + '\\n');
     const result = envelope.rules ? { schema_version: '2', judgments: Object.fromEntries(envelope.rules.map(rule => [rule.slot, {
       compliance: 'pass', rationale: 'Inspected exact bytes.', trigger: 'not-matched', trigger_evidence: 'No matched trigger.'
     }])) } : { outcome: 'no_issues_found', feedback: 'Inspected exact current and baseline bytes; no actionable issues.' };

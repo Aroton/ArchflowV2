@@ -1,3 +1,4 @@
+import { previewReview } from "./review-preview.js";
 import { configV1Schema } from "../contracts/config.js";
 import { loadImplementationSelectionInput } from "../review/implementation-models.js";
 import { projectImplementationProfiles } from "../contracts/implementation-selection.js";
@@ -49,7 +50,7 @@ import { handleState } from "../mcp/handlers/state.js";
 export const LOCAL_COMMANDS = Object.freeze([
   "validate", "hash", "render", "snapshot", "restore", "clean", "reconcile",
   "init", "manual-status", "automation-status", "upgrade", "upgrade-adopt",
-  "set-commit-authority", "implementation-profiles",
+  "set-commit-authority", "implementation-profiles", "review-preview",
 ] as const);
 export type LocalCommand = typeof LOCAL_COMMANDS[number];
 
@@ -59,6 +60,7 @@ export type LocalCommandContract = Readonly<{
 }>;
 
 export const LOCAL_COMMAND_CONTRACTS: Readonly<Record<LocalCommand, LocalCommandContract>> = Object.freeze({
+  "review-preview": { payload: null, task: "required" },
   validate: { payload: '{"kind":<artifact kind>,"value":<artifact>}', task: "ignored" },
   hash: { payload: "<any plain-JSON value>", task: "ignored" },
   render: { payload: '{"kind":"review"|"adjudication","value":<review or adjudication artifact>}', task: "ignored" },
@@ -86,6 +88,8 @@ type CommandInput = Readonly<{
   repository_name?: string;
   value?: unknown;
   force?: boolean;
+  producer?: string;
+  reviewer?: string;
 }>;
 
 function requireValue(input: CommandInput): PlainJsonValue {
@@ -434,6 +438,7 @@ async function setCommitAuthority(input: CommandInput): Promise<PlainJsonValue |
 }
 
 const LOCAL_COMMAND_HANDLERS: Readonly<Record<LocalCommand, (input: CommandInput) => Promise<PlainJsonValue | ProjectResult<unknown>>>> = Object.freeze({
+  "review-preview": previewReview,
   validate, hash, render, snapshot, restore, clean, reconcile,
   init, "manual-status": manualStatus, "automation-status": automationStatus,
   upgrade, "upgrade-adopt": upgradeAdopt,

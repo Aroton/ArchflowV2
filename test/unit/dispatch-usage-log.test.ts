@@ -78,7 +78,7 @@ describe("central dispatch usage log", () => {
     const bundle = join(home, "bundle");
     const entry = join(bundle, "dist", "archflow-mcp.mjs");
     await build({ entryPoints: [fileURLToPath(new URL("../../src/dispatch/usage-log.ts", import.meta.url))],
-      outfile: entry, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+      outfile: entry, bundle: true, platform: "node", loader: { ".yaml": "text" }, format: "esm", logLevel: "silent" });
     const installed = await import(pathToFileURL(entry).href);
     const value = record();
     await installed.writeDispatchUsageRecord(value, undefined, now);

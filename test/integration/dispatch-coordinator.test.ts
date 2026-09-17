@@ -56,7 +56,7 @@ const CLAUDE_ROUTE: DispatchRoute = Object.freeze({
 });
 const ENVELOPE: DispatchEnvelope = Object.freeze({
   result_kind: "review",
-  bytes: Buffer.from('{"schema_version":"1"}\n'),
+  bytes: Buffer.from('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'),
   digest: "d".repeat(64) as DispatchEnvelope["digest"],
   byte_count: 23,
 });
@@ -106,9 +106,9 @@ if (argv.length === 1 && argv[0] === "--version") {
     argv,
     entries: target === null ? [] : readdirSync(target).sort(),
     view: target === null ? null : {
-      tracked: existsSync(join(target, "tracked.txt")),
-      git: existsSync(join(target, ".git")),
-      tasks: existsSync(join(target, ".archflow", "tasks")),
+      tracked: existsSync(join(target, "repositories", "primary", "tracked.txt")),
+      git: existsSync(join(target, "repositories", "primary", ".git")),
+      tasks: existsSync(join(target, "repositories", "primary", ".archflow", "tasks")),
     },
   }));
   await writeFile(${JSON.stringify(join(root, "observed-invocations.log"))}, JSON.stringify({ argv, tmpdir: process.env.TMPDIR }) + "\\n", { flag: "a" });
@@ -319,7 +319,7 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
     });
     const siblingEnvelope: DispatchEnvelope = Object.freeze({
       result_kind: "review",
-      bytes: Buffer.from('{"schema_version":"1"}\n'),
+      bytes: Buffer.from('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'),
       digest: "e".repeat(64) as DispatchEnvelope["digest"],
       byte_count: 23,
     });
@@ -342,7 +342,7 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
     const [first, second] = invocations!;
     // Reproduces the original collision shape: concurrent Codex children with the same result kind.
     expect(viewOf(second!)).toBe(viewOf(first!));
-    expect(viewOf(first!)).toBe(view);
+    expect(viewOf(first!)).toBe((await shared.acquire()).review_root);
     expect(outputOf(second!)).not.toBe(outputOf(first!));
     expect(dirname(outputOf(second!))).not.toBe(dirname(outputOf(first!)));
     expect(first!.tmpdir).toBe(dirname(outputOf(first!)));

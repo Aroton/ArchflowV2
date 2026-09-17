@@ -1,20 +1,13 @@
+import { prepareReviewInputs } from "../../src/review/inputs.js";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import {
-  PRIOR_TRIAGE_INSTRUCTION,
-  IMPLEMENTATION_REVIEW_INSTRUCTION,
-  CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION,
-  REVIEW_INSTRUCTION,
-  GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION,
-  TEST_REVIEW_ASSIGNMENT_INSTRUCTION,
   MULTI_REPOSITORY_VIEW_NOTE,
   PRODUCED_REPOSITORY_VIEW_NOTE,
   REPOSITORY_VIEW_NOTE,
-  REVIEW_ENVELOPE_BYTE_CAP,
-  ReviewEnvelopeError,
   buildAdjudicationEnvelope,
   buildReviewEnvelope,
   type AdjudicationEnvelopeInput,
@@ -90,17 +83,12 @@ describe("review dispatch envelopes", () => {
     expect(first.result_kind).toBe("review");
     expect(first.digest).toBe(second.digest);
     expect(first.byte_count).toBe(first.bytes.byteLength);
-    expect(text).toMatch(/^\{\n  "schema_version": "1",/u);
+    expect(text).toMatch(/^\{"schema_version":"1",/u);
     expect(json(first.bytes)).toMatchObject({ schema_version: "1", artifact: input().artifact });
     const visible = json(first.bytes);
     expect(first.digest).toBe(canonicalJsonDigest({
-      schema_version: "1",
+      ...visible as never as Record<string, never>,
       digest_kind: "dispatch-envelope",
-      artifact: visible.artifact as string,
-      rubric: visible.rubric as never,
-      context: visible.context as never,
-      instructions: visible.instructions as never,
-      subject: visible.subject as never,
     }));
   });
 
@@ -115,7 +103,7 @@ describe("review dispatch envelopes", () => {
     } as const;
     const envelope = buildReviewEnvelope({ ...input(), context: [askEntry] });
     const visible = json(envelope.bytes);
-    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "instructions", "subject"]);
+    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "subject", "review_configuration", "document_configuration", "rendered_inputs"]);
     expect(visible.context).toEqual([askEntry]);
 
     const unavailable = {
@@ -136,11 +124,7 @@ describe("review dispatch envelopes", () => {
     });
     const visible = json(assigned.bytes);
     expect(visible.assignment).toEqual({ reviewer_id: "test", focus: "tests", criterion_ids: ["contract-match"] });
-    expect(visible.instructions).toEqual({
-      review: IMPLEMENTATION_REVIEW_INSTRUCTION,
-
-      assignment: TEST_REVIEW_ASSIGNMENT_INSTRUCTION,
-    });
+    expect(visible).toHaveProperty("review_configuration");
     expect(assigned.digest).not.toBe(bare.digest);
     expect(() => buildReviewEnvelope({
       ...input(),
@@ -206,12 +190,7 @@ describe("review dispatch envelopes", () => {
       criterion_ids: [],
       expected_upstream_digests: [],
     });
-    expect(alignmentOnly.instructions).toEqual({
-      review: IMPLEMENTATION_REVIEW_INSTRUCTION,
-
-      assignment: GENERAL_REVIEW_ASSIGNMENT_INSTRUCTION,
-      prior_triage: PRIOR_TRIAGE_INSTRUCTION,
-    });
+    expect(alignmentOnly).toHaveProperty("review_configuration");
 
     const confirmationOnly = json(buildReviewEnvelope({
       ...twoCriteria,
@@ -223,12 +202,7 @@ describe("review dispatch envelopes", () => {
       },
     }).bytes);
     expect(confirmationOnly.rubric).toMatchObject({ criteria: [] });
-    expect(confirmationOnly.instructions).toEqual({
-      review: IMPLEMENTATION_REVIEW_INSTRUCTION,
-
-      assignment: TEST_REVIEW_ASSIGNMENT_INSTRUCTION,
-      prior_triage: PRIOR_TRIAGE_INSTRUCTION,
-    });
+    expect(confirmationOnly).toHaveProperty("review_configuration");
     expect(() => buildReviewEnvelope({
       ...twoCriteria,
       assignment: { reviewer_id: "general", focus: "general", criterion_ids: [] },
@@ -251,8 +225,8 @@ describe("review dispatch envelopes", () => {
     const bound = buildReviewEnvelope({ ...input(), workspace });
     const visible = json(bound.bytes);
 
-    expect(Object.keys(json(bare.bytes))).toEqual(["schema_version", "artifact", "rubric", "context", "instructions", "subject"]);
-    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "instructions", "workspace", "subject"]);
+    expect(Object.keys(json(bare.bytes))).toEqual(["schema_version", "artifact", "rubric", "context", "subject", "review_configuration", "document_configuration", "rendered_inputs"]);
+    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "workspace", "subject", "review_configuration", "document_configuration", "rendered_inputs"]);
     expect(visible.workspace).toEqual(workspace);
     expect(bound.digest).not.toBe(bare.digest);
     expect(bound.digest).toBe(canonicalJsonDigest({
@@ -334,52 +308,6 @@ describe("review dispatch envelopes", () => {
     })).toThrow();
   });
 
-  it("admits prior-triage context and adds the fixed instruction literal exactly then", () => {
-    const priorTriage = {
-      kind: "prior-triage",
-      label: "prior-round-triage",
-      status: "pinned",
-      content_digest: digest("e"),
-      encoding: "utf8",
-      content: '{"record_kind":"prior-triage"}\n',
-    } as const;
-    const bare = buildReviewEnvelope(input());
-    const bound = buildReviewEnvelope({ ...input(), context: [priorTriage] });
-    const visible = json(bound.bytes);
-
-    // The framing literal is always present; the remediation literal only when prior triage is pinned.
-    expect(json(bare.bytes).instructions).toEqual({
-      review: IMPLEMENTATION_REVIEW_INSTRUCTION,
-
-    });
-    expect(Object.keys(visible)).toEqual([
-      "schema_version", "artifact", "rubric", "context", "instructions", "subject",
-    ]);
-    expect(visible.context).toEqual([priorTriage]);
-    expect(visible.instructions).toEqual({
-      review: IMPLEMENTATION_REVIEW_INSTRUCTION,
-
-      prior_triage: PRIOR_TRIAGE_INSTRUCTION,
-    });
-    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("declared by this phase");
-    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("unchanged files");
-    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("introduced, exposed, or materially worsened");
-    expect(IMPLEMENTATION_REVIEW_INSTRUCTION).toContain("not a general code review");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Verify the revisions");
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("Keep follow-up scoped to the changes");
-    // Remediation rounds are scoped to the revision: no fresh sweep of unchanged sections, and
-    // an empty finding list is the intended terminal state.
-    expect(PRIOR_TRIAGE_INSTRUCTION).toContain("outcome=no_issues_found");
-    expect(PRIOR_TRIAGE_INSTRUCTION).not.toContain("anywhere in the artifact");
-    // Initial envelope does not carry remediation instructions
-    expect(json(bare.bytes).instructions).not.toHaveProperty("prior_triage");
-    // The instruction literal and the entry participate in the recorded envelope digest.
-    expect(bound.digest).not.toBe(bare.digest);
-    expect(bound.digest).toBe(canonicalJsonDigest({
-      ...visible,
-      digest_kind: "dispatch-envelope",
-    } as never));
-  });
 
   it("rejects context entries outside the closed vocabulary or shape", () => {
     const askEntry = {
@@ -412,37 +340,7 @@ describe("review dispatch envelopes", () => {
     })).toThrow(/encoding/u);
   });
 
-  it("adjudication envelope instructs trigger judgment from observable evidence only", () => {
-    const visible = json(buildAdjudicationEnvelope(adjudicationInput()).bytes) as {
-      instructions: Record<string, string>;
-    };
-    expect(visible.instructions.trigger).toMatch(/directly evidenced by the artifact/u);
-    expect(visible.instructions.trigger).toMatch(/no review_trigger is always not-matched/u);
-    expect(visible.instructions.trigger).toMatch(/gate authority, approvals, commits, and dispatch outcomes/u);
-    expect(visible.instructions).not.toHaveProperty("implementation_scope");
-  });
 
-  it("limits implementation and constitution review to declared outputs", () => {
-    const workspace: ReviewWorkspaceBinding = {
-      kind: "read-only-produced-repository-snapshot",
-      base_commit: "0123456789abcdef0123456789abcdef01234567" as never,
-      snapshot_digest: digest("f"),
-      note: PRODUCED_REPOSITORY_VIEW_NOTE,
-    };
-    const adjudication = json(buildAdjudicationEnvelope({ ...adjudicationInput(), workspace }).bytes) as {
-      instructions: Record<string, string>;
-    };
-    expect(adjudication.instructions.implementation_scope).toBe(CONSTITUTION_IMPLEMENTATION_SCOPE_INSTRUCTION);
-    expect(adjudication.instructions.implementation_scope).toContain("supporting evidence, not separate review subjects");
-    expect(adjudication.instructions.implementation_scope).toContain("introduced, exposed, or materially worsened");
-
-    const document = input();
-    const documentReview = json(buildReviewEnvelope({
-      ...document,
-      rubric: { ...document.rubric, kind: "artifact" },
-    }).bytes) as { instructions: Record<string, string> };
-    expect(documentReview.instructions.review).toBe(REVIEW_INSTRUCTION);
-  });
 
   it("builds a domain-separated adjudication envelope with only child-visible instructions", () => {
     const first = buildAdjudicationEnvelope(adjudicationInput());
@@ -453,7 +351,7 @@ describe("review dispatch envelopes", () => {
     expect(first.result_kind).toBe("adjudication");
     expect(first.bytes).toEqual(second.bytes);
     expect(first.digest).toBe(second.digest);
-    expect(text).toMatch(/^\{\n  "schema_version": "2",/u);
+    expect(text).toMatch(/^\{"schema_version":"2",/u);
     expect(visible).toMatchObject({
       artifact: adjudicationInput().artifact,
       rules: [{ slot: "rule-slot-1", enforced_by: ["path-contract"] }],
@@ -495,7 +393,7 @@ describe("review dispatch envelopes", () => {
     }
   });
 
-  it("rejects adjudication subject mismatches and applies the same byte cap", () => {
+  it("rejects adjudication subject mismatches and accepts file-backed large inputs", () => {
     const base = adjudicationInput();
     expect(() => buildAdjudicationEnvelope({
       ...base,
@@ -503,24 +401,10 @@ describe("review dispatch envelopes", () => {
     })).toThrow(/source_review_envelope_digest/u);
     expect(() => buildAdjudicationEnvelope({
       ...base,
-      artifact: "x".repeat(REVIEW_ENVELOPE_BYTE_CAP),
-    })).toThrow(ReviewEnvelopeError);
+      artifact: "x".repeat(1_048_576),
+    })).not.toThrow();
   });
 
-  it("returns the exact contract failure above the one MiB pre-spawn cap", () => {
-    let thrown: unknown;
-    try {
-      buildReviewEnvelope({ ...input(), artifact: "x".repeat(REVIEW_ENVELOPE_BYTE_CAP) });
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown).toBeInstanceOf(ReviewEnvelopeError);
-    expect((thrown as ReviewEnvelopeError).project_error).toMatchObject({
-      code: "CONTRACT_INVALID",
-      diagnostic: { parameters: { issue_code: "envelope-byte-cap" } },
-      next_action: "correct-contract",
-    });
-  });
 
   it.each(["Invocation:1", "result_1", "1-result", "result--one"])(
     "rejects provenance ID %j outside the evidence vocabulary",
@@ -578,8 +462,8 @@ describe("review dispatch envelopes", () => {
 
   it("binds diff file identities and rejects paths outside their generated locations", () => {
     const full = { kind: "implementation" as const, subject_digest: subject().subject_digest,
-      patch: { path: "../review-diffs/full.patch", content_digest: digest("1"), byte_count: 4 },
-      stat: { path: "../review-diffs/full.stat", content_digest: digest("2"), byte_count: 2 },
+      patch: { path: "review-diffs/full.patch", content_digest: digest("1"), byte_count: 4 },
+      stat: { path: "review-diffs/full.stat", content_digest: digest("2"), byte_count: 2 },
     };
     const first = buildReviewEnvelope({ ...input(), diffs: { full } });
     expect(buildReviewEnvelope({ ...input(), diffs: { full: { ...full, patch: { ...full.patch, content_digest: digest("3") } } } }).digest).not.toBe(first.digest);
@@ -587,36 +471,9 @@ describe("review dispatch envelopes", () => {
     expect(() => buildReviewEnvelope({ ...input(), diffs: { full: { ...full, subject_digest: digest("4") } } })).toThrow(/subject mismatch/);
   });
 
-  it("authenticates inline diff bytes, preloads only the revision on follow-up, and falls back to files at the envelope cap", () => {
-    const file = (path: string, content: string) => ({ path, content,
-      byte_count: Buffer.byteLength(content), content_digest: sha256Bytes(new TextEncoder().encode(content)),
-    });
-    const full = { kind: "document" as const, subject_digest: subject().subject_digest,
-      patch: file("../review-diffs/full.patch", "FULL PATCH\n"), stat: file("../review-diffs/full.stat", "full stat\n") };
-    const revision = { kind: "revision" as const, subject_digest: subject().subject_digest, base_subject_digest: digest("b"),
-      patch: file(`../review-diffs/since-${digest("b")}.patch`, "REVISION PATCH\n"),
-      stat: file(`../review-diffs/since-${digest("b")}.stat`, "revision stat\n") };
-    const decode = (envelope: ReturnType<typeof buildReviewEnvelope>) => JSON.parse(new TextDecoder().decode(envelope.bytes));
-    const delivered = decode(buildReviewEnvelope({ ...input(), diffs: { full, revision } }));
-    expect(delivered.diffs.full.patch).not.toHaveProperty("content");
-    expect(delivered.diffs.revision.patch.content).toBe("REVISION PATCH\n");
-    expect(() => buildReviewEnvelope({ ...input(), diffs: { full: { ...full,
-      patch: { ...full.patch, content: "forged text" } } } })).toThrow(/inline review diff content mismatch/);
-
-    const huge = { ...full, patch: file(full.patch.path, "x".repeat(REVIEW_ENVELOPE_BYTE_CAP)) };
-    const result = buildReviewEnvelope({ ...input(), diffs: { full: huge } });
-    expect(result.byte_count).toBeLessThan(REVIEW_ENVELOPE_BYTE_CAP);
-    expect(decode(result).diffs.full.patch).toEqual({ path: huge.patch.path,
-      content_digest: huge.patch.content_digest, byte_count: huge.patch.byte_count });
-    const { content: _patch, ...patch } = huge.patch;
-    const { content: _stat, ...stat } = huge.stat;
-    expect(result.digest).toBe(buildReviewEnvelope({ ...input(), diffs: { full: { ...huge, patch, stat } } }).digest);
-    expect(decode(buildAdjudicationEnvelope({ ...adjudicationInput(), diffs: { full: huge } })).diffs.full.patch)
-      .not.toHaveProperty("content");
-  });
 
   it("keeps contamination fields out of the representable and accepted shapes", () => {
-    expectTypeOf<keyof ReviewEnvelopeInput>().toEqualTypeOf<"artifact" | "rubric" | "assignment" | "context" | "subject" | "workspace" | "diffs">();
+    expectTypeOf<keyof ReviewEnvelopeInput>().toEqualTypeOf<"artifact" | "rubric" | "assignment" | "context" | "subject" | "workspace" | "diffs" | "documents" | "governing_document_comparisons" | "phase_kind">();
     expectTypeOf<keyof Extract<ReviewWorkspaceBinding, { kind: "read-only-repository-checkout" }>>()
       .toEqualTypeOf<"kind" | "commit" | "note">();
     expectTypeOf<keyof Extract<ReviewWorkspaceBinding, { kind: "read-only-produced-repository-snapshot" }>>()

@@ -22,6 +22,8 @@ export type DispatchWorkspace = Readonly<{
   env: Readonly<NodeJS.ProcessEnv>;
   /** Read-only checkout for review dispatch; absent for adjudication and preflight-only use. */
   repository_view_root?: string;
+  /** Reviewer cwd: contains only the repository snapshots and supplied review files. */
+  review_root?: string;
   dispose: () => Promise<void>;
 }>;
 
@@ -291,20 +293,21 @@ export async function materializeRepositoryViews(
   candidate: DispatchRepositoryViewPlan,
 ): Promise<DispatchWorkspace> {
   const plan = validateDispatchRepositoryViewPlan(candidate);
-  const container = plan.length === 1 ? workspace.root : join(workspace.root, "repos");
-  if (plan.length > 1) await mkdir(container);
+  const reviewRoot = join(workspace.root, "review");
+  const container = join(reviewRoot, "repositories");
+  await mkdir(container, { recursive: true });
   // Every name has already passed `validateDispatchRepositoryViewPlan` (index 0 is literally
   // `primary`, every other member is a declared repository name), so `join` cannot escape the
   // container; the view is always a direct child.
   for (const member of plan) {
-    const view = plan.length === 1 ? join(workspace.root, "repo") : join(container, member.name);
+    const view = join(container, member.name);
     try {
       await materializeRepositoryArchive(view, member);
     } catch (error) {
       throw new RepositoryViewMaterializationError(member.name, error);
     }
   }
-  return Object.freeze({ ...workspace, repository_view_root: plan.length === 1 ? join(workspace.root, "repo") : container });
+  return Object.freeze({ ...workspace, review_root: reviewRoot, repository_view_root: plan.length === 1 ? join(container, "primary") : container });
 }
 
 function errno(error: unknown): string | undefined {

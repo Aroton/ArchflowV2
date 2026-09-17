@@ -1,3 +1,4 @@
+import { buildReviewEnvelope } from "../../src/review/envelopes.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -7,14 +8,10 @@ import { sha256Bytes } from "../../src/contracts/canonical.js";
 import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import {
-  REVIEW_ENVELOPE_BYTE_CAP,
-  ReviewEnvelopeError,
   type DispatchSubject,
   type ReviewEnvelopeInput,
 } from "../../src/review/envelopes.js";
 import {
-  buildReviewEnvelopeWithCap,
-  excerptContextEntry,
   importTargetCandidates,
   mentionedRepositoryPaths,
   pinnedContextEntry,
@@ -133,21 +130,21 @@ describe("mechanical extraction", () => {
     ]);
   });
 
-  it("pins small evidence whole and truncates large evidence with the full digest", () => {
+  it("pins complete evidence regardless of size", () => {
     const small = new TextEncoder().encode("short\n");
-    expect(excerptContextEntry("interface-excerpt", "src/a.ts", small))
+    expect(pinnedContextEntry("interface-excerpt", "src/a.ts", small))
       .toMatchObject({ status: "pinned", content: "short\n" });
 
     const large = new TextEncoder().encode(`${"x".repeat(30_000)}é`);
-    const truncated = excerptContextEntry("interface-excerpt", "src/b.ts", large);
+    const truncated = pinnedContextEntry("interface-excerpt", "src/b.ts", large);
     expect(truncated).toMatchObject({
-      status: "truncated",
+      status: "pinned",
       content_digest: sha256Bytes(large),
       encoding: "utf8",
-      total_byte_count: large.byteLength,
+      content: new TextDecoder().decode(large),
     });
     if (truncated.status === "truncated") {
-      expect(truncated.content.length).toBeLessThan(30_000);
+      expect(truncated.content.length).toBeGreaterThan(30_000);
     }
   });
 });
@@ -192,7 +189,7 @@ describe("verificationTranscriptEvidence", () => {
     }]);
   });
 
-  it.each([84_632, REVIEW_ENVELOPE_BYTE_CAP + 1])("bounds %i transcript bytes while retaining final results and full-log metadata", async (size) => {
+  it.each([84_632, 1_048_577])("retains all %i transcript bytes and final results", async (size) => {
     const h = await transcriptWorkspace("complete-transcript");
     const tail = "\n$ npm test\n305 tests passed\nexit code: 0\n";
     const text = `${"dependency setup output\n".repeat(Math.ceil(size / 24)).slice(0, size - tail.length)}${tail}`;
@@ -202,14 +199,14 @@ describe("verificationTranscriptEvidence", () => {
     writeFileSync(join(directory, "verification.txt"), bytes);
     const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, implSubject());
     expect(entries).toMatchObject([{
-      kind: "verification-transcript", status: "truncated", content_digest: sha256Bytes(bytes),
-      encoding: "utf8", total_byte_count: bytes.byteLength,
+      kind: "verification-transcript", status: "pinned", content_digest: sha256Bytes(bytes),
+      encoding: "utf8", content: text,
     }]);
-    const envelope = JSON.parse(new TextDecoder().decode(buildReviewEnvelopeWithCap(input(entries)).bytes));
+    const envelope = JSON.parse(new TextDecoder().decode(buildReviewEnvelope(input(entries)).bytes));
     expect(envelope.context[0].content.startsWith("dependency setup output\n")).toBe(true);
     expect(envelope.context[0].content.endsWith(tail)).toBe(true);
-    expect(envelope.context[0].content).toContain("does not establish that omitted commands passed");
-    expect(envelope.context[0].content.length).toBeLessThan(25_000);
+    expect(envelope.context[0].content).toBe(text);
+    expect(Buffer.byteLength(envelope.context[0].content)).toBe(bytes.byteLength);
   });
 
   it("preserves UTF-8 boundaries at both ends of a large transcript", async () => {
@@ -219,9 +216,9 @@ describe("verificationTranscriptEvidence", () => {
     const text = `a${"🙂".repeat(10_000)}z`;
     writeFileSync(join(directory, "verification.txt"), text);
     const entries = await verificationTranscriptEvidence(h.services.runner, h.services.authority, implState, implSubject());
-    expect(entries[0]).toMatchObject({ status: "truncated", encoding: "utf8" });
+    expect(entries[0]).toMatchObject({ status: "pinned", encoding: "utf8" });
     const entry = entries[0]!;
-    if (entry.status !== "truncated") throw new Error("expected excerpt");
+    if (entry.status !== "pinned") throw new Error("expected excerpt");
     expect(entry.content).not.toContain("�");
     expect(entry.content.startsWith("a🙂")).toBe(true);
     expect(entry.content.endsWith("🙂z")).toBe(true);
@@ -243,7 +240,7 @@ describe("verificationTranscriptEvidence", () => {
       content_digest: sha256Bytes(new TextEncoder().encode(replacement)) });
     expect(original[0]).toMatchObject({ content: new TextDecoder().decode(TRANSCRIPT), content_digest: sha256Bytes(TRANSCRIPT) });
     expect(subject).toEqual(before);
-    expect(buildReviewEnvelopeWithCap(input(refreshed)).digest).not.toEqual(buildReviewEnvelopeWithCap(input(original)).digest);
+    expect(buildReviewEnvelope(input(refreshed)).digest).not.toEqual(buildReviewEnvelope(input(original)).digest);
   });
 
   it("emits nothing outside implementation phases", async () => {
@@ -458,73 +455,11 @@ describe("priorTriageEvidence", () => {
   });
 });
 
-describe("buildReviewEnvelopeWithCap", () => {
-  it("drops the lowest-priority droppable entry first and marks it omitted-cap", () => {
-    const upstream = pinnedContextEntry("approved-upstream", "prd.md", new TextEncoder().encode("# PRD\n"));
-    const conventions = pinnedContextEntry("conventions", "CLAUDE.md", new TextEncoder().encode("c".repeat(400_000)));
-    const repoMap = pinnedContextEntry("repo-map", "tree abc", new TextEncoder().encode("m".repeat(800_000)));
-    const envelope = buildReviewEnvelopeWithCap(input([upstream, conventions, repoMap]));
-    const visible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
-      context: readonly { kind: string; status: string; content_digest?: string }[];
-    };
-    expect(visible.context.map((entry) => [entry.kind, entry.status])).toEqual([
-      ["approved-upstream", "pinned"],
-      ["conventions", "pinned"],
-      ["repo-map", "omitted-cap"],
-    ]);
-    expect(visible.context[2]!.content_digest).toBe(repoMap.status === "pinned" ? repoMap.content_digest : undefined);
-  });
-  it("reduces an optional verification excerpt to metadata when required context needs the space", () => {
-    const upstream = pinnedContextEntry("approved-upstream", "prd.md", new TextEncoder().encode("p".repeat(1_030_000)));
-    const transcript = excerptContextEntry("verification-transcript", "verification.txt", new TextEncoder().encode("t".repeat(50_000)));
-    const envelope = buildReviewEnvelopeWithCap(input([upstream, transcript]));
-    const visible = JSON.parse(new TextDecoder().decode(envelope.bytes));
-    expect(visible.context[0].status).toBe("pinned");
-    expect(visible.context[1]).toMatchObject({ status: "omitted-cap", content_digest: sha256Bytes(new TextEncoder().encode("t".repeat(50_000))),
-      note: expect.stringContaining("original byte count: 50000") });
-  });
-
-  it("never drops the prior-triage record for the cap: an envelope that cannot hold it fails closed", () => {
-    const upstream = pinnedContextEntry("approved-upstream", "prd.md", new TextEncoder().encode("# PRD\n"));
-    const priorTriage = pinnedContextEntry(
-      "prior-triage", "prior-round-triage", new TextEncoder().encode("t".repeat(1_100_000)),
-    );
-    expect(() => buildReviewEnvelopeWithCap(input([upstream, priorTriage]))).toThrow();
-  });
-
-  it("sacrifices mechanical evidence to the cap before the prior-triage record", () => {
-    const priorTriage = pinnedContextEntry(
-      "prior-triage", "prior-round-triage", new TextEncoder().encode("t".repeat(400_000)),
-    );
-    const repoMap = pinnedContextEntry("repo-map", "tree abc", new TextEncoder().encode("m".repeat(800_000)));
-    const envelope = buildReviewEnvelopeWithCap(input([priorTriage, repoMap]));
-    const visible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
-      context: readonly { kind: string; status: string }[];
-    };
-    expect(visible.context.map((entry) => [entry.kind, entry.status])).toEqual([
-      ["prior-triage", "pinned"],
-      ["repo-map", "omitted-cap"],
-    ]);
-  });
-
-  it("passes a fitting envelope through unchanged", () => {
-    const entry = pinnedContextEntry("user-ask", "ask.md", new TextEncoder().encode("Ask.\n"));
-    const envelope = buildReviewEnvelopeWithCap(input([entry]));
-    const visible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as { context: unknown };
-    expect(visible.context).toEqual([entry]);
-  });
-
-  it("fails closed when a non-droppable entry alone exceeds the cap", () => {
-    const oversized = pinnedContextEntry(
-      "user-ask",
-      "ask.md",
-      new TextEncoder().encode("x".repeat(REVIEW_ENVELOPE_BYTE_CAP)),
-    );
-    expect(() => buildReviewEnvelopeWithCap(input([oversized]))).toThrow(ReviewEnvelopeError);
-  });
-
-  it("rethrows non-cap envelope failures untouched", () => {
-    const bad = { ...input([]), artifact: 7 as never };
-    expect(() => buildReviewEnvelopeWithCap(bad)).toThrow(/artifact must be text/u);
+describe("complete file-backed review context", () => {
+  it("retains all evidence above the old envelope limit", () => {
+    const entries = ["user-ask", "prior-triage", "verification-transcript"] as const;
+    const context = entries.map(kind => pinnedContextEntry(kind, `${kind}.md`, new TextEncoder().encode("x".repeat(1_100_000))));
+    const bound = buildReviewEnvelope(input(context));
+    expect(JSON.parse(new TextDecoder().decode(bound.bytes)).context).toEqual(context);
   });
 });

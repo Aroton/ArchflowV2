@@ -1,3 +1,4 @@
+import { governingReviewBindings } from "./documents.js";
 import { isFeedbackReview } from "../contracts/review.js";
 import type { ReviewResponse } from "../contracts/triage.js";
 import { reviewFindings } from "../contracts/review.js";
@@ -32,34 +33,9 @@ import type { ProjectionPlan } from "../state/snapshots.js";
 import type { TransactionDependencies } from "../state/transaction.js";
 import { loadLegacyImportInitialization } from "../state/legacy-import-resume.js";
 import {
-  ReviewEnvelopeError,
-  buildReviewEnvelope,
-  type DispatchEnvelope,
   type PinnedContextEntry,
   type PinnedContextKind,
-  type ReviewEnvelopeInput,
 } from "./envelopes.js";
-
-/**
- * Cap priority, highest kept first. Required comparison bases sit above `CAP_DROPPABLE_KINDS`
- * membership: a kind not in the droppable set is never sacrificed to the byte cap, so an envelope
- * that cannot fit the artifact plus every non-droppable entry fails closed exactly as before.
- */
-const CAP_PRIORITY: readonly PinnedContextKind[] = [
-  "approved-upstream", "imported-reference", "user-ask", "validation-override", "verification-transcript",
-  "prior-triage", "interface-excerpt", "conventions", "repo-map",
-];
-
-// `prior-triage` is deliberately not droppable and is pinned whole rather than excerpted: a
-// truncated or missing record silently turns a remediation round back into a fresh full review,
-// which is the endless-findings failure the record exists to prevent. An envelope that cannot
-// hold it fails closed like one that cannot hold the user ask.
-const CAP_DROPPABLE_KINDS: ReadonlySet<PinnedContextKind> = new Set([
-  "verification-transcript", "interface-excerpt", "conventions", "repo-map",
-]);
-
-/** Per-entry head budget for mechanical evidence; the full-file digest stays recorded. */
-const EXCERPT_BYTE_BUDGET = 24_576;
 
 /** Pins evidence bytes whole, recording the digest of exactly those bytes. */
 export function pinnedContextEntry(
@@ -83,74 +59,6 @@ export function unavailableContextEntry(
   note: string,
 ): PinnedContextEntry {
   return Object.freeze({ kind, label, status: "unavailable", note });
-}
-
-/** Cuts a byte head on a UTF-8 boundary so a truncated text file stays readable text. */
-function utf8SafeHead(bytes: Uint8Array, budget: number): Uint8Array {
-  for (let cut = budget; cut > budget - 4 && cut > 0; cut -= 1) {
-    const head = bytes.slice(0, cut);
-    // Backtrack to the previous code-point boundary until the head decodes cleanly.
-    if (decodeUtf8Strict(head) !== undefined) return head;
-  }
-  return bytes.slice(0, budget);
-}
-
-/** Pins whole when within budget, otherwise a bounded head with the full-file digest recorded. */
-export function excerptContextEntry(
-  kind: PinnedContextKind,
-  label: string,
-  bytes: Uint8Array,
-): PinnedContextEntry {
-  if (bytes.byteLength <= EXCERPT_BYTE_BUDGET) {
-    return pinnedContextEntry(kind, label, bytes);
-  }
-  return Object.freeze({
-    kind,
-    label,
-    status: "truncated",
-    content_digest: sha256Bytes(bytes),
-    ...visibleContent(utf8SafeHead(bytes, EXCERPT_BYTE_BUDGET)),
-    total_byte_count: bytes.byteLength,
-  });
-}
-
-function omittedForCap(entry: PinnedContextEntry, digest: Sha256Digest): PinnedContextEntry {
-  return Object.freeze({
-    kind: entry.kind,
-    label: entry.label,
-    status: "omitted-cap",
-    content_digest: digest,
-    note: "omitted to fit the review envelope byte cap; the digest still names the exact evidence bytes" +
-      (entry.status === "truncated" ? `; original byte count: ${entry.total_byte_count}` : ""),
-  });
-}
-
-function isByteCapError(error: unknown): error is ReviewEnvelopeError {
-  return error instanceof ReviewEnvelopeError &&
-    error.project_error.code === "CONTRACT_INVALID" &&
-    (error.project_error.diagnostic.parameters as { issue_code?: unknown }).issue_code === "envelope-byte-cap";
-}
-
-/**
- * Builds the review envelope, and on byte-cap overflow replaces droppable pinned entries with
- * `omitted-cap` markers, lowest cap priority first, before failing closed. A dropped entry stays
- * visible to the reviewer as a named digest, so the omission surfaces under `unverifiable-claims`
- * instead of silently narrowing the review.
- */
-export function buildReviewEnvelopeWithCap(input: ReviewEnvelopeInput): DispatchEnvelope {
-  const context = [...input.context];
-  for (;;) {
-    try {
-      return buildReviewEnvelope({ ...input, context });
-    } catch (error) {
-      if (!isByteCapError(error)) throw error;
-      const index = dropCandidateIndex(context);
-      if (index === undefined) throw error;
-      const entry = context[index]!;
-      if (entry.status !== "pinned" && entry.status !== "truncated") throw error;
-      context[index] = omittedForCap(entry, entry.content_digest);
-    }
-  }
 }
 
 const ok = <T>(value: T): ProjectResult<T> =>
@@ -343,7 +251,8 @@ async function assembleUpstreamContext(input: {
   readonly subject: CurrentProduceSubject;
 }): Promise<ProjectResult<readonly PinnedContextEntry[]>> {
   const entries: PinnedContextEntry[] = [];
-  for (const binding of produceUpstreamBindingsForSubject(input.state, input.subject.artifact)) {
+  const produced = new Set(produceOwnedTaskDocumentPaths(input.subject.artifact));
+  for (const binding of governingReviewBindings(input.state.phase_instance).filter(binding => !produced.has(binding.path))) {
     const upstream = await loadProduceUpstreamSubject(input.dependencies, input.authority, input.state, binding);
     if (!upstream.ok) return upstream;
     // Retained owners were authority-checked by the shared loader, including the exact producer
@@ -357,7 +266,7 @@ async function assembleUpstreamContext(input: {
       input.runner, input.authority, upstream.value, binding.path,
     );
     if (!projection.ok) return projection;
-    entries.push(pinnedContextEntry("imported_projection" in upstream.value ? "imported-reference" : "approved-upstream", binding.path, projection.value.bytes));
+    entries.push({ ...pinnedContextEntry("imported_projection" in upstream.value ? "imported-reference" : "approved-upstream", binding.path, projection.value.bytes), source_version: upstream.value.artifact_digest });
   }
   if (input.state.phase_instance === "design") {
     const imported = await loadLegacyImportInitialization(
@@ -482,35 +391,7 @@ export async function verificationTranscriptEvidence(
     return [unavailableContextEntry("verification-transcript", displayPath,
       "verification log is absent; assess the verification record in implementation notes and relevant code and tests")];
   }
-  if (bytes.byteLength <= EXCERPT_BYTE_BUDGET) {
-    return [pinnedContextEntry("verification-transcript", displayPath, bytes)];
-  }
-  // Keep setup/commands and final results visible without letting raw log volume strand review.
-  // The marker and status explicitly prohibit treating omitted output as evidence of success.
-  const half = EXCERPT_BYTE_BUDGET / 2;
-  const head = utf8SafeHead(bytes, half);
-  let tailStart = bytes.byteLength - half;
-  for (let offset = 0; offset < 4; offset += 1) {
-    if (decodeUtf8Strict(bytes.subarray(tailStart + offset)) !== undefined) {
-      tailStart += offset;
-      break;
-    }
-  }
-  const marker = new TextEncoder().encode(
-    `\n[${tailStart - head.byteLength} bytes omitted; this excerpt does not establish that omitted commands passed. See the verification record in implementation notes.]\n`,
-  );
-  const excerpt = new Uint8Array(head.byteLength + marker.byteLength + bytes.byteLength - tailStart);
-  excerpt.set(head);
-  excerpt.set(marker, head.byteLength);
-  excerpt.set(bytes.subarray(tailStart), head.byteLength + marker.byteLength);
-  return [Object.freeze({
-    kind: "verification-transcript",
-    label: displayPath,
-    status: "truncated",
-    content_digest: sha256Bytes(bytes),
-    ...visibleContent(excerpt),
-    total_byte_count: bytes.byteLength,
-  })];
+  return [pinnedContextEntry("verification-transcript", displayPath, bytes)];
 }
 
 /**
@@ -653,9 +534,9 @@ export function priorTriageContextEntry(
     const previousReports = reports.map(report => "outcome" in report
       ? { reviewer_id: report.reviewer_id, outcome: report.outcome, feedback: report.feedback }
       : { reviewer_id: report.reviewer_id, report: report.report });
-    return pinnedContextEntry("prior-triage", "prior-round-response", new TextEncoder().encode(JSON.stringify({
+    return { ...pinnedContextEntry("prior-triage", "prior-round-response", new TextEncoder().encode(JSON.stringify({
       previous_reports: previousReports, revision_summary: record.response.rationale, verification_requests: requests,
-    })));
+    }))), ...(record.source_review === undefined ? {} : { source_version: record.source_review.evidence_digest }) };
   }
   const accepted = record.dispositions.filter((disposition) => disposition.disposition === "accepted");
   const dispositions = owns === undefined
@@ -690,20 +571,4 @@ export async function priorTriageEvidence(
       ? []
       : [priorTriageContextEntry(record.value)],
   ));
-}
-
-function dropCandidateIndex(context: readonly PinnedContextEntry[]): number | undefined {
-  let candidate: number | undefined;
-  let candidatePriority = -1;
-  for (let index = 0; index < context.length; index += 1) {
-    const entry = context[index]!;
-    if (!CAP_DROPPABLE_KINDS.has(entry.kind)) continue;
-    if (entry.status !== "pinned" && entry.status !== "truncated") continue;
-    const priority = CAP_PRIORITY.indexOf(entry.kind);
-    if (priority > candidatePriority) {
-      candidate = index;
-      candidatePriority = priority;
-    }
-  }
-  return candidate;
 }

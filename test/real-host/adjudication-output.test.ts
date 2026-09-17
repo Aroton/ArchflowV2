@@ -57,8 +57,8 @@ describe.skipIf(!available)("real Gemini adjudication output", () => {
       });
       const reviewDigest = canonicalJsonDigest({ review: "synthetic" });
       // Exercise the file-only fallback: inline text would bypass the access being tested.
-      const { content: _patchContent, ...patch } = prepared.full.patch;
-      const { content: _statContent, ...stat } = prepared.full.stat;
+      const patch = prepared.full.patch;
+      const stat = prepared.full.stat;
       const envelope = buildAdjudicationEnvelope({
         artifact: "This is a filesystem-access acceptance test. Read context.ts from the repository view and the complete patch at diffs.full.patch.path. In your judgment rationales quote the exact sourceToken string from context.ts and the exact deleted previousToken string from the patch. Neither value is supplied here. You must read both files; if tools or access are unavailable, explicitly report that failure. Also read diffs.full.stat.path and name the changed file. Do not infer values from metadata.",
         diffs: { full: { ...prepared.full, patch, stat } },
