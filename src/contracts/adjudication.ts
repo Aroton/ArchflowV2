@@ -117,7 +117,14 @@ function materializeRuleSlots(value: readonly AdjudicationRuleSlotV1[]): readonl
 }
 
 function rawAdjudicationV2SchemaFromMaterializedSlots(slots: readonly AdjudicationRuleSlotV1[]) {
-  const judgments = Object.fromEntries(slots.map((entry) => [entry.slot, adjudicationJudgmentV2Schema]));
+  return createAdjudicationOutputSchema(slots.map(entry => entry.slot));
+}
+
+/** Child-visible contract shared by prompt generation and authenticated rule-plan validation. */
+export function createAdjudicationOutputSchema(slotNames: readonly string[]): z.ZodType<RawAdjudicationV2> {
+  const slots = z.array(opaqueSlot).min(1).parse(slotNames);
+  if (new Set(slots).size !== slots.length) throw new TypeError("adjudication rule slots must be unique");
+  const judgments = Object.fromEntries(slots.map(slot => [slot, adjudicationJudgmentV2Schema]));
   return z.object({ schema_version: z.literal("2"), judgments: z.object(judgments).strict() }).strict() as z.ZodType<RawAdjudicationV2>;
 }
 

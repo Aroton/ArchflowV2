@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { parseGeneralReviewOutputV3 } from "../../src/contracts/review.js";
+import { parseGeneralReviewOutputV3, reviewReportOutputSchema } from "../../src/contracts/review.js";
+import { createAdjudicationOutputSchema } from "../../src/contracts/adjudication.js";
 import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
 import effortReviewSchema from "../../src/contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
 import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
@@ -23,6 +24,9 @@ import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import type { DispatchWorkspace } from "../../src/dispatch/workspace.js";
 import type { DispatchEnvelope } from "../../src/review/envelopes.js";
 import validReview from "../fixtures/contracts/review/valid.json" with { type: "json" };
+
+const reviewOutputSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" })));
+const adjudicationOutputSchema = JSON.parse(JSON.stringify(createAdjudicationOutputSchema(["rule-1"]).toJSONSchema({ target: "draft-2020-12" })));
 
 const bytes = (value: string): Buffer => Buffer.from(value, "utf8");
 const result = (value: Partial<DispatchChildResult> = {}): DispatchChildResult => Object.freeze({
@@ -124,7 +128,7 @@ describe("CLI invocation construction", () => {
     const target = await workspace();
     const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
     const invocation = await selectCliAdapter("codex")
-      .buildInvocation(envelope, route, target, reviewSchema);
+      .buildInvocation(envelope, route, target, reviewOutputSchema);
     expect(invocation.argv.slice(0, 5)).toEqual(["-p", "--safe-mode", "--tools", "Read,Grep,Glob", "--add-dir"]);
     expect(invocation.argv).toContain("--setting-sources");
     expect(invocation.argv).not.toContain("--bare");
@@ -141,11 +145,11 @@ describe("CLI invocation construction", () => {
     const plainRoute: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" };
     const providerRoute: DispatchRoute = { ...plainRoute, provider: "zai" };
 
-    const plain = await adapter.buildInvocation(envelope, plainRoute, target, reviewSchema);
+    const plain = await adapter.buildInvocation(envelope, plainRoute, target, reviewOutputSchema);
     expect(plain.command).toBe("claude");
     expect(plain.env).toBe(target.env);
 
-    const wrapped = await adapter.buildInvocation(envelope, providerRoute, target, reviewSchema);
+    const wrapped = await adapter.buildInvocation(envelope, providerRoute, target, reviewOutputSchema);
     expect(wrapped.command).toBe("cc-switch");
     expect(wrapped.argv.slice(0, 4)).toEqual(["start", "claude", "zai", "--"]);
     // The full lockdown argv rides unchanged after the `--` separator.
@@ -161,12 +165,12 @@ describe("CLI invocation construction", () => {
   it("builds the pinned Codex argv with schema/output paths and exact suppressions", async () => {
     const target = await workspace();
     const route: DispatchRoute = { adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "xhigh" };
-    const invocation = await selectCliAdapter("claude").buildInvocation(envelope, route, target, reviewSchema);
+    const invocation = await selectCliAdapter("claude").buildInvocation(envelope, route, target, reviewOutputSchema);
     await expect(selectCliAdapter("claude").buildInvocation(
       envelope,
       { ...route, provider: "zai" } as DispatchRoute,
       target,
-      reviewSchema,
+      reviewOutputSchema,
     )).rejects.toMatchObject({ project_error: { code: "CONFIG_INVALID", diagnostic: { parameters: { issue_code: "provider-unsupported" } } } });
     expect(invocation.argv.slice(0, 6)).toEqual(["exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "--strict-config"]);
     expect(invocation.argv).toContain("--output-schema");
@@ -185,12 +189,12 @@ describe("CLI invocation construction", () => {
     const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
     const adapter = selectCliAdapter("codex");
 
-    const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
+    const bare = await adapter.buildInvocation(envelope, route, target, reviewOutputSchema);
     expect(bare.cwd).toBe(target.root);
     expect(bare.argv).toContain("--add-dir");
     expect(bare.argv[bare.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
 
-    const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewSchema);
+    const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewOutputSchema);
     expect(invocation.cwd).toBe(viewed.review_root);
     expect(invocation.argv).toContain("--add-dir");
     expect(invocation.argv[invocation.argv.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
@@ -207,13 +211,13 @@ describe("CLI invocation construction", () => {
     const route: DispatchRoute = { adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "high" };
     const adapter = selectCliAdapter("claude");
 
-    const bare = await adapter.buildInvocation(envelope, route, target, reviewSchema);
+    const bare = await adapter.buildInvocation(envelope, route, target, reviewOutputSchema);
     expect(bare.argv[bare.argv.indexOf("-C") + 1]).toBe(target.root);
     for (const feature of ["shell_tool", "unified_exec"]) {
       expect(bare.argv[bare.argv.indexOf(feature) - 1]).toBe("--enable");
     }
 
-    const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewSchema);
+    const invocation = await adapter.buildInvocation(envelope, route, viewed, reviewOutputSchema);
     expect(invocation.argv[invocation.argv.indexOf("-C") + 1]).toBe(viewed.review_root);
     for (const feature of ["shell_tool", "unified_exec"]) {
       expect(invocation.argv[invocation.argv.indexOf(feature) - 1]).toBe("--enable");
@@ -237,18 +241,18 @@ describe("CLI invocation construction", () => {
       ? { adapter: id, family: "claude", model: "claude-opus-4-6", effort: "high" }
       : { adapter: id, family: "codex", model: "gpt-5.3-codex", effort: "high" };
     const adjudicationEnvelope: DispatchEnvelope = { ...envelope, result_kind: "adjudication" };
-    const invocation = await adapter.buildInvocation(adjudicationEnvelope, route, target, adjudicationSchema);
+    const invocation = await adapter.buildInvocation(adjudicationEnvelope, route, target, adjudicationOutputSchema);
     const schemaText = id === "claude-cli"
       ? invocation.argv[invocation.argv.indexOf("--json-schema") + 1]!
       : await readFile(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]!, "utf8");
     const parsed = JSON.parse(schemaText) as Record<string, unknown>;
 
     expect(schemaText).not.toMatch(/(?:"\$schema"|"\$id"|"allOf"|"x-archflow-)/u);
-    expect(parsed).toEqual(projectCliOutputSchema(adjudicationSchema as PlainJsonValue, "adjudication", id));
+    expect(parsed).toEqual(projectCliOutputSchema(adjudicationOutputSchema as PlainJsonValue, "adjudication", id));
     expect(parsed).toMatchObject({
       type: "object",
       additionalProperties: false,
-      required: adjudicationSchema.required,
+      required: adjudicationOutputSchema.required,
     });
     const properties = parsed.properties as Record<string, unknown>;
     for (const derived of ["constitution", "drift", "matched_rule_versions", "uncertain_rule_versions"]) {
@@ -258,7 +262,7 @@ describe("CLI invocation construction", () => {
       expect(invocation.argv[invocation.argv.indexOf("--output-schema") + 1]).toMatch(/adjudication\.schema\.json$/u);
       // The codex state-branch expansion existed only for per-mechanism evidence, which findings
       // no longer carry; the adjudication document needs no adapter-specific rewrite at all.
-      expect(parsed.$defs as Record<string, unknown>).not.toHaveProperty("mechanical");
+      expect(parsed).not.toHaveProperty("$defs.mechanical");
     } else {
       expect(schemaText).not.toMatch(/"(?:minimum|maximum|minLength|minItems|maxItems|uniqueItems)"/u);
     }
@@ -689,7 +693,7 @@ describe("CLI output contracts and failure classification", () => {
       envelope,
       { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" },
       ws,
-      reviewSchema as PlainJsonValue,
+      reviewOutputSchema as PlainJsonValue,
     );
 
     expect(inv.command).toBe("agy");
@@ -732,7 +736,7 @@ describe("CLI output contracts and failure classification", () => {
       large,
       route,
       await workspace(),
-      reviewSchema as PlainJsonValue,
+      reviewOutputSchema as PlainJsonValue,
     );
     expect(inv.argv.every((element) => Buffer.byteLength(element, "utf8") < MAX_ARGV_ELEMENT_BYTES)).toBe(true);
     expect(inv.stdin).toBeUndefined();

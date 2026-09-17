@@ -1,5 +1,6 @@
 import { loadReviewDocumentConfiguration } from "./documents.js";
 import { loadReviewInputConfiguration, prepareReviewInputs, renderReviewPrompt, type ReviewDocument } from "./inputs.js";
+import { createReviewResponseSchema } from "./response-schema.js";
 import { canonicalJsonDigest, parseGitOid, sha256Bytes, type GitOid } from "../contracts/canonical.js";
 import { REPOSITORY_NAME_PATTERN } from "../contracts/config.js";
 import { createProjectError, type ProjectError } from "../contracts/errors.js";
@@ -630,7 +631,7 @@ export function sealDispatchInput(
 ): DispatchEnvelope {
   assertPlainJson(envelope, "server review input");
   const record = structuredClone(envelope) as Readonly<Record<string, PlainJsonValue>>;
-  const sealed = { ...record, review_configuration: loadReviewInputConfiguration(), document_configuration: loadReviewDocumentConfiguration() };
+  const sealed = { ...record, response_schema: createReviewResponseSchema(resultKind, record), review_configuration: loadReviewInputConfiguration(), document_configuration: loadReviewDocumentConfiguration() };
   const provisionalBytes = utf8.encode(`${JSON.stringify(sealed)}\n`);
   const prepared = prepareReviewInputs({ result_kind: resultKind, bytes: provisionalBytes, digest: "" as Sha256Digest, byte_count: provisionalBytes.byteLength });
   const rendered = {

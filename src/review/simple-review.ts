@@ -5,7 +5,7 @@ import { canonicalJsonBytes, sha256Bytes } from "../contracts/canonical.js";
 import { createRawAdjudicationV2Schema } from "../contracts/adjudication.js";
 import type { InvocationContext } from "../contracts/contexts.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
-import { assertPlainJson } from "../contracts/plain-json.js";
+import { dispatchInputRecord } from "./inputs.js";
 import { reviewReportOutputSchema } from "../contracts/review.js";
 import { parseSimpleReviewInput, parseSimpleReviewResult, type SimpleReviewInput, type SimpleReviewResult } from "../contracts/simple-review.js";
 import { createReviewDispatcher } from "../dispatch/coordinator.js";
@@ -25,12 +25,6 @@ export type SimpleReviewDependencies = {
 };
 const failure = (code: string, message: string): SimpleReviewResult => ({ schema_version: "1", ok: false, error: { code, message, retryable: false } });
 
-function jsonSchema(schema: { toJSONSchema: (options: { target: "draft-2020-12" }) => unknown }): PlainJsonValue {
-  // Zod attaches a non-enumerable Standard Schema helper to its own schema output.
-  const value: unknown = JSON.parse(JSON.stringify(schema.toJSONSchema({ target: "draft-2020-12" })));
-  assertPlainJson(value);
-  return structuredClone(value);
-}
 const envelope = sealDispatchInput;
 
 /** One stateless pass. Reports describe inspected bytes, never authorization or a workflow transition. */
@@ -88,11 +82,11 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
           })
           : envelope("review", { ...common, assignment: assignment!, rubric,
              });
-        const schema = role === "adjudicator" ? constitutionSchema! : reviewReportOutputSchema;
+        const schema = dispatchInputRecord(request).response_schema!;
         let returned;
         for (let attempt = 0; ; attempt++) {
           context.signal.throwIfAborted();
-          try { returned = await dispatch(route, request, jsonSchema(schema)); break; }
+          try { returned = await dispatch(route, request, schema); break; }
           catch (error) {
             if (attempt >= 2 || !isTransientDispatchFailure(error) || context.signal.aborted) throw error;
             const ms = attempt === 0 ? 1000 : 4000;

@@ -9,6 +9,7 @@ import { governingReviewBindings } from "../../src/review/documents.js";
 import { pinnedContextEntry } from "../../src/review/pinned-context.js";
 import { loadCanonicalRubricForPhaseKind, reviewCriterionIds } from "../../src/review/rubrics.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 const config = loadReviewInputConfiguration();
 const baseCases = Object.entries(config.phases).flatMap(([phase, value]) => Object.keys(value.reviewers).flatMap(reviewer => ["initial", "follow_up"].map(mode => ({ phase, reviewer, mode }))));
@@ -54,8 +55,13 @@ describe("readable final review prompts", () => {
       const full = { kind: phase === "phase-impl" ? "implementation" : "document", subject_digest: hash("current subject"), patch: await descriptor("full.patch", "-old behavior\n+new behavior\n"), stat: await descriptor("full.stat", "1\t1\tsubject\n") };
       const revision = followUp ? { kind: "revision", subject_digest: hash("current subject"), base_subject_digest: hash("previous reviewer subject"), patch: await descriptor("revision.patch", "+reject empty query\n"), stat: await descriptor("revision.stat", "1\t0\tsubject\n") } : undefined;
       const resultKind = reviewer === "constitution" ? "adjudication" : reviewer === "effort" ? "effort-review" : "review";
-      const envelope = sealDispatchInput(resultKind, { ...record, ...(reviewer === "effort" ? record.subject : {}), diffs: { full, ...(revision === undefined ? {} : { revision }) } } as unknown as PlainJsonValue);
+      const envelope = sealDispatchInput(resultKind, { ...record, ...(reviewer === "effort" ? { ...record.subject, task_id: "document-search", input_fingerprint: hash("inputs"), step: "effort_review", role: "effort-reviewer" } : {}), diffs: { full, ...(revision === undefined ? {} : { revision }) } } as unknown as PlainJsonValue);
       const rendered = await materializeReviewInputs(envelope, { root, repository_view_root, env: {}, dispose: async () => {} });
+      const example = JSON.parse(rendered.prompt.match(/```json\n([\s\S]*?)\n```/u)![1]!);
+      const validator = createJsonSchemaValidator(rendered.prepared.response_schema as Record<string, unknown>);
+      expect(validator.validate(example), JSON.stringify(validator.validate.errors)).toBe(true);
+      expect(rendered.prompt).not.toContain('"$schema"');
+      expect(rendered.prompt).not.toContain("CLI-provided response schema");
       expect(rendered.prompt).not.toContain("@..");
       for (const reference of rendered.prompt.split("\n").filter(line => line.startsWith("@"))) expect(reference).toMatch(/^@review-inputs\/[a-z-]+\/[a-zA-Z0-9._-]+$/u);
       if (["general", "tests"].includes(reviewer)) {

@@ -8,7 +8,27 @@ Investigate before judging: establish the authenticated assignment and the outco
 
 This role reassesses the complete current subject each round, including follow-ups. Judge every supplied rule against the current subject and its governing documents. Return exactly one judgment per supplied rule slot, using each slot once. Enforcement labels provide context, not a request to verify enforcement machinery. Report uncertainty only when the supplied evidence leaves compliance open. Match review triggers only on direct evidence from the subject, its co-produced documents or repository snapshot; workflow mechanics are not trigger evidence. Rules without a trigger must report not-matched. Do not author rule identities, rollups or approval decisions.
 
-Return only the result requested by the CLI-provided response schema. Do not create a separate review document.
+Follow the Response format example below when returning your assessment.
+
+## Response format
+
+Return exactly one JSON object using the structure below. Replace the illustrative judgments and placeholder text with your own assessment; preserve fixed identifiers and version values. Do not wrap your response in Markdown fences, add surrounding commentary, or create a separate review document.
+
+```json
+{
+  "schema_version": "2",
+  "judgments": {
+    "rule-1": {
+      "compliance": "pass",
+      "rationale": "<rationale: your assessment grounded in the supplied evidence>",
+      "trigger": "not-matched",
+      "trigger_evidence": "<trigger evidence: your assessment grounded in the supplied evidence>"
+    }
+  }
+}
+```
+
+Allowed values: compliance: `pass` | `fail` | `uncertain`; trigger: `not-matched` | `matched` | `uncertain`.
 
 ## Supplied files and how to use them
 

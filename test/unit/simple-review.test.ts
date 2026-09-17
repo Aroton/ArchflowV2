@@ -33,8 +33,9 @@ async function repo() {
   return { root, input, context, controller };
 }
 function fakeDispatch(calls: Array<{ role: string; envelope: Record<string, any>; route: any }>, change?: (role: string, body: any) => unknown): NonNullable<SimpleReviewDependencies["dispatch"]> {
-  return async (route, envelope) => {
+  return async (route, envelope, schema) => {
     const body = JSON.parse(new TextDecoder().decode(envelope.bytes));
+    expect(schema).toEqual(body.response_schema);
     const role = envelope.result_kind === "adjudication" ? "adjudicator" : body.assignment.focus === "tests" ? "test-reviewer" : "counter-reviewer";
     calls.push({ role, envelope: body, route });
     const override = change?.(role, body);
@@ -90,6 +91,14 @@ describe("standalone simple review", () => {
       expected_policy_digest: plan.value!.policy_digest }, context, dependencies);
     expect(implementation.ok, JSON.stringify(implementation)).toBe(true);
     expect(calls).toHaveLength(6);
+    for (const call of calls) {
+      const prompt = call.envelope.rendered_inputs.prompt as string;
+      const example = JSON.parse(prompt.match(/```json\n([\s\S]*?)\n```/u)![1]!);
+      expect(prompt).not.toContain('"$schema"');
+      if (call.role === "adjudicator") {
+        expect(Object.keys(example.judgments)).toEqual(call.envelope.rules.map((rule: { slot: string }) => rule.slot));
+      } else expect(example).toMatchObject({ outcome: "issues_found", feedback: expect.any(String) });
+    }
     const implementationRubric = await loadCanonicalRubricForSimpleStage("implementation");
     if (!implementationRubric.ok) throw implementationRubric.error;
     expect(implementationRubric.value.rubric_id).toBe("implementation-v1");

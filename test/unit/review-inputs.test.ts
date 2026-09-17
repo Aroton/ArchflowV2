@@ -7,8 +7,9 @@ import { buildReviewEnvelope, sealDispatchInput, type ReviewEnvelopeInput } from
 import { pinnedContextEntry } from "../../src/review/pinned-context.js";
 import { governingReviewBindings, loadReviewDocumentConfiguration } from "../../src/review/documents.js";
 import { loadReviewInputConfiguration, parseReviewInputConfiguration, prepareReviewInputs, materializeReviewInputs, renderReviewPrompt } from "../../src/review/inputs.js";
-import { selectCliAdapter } from "../../src/dispatch/cli.js";
+import { projectCliOutputSchema, selectCliAdapter } from "../../src/dispatch/cli.js";
 import type { DispatchWorkspace } from "../../src/dispatch/workspace.js";
+import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 const bytes = (text: string) => new TextEncoder().encode(text);
 const hash = (text: string) => sha256Bytes(bytes(text));
 const roots: string[] = [];
@@ -104,6 +105,18 @@ describe("bundled review recipes", () => {
     expect(() => renderReviewPrompt(prepared, "review-inputs")).toThrow(/16 KiB/);
     expect(prepared.files.find(file => file.group === "subject")?.content).toBe(seed().artifact);
   });
+  it("counts the response example toward the prompt limit without truncating it", () => {
+    const prepared = prepareReviewInputs(buildReviewEnvelope(seed()));
+    prepared.response_schema = { type: "object", properties: { fixed_value: { const: "x".repeat(16384) } } };
+    expect(() => renderReviewPrompt(prepared, "review-inputs")).toThrow(/response example.*16 KiB/);
+    expect(prepared.response_schema).toEqual({ type: "object", properties: { fixed_value: { const: "x".repeat(16384) } } });
+  });
+  it("rejects response contract changes that are not authenticated by the envelope", () => {
+    const envelope = buildReviewEnvelope(seed());
+    const record = JSON.parse(new TextDecoder().decode(envelope.bytes));
+    record.response_schema.properties.outcome.enum = ["invented-outcome"];
+    expect(() => prepareReviewInputs({ ...envelope, bytes: bytes(JSON.stringify(record)) })).toThrow(/binding changed/);
+  });
 });
 
 describe("materialized review inputs", () => {
@@ -140,9 +153,44 @@ describe("materialized review inputs", () => {
     const invocation = await selectCliAdapter("claude", route).buildInvocation(envelope, route, ws, { type: "object", properties: {}, additionalProperties: false });
     const prompt = route.adapter === "antigravity-cli" ? invocation.argv[1] : invocation.argv.at(-1);
     expect(prompt).toBe(preview.prompt);
+    const schemaFlag = route.adapter === "codex-cli" ? "--output-schema" : "--json-schema";
+    const schemaArgument = invocation.argv[invocation.argv.indexOf(schemaFlag) + 1]!;
+    const schemaText = route.adapter === "claude-cli" ? schemaArgument : await readFile(schemaArgument, "utf8");
+    expect(JSON.parse(schemaText)).toEqual(projectCliOutputSchema(preview.prepared.response_schema, "review", route.adapter));
     expect(invocation.stdin).toBeUndefined();
     for (const file of preview.prepared.files) expect((await readFile(join(preview.directory, file.name))).byteLength).toBe(file.byte_count);
     const other = buildReviewEnvelope({ ...seed(), subject: { ...seed().subject, invocation_id: "different-invocation", result_id: "different-result" } });
     expect((await materializeReviewInputs(other, ws)).prompt).toBe(preview.prompt);
+  });
+  it.each([
+    { adapter: "claude-cli", family: "claude", model: "claude-fable-5-1", effort: "medium" },
+    { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "medium" },
+    { adapter: "antigravity-cli", family: "gemini", model: "gemini-3.8-flash-high", effort: "high" },
+  ] as const)("keeps specialist examples and CLI contracts aligned for $adapter", async (route) => {
+    for (const kind of ["adjudication", "effort-review"] as const) {
+      const subject = seed().subject;
+      const record = kind === "adjudication"
+        ? { subject, rules: ["rule-a", "rule-b"].map(slot => ({ slot, text: "Preserve the public interface.", enforced_by: [] })) }
+        : { ...subject, step: "effort_review", role: "effort-reviewer" };
+      const envelope = sealDispatchInput(kind, { ...record, artifact: "# Current subject", context: [] });
+      const ws = await workspace();
+      const preview = await materializeReviewInputs(envelope, ws);
+      const invocation = await selectCliAdapter("claude", route).buildInvocation(envelope, route, ws, preview.prepared.response_schema);
+      const prompt = route.adapter === "antigravity-cli" ? invocation.argv[1]! : invocation.argv.at(-1)!;
+      expect(prompt).toBe(preview.prompt);
+      const example = JSON.parse(prompt.match(/```json\n([\s\S]*?)\n```/u)![1]!);
+      const schemaFlag = route.adapter === "codex-cli" ? "--output-schema" : "--json-schema";
+      const argument = invocation.argv[invocation.argv.indexOf(schemaFlag) + 1]!;
+      const schema = JSON.parse(route.adapter === "claude-cli" ? argument : await readFile(argument, "utf8"));
+      expect(schema).toEqual(projectCliOutputSchema(preview.prepared.response_schema, kind, route.adapter));
+      expect(createJsonSchemaValidator(schema).validate(example)).toBe(true);
+      if (kind === "adjudication") {
+        expect(Object.keys(example.judgments)).toEqual(["rule-a", "rule-b"]);
+        expect(createJsonSchemaValidator(schema).validate({ ...example, judgments: { "rule-a": example.judgments["rule-a"] } })).toBe(false);
+      } else {
+        expect(example).toMatchObject({ task_id: subject.task_id, subject_digest: subject.subject_digest, input_fingerprint: subject.input_fingerprint });
+        expect(createJsonSchemaValidator(schema).validate({ ...example, subject_digest: hash("other subject") })).toBe(false);
+      }
+    }
   });
 });

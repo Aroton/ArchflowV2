@@ -5,7 +5,7 @@
       "imports": []
     },
     "assets/review-inputs.yaml": {
-      "bytes": 23707,
+      "bytes": 23668,
       "imports": []
     },
     "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs": {
@@ -3469,7 +3469,7 @@
       ]
     },
     "src/contracts/adjudication.ts": {
-      "bytes": 20868,
+      "bytes": 21310,
       "format": "esm",
       "imports": [
         {
@@ -4712,14 +4712,6 @@
         "type": "json"
       }
     },
-    "src/contracts/schemas/v1/effort-review.schema.json": {
-      "bytes": 1665,
-      "format": "esm",
-      "imports": [],
-      "with": {
-        "type": "json"
-      }
-    },
     "src/contracts/schemas/v1/evidence-slots.schema.json": {
       "bytes": 1381,
       "format": "esm",
@@ -5192,7 +5184,7 @@
       ]
     },
     "src/dispatch/cli.ts": {
-      "bytes": 45789,
+      "bytes": 45837,
       "format": "esm",
       "imports": [
         {
@@ -7694,7 +7686,7 @@
       ]
     },
     "src/review/counter-review.ts": {
-      "bytes": 49220,
+      "bytes": 48894,
       "format": "esm",
       "imports": [
         {
@@ -7704,11 +7696,8 @@
         },
         {
           "kind": "import-statement",
-          "original": "../contracts/schemas/v1/effort-review.schema.json",
-          "path": "src/contracts/schemas/v1/effort-review.schema.json",
-          "with": {
-            "type": "json"
-          }
+          "original": "./inputs.js",
+          "path": "src/review/inputs.ts"
         },
         {
           "kind": "import-statement",
@@ -7716,9 +7705,9 @@
           "path": "src/contracts/canonical.ts"
         },
         {
+          "external": true,
           "kind": "import-statement",
-          "original": "../contracts/adjudication.js",
-          "path": "src/contracts/adjudication.ts"
+          "path": "../contracts/adjudication.js"
         },
         {
           "kind": "import-statement",
@@ -7910,7 +7899,7 @@
       "imports": []
     },
     "src/review/envelopes.ts": {
-      "bytes": 36488,
+      "bytes": 36620,
       "format": "esm",
       "imports": [
         {
@@ -7922,6 +7911,11 @@
           "kind": "import-statement",
           "original": "./inputs.js",
           "path": "src/review/inputs.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./response-schema.js",
+          "path": "src/review/response-schema.ts"
         },
         {
           "kind": "import-statement",
@@ -8088,13 +8082,18 @@
       ]
     },
     "src/review/inputs.ts": {
-      "bytes": 21559,
+      "bytes": 22620,
       "format": "esm",
       "imports": [
         {
           "kind": "import-statement",
           "original": "./documents.js",
           "path": "src/review/documents.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "./response-schema.js",
+          "path": "src/review/response-schema.ts"
         },
         {
           "kind": "import-statement",
@@ -8224,6 +8223,32 @@
         }
       ]
     },
+    "src/review/response-schema.ts": {
+      "bytes": 2817,
+      "format": "esm",
+      "imports": [
+        {
+          "kind": "import-statement",
+          "original": "../contracts/adjudication.js",
+          "path": "src/contracts/adjudication.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/effort-review.js",
+          "path": "src/contracts/effort-review.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/plain-json.js",
+          "path": "src/contracts/plain-json.ts"
+        },
+        {
+          "kind": "import-statement",
+          "original": "../contracts/review.js",
+          "path": "src/contracts/review.ts"
+        }
+      ]
+    },
     "src/review/reviewer-tags.ts": {
       "bytes": 8260,
       "format": "esm",
@@ -8337,7 +8362,7 @@
       ]
     },
     "src/review/simple-review.ts": {
-      "bytes": 11426,
+      "bytes": 11014,
       "format": "esm",
       "imports": [
         {
@@ -8362,8 +8387,8 @@
         },
         {
           "kind": "import-statement",
-          "original": "../contracts/plain-json.js",
-          "path": "src/contracts/plain-json.ts"
+          "original": "./inputs.js",
+          "path": "src/review/inputs.ts"
         },
         {
           "kind": "import-statement",
@@ -11108,7 +11133,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2656580,
+      "bytes": 2659643,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11758,7 +11783,7 @@
           "bytesInOutput": 4112
         },
         "assets/review-inputs.yaml": {
-          "bytesInOutput": 23745
+          "bytesInOutput": 23706
         },
         "node_modules/@secretlint/core/module/RuleContext.js": {
           "bytesInOutput": 2398
@@ -12292,7 +12317,7 @@
           "bytesInOutput": 5119
         },
         "src/contracts/adjudication.ts": {
-          "bytesInOutput": 13771
+          "bytesInOutput": 14077
         },
         "src/contracts/automation-status.ts": {
           "bytesInOutput": 15540
@@ -12436,7 +12461,7 @@
           "bytesInOutput": 3877
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 30880
+          "bytesInOutput": 30910
         },
         "src/dispatch/coordinator.ts": {
           "bytesInOutput": 10474
@@ -12550,7 +12575,7 @@
           "bytesInOutput": 7278
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 9361
+          "bytesInOutput": 9240
         },
         "src/review/diffs.ts": {
           "bytesInOutput": 10441
@@ -12562,7 +12587,7 @@
           "bytesInOutput": 1897
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 24271
+          "bytesInOutput": 24337
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 27934
@@ -12571,10 +12596,13 @@
           "bytesInOutput": 2243
         },
         "src/review/inputs.ts": {
-          "bytesInOutput": 19476
+          "bytesInOutput": 20372
         },
         "src/review/pinned-context.ts": {
           "bytesInOutput": 15491
+        },
+        "src/review/response-schema.ts": {
+          "bytesInOutput": 1891
         },
         "src/review/reviewer-tags.ts": {
           "bytesInOutput": 118
@@ -12720,7 +12748,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3826445,
+      "bytes": 3827547,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -12817,6 +12845,16 @@
         {
           "external": true,
           "kind": "import-statement",
+          "path": "node:fs/promises"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
+          "path": "node:path"
+        },
+        {
+          "external": true,
+          "kind": "import-statement",
           "path": "node:url"
         },
         {
@@ -12838,16 +12876,6 @@
           "external": true,
           "kind": "import-statement",
           "path": "node:fs"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:fs/promises"
-        },
-        {
-          "external": true,
-          "kind": "import-statement",
-          "path": "node:path"
         },
         {
           "external": true,
@@ -13380,7 +13408,7 @@
           "bytesInOutput": 4112
         },
         "assets/review-inputs.yaml": {
-          "bytesInOutput": 23745
+          "bytesInOutput": 23706
         },
         "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs": {
           "bytesInOutput": 34870
@@ -13398,7 +13426,7 @@
           "bytesInOutput": 40180
         },
         "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs": {
-          "bytesInOutput": 184884
+          "bytesInOutput": 184881
         },
         "node_modules/@secretlint/core/module/RuleContext.js": {
           "bytesInOutput": 2398
@@ -13722,7 +13750,7 @@
           "bytesInOutput": 736
         },
         "node_modules/zod/v4/classic/schemas.js": {
-          "bytesInOutput": 45723
+          "bytesInOutput": 45719
         },
         "node_modules/zod/v4/core/api.js": {
           "bytesInOutput": 22901
@@ -13932,7 +13960,7 @@
           "bytesInOutput": 4611
         },
         "src/contracts/adjudication.ts": {
-          "bytesInOutput": 13842
+          "bytesInOutput": 14148
         },
         "src/contracts/canonical.ts": {
           "bytesInOutput": 3740
@@ -14042,9 +14070,6 @@
         "src/contracts/schemas/v1/durable-primitives.schema.json": {
           "bytesInOutput": 26507
         },
-        "src/contracts/schemas/v1/effort-review.schema.json": {
-          "bytesInOutput": 1615
-        },
         "src/contracts/schemas/v1/evidence-slots.schema.json": {
           "bytesInOutput": 1352
         },
@@ -14130,7 +14155,7 @@
           "bytesInOutput": 3858
         },
         "src/dispatch/cli.ts": {
-          "bytesInOutput": 33489
+          "bytesInOutput": 33519
         },
         "src/dispatch/coordinator.ts": {
           "bytesInOutput": 10446
@@ -14154,7 +14179,7 @@
           "bytesInOutput": 7338
         },
         "src/dispatch/usage-log.ts": {
-          "bytesInOutput": 1537
+          "bytesInOutput": 1563
         },
         "src/dispatch/usage.ts": {
           "bytesInOutput": 1360
@@ -14232,7 +14257,7 @@
           "bytesInOutput": 2789
         },
         "src/repository/paths.ts": {
-          "bytesInOutput": 18910
+          "bytesInOutput": 18921
         },
         "src/repository/repository-set.ts": {
           "bytesInOutput": 6059
@@ -14241,7 +14266,7 @@
           "bytesInOutput": 9293
         },
         "src/review/counter-review.ts": {
-          "bytesInOutput": 28789
+          "bytesInOutput": 28665
         },
         "src/review/diffs.ts": {
           "bytesInOutput": 10471
@@ -14253,7 +14278,7 @@
           "bytesInOutput": 1558
         },
         "src/review/envelopes.ts": {
-          "bytesInOutput": 24081
+          "bytesInOutput": 24147
         },
         "src/review/fixed-point.ts": {
           "bytesInOutput": 27861
@@ -14262,10 +14287,13 @@
           "bytesInOutput": 2155
         },
         "src/review/inputs.ts": {
-          "bytesInOutput": 18730
+          "bytesInOutput": 19590
         },
         "src/review/pinned-context.ts": {
           "bytesInOutput": 15394
+        },
+        "src/review/response-schema.ts": {
+          "bytesInOutput": 1835
         },
         "src/review/reviewer-tags.ts": {
           "bytesInOutput": 118
@@ -14277,7 +14305,7 @@
           "bytesInOutput": 8731
         },
         "src/review/simple-review.ts": {
-          "bytesInOutput": 9267
+          "bytesInOutput": 9041
         },
         "src/state/approval-rules.ts": {
           "bytesInOutput": 8985

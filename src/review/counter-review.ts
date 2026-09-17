@@ -1,12 +1,10 @@
 import type { DispatchUsage } from "../contracts/dispatch-usage.js";
 import type { PreparedReviewDiffs } from "./diffs.js";
-import { reviewReportOutputSchema, parseReviewFeedback, isFeedbackReview, type ReviewReport, type ReviewFeedbackV1, type ServerAttestedReviewV5 } from "../contracts/review.js";
-import effortReviewOutputSchema from "../contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
-const reviewOutputSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue;
+import { parseReviewFeedback, isFeedbackReview, type ReviewReport, type ReviewFeedbackV1, type ServerAttestedReviewV5 } from "../contracts/review.js";
+import { dispatchInputRecord } from "./inputs.js";
 
 import { canonicalJsonDigest, sha256Bytes, type CanonicalDocument } from "../contracts/canonical.js";
 import {
-  createRawAdjudicationV2Schema,
   type AdjudicationEvidence,
   type AdjudicationRuleSlotV1,
   type ServerAttestedAdjudicationV2,
@@ -727,7 +725,7 @@ export async function runCounterReview(
     }
     try {
       dispatched ??= await dispatchObserved(routeEntry.role, routeEntry, async (selectedRoute) => {
-        const result = await dependencies.dispatch(selectedRoute, reviewEnvelope, reviewOutputSchema as PlainJsonValue);
+        const result = await dependencies.dispatch(selectedRoute, reviewEnvelope, dispatchInputRecord(reviewEnvelope).response_schema!);
         // Keep received feedback even if server-owned evidence construction fails afterwards.
         await retained?.write(binding, result);
         try { receive(result); } catch { throw new CliAdapterError(createProjectError("MODEL_OUTPUT_INVALID", { adapter: selectedRoute.adapter, attempt: input.authority.context.attempt, issue_code: "review-output-unreadable" })); }
@@ -787,7 +785,7 @@ export async function runCounterReview(
       }
       let dispatched: CounterReviewDispatchResult;
       try {
-        dispatched = await dependencies.dispatch(route, effortEnvelope, effortReviewOutputSchema as PlainJsonValue);
+        dispatched = await dependencies.dispatch(route, effortEnvelope, dispatchInputRecord(effortEnvelope).response_schema!);
       } catch {
         return { ok: true, value: { kind: "effort", assessment: createDefaultEffortSelectionV3(parsedEffortEnvelope) } };
       }
@@ -839,8 +837,7 @@ export async function runCounterReview(
           const result = await plan.dispatch(
             selectedRoute,
             constitutionEnvelope,
-            JSON.parse(JSON.stringify(createRawAdjudicationV2Schema(plan.rule_slots)
-              .toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue,
+            dispatchInputRecord(constitutionEnvelope).response_schema!,
           );
           try { mint(result); } catch (error) {
             throw new CliAdapterError(error instanceof AdjudicationServiceError ? error.project_error : createProjectError("MODEL_OUTPUT_INVALID", { adapter: selectedRoute.adapter, attempt: 1, issue_code: adjudicationOutputIssueCode(error) }));

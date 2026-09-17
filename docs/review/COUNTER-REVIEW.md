@@ -34,6 +34,8 @@ General and test reviewers receive `rubric.md`, with the source rubric and only 
 
 The reviewer prompt is ordinary Markdown: it identifies the primary subject, explains the review assignment, and introduces each referenced file with its purpose and how to use it. Supplied files are the entire base context, read as fully as practical before investigation. Additional independent reads can be batched. The server retains the canonical binding of authority, configuration, rendered prompt, filenames, sizes, hashes, and originating versions; this JSON binding is not sent to the CLI. Structured results still pass the existing schema and provenance checks.
 
+Each prompt includes a short JSON response example and the allowed judgment values, generated from the current response contract. Examples illustrate structure rather than prescribe a judgment. Constitution examples enumerate the assigned rule slots; effort examples preserve the exact task and subject bindings. The complete schema stays in the authenticated envelope and supplies the CLI structured-output configuration, so the reviewer need not look up the response shape. Server validation remains authoritative. Previews, standalone reviews, and follow-ups use the same renderer.
+
 ```text
 review/                         # reviewer working directory
 ├── review-inputs/
@@ -62,7 +64,7 @@ Standalone plans retain `simple-plan-v1`, with framing for the ask, plan, declar
 
 ## Diffs and initial review material
 
-Full files are always available. The CLI receives bounded instructions and explicit references on argv, with empty stdin. The 16 KiB prompt limit bounds instructions and references, not document or patch size; exceeding it fails explicitly. The old JSON-envelope cap, inline diff copies, and context-dropping/excerpt logic are removed.
+Full files are always available. The CLI receives bounded instructions and explicit references on argv, with empty stdin. The 16 KiB prompt limit bounds instructions, the response example, and references, not document or patch size; exceeding it fails explicitly without truncating the example or evidence. The old JSON-envelope cap, inline diff copies, and context-dropping/excerpt logic are removed.
 
 Claude's tested noninteractive safe-mode invocation expands direct small-file references before model tool calls, but did not expand a nested reference and omitted a roughly 404 KB file in a narrow probe. Codex exec and Antigravity print left references as text and required tool reads. The prompt therefore tells each reviewer to read any referenced content the CLI has not already included. Do not equate a supplied reference with guaranteed immediate inclusion. See [the recorded probes](../validation/review-file-reference-probes.md).
 

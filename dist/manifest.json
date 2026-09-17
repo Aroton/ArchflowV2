@@ -86,16 +86,16 @@
   ],
   "artifacts": [
     {
-      "digest": "ec47deeeed219bfb77ab48ad63a3d0f848c9d589b625a36f5c0e9fad47defdc0",
+      "digest": "018de5eecb790ec32cce658b969e8ace95f371a854f4adda57a487292cbe24ad",
       "path": "archflow-local.mjs",
       "role": "executable",
-      "size": 2656580
+      "size": 2659643
     },
     {
-      "digest": "0db6d0f959e8fe5e3dbdc5809b80c3a0c27b4e97dc1619305149144da8b28dd6",
+      "digest": "bdc4cdfbff95c1fc3f37f2f165dc5e785201fa984de9bee8505740cac838dd8a",
       "path": "archflow-mcp.mjs",
       "role": "executable",
-      "size": 3826445
+      "size": 3827547
     },
     {
       "digest": "b1a2da6bef84f2512ae167c3f0e9f8caee088fed9ac04f4e7022366d83729ca0",
@@ -210,10 +210,10 @@
       "role": "manifest"
     },
     {
-      "digest": "d4d6fd89a7deff2d36ef096e66f03ca2199c9827ee616c7e21a5e57be260861b",
+      "digest": "b437afb02dd2c6d40a74a038a95f391f4d27bd8519254b898f0c9f1eaff15e81",
       "path": "metafile.json",
       "role": "metafile",
-      "size": 410803
+      "size": 411576
     }
   ],
   "build_entries": [
@@ -232,7 +232,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "0db6d0f959e8fe5e3dbdc5809b80c3a0c27b4e97dc1619305149144da8b28dd6",
+  "bundle_digest": "bdc4cdfbff95c1fc3f37f2f165dc5e785201fa984de9bee8505740cac838dd8a",
   "bundle_inputs": [
     {
       "bytes_in_output": 8224,
@@ -245,14 +245,14 @@
       "size": 4029
     },
     {
-      "bytes_in_output": 47490,
-      "digest": "bcfa18c6c3be29f73e802d3c9a5eafa3917cae3dfca28eb1602ae0dd7bb18a92",
+      "bytes_in_output": 47412,
+      "digest": "ab204895271346e7004bc938fbf2323ecafba697b50ac6aea207da684c0ae8b8",
       "key": "assets/review-inputs.yaml",
       "origin": {
         "kind": "repository",
         "path": "assets/review-inputs.yaml"
       },
-      "size": 23707
+      "size": 23668
     },
     {
       "bytes_in_output": 34870,
@@ -351,7 +351,7 @@
       "size": 184
     },
     {
-      "bytes_in_output": 184884,
+      "bytes_in_output": 184881,
       "digest": "32ecc5f9aaaab5f35499fdfb11e0f1cb3f39a763d762f21e76c5cd55cc11c9c0",
       "key": "node_modules/@modelcontextprotocol/server/dist/src-CX2iR2pK.mjs",
       "origin": {
@@ -1659,7 +1659,7 @@
       "size": 997
     },
     {
-      "bytes_in_output": 95301,
+      "bytes_in_output": 95297,
       "digest": "eb4af7946a092aff8678b9251728ea58dab40154920cd65ec4a2ca1d4df68393",
       "key": "node_modules/zod/v4/classic/schemas.js",
       "origin": {
@@ -2511,14 +2511,14 @@
       "size": 4498
     },
     {
-      "bytes_in_output": 27613,
-      "digest": "91bdcaff13290f71e5f483119a1a17de899b5d3636b120215931049523d4f329",
+      "bytes_in_output": 28225,
+      "digest": "8400d995764923f0126cfff26cdae4e1aae76d83eb92435f6c9dcfe5b65d1c35",
       "key": "src/contracts/adjudication.ts",
       "origin": {
         "kind": "repository",
         "path": "src/contracts/adjudication.ts"
       },
-      "size": 20868
+      "size": 21310
     },
     {
       "bytes_in_output": 15540,
@@ -2891,16 +2891,6 @@
       "size": 27360
     },
     {
-      "bytes_in_output": 1615,
-      "digest": "296409165570b6276bb297692a82977b8ac2092743e267589110e1e7db1be1f0",
-      "key": "src/contracts/schemas/v1/effort-review.schema.json",
-      "origin": {
-        "kind": "repository",
-        "path": "src/contracts/schemas/v1/effort-review.schema.json"
-      },
-      "size": 1665
-    },
-    {
       "bytes_in_output": 1352,
       "digest": "949267de322305d479b37a6584c3990c1d92da82c14f6dc7a00c4a5d3f6aef29",
       "key": "src/contracts/schemas/v1/evidence-slots.schema.json",
@@ -3181,14 +3171,14 @@
       "size": 5077
     },
     {
-      "bytes_in_output": 64369,
-      "digest": "0fc87c6c9d65227918bc72a7db76a9ac10089524138b4e6311a2ec56972f323f",
+      "bytes_in_output": 64429,
+      "digest": "9a7270ebda8b6d3bb87b3f28093a40296ef40cd93a1e49cbf298a99abccb0562",
       "key": "src/dispatch/cli.ts",
       "origin": {
         "kind": "repository",
         "path": "src/dispatch/cli.ts"
       },
-      "size": 45789
+      "size": 45837
     },
     {
       "bytes_in_output": 20920,
@@ -3261,7 +3251,7 @@
       "size": 11402
     },
     {
-      "bytes_in_output": 3164,
+      "bytes_in_output": 3190,
       "digest": "917c59daf9f0f72d7c773d71711676e12a07a6ac50d26c8a2f7c891cdc27c8bc",
       "key": "src/dispatch/usage-log.ts",
       "origin": {
@@ -3641,7 +3631,7 @@
       "size": 6606
     },
     {
-      "bytes_in_output": 38338,
+      "bytes_in_output": 38349,
       "digest": "3e656202994bf94597764107eb71d1143520de6d3c261e7c7fcab42394c69fc3",
       "key": "src/repository/paths.ts",
       "origin": {
@@ -3671,14 +3661,14 @@
       "size": 17192
     },
     {
-      "bytes_in_output": 38150,
-      "digest": "b1b4f66ac4b6f44a16c253750d6eb9f182d790ef9d3d72734082e91a5ffd544b",
+      "bytes_in_output": 37905,
+      "digest": "a99f34010abb1c2c58fc5ecdbde058f20cbc91a27b206361a6da35e8091354d0",
       "key": "src/review/counter-review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/counter-review.ts"
       },
-      "size": 49220
+      "size": 48894
     },
     {
       "bytes_in_output": 20912,
@@ -3711,14 +3701,14 @@
       "size": 7528
     },
     {
-      "bytes_in_output": 48352,
-      "digest": "f6144614acfbf44fedb394d0f3e5877e38b9dd67b5dd6949b0bbee2f7c37c802",
+      "bytes_in_output": 48484,
+      "digest": "46afdb4dab93f0c67ba8e6d3ac8211217eea980eb04435cc345e84a1ff003952",
       "key": "src/review/envelopes.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/envelopes.ts"
       },
-      "size": 36488
+      "size": 36620
     },
     {
       "bytes_in_output": 55795,
@@ -3741,14 +3731,14 @@
       "size": 3497
     },
     {
-      "bytes_in_output": 38206,
-      "digest": "d3b9531c48880926f218012828c6c79488dc8389da35ba1fc2eb911f737576e3",
+      "bytes_in_output": 39962,
+      "digest": "e5d2a78e93d5bc605ba1f51afd2d46686603cdec0fb9b1f7848afd8f83ef15ad",
       "key": "src/review/inputs.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/inputs.ts"
       },
-      "size": 21559
+      "size": 22620
     },
     {
       "bytes_in_output": 30885,
@@ -3759,6 +3749,16 @@
         "path": "src/review/pinned-context.ts"
       },
       "size": 26840
+    },
+    {
+      "bytes_in_output": 3726,
+      "digest": "e97f3bdc0df000439fc913029524159e25e9f7c26018687b0a5ba5a45e622f87",
+      "key": "src/review/response-schema.ts",
+      "origin": {
+        "kind": "repository",
+        "path": "src/review/response-schema.ts"
+      },
+      "size": 2817
     },
     {
       "bytes_in_output": 236,
@@ -3791,14 +3791,14 @@
       "size": 9404
     },
     {
-      "bytes_in_output": 9267,
-      "digest": "fd97232748f73344b4fa27001f9e9e4855ca00ba830bcc32642ebcb18de6ec3f",
+      "bytes_in_output": 9041,
+      "digest": "b662bb38bbaf92d8c0b42a19629ebe1a7c0fc422c11e97cccf4fc4407dab6316",
       "key": "src/review/simple-review.ts",
       "origin": {
         "kind": "repository",
         "path": "src/review/simple-review.ts"
       },
-      "size": 11426
+      "size": 11014
     },
     {
       "bytes_in_output": 15842,
@@ -4525,7 +4525,6 @@
     "src/contracts/rubric.ts",
     "src/contracts/schemas/v1/document-artifact.schema.json",
     "src/contracts/schemas/v1/durable-primitives.schema.json",
-    "src/contracts/schemas/v1/effort-review.schema.json",
     "src/contracts/schemas/v1/evidence-slots.schema.json",
     "src/contracts/schemas/v1/gate-contract.schema.json",
     "src/contracts/schemas/v1/gate-decision.schema.json",
@@ -4612,6 +4611,7 @@
     "src/review/implementation-models.ts",
     "src/review/inputs.ts",
     "src/review/pinned-context.ts",
+    "src/review/response-schema.ts",
     "src/review/reviewer-tags.ts",
     "src/review/rubrics.ts",
     "src/review/simple-context.ts",
@@ -4733,7 +4733,7 @@
     ],
     "workflow": "assets/workflow.yaml"
   },
-  "dependency_inventory_digest": "a524c92f50f5c5bba9f2936bd756b1e99de2d5d09f3b8ee1d76faa33d51078fe",
+  "dependency_inventory_digest": "911fdae73d57f66c6adc3ac9271a944de1fe20c82fba4106a192f5212a656955",
   "dependency_provenance_inputs": [
     {
       "digest": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
@@ -5197,7 +5197,6 @@
         "src/contracts/rubric.ts",
         "src/contracts/schemas/v1/document-artifact.schema.json",
         "src/contracts/schemas/v1/durable-primitives.schema.json",
-        "src/contracts/schemas/v1/effort-review.schema.json",
         "src/contracts/schemas/v1/evidence-slots.schema.json",
         "src/contracts/schemas/v1/gate-contract.schema.json",
         "src/contracts/schemas/v1/gate-decision.schema.json",
@@ -5272,6 +5271,7 @@
         "src/review/implementation-models.ts",
         "src/review/inputs.ts",
         "src/review/pinned-context.ts",
+        "src/review/response-schema.ts",
         "src/review/reviewer-tags.ts",
         "src/review/rubrics.ts",
         "src/review/simple-context.ts",
@@ -5329,7 +5329,7 @@
       ],
       "entry_point": "src/main.ts",
       "id": "mcp-stdio",
-      "output_digest": "0db6d0f959e8fe5e3dbdc5809b80c3a0c27b4e97dc1619305149144da8b28dd6",
+      "output_digest": "bdc4cdfbff95c1fc3f37f2f165dc5e785201fa984de9bee8505740cac838dd8a",
       "output_path": "archflow-mcp.mjs"
     },
     {
@@ -5629,6 +5629,7 @@
         "src/review/implementation-models.ts",
         "src/review/inputs.ts",
         "src/review/pinned-context.ts",
+        "src/review/response-schema.ts",
         "src/review/reviewer-tags.ts",
         "src/review/rubrics.ts",
         "src/state/approval-rules.ts",
@@ -5679,7 +5680,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "ec47deeeed219bfb77ab48ad63a3d0f848c9d589b625a36f5c0e9fad47defdc0",
+      "output_digest": "018de5eecb790ec32cce658b969e8ace95f371a854f4adda57a487292cbe24ad",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -6088,6 +6089,11 @@
       "size": 11681
     },
     {
+      "digest": "296409165570b6276bb297692a82977b8ac2092743e267589110e1e7db1be1f0",
+      "path": "src/contracts/schemas/v1/effort-review.schema.json",
+      "size": 1665
+    },
+    {
       "digest": "6cc51893845d59f6e36b9fc32ca424d473ed8b578dc864e102bc1c31d97a64d1",
       "path": "src/contracts/schemas/v1/gate-decision-record.schema.json",
       "size": 6035
@@ -6305,9 +6311,9 @@
       "size": 4029
     },
     {
-      "digest": "bcfa18c6c3be29f73e802d3c9a5eafa3917cae3dfca28eb1602ae0dd7bb18a92",
+      "digest": "ab204895271346e7004bc938fbf2323ecafba697b50ac6aea207da684c0ae8b8",
       "path": "assets/review-inputs.yaml",
-      "size": 23707
+      "size": 23668
     },
     {
       "digest": "322bf0f3f1d764957773a64c742105c07c03bdbffb00f69d29edbaf678ff0556",

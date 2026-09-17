@@ -103,7 +103,7 @@ describe("review dispatch envelopes", () => {
     } as const;
     const envelope = buildReviewEnvelope({ ...input(), context: [askEntry] });
     const visible = json(envelope.bytes);
-    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "subject", "review_configuration", "document_configuration", "rendered_inputs"]);
+    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "subject", "response_schema", "review_configuration", "document_configuration", "rendered_inputs"]);
     expect(visible.context).toEqual([askEntry]);
 
     const unavailable = {
@@ -225,8 +225,8 @@ describe("review dispatch envelopes", () => {
     const bound = buildReviewEnvelope({ ...input(), workspace });
     const visible = json(bound.bytes);
 
-    expect(Object.keys(json(bare.bytes))).toEqual(["schema_version", "artifact", "rubric", "context", "subject", "review_configuration", "document_configuration", "rendered_inputs"]);
-    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "workspace", "subject", "review_configuration", "document_configuration", "rendered_inputs"]);
+    expect(Object.keys(json(bare.bytes))).toEqual(["schema_version", "artifact", "rubric", "context", "subject", "response_schema", "review_configuration", "document_configuration", "rendered_inputs"]);
+    expect(Object.keys(visible)).toEqual(["schema_version", "artifact", "rubric", "context", "workspace", "subject", "response_schema", "review_configuration", "document_configuration", "rendered_inputs"]);
     expect(visible.workspace).toEqual(workspace);
     expect(bound.digest).not.toBe(bare.digest);
     expect(bound.digest).toBe(canonicalJsonDigest({

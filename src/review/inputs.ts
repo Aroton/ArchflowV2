@@ -1,4 +1,5 @@
 import { loadReviewDocumentConfiguration } from "./documents.js";
+import { createReviewResponseSchema, reviewResponseExample } from "./response-schema.js";
 import bundledConfiguration from "../../assets/review-inputs.yaml";
 import { chmod, lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -61,7 +62,7 @@ export type ReviewInputFile = {
   content?: string; encoding?: "utf8" | "base64"; source_path?: string;
 };
 export type PreparedReviewInputs = {
-  instructions: string; files: ReviewInputFile[]; configuration_digest: string;
+  instructions: string; files: ReviewInputFile[]; configuration_digest: string; response_schema: PlainJsonValue;
   phase: string; reviewer: string; reviewer_id: string; mode: "initial" | "follow_up";
 };
 
@@ -83,8 +84,11 @@ export function dispatchInputRecord(envelope: DispatchEnvelope): RecordValue {
 }
 
 /** One renderer for both previews and live dispatch. The JSON carrier never reaches a CLI. */
-export function prepareReviewInputs(envelope: DispatchEnvelope): PreparedReviewInputs {
+export function prepareReviewInputs(envelope: DispatchEnvelope, outputSchema?: PlainJsonValue): PreparedReviewInputs {
   const record = dispatchInputRecord(envelope);
+  const responseSchema = record.response_schema ?? outputSchema ?? createReviewResponseSchema(envelope.result_kind, record);
+  assertPlainJson(responseSchema, "review response schema");
+  const response_schema = structuredClone(responseSchema);
   const config = record.review_configuration === undefined ? loadReviewInputConfiguration() : parseReviewInputConfiguration(record.review_configuration);
   const subject = envelope.result_kind === "effort-review" ? record : object(record.subject);
   const phaseInstance = String(subject.phase_instance ?? (subject.stage === "implementation" ? "phase-impl" : "phase-design"));
@@ -183,7 +187,7 @@ export function prepareReviewInputs(envelope: DispatchEnvelope): PreparedReviewI
     const governing = file.group === "governing-documents" ? Object.values(documentConfig.documents).find(doc => doc.filename === file.name) : undefined;
     file.guidance = { ...guidance, ...(governing === undefined ? {} : { use: governing.use }) };
   }
-  return { instructions: blocks.join("\n\n"), files: files.sort((a,b) => [...selected.inputs, ...selected.available_inputs].indexOf(a.group) - [...selected.inputs, ...selected.available_inputs].indexOf(b.group)), configuration_digest: canonicalJsonDigest({ recipes: config, documents: documentConfig } as unknown as PlainJsonValue), phase, reviewer, reviewer_id: String(assignment.reviewer_id ?? reviewer), mode };
+  return { instructions: blocks.join("\n\n"), response_schema, files: files.sort((a,b) => [...selected.inputs, ...selected.available_inputs].indexOf(a.group) - [...selected.inputs, ...selected.available_inputs].indexOf(b.group)), configuration_digest: canonicalJsonDigest({ recipes: config, documents: documentConfig } as unknown as PlainJsonValue), phase, reviewer, reviewer_id: String(assignment.reviewer_id ?? reviewer), mode };
 }
 
 export function renderReviewPrompt(prepared: PreparedReviewInputs, directory: string): string {
@@ -192,12 +196,14 @@ export function renderReviewPrompt(prepared: PreparedReviewInputs, directory: st
     const reference = file.delivery === "available" ? `Available on disk: \`${directory}/${file.name}\`` : `@${directory}/${file.name}`;
     return `### ${file.guidance.title}\n\n${reference}\n\n${file.guidance.use}`;
   }).join("\n\n");
-  const prompt = `${prepared.instructions}\n\n## Supplied files and how to use them\n\n${references}\n`;
-  if (Buffer.byteLength(prompt) > REVIEW_PROMPT_BYTE_LIMIT) throw new ReviewInputError("Review instructions and references exceed 16 KiB; shorten the bundled recipe or reduce document references. No context was truncated.");
+  const { example, choices } = reviewResponseExample(prepared.response_schema);
+  const response = `## Response format\n\nReturn exactly one JSON object using the structure below. Replace the illustrative judgments and placeholder text with your own assessment; preserve fixed identifiers and version values. Do not wrap your response in Markdown fences, add surrounding commentary, or create a separate review document.\n\n\`\`\`json\n${JSON.stringify(example, null, 2)}\n\`\`\`\n\nAllowed values: ${choices.join("; ")}.`;
+  const prompt = `${prepared.instructions}\n\n${response}\n\n## Supplied files and how to use them\n\n${references}\n`;
+  if (Buffer.byteLength(prompt) > REVIEW_PROMPT_BYTE_LIMIT) throw new ReviewInputError("Review instructions, response example, and references exceed 16 KiB; shorten the bundled recipe, reduce document references, or reduce the assigned rule set. No context or example was truncated.");
   return prompt;
 }
-export async function materializeReviewInputs(envelope: DispatchEnvelope, workspace: DispatchWorkspace): Promise<{ prompt: string; directory: string; prepared: PreparedReviewInputs }> {
-  const prepared = prepareReviewInputs(envelope);
+export async function materializeReviewInputs(envelope: DispatchEnvelope, workspace: DispatchWorkspace, outputSchema?: PlainJsonValue): Promise<{ prompt: string; directory: string; prepared: PreparedReviewInputs }> {
+  const prepared = prepareReviewInputs(envelope, outputSchema);
   const root = workspace.review_root ?? workspace.root;
   const directoryId = prepared.reviewer_id;
   if (!/^[a-z][a-z0-9-]*$/u.test(directoryId)) throw new TypeError("Invalid reviewer input directory");

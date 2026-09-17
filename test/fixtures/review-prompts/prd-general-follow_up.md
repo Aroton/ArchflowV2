@@ -14,7 +14,20 @@ Use the assigned criteria to focus on the changed work, design soundness, interf
 
 Verify the revisions against the earlier feedback and the working AI's request. Check whether the concrete problems are resolved and whether the changes introduce consequential regressions. Do not demand the earlier suggested solution when a different solution works. Start with the revision diff when supplied, the previous feedback, and the working AI's verification request; read current code and tests as needed to validate the fix. Prior judgments are evidence about the bytes they reviewed and never approve new bytes. When no revision comparison is available, start from the full patch and state that limitation. Keep follow-up scoped to the changes and their consequential regressions. Return only unresolved actionable issues or regressions; do not repeat resolved findings or explain everything that is correct. When no actionable issue remains, return outcome=no_issues_found and a short explicit confirmation. Agreement on every earlier suggestion is unnecessary.
 
-Return only the result requested by the CLI-provided response schema. Do not create a separate review document.
+Follow the Response format example below when returning your assessment.
+
+## Response format
+
+Return exactly one JSON object using the structure below. Replace the illustrative judgments and placeholder text with your own assessment; preserve fixed identifiers and version values. Do not wrap your response in Markdown fences, add surrounding commentary, or create a separate review document.
+
+```json
+{
+  "outcome": "issues_found",
+  "feedback": "<feedback: your assessment grounded in the supplied evidence>"
+}
+```
+
+Allowed values: outcome: `issues_found` | `no_issues_found`.
 
 ## Supplied files and how to use them
 

@@ -12,7 +12,20 @@ Read and apply rubric.md to the primary review subject. It contains the assigned
 
 Assess whether the proposed verification strategy would catch concrete failures in the planned behavior. Inspect existing code and tests for reusable or equivalent coverage. The proposed implementation and its test results need not exist yet; do not report their absence as a defect. Identify consequential gaps in the planned checks and suggest the cheapest credible way to cover them.
 
-Return only the result requested by the CLI-provided response schema. Do not create a separate review document.
+Follow the Response format example below when returning your assessment.
+
+## Response format
+
+Return exactly one JSON object using the structure below. Replace the illustrative judgments and placeholder text with your own assessment; preserve fixed identifiers and version values. Do not wrap your response in Markdown fences, add surrounding commentary, or create a separate review document.
+
+```json
+{
+  "outcome": "issues_found",
+  "feedback": "<feedback: your assessment grounded in the supplied evidence>"
+}
+```
+
+Allowed values: outcome: `issues_found` | `no_issues_found`.
 
 ## Supplied files and how to use them
 

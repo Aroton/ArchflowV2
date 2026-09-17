@@ -4,7 +4,8 @@ import { delimiter, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
+import { reviewReportOutputSchema } from "../../src/contracts/review.js";
+const reviewSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" })));
 import { CliAdapterError, selectCliAdapter } from "../../src/dispatch/cli.js";
 import { runDispatchChild } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";

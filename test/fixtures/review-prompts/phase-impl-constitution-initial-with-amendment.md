@@ -10,7 +10,27 @@ This role reassesses the complete current subject each round, including follow-u
 
 For this implementation phase, judge rule compliance and triggers only against the declared outputs, their co-produced documents, and their current post-change behavior. Repository snapshots and unchanged files are supporting evidence, not separate review subjects. A noncompliant, uncertain, or triggered result must identify the declared output that introduced, exposed, or materially worsened the condition. Do not surface pre-existing or unrelated repository conditions.
 
-Return only the result requested by the CLI-provided response schema. Do not create a separate review document.
+Follow the Response format example below when returning your assessment.
+
+## Response format
+
+Return exactly one JSON object using the structure below. Replace the illustrative judgments and placeholder text with your own assessment; preserve fixed identifiers and version values. Do not wrap your response in Markdown fences, add surrounding commentary, or create a separate review document.
+
+```json
+{
+  "schema_version": "2",
+  "judgments": {
+    "rule-1": {
+      "compliance": "pass",
+      "rationale": "<rationale: your assessment grounded in the supplied evidence>",
+      "trigger": "not-matched",
+      "trigger_evidence": "<trigger evidence: your assessment grounded in the supplied evidence>"
+    }
+  }
+}
+```
+
+Allowed values: compliance: `pass` | `fail` | `uncertain`; trigger: `not-matched` | `matched` | `uncertain`.
 
 ## Supplied files and how to use them
 

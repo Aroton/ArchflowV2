@@ -6,8 +6,10 @@ import { delimiter, dirname, join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
-import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
+import { createAdjudicationOutputSchema } from "../../src/contracts/adjudication.js";
+const adjudicationSchema = JSON.parse(JSON.stringify(createAdjudicationOutputSchema(["rule-1"]).toJSONSchema({ target: "draft-2020-12" })));
+import { reviewReportOutputSchema } from "../../src/contracts/review.js";
+const reviewSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" })));
 import { parseGitOid } from "../../src/contracts/canonical.js";
 import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";

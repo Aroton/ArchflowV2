@@ -686,10 +686,10 @@ const claudeAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("claude-cli", route);
-    const reviewInputs = await materializeReviewInputs(envelope, workspace);
+    const reviewInputs = await materializeReviewInputs(envelope, workspace, outputSchema);
     const projection = envelopeProjection(envelope);
     const schema = projectCliOutputSchema(
-      outputSchema, envelope.result_kind, "claude-cli", projection.subject, projection.assignment,
+      reviewInputs.prepared.response_schema, envelope.result_kind, "claude-cli", projection.subject,
     );
     if (route.effort === "ultra") {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
@@ -796,14 +796,14 @@ const codexAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("codex-cli", route);
-    const reviewInputs = await materializeReviewInputs(envelope, workspace);
+    const reviewInputs = await materializeReviewInputs(envelope, workspace, outputSchema);
     if (route.provider !== undefined) {
       // cc-switch wraps only the claude CLI; routing already rejects this pairing.
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const projection = envelopeProjection(envelope);
     const schema = projectCliOutputSchema(
-      outputSchema, envelope.result_kind, "codex-cli", projection.subject, projection.assignment,
+      reviewInputs.prepared.response_schema, envelope.result_kind, "codex-cli", projection.subject,
     );
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
     // Named per result kind so the two children of one review can share a workspace root
@@ -916,13 +916,13 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     outputSchema: PlainJsonValue,
   ) {
     assertRoute("antigravity-cli", route);
-    const reviewInputs = await materializeReviewInputs(envelope, workspace);
+    const reviewInputs = await materializeReviewInputs(envelope, workspace, outputSchema);
     if (route.provider !== undefined) {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
     const projection = envelopeProjection(envelope);
     const schema = projectCliOutputSchema(
-      outputSchema, envelope.result_kind, "antigravity-cli", projection.subject, projection.assignment,
+      reviewInputs.prepared.response_schema, envelope.result_kind, "antigravity-cli", projection.subject,
     );
     // Only bounded instructions and references ride on argv; full inputs and schemas are files.
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
