@@ -16,7 +16,7 @@ import { selectDispatchRouteCandidates, validateSelectedDispatchRoute, type Disp
 import { projectRepositoryWorkspaceBinding, shareRepositoryViewWorkspace } from "../dispatch/workspace.js";
 import { approvalRuleMatchSummary, evaluateApprovalRules } from "../state/approval-rules.js";
 import { sealDispatchInput, type DispatchEnvelope } from "./envelopes.js";
-import { loadCanonicalRubricForPhaseKind, reviewAssignment } from "./rubrics.js";
+import { loadCanonicalRubricForSimpleStage, reviewAssignment } from "./rubrics.js";
 import { captureSimpleContext, SimpleReviewError } from "./simple-context.js";
 
 export type SimpleReviewDependencies = {
@@ -24,6 +24,7 @@ export type SimpleReviewDependencies = {
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
 };
 const failure = (code: string, message: string): SimpleReviewResult => ({ schema_version: "1", ok: false, error: { code, message, retryable: false } });
+
 function jsonSchema(schema: { toJSONSchema: (options: { target: "draft-2020-12" }) => unknown }): PlainJsonValue {
   // Zod attaches a non-enumerable Standard Schema helper to its own schema output.
   const value: unknown = JSON.parse(JSON.stringify(schema.toJSONSchema({ target: "draft-2020-12" })));
@@ -41,15 +42,15 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
     const captured = await captureSimpleContext(context.connection.startup_repository_candidate.working_directory, input, context.signal);
     const { policy } = captured;
     const host = context.connection.initialization_candidates.host;
-    const phaseKind = input.stage === "plan" ? "phase-design" : "phase-impl";
-    const rubricResult = await loadCanonicalRubricForPhaseKind(phaseKind);
+    // Reuse existing configured routing, approval rules, and specialist partition only.
+    const policyPhaseKind = input.stage === "plan" ? "phase-design" : "phase-impl";
+    const rubricResult = await loadCanonicalRubricForSimpleStage(input.stage);
     if (!rubricResult.ok) return failure("CONFIG_INVALID", "The installed review rubric is missing or invalid.");
-    const rubric = { ...rubricResult.value.rubric, criteria: rubricResult.value.rubric.criteria.filter((criterion) =>
-      input.stage !== "plan" || criterion.id !== "phase-plan-soundness") };
+    const rubric = rubricResult.value.rubric;
     const roles: Array<"counter-reviewer" | "test-reviewer" | "adjudicator"> = ["counter-reviewer", "test-reviewer"];
     if (policy.rules.length > 0) roles.push("adjudicator");
     const selected = roles.flatMap((role) => {
-      const routes = selectDispatchRouteCandidates(policy.config, phaseKind, role, input.review_routes?.[role], undefined, host);
+      const routes = selectDispatchRouteCandidates(policy.config, policyPhaseKind, role, input.review_routes?.[role], undefined, host);
       if (routes.length === 0) throw new SimpleReviewError("CONFIG_INVALID", `No route is configured for ${role}.`);
       return routes.map((candidate, index) => ({ role, reviewer_id: `${role}-${index + 1}`, route: validateSelectedDispatchRoute(candidate).route }));
     });
@@ -64,7 +65,7 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
       reports: [], constitution: { status: policy.rules.length === 0 ? "not-applicable" : "failed", judgments: [] },
       human_review_reasons: [], failures: [],
     };
-    const approval = evaluateApprovalRules(policy.config, phaseKind, input.paths);
+    const approval = evaluateApprovalRules(policy.config, policyPhaseKind, input.paths);
     if (approval.wait) value.human_review_reasons.push(approvalRuleMatchSummary(approval.match));
     const slots = policy.rules.map((rule, index) => ({ slot: `rule-${index + 1}`, rule_id: rule.id, rule_version: rule.version }));
     const constitutionSchema = slots.length === 0 ? undefined : createRawAdjudicationV2Schema(slots);
@@ -79,10 +80,9 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
       const { role, reviewer_id, route } = selection;
       try {
         const assignment = role === "adjudicator" ? undefined : reviewAssignment(reviewer_id,
-          role === "test-reviewer" ? "tests" : "general", phaseKind, rubric);
+          role === "test-reviewer" ? "tests" : "general", policyPhaseKind, rubric);
         const request = role === "adjudicator"
           ? envelope("adjudication", { ...common,
-            instructions: "Judge each assigned active constitution rule against this subject. Return schema_version 2 and exactly one judgment per rule slot. For rules without review_trigger, trigger must be not-matched. Triggers require direct evidence, not workflow machinery absent by design. Explain compliance, rationale, trigger, and trigger_evidence; do not author approvals or rule identities.",
             rules: policy.rules.map((rule, index) => ({ slot: slots[index]!.slot, text: rule.text,
               ...(rule.review_trigger === undefined ? {} : { review_trigger: rule.review_trigger }), enforced_by: [...(rule.enforced_by ?? [])] })),
           })

@@ -24,7 +24,7 @@ const names = ["effort-context", "subject", "user-ask", "governing-documents", "
 const recipe = z.object({ instructions: z.array(z.string().min(1)).min(1), inputs: z.array(z.enum(names)).min(1), available_inputs: z.array(z.enum(names)).default([]) }).strict();
 const rounds = z.object({ initial: recipe, follow_up: recipe }).strict();
 const roles = z.object({ general: rounds, tests: rounds.optional(), constitution: rounds, effort: rounds.optional() }).strict();
-const phaseRecipe = z.object({ rubric: z.object({ file: z.string().regex(/^rubrics\/[a-z-]+\.yaml$/u), id: z.enum(["prd-v1", "design-v3", "implementation-v1"]), test_criteria: z.array(z.string().min(1)) }).strict(), reviewers: roles }).strict();
+const phaseRecipe = z.object({ rubric: z.object({ file: z.string().regex(/^rubrics\/[a-z-]+\.yaml$/u), id: z.enum(["prd-v1", "design-v3", "phase-design-v1", "implementation-v1"]), test_criteria: z.array(z.string().min(1)) }).strict(), reviewers: roles }).strict();
 const configurationSchema = z.object({ schema_version: z.literal("1"), instructions: z.record(z.string(), z.string().min(1)), input_guidance: z.record(z.string(), z.object({ title: z.string().min(1), use: z.string().min(1) }).strict()), phases: z.object({ prd: phaseRecipe, design: phaseRecipe, "phase-design": phaseRecipe, "phase-impl": phaseRecipe }).strict() }).strict();
 export type ReviewInputConfiguration = z.infer<typeof configurationSchema>;
 
@@ -141,7 +141,9 @@ export function prepareReviewInputs(envelope: DispatchEnvelope): PreparedReviewI
     const assigned = assignment.criterion_ids as string[] | undefined;
     const criteria = (object(record.rubric).criteria as PlainJsonValue[]).filter(criterion => assigned === undefined || assigned.includes(String(object(criterion).id)));
     if (criteria.length === 0 && assignment.expected_upstream_digests === undefined && assignment.legacy_confirmations === undefined) throw new TypeError("Review has no rubric criteria or authenticated responsibility");
-    const rubricConfig = config.phases[phase].rubric;
+    const rubricConfig = subject.stage === "plan"
+      ? { file: "rubrics/simple-plan.yaml", id: "simple-plan-v1" }
+      : config.phases[phase].rubric;
     const text = `# Assigned review rubric\n\nSource: assets/${rubricConfig.file} (${rubricConfig.id}).\nReviewer: ${reviewer}.\n\n${criteria.length === 0 ? "No rubric criteria assigned. Review only the authenticated upstream-alignment or legacy-confirmation responsibilities." : readable(criteria)}`;
     add("rubric", "rubric.md", text, `assets/${rubricConfig.file}`, String(subject.rubric_digest ?? canonicalJsonDigest(criteria)));
 
@@ -162,8 +164,12 @@ export function prepareReviewInputs(envelope: DispatchEnvelope): PreparedReviewI
   const workspace = object(record.workspace);
   if (Object.keys(workspace).length > 0) add("repository", "repository.md", `${String(workspace.note ?? "Inspect the supplied repository snapshot without modifying files.")}\n${Array.isArray(workspace.repositories) ? workspace.repositories.map(repository => `- ${String(object(repository).name)}: repositories/${String(object(repository).path)}`).join("\n") : ""}`, "repository snapshots", canonicalJsonDigest(workspace));
   const label = phase === "prd" ? "PRD" : phase === "design" ? "task design" : `${phase === "phase-design" ? "phase design" : "phase implementation"} ${phaseInstance.split("-").at(-1)!.match(/^\d+$/u) ? phaseInstance.split("-").at(-1) : ""}`.trim();
-  const blocks = [`Review ${label}. Assigned reviewer: ${String(assignment.reviewer_id ?? reviewer)}.`, documentConfig.phases[phase].review, ...selected.instructions.map(name => config.instructions[name]!)];
-  if (subject.stage !== undefined) blocks.push(config.instructions.simple!);
+  const standalone = subject.stage !== undefined;
+  const blocks = [
+    `Review ${standalone ? `standalone ${String(subject.stage)}` : label}. Assigned reviewer: ${String(assignment.reviewer_id ?? reviewer)}.`,
+    ...(standalone ? [config.instructions.simple!, ...(reviewer === "constitution" ? [] : [config.instructions[`simple_${String(subject.stage)}`]!])] : [documentConfig.phases[phase].review]),
+    ...selected.instructions.filter(name => !standalone || !["implementation", "constitution_implementation"].includes(name)).map(name => config.instructions[name]!),
+  ];
   for (const file of files) {
     file.delivery = selected.available_inputs.includes(file.group) ? "available" : "referenced";
     const key = file.delivery === "available" && file.group === "changes" ? file.name.endsWith(".patch") ? "available-changes" : "available-statistics"

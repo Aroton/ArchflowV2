@@ -1824,6 +1824,24 @@ describe("partial review round retry", () => {
       expect(reviewed.envelopes.get(model)).toHaveProperty("diffs", { full });
     }
     expect(reviewed.envelopes.get(FABLE)).toHaveProperty("diffs", { full, revision });
+    // Every child's composed instructions account for the complete declared change — additions,
+    // deletions, and non-text markers — before narrowing investigation.
+    for (const envelope of reviewed.envelopes.values()) {
+      const instructions = (envelope as { rendered_inputs: { prompt: string } }).rendered_inputs.prompt;
+      expect(instructions).toContain("complete patch");
+      expect(instructions).toContain("additions, deletions, and non-text change markers");
+      expect(instructions).toContain("account for the declared change before choosing where deeper investigation");
+    }
+    // A comparison descriptor alone does not turn an initial review into follow-up.
+    // The follow-up recipe requires authenticated prior feedback (exercised below).
+    const initial = reviewed.envelopes.get(FABLE) as { rendered_inputs: { prompt: string } };
+    expect(initial.rendered_inputs.prompt).not.toContain("Start follow-up investigation here");
+    expect(initial.rendered_inputs.prompt).not.toContain("@review-inputs/general-2/revision.patch");
+    for (const model of [SOL, LUNA, ADJUDICATOR]) {
+      const envelope = reviewed.envelopes.get(model) as { rendered_inputs: { prompt: string }; diffs: { revision?: unknown } };
+      expect(envelope.diffs.revision).toBeUndefined();
+      expect(envelope.rendered_inputs.prompt).not.toContain("Verify the revisions");
+    }
   });
 
   it("delivers every report, verifies only selected reviewers, and permits explained disagreement", async () => {
@@ -1841,6 +1859,13 @@ describe("partial review round retry", () => {
     const second = await round(h, store, subjects[1]!, fingerprints[1]!, {}, true, { dependencies, version: 1, remediation: true });
     expect(second.models).toEqual([FABLE, ADJUDICATOR].sort());
     expect(JSON.stringify(second.envelopes.get(FABLE))).toContain("Verify retries stop after cancellation.");
+    // The selected reviewer's composed follow-up envelope carries the revision-first method
+    // alongside the pinned verification request, while the initial round carried none.
+    const followUp = second.envelopes.get(FABLE) as { rendered_inputs: { prompt: string } };
+    expect(followUp.rendered_inputs.prompt).toContain("Verify the revisions");
+    expect(followUp.rendered_inputs.prompt).toContain("Start with the revision diff when supplied");
+    expect(followUp.rendered_inputs.prompt).toContain("never approve new bytes");
+    expect((first.envelopes.get(FABLE) as { rendered_inputs: { prompt: string } }).rendered_inputs.prompt).not.toContain("Verify the revisions");
     expect(second.result.ok).toBe(true);
     if (!second.result.ok || second.result.value.evidence.schema_version !== "5") throw new Error("expected reports");
     expect(second.result.value.evidence.previous_reports?.map(report => report.reviewer_id)).toEqual(["general-1", "test"]);

@@ -10,12 +10,13 @@ import {
   type ProjectResult,
 } from "../contracts/errors.js";
 import { parseRubricV1, type RubricV1 } from "../contracts/rubric.js";
+import type { SimpleReviewInput } from "../contracts/simple-review.js";
 import type { ReviewAssignmentV1, ReviewFocus } from "./envelopes.js";
 import { parseSingleYamlDocument } from "../contracts/yaml.js";
 import { assetRoot } from "../init/assets.js";
 
 export type CounterReviewPhaseKind = "prd" | "design" | "phase-design" | "phase-impl";
-export type CanonicalRubricId = "prd-v1" | "design-v3" | "implementation-v1";
+export type CanonicalRubricId = "prd-v1" | "design-v3" | "phase-design-v1" | "simple-plan-v1" | "implementation-v1";
 
 export type CanonicalRubric = Readonly<{
   rubric_id: CanonicalRubricId;
@@ -158,7 +159,21 @@ export async function loadRubricFile(input: Readonly<{
 export async function loadCanonicalRubricForPhaseKind(
   phaseKind: CounterReviewPhaseKind,
 ): Promise<ProjectResult<CanonicalRubric>> {
-  const expected = loadReviewInputConfiguration().phases[phaseKind].rubric;
+  return loadInstalledRubric(loadReviewInputConfiguration().phases[phaseKind].rubric);
+}
+
+/** Standalone plans have their own policy; implementations share defect criteria. */
+export async function loadCanonicalRubricForSimpleStage(
+  stage: SimpleReviewInput["stage"],
+): Promise<ProjectResult<CanonicalRubric>> {
+  return stage === "plan"
+    ? loadInstalledRubric({ file: "rubrics/simple-plan.yaml", id: "simple-plan-v1" })
+    : loadCanonicalRubricForPhaseKind("phase-impl");
+}
+
+async function loadInstalledRubric(
+  expected: Readonly<{ file: string; id: CanonicalRubricId }>,
+): Promise<ProjectResult<CanonicalRubric>> {
   let root: string;
   try {
     root = await assetRoot();

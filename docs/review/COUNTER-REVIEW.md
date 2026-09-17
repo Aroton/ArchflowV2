@@ -1,6 +1,6 @@
 # review/COUNTER-REVIEW
 
-**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
+**Explored:** 2026-09-16 · **Commit:** `e479c26` · **Covers:** `src/review/`, `src/dispatch/`, `src/contracts/mcp-tools.ts`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/state/semantic-actions.ts`, `src/state/produce-subject.ts`, `src/state/evidence-results.ts`
 
 Counter-review supplies independent feedback to the working AI. The initial review runs the configured general and test reviewers, alongside separate constitution review when rules are active. Reviewers return concise feedback with an explicit outcome; the working AI interprets them, makes worthwhile revisions, and selects previous reviewers to verify the changes. Useful feedback and economical follow-up matter more than agreement on every suggestion.
 
@@ -51,6 +51,14 @@ review/                         # reviewer working directory
 References such as `@review-inputs/general/prd.md` resolve below the reviewer cwd. Control files and child outputs remain outside `review/`. Inputs are materialized from authenticated retained/approved bytes, separately from repository snapshots, and verified before launch. Live files never substitute for unavailable historical evidence. Reviewer-specific directory names keep concurrent assignments separate.
 
 `archflow-local review-preview --task <task> --producer <claude|codex|antigravity>` shares the live preparation and rendering path. It prints the exact prompt, files, sizes, originating versions, selected route, and CLI-loading caveats without invoking a model or advancing state. Use `--reviewer <id>` to select one reviewer or `--format json` for structured output. Readable examples for every phase, reviewer, and round mode are maintained under `test/fixtures/review-prompts/`.
+
+## Investigation and stage boundaries
+
+The shared `investigation` recipe block asks reviewers to orient on the assigned subject, identify plausible consequential failures, investigate those concerns with targeted reads, and stop when the evidence resolves them. Missing evidence that prevents a material judgment is disclosed. This sets no file, tool-call, token, or finding quota and never narrows constitution rule or trigger coverage.
+
+Document framing follows the authenticated stage: PRDs establish product outcomes, task designs establish architectural feasibility and ownership, and phase designs establish actionable mechanisms, predecessor guarantees, and useful verification. The separate `phase-design-v1` rubric preserves this handoff focus. Initial implementation review accounts for the complete patch, including deletions and non-text markers, before tracing consequences in surrounding code. Follow-ups start from reviewer-specific revision evidence; missing comparisons fall back to the full patch with an explicit limitation. Prior judgments never approve new bytes.
+
+Standalone plans retain `simple-plan-v1`, with framing for the ask, plan, declared paths, and current repository view. Standalone implementation review compares declared paths in the current and baseline snapshots. Neither promises generated patches or initialized-task documents. Both use the shared renderer and investigation method; general review does not inherit test-owned criteria.
 
 ## Diffs and initial review material
 

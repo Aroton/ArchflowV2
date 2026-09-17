@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "bash",
       "args": ["scripts/dev-mcp-launcher.sh"],
-      "env": {},
+      "env": { "ARCHFLOW_DEV": "1" },
       "timeout": 3600000
     }
   }

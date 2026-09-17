@@ -6,16 +6,18 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { canonicalJsonDigest } from "../../src/contracts/canonical.js";
 import type { ProjectResult } from "../../src/contracts/errors.js";
-import { loadRubricFile, reviewAssignment, type CanonicalRubric, type CanonicalRubricId } from "../../src/review/rubrics.js";
+import { loadCanonicalRubricForSimpleStage, loadRubricFile, reviewAssignment, type CanonicalRubric, type CanonicalRubricId } from "../../src/review/rubrics.js";
 import { loadTestRubric } from "../helpers/rubrics.js";
 
 // Digests pinned to the reviewed rubric policy in assets/rubrics/. Regenerate
 // deliberately, never casually: a changed digest is changed review policy for every
 // installed bundle, and it fails in-flight tasks' input fingerprints closed.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
-  "prd-v1": "2c9729a74f9544749c6bde4c693d2c19f533de46e080f520e46142a55af42aae",
-  "design-v3": "324c57bb6eeca3a763b95dfed9fb9814bbb1bebf362aedccbc12e4addb1b807c",
-  "implementation-v1": "a27454fdb2970db71adf49dd0a891a486deb55cbc9c0c73937fbfa35f6f8b118",
+  "prd-v1": "43dc1ff7850fce99d8c5ac5062be8efc556b08bb28aa898715aaab3bb5a6b4a8",
+  "design-v3": "27cb3d9345561641644709cdf327484b70024c272ba4b92676db5dd81a54cc06",
+  "phase-design-v1": "28e7e3dc604e3047b5cca3dc4b46c14c66f153346119f3a9fdfdeaed7b4a5880",
+  "simple-plan-v1": "0b2ec7c28cf7e32fb6c06ab16b86b5d887f35fb0da70120243cc0bc62447ff1b",
+  "implementation-v1": "32cee8a8cf22ea05a7916d4ca55c6cd79a1aab11e8ef423b71a3e39bd9cfee33",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];
@@ -54,7 +56,7 @@ function expectRubricFailure(result: ProjectResult<CanonicalRubric>): {
 }
 
 describe("canonical counter-review rubrics", () => {
-  it("loads one immutable versioned rubric per workflow artifact family", async () => {
+  it("loads a distinct immutable versioned rubric for each workflow artifact stage", async () => {
     const prd = await loadTestRubric("prd");
     const design = await loadTestRubric("design");
     const phaseDesign = await loadTestRubric("phase-design");
@@ -62,15 +64,14 @@ describe("canonical counter-review rubrics", () => {
 
     expect(prd.rubric_id).toBe("prd-v1");
     expect(design.rubric_id).toBe("design-v3");
-    // design and phase-design select the same file, so the same exact bytes.
-    expect(phaseDesign.rubric_id).toBe(design.rubric_id);
-    expect(phaseDesign.rubric_digest).toBe(design.rubric_digest);
+    expect(phaseDesign.rubric_id).toBe("phase-design-v1");
+    expect(phaseDesign.rubric_digest).not.toBe(design.rubric_digest);
     expect(implementation.rubric_id).toBe("implementation-v1");
     expect(prd.rubric.kind).toBe("artifact");
     expect(design.rubric.kind).toBe("artifact");
     expect(implementation.rubric.kind).toBe("implementation");
 
-    for (const selected of [prd, design, implementation]) {
+    for (const selected of [prd, design, phaseDesign, implementation]) {
       expect(selected.rubric_digest).toBe(canonicalJsonDigest(selected.rubric as never));
       expect(Object.isFrozen(selected)).toBe(true);
       expect(Object.isFrozen(selected.rubric)).toBe(true);
@@ -82,8 +83,29 @@ describe("canonical counter-review rubrics", () => {
   it("reproduces the pinned consequential-review policy digests", async () => {
     expect((await loadTestRubric("prd")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["prd-v1"]);
     expect((await loadTestRubric("design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v3"]);
-    expect((await loadTestRubric("phase-design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["design-v3"]);
+    expect((await loadTestRubric("phase-design")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["phase-design-v1"]);
     expect((await loadTestRubric("phase-impl")).rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["implementation-v1"]);
+  });
+
+  it("selects a dedicated standalone plan rubric and shares implementation policy with workflow review", async () => {
+    const plan = await loadCanonicalRubricForSimpleStage("plan");
+    const implementation = await loadCanonicalRubricForSimpleStage("implementation");
+    if (!plan.ok) throw plan.error;
+    if (!implementation.ok) throw implementation.error;
+    expect(plan.value.rubric_id).toBe("simple-plan-v1");
+    expect(plan.value.rubric_digest).toBe(PINNED_RUBRIC_DIGESTS["simple-plan-v1"]);
+    expect(plan.value.rubric_digest).not.toBe((await loadTestRubric("phase-design")).rubric_digest);
+    expect(implementation.value).toEqual(await loadTestRubric("phase-impl"));
+
+    const general = reviewAssignment("general", "general", "phase-design", plan.value.rubric, false);
+    const tests = reviewAssignment("tests", "tests", "phase-design", plan.value.rubric);
+    expect(tests.criterion_ids).toEqual(["test-strategy"]);
+    expect(general.criterion_ids).not.toContain("test-strategy");
+    expect(general.criterion_ids).toContain("decision-readiness");
+    expect(general.criterion_ids).not.toContain("predecessor-guarantees");
+    expect(new Set([...general.criterion_ids, ...tests.criterion_ids])).toEqual(
+      new Set(plan.value.rubric.criteria.map((criterion) => criterion.id)),
+    );
   });
 
   it("pins the shape of the quality, shortcut, and confidence criteria", async () => {
@@ -91,7 +113,7 @@ describe("canonical counter-review rubrics", () => {
     const byId = new Map(implementation.rubric.criteria.map((criterion) => [criterion.id, criterion]));
     expect(byId.get("test-quality")?.blocking).toBe(true);
     expect(byId.get("anti-shortcut")?.blocking).toBe(true);
-    for (const rubric of [await loadTestRubric("prd"), await loadTestRubric("design"), implementation]) {
+    for (const rubric of [await loadTestRubric("prd"), await loadTestRubric("design"), await loadTestRubric("phase-design"), implementation]) {
       const last = rubric.rubric.criteria[rubric.rubric.criteria.length - 1];
       expect(last?.id).toBe("advisory-observations");
       const confidence = rubric.rubric.criteria.find((criterion) => criterion.id === "reviewer-confidence");
@@ -100,7 +122,7 @@ describe("canonical counter-review rubrics", () => {
   });
 
   it("keeps legacy finding vocabulary out of criterion prose while retaining parser policy keys", async () => {
-    for (const selected of [await loadTestRubric("prd"), await loadTestRubric("design"), await loadTestRubric("phase-impl")]) {
+    for (const selected of [await loadTestRubric("prd"), await loadTestRubric("design"), await loadTestRubric("phase-design"), await loadTestRubric("phase-impl")]) {
       expect(selected.rubric.criteria.every((criterion) => typeof criterion.blocking === "boolean")).toBe(true);
       const prose = selected.rubric.criteria.map((criterion) => criterion.text).join("\n");
       expect(prose).not.toMatch(/\b(?:severity|critical|major|minor|blocker|blocking)\b/iu);
@@ -108,18 +130,18 @@ describe("canonical counter-review rubrics", () => {
   });
 
   it("keeps remediation policy in the fixed instruction and implementation findings on declared outputs", async () => {
-    for (const rubric of [await loadTestRubric("prd"), await loadTestRubric("design"), await loadTestRubric("phase-impl")]) {
+    for (const rubric of [await loadTestRubric("prd"), await loadTestRubric("design"), await loadTestRubric("phase-design"), await loadTestRubric("phase-impl")]) {
       const text = rubric.rubric.criteria.map((criterion) => criterion.text).join("\n");
       expect(text).not.toMatch(/prior-triage|challenge a prior disposition|accepted revision intent/iu);
     }
     const implementation = await loadTestRubric("phase-impl");
     const substantive = implementation.rubric.criteria.find((criterion) => criterion.id === "substantive-correctness")?.text ?? "";
-    expect(substantive).toContain("declared phase output");
+    expect(substantive).toContain("declared implementation outputs");
     expect(substantive).toContain("introduced, exposed, or materially worsened");
     expect(substantive).toContain("pre-existing unrelated defects");
   });
 
-  it("partitions test review without duplicating criteria and preserves full legacy review", async () => {
+  it("partitions test review without duplicating criteria or widening general scope when the specialist is unavailable", async () => {
     const design = await loadTestRubric("phase-design");
     const implementation = await loadTestRubric("phase-impl");
     const designGeneral = reviewAssignment("general", "general", "phase-design", design.rubric, true);
@@ -128,6 +150,9 @@ describe("canonical counter-review rubrics", () => {
     const implementationTests = reviewAssignment("test", "tests", "phase-impl", implementation.rubric, true);
 
     expect(designTests.criterion_ids).toEqual(["test-strategy"]);
+    expect(designGeneral.criterion_ids).toContain("implementation-readiness");
+    expect(designGeneral.criterion_ids).toContain("predecessor-guarantees");
+    expect(designGeneral.criterion_ids).not.toContain("phase-plan-soundness");
     expect(implementationTests.criterion_ids).toEqual(["verification-evidence", "test-quality"]);
     for (const [rubric, general, tests] of [
       [design.rubric, designGeneral, designTests],
@@ -140,6 +165,8 @@ describe("canonical counter-review rubrics", () => {
     }
     expect(reviewAssignment("general", "general", "phase-impl", implementation.rubric, false).criterion_ids)
       .toEqual(implementationGeneral.criterion_ids);
+    expect(reviewAssignment("general", "general", "phase-design", design.rubric, false).criterion_ids)
+      .toEqual(designGeneral.criterion_ids);
   });
 
   it("constructs explicit alignment-only and legacy-confirmation-only assignments", async () => {

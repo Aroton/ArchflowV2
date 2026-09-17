@@ -11,13 +11,13 @@ kind: artifact
 mode: adversarial
 criteria:
   - id: substantive-correctness
-    text: "Find consequential product or design flaws, unsafe outcomes, or requirements that cannot be meaningfully verified. Explain the concrete downstream problem using the stated goal and available evidence; do not manufacture precision for harmless implementation choices."
+    text: "Find consequential product flaws, unsafe outcomes, or requirements that cannot be meaningfully verified. Focus on user-visible outcomes, scope, product tradeoffs, and observable acceptance. Explain the concrete downstream problem using the stated goal and available evidence; leave architecture and harmless implementation choices to later design."
     blocking: true
   - id: ask-fidelity
     text: "Use the original request and recorded clarifications to understand the desired outcome. Report an omission, exclusion, or contradiction only when it would materially change what the user gets, rather than enforcing a word-for-word checklist."
     blocking: true
   - id: proportionality
-    text: "Report proposed scope or process that creates a concrete product problem or disproportionate delivery or maintenance cost. A preferred smaller solution alone is not a finding."
+    text: "Report proposed scope, process, or premature implementation prescriptions only when they create a concrete product problem or disproportionate delivery or maintenance cost. A preferred smaller solution, document length, or missing template section alone is not a finding."
     blocking: true
   - id: testable-requirements
     text: "Identify an important outcome that reasonable implementers could interpret incompatibly or that available verification cannot distinguish from failure. Check existing behavior and tests before demanding additional specificity or coverage."

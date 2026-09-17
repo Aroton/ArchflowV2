@@ -16,6 +16,7 @@
     "test:crash": "vitest run --project crash",
     "test:real-host": "vitest run --project real-host",
     "bench:review": "vitest run --project real-host test/real-host/review-benchmark.test.ts",
+    "bench:review-efficiency": "vitest run --project real-host test/real-host/review-efficiency.test.ts",
     "probe:mcp-sdk-compatibility": "node scripts/probe-mcp-sdk-compatibility.mjs",
     "build:temp": "node scripts/build-temp.mjs",
     "release:stage": "node scripts/build-release.mjs",

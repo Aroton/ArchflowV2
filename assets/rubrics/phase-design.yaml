@@ -1,0 +1,44 @@
+# Server-owned counter-review rubric for the "phase-design" phase kind.
+# Loaded fresh and strictly validated; criterion order is digest-significant.
+# See README.md for editing and installation rules.
+rubric_id: phase-design-v1
+schema_version: "1"
+kind: artifact
+mode: adversarial
+criteria:
+  - id: substantive-correctness
+    text: "Find consequential flaws in this implementation handoff. Consider whether an implementer following it literally could produce materially wrong behavior. Explain the concrete failure and its evidence; leave verification selection to test-strategy."
+    blocking: true
+  - id: upstream-coverage
+    text: "Use approved upstream documents, when present, for intent and shared contracts. Report divergence or missing operational facts only when they would cause a concrete implementation problem. References may supply rationale; do not demand repeated background or a traceability checklist."
+    blocking: true
+  - id: interface-reality
+    text: "Check the proposed changes against current code, interfaces, and relevant examples. Identify a concrete incompatibility or missing integration decision and its consequence; routine local coding choices may remain with implementation."
+    blocking: true
+  - id: quantitative-consistency
+    text: "Check arithmetic, limits, and capacity assumptions when they affect real behavior. Show the contradiction and its consequence; an unexplained number alone does not require a finding."
+    blocking: true
+  - id: boundary-and-mechanism-coverage
+    text: "Check whether the specified mechanism establishes the promised behavior, including consequential state ownership, transitions, ordering, and failure or recovery behavior. Name a concrete case left ambiguous or handled incorrectly. A missing table, algorithm sketch, or preferred representation alone is not a defect; leave test-selection judgments to test-strategy."
+    blocking: true
+  - id: predecessor-guarantees
+    text: "Check guarantees assumed from current code or completed predecessors against available implementation and evidence. Identify an unavailable interface, unresolved dependency, or unsupported guarantee only when it can break this phase's behavior. Do not treat an earlier plan as proof that its implementation exists."
+    blocking: true
+  - id: proportionality
+    text: "Report complexity, repeated contracts, or unnecessary detail only when it obscures decisions, creates conflicting instructions, or causes disproportionate implementation or maintenance cost. Document length and a preferred format alone are not defects. Preserve concise operational facts needed by a fresh implementation agent."
+    blocking: true
+  - id: implementation-readiness
+    text: "Identify consequential decisions an implementing agent would still have to design: name the missing decision and how plausible choices produce different behavior or rework. Check that this phase settles those decisions or supplies an established mechanism to follow. Do not ask merely for more detail or enforce model quotas; ordinary local choices and inherently difficult implementation may remain."
+    blocking: true
+  - id: test-strategy
+    text: "Check current tests and the proposed verification against this phase's promised behavior and important failures. Name a concrete failure that could escape those checks, accept equivalent behavioral evidence at any credible layer, and prefer the cheapest useful addition. Flag duplicate or expensive fixtures only for a material delivery cost; avoid raw coverage targets and exhaustive matrices."
+    blocking: true
+  - id: unverifiable-claims
+    text: "Inspect available context and repository evidence before claiming it is absent. Explain an evidence gap only when it prevents assessing important behavior; absence from the document alone does not prove a missing implementation or check."
+    blocking: false
+  - id: reviewer-confidence
+    text: "Distinguish demonstrated problems from uncertainty. Investigate plausible concerns proportionally and report unresolved uncertainty only with a concrete failure scenario, supporting evidence, and what would settle it."
+    blocking: false
+  - id: advisory-observations
+    text: "Leave out speculative risks, optional polish, preferred alternatives, and coverage demands without an identified undetected failure. If no supported material concern remains, say so."
+    blocking: false

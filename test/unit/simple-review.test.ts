@@ -11,6 +11,7 @@ import { runSimpleReview, type SimpleReviewDependencies } from "../../src/review
 import { captureSimpleContext, loadSimplePolicy } from "../../src/review/simple-context.js";
 import { shareRepositoryViewWorkspace } from "../../src/dispatch/workspace.js";
 import { createToolBoundary } from "../../src/mcp/server.js";
+import { loadCanonicalRubricForSimpleStage } from "../../src/review/rubrics.js";
 
 const roots: string[] = [];
 const git = (root: string, ...args: string[]) => execFileSync("git", ["-C", root, ...args], {
@@ -72,17 +73,87 @@ describe("standalone simple review", () => {
     expect(plan.ok, JSON.stringify(plan)).toBe(true);
     expect(calls.map((call) => call.role)).toEqual(["counter-reviewer", "test-reviewer", "adjudicator"]);
     expect(calls[0]!.route.model).toBe("claude-fable-5-1");
+    const planRubric = await loadCanonicalRubricForSimpleStage("plan");
+    if (!planRubric.ok) throw planRubric.error;
+    expect(planRubric.value.rubric_id).toBe("simple-plan-v1");
+    expect(calls[0]!.envelope.rubric).toEqual(planRubric.value.rubric);
+    expect(calls[0]!.envelope.rendered_inputs.files).toContainEqual(expect.objectContaining({
+      name: "rubric.md", source: "assets/rubrics/simple-plan.yaml",
+    }));
     expect(calls[0]!.envelope.rubric.criteria.some((criterion: any) => criterion.id === "phase-plan-soundness")).toBe(false);
+    expect(calls[0]!.envelope.assignment.criterion_ids).toContain("decision-readiness");
+    expect(calls[0]!.envelope.assignment.criterion_ids).not.toContain("predecessor-guarantees");
+    expect(calls[0]!.envelope.assignment.criterion_ids).not.toContain("test-strategy");
     expect(calls[1]!.envelope.assignment.criterion_ids).toEqual(["test-strategy"]);
     await writeFile(join(root, "app.txt"), "after plan fixes\n");
     const implementation = await runSimpleReview({ ...input, stage: "implementation", plan: "Corrected plan", verification: "Relevant check passed",
       expected_policy_digest: plan.value!.policy_digest }, context, dependencies);
     expect(implementation.ok, JSON.stringify(implementation)).toBe(true);
     expect(calls).toHaveLength(6);
+    const implementationRubric = await loadCanonicalRubricForSimpleStage("implementation");
+    if (!implementationRubric.ok) throw implementationRubric.error;
+    expect(implementationRubric.value.rubric_id).toBe("implementation-v1");
+    expect(calls[3]!.envelope.rubric).toEqual(implementationRubric.value.rubric);
+    expect(calls[3]!.envelope.assignment.criterion_ids).not.toContain("verification-evidence");
     expect(calls[4]!.envelope.assignment.criterion_ids).toEqual(["verification-evidence", "test-quality"]);
     expect(await readdir(root)).not.toContain(".archflow");
     expect(JSON.stringify(implementation)).not.toMatch(/next_action|implementation_recommendation|task_id|phase_instance/);
     expect(git(root, "rev-parse", "HEAD")).toBe(input.base_commit);
+  });
+
+  it("delivers stage-specific ordinary framing and one stage-independent constitution method", async () => {
+    const { root, input, context } = await repo();
+    const calls: Parameters<typeof fakeDispatch>[0] = [];
+    const plan = await runSimpleReview(input, context, { dispatch: fakeDispatch(calls) });
+    expect(plan.ok, JSON.stringify(plan)).toBe(true);
+    await writeFile(join(root, "app.txt"), "after plan fixes\n");
+    const implementation = await runSimpleReview({ ...input, stage: "implementation", plan: "Corrected plan",
+      verification: "Relevant check passed", expected_policy_digest: plan.value!.policy_digest }, context, { dispatch: fakeDispatch(calls) });
+    expect(implementation.ok, JSON.stringify(implementation)).toBe(true);
+    expect(calls).toHaveLength(6);
+    const instructions = calls.map((call) => call.envelope.rendered_inputs.prompt as unknown);
+    const text = (value: unknown) => typeof value === "string" ? value : JSON.stringify(value);
+    // Every ordinary and constitution envelope at both stages carries the shared method, including
+    // the instruction to disclose a material missing-evidence limitation.
+    for (const instruction of instructions) {
+      expect(text(instruction)).toContain("plausible consequential failure");
+      expect(text(instruction)).toContain("disclose that limitation");
+    }
+    const [planGeneral, planTest, planAdjudicator, implGeneral, implTest, implAdjudicator] = instructions;
+    // Plan and implementation ordinary reviews start from different evidence...
+    expect(text(planGeneral)).toContain("Plan review starts from");
+    expect(text(implGeneral)).toContain("compares the declared paths in the current view with the baseline view");
+    expect(text(planGeneral)).not.toBe(text(implGeneral));
+    // ...and each stage's delivered framing affirmatively disclaims the workflow evidence it does
+    // not have, so reviewers cannot be directed toward nonexistent patches or task artifacts.
+    for (const instruction of [planGeneral, planTest]) {
+      expect(text(instruction)).toContain("No implementation, Git patch, statistics file, or task document");
+    }
+    for (const instruction of [implGeneral, implTest]) {
+      expect(text(instruction)).toContain("No generated patch file or statistics file");
+    }
+    // ...while constitution framing is one shared, stage-independent composition.
+    expect(text(planAdjudicator)).toContain("Judge every supplied rule");
+    expect(text(implAdjudicator)).toContain("Judge every supplied rule");
+    expect(text(planAdjudicator)).toContain("exactly one judgment per supplied rule slot");
+    expect(text(planAdjudicator)).toContain("trigger must report not-matched");
+    // Each ordinary role receives only its own responsibility boundary.
+    for (const instruction of [planGeneral, implGeneral]) {
+      expect(text(instruction)).toContain("Leave test-owned criteria to the test reviewer");
+    }
+    for (const instruction of [planTest, implTest]) {
+      expect(text(instruction)).toMatch(/existing code and tests|actual assertions/u);
+      expect(text(instruction)).toContain("cheapest credible");
+    }
+    // Standalone delivery never promises workflow patches, diff files, or task artifacts. Rule
+    // text is subject evidence and may name policy paths, so only instructions and scope bind.
+    for (const call of calls) {
+      expect(call.envelope.diffs).toBeUndefined();
+      for (const promise of [text(call.envelope.rendered_inputs.prompt), call.envelope.scope as string]) {
+        expect(promise).not.toContain("review-diffs");
+        expect(promise).not.toContain(".archflow");
+      }
+    }
   });
 
   it("captures additions, deletions and pre-existing edits in disposable baseline/current views", async () => {

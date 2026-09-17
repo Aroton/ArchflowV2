@@ -1,4 +1,4 @@
-# Server-owned counter-review rubric for the "phase-impl" phase kind.
+# Server-owned counter-review rubric for workflow and standalone implementation review.
 #
 # The MCP server reads and strictly parses this file fresh on every review and
 # status call; a missing or invalid file fails the review closed. `rubric_id` is
@@ -11,16 +11,16 @@ kind: implementation
 mode: adversarial
 criteria:
   - id: substantive-correctness
-    text: "Find consequential bugs, design flaws, or unsafe behavior in a declared phase output or its current post-change behavior. Investigate problems introduced, exposed, or materially worsened by the changes; leave pre-existing unrelated defects outside this review. A real defect matters even when the plan never mentioned it."
+    text: "Find consequential bugs, design flaws, or unsafe behavior in declared implementation outputs or their current post-change behavior. Investigate problems introduced, exposed, or materially worsened by the changes; leave pre-existing unrelated defects outside this review. A real defect matters even when the plan never mentioned it."
     blocking: true
   - id: design-conformance
-    text: "Use the approved design to understand intent and constraints. Report a discrepancy only when it causes a concrete problem in behavior, interfaces, or subsequent work; different file organization or wording alone is not a defect."
+    text: "Use the supplied plan or design to understand intent and constraints. Report a discrepancy only when it causes a concrete problem in behavior, interfaces, or subsequent work; different file organization or wording alone is not a defect."
     blocking: true
   - id: interface-fidelity
     text: "Trace changed interfaces through their existing callers and dependencies. Report an evidenced mismatch that can break behavior, data, or compatibility."
     blocking: true
   - id: verification-evidence
-    text: "Check the verification record in implementation notes, any supplied verification log or excerpt, and relevant code and tests. Raw logs are optional supporting evidence; a digest identifies bytes, not execution. Do not infer success from omitted output or demand a complete raw log when available evidence supports the behavior. Report missing, failed, or misleading verification when it leaves an important behavior or safety boundary unsupported, whether or not the phase design requested that check; explain the concrete failure that remains undetected."
+    text: "Check the supplied verification evidence, including implementation notes or log excerpts when provided, and relevant code and tests. Raw logs are optional supporting evidence; a digest identifies bytes, not execution. Do not infer success from omitted output or demand a complete raw log when available evidence supports the behavior. Report missing, failed, or misleading verification when it leaves an important behavior or safety boundary unsupported, whether or not the plan requested that check; explain the concrete failure that remains undetected."
     blocking: true
   - id: test-quality
     text: "Assess distinct regression protection using existing tests and their actual assertions. Identify a concrete failure that could escape detection before requesting coverage, and accept an equivalent oracle at another layer. Prefer the cheapest credible check; flag duplicated or expensive fixtures only when their concrete cost materially harms delivery. Avoid raw coverage targets, exhaustive matrices, and test-structure preferences."

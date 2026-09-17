@@ -1,6 +1,6 @@
 # LIMITATIONS
 
-**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `skills/archflow-simple/`, `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-09-16 · **Commit:** `e479c26` · **Covers:** `skills/archflow-simple/`, `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
 
 Review V5 deliberately does not prove that every reported concern was addressed. The working AI interprets reports and may finish with explained disagreement. Server-attested provenance identifies who reviewed which subject; it does not attest correctness. Partial and previous-version reports are not current completed review authority.
 
@@ -274,6 +274,14 @@ The first version supports one connected Git repository with an existing HEAD, r
 ## Dispatch usage accounting
 
 Installed bundles keep private, best-effort per-dispatch records beside `bundle/` in `<ARCHFLOW_HOME>/usage/`. The central log survives task cleanup and reinstall, but deletes records older than seven days on the next dispatch; there is no idle background cleanup. It contains numeric usage and dispatch identity/status, not transcripts. Claude token/cost values are CLI-reported estimates; missing measurements, including interrupted calls without a terminal wrapper or adapters without token extraction, remain unknown. A successful dispatch record does not itself establish completed review or approval. Source runs do not automatically write shared-installation state.
+
+## The review-efficiency experiment measures one route on a tiny sample
+
+**Not provided:** The paired review-efficiency harness (`test/helpers/review-efficiency/`, run via `npm run bench:review-efficiency`) compares historical and current reviewer instructions on six frozen cases at one fixed route (`claude-opus-5`/high) in one sitting. It does not measure reviewer quality in general, does not sample provider variance over time, and its token totals say nothing about other models, efforts, or task shapes. Twenty-eight planned turns is a directed probe, not a study.
+
+**Existing mitigation:** The historical instructions are captured verbatim into a canonical fixture whose provenance is proven against the pinned Git blobs, and the harness substitutes them into the selected review recipe and regenerates the prompt, adapting only the historical request for a `report` string to the common `{outcome, feedback}` format. The fixture itself is unchanged. The intended difference between variants is the selected instruction text and its rendered prompt; supplied file bytes and authority remain equal, with pair parity asserted at build time and in the unit suite. Historical observations predate file-based delivery and do not establish its cost. The first completed turn acts as a probe: if cumulative usage, accepted model, or the read-only tool surface cannot be observed, the run stops inconclusive instead of spending the remaining turns. Usage fields are aggregated only when every contributor exposes them, per-attempt absence is never recorded as zero, and concurrent sibling wall time is never summed. The staged observation document is digest-bound and immutable; the supported/mixed conclusion is a separately bound human assessment, and a changed CLI version across resumed runs stops as inconclusive rather than mixing environments.
+
+**Why accepted:** The experiment exists to answer one question — does the current instruction set still find the seeded defects with comparable cost — with the least machinery that makes the answer auditable. The merged current instructions also simplify reviewer writing, so observed savings cannot be attributed to investigation changes alone. Treating its observation as a general benchmark would require route matrices, repeat runs, and variance analysis that no current decision needs.
 
 ## File references are not universal immediate inclusion
 

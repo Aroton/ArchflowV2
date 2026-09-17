@@ -30,7 +30,10 @@ export const ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
 /** The default `.gitattributes` contents: the rule appended *after* `* text=auto`, never before. */
 export const ARCHFLOW_GITATTRIBUTES = `* text=auto\n${ARCHFLOW_GITATTRIBUTES_LINE}\n`;
 
-const GIT_ENV: NodeJS.ProcessEnv = {
+// Evaluated per call so a caller can pin commit dates (e.g. deterministic fixture commits)
+// through process.env immediately before invoking git. Never capture this object: a
+// module-level snapshot would freeze the dates a caller pins afterwards out of every command.
+const gitEnv = (): NodeJS.ProcessEnv => ({
   ...process.env,
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
@@ -38,7 +41,7 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   GIT_AUTHOR_EMAIL: "test@example.invalid",
   GIT_COMMITTER_NAME: "ArchFlow Test",
   GIT_COMMITTER_EMAIL: "test@example.invalid",
-};
+});
 
 let gitAvailableMemo: boolean | undefined;
 
@@ -56,13 +59,13 @@ export function gitAvailable(): boolean {
 
 /** Runs `git` in `cwd` and returns trimmed stdout; a nonzero exit throws. */
 export function git(cwd: string, ...args: readonly string[]): string {
-  return execFileSync("git", [...args], { cwd, env: GIT_ENV, encoding: "utf8" }).trimEnd();
+  return execFileSync("git", [...args], { cwd, env: gitEnv(), encoding: "utf8" }).trimEnd();
 }
 
 /** For the commands whose whole purpose is to stop on a conflict: the nonzero exit *is* the fixture. */
 export function gitAllowFail(cwd: string, ...args: readonly string[]): void {
   try {
-    execFileSync("git", [...args], { cwd, env: GIT_ENV, stdio: "ignore" });
+    execFileSync("git", [...args], { cwd, env: gitEnv(), stdio: "ignore" });
   } catch {
     /* expected */
   }
@@ -171,7 +174,7 @@ export function createTempRepository(options: TempRepositoryOptions): TempReposi
     hashObject: (content) =>
       execFileSync("git", ["hash-object", "-w", "--stdin"], {
         cwd: current,
-        env: GIT_ENV,
+        env: gitEnv(),
         input: content,
         encoding: "utf8",
       }).trim(),

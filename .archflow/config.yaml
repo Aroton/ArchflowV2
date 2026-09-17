@@ -45,8 +45,8 @@ producers:
       effort: high
   codex:
     counter-reviewer:
-      model: claude-opus-5
-      effort: medium
+      model: gemini-3.8-flash-high
+      effort: high
     adjudicator:
       model: gemini-3.8-flash-high
       effort: high

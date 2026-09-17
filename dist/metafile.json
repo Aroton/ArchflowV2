@@ -1,11 +1,11 @@
 {
   "inputs": {
     "assets/review-documents.yaml": {
-      "bytes": 2798,
+      "bytes": 4029,
       "imports": []
     },
     "assets/review-inputs.yaml": {
-      "bytes": 21315,
+      "bytes": 23707,
       "imports": []
     },
     "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs": {
@@ -8078,7 +8078,7 @@
       ]
     },
     "src/review/inputs.ts": {
-      "bytes": 21149,
+      "bytes": 21559,
       "format": "esm",
       "imports": [
         {
@@ -8220,7 +8220,7 @@
       "imports": []
     },
     "src/review/rubrics.ts": {
-      "bytes": 7271,
+      "bytes": 7933,
       "format": "esm",
       "imports": [
         {
@@ -8327,7 +8327,7 @@
       ]
     },
     "src/review/simple-review.ts": {
-      "bytes": 11858,
+      "bytes": 11426,
       "format": "esm",
       "imports": [
         {
@@ -11097,7 +11097,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2639722,
+      "bytes": 2643807,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -11744,10 +11744,10 @@
       ],
       "inputs": {
         "assets/review-documents.yaml": {
-          "bytesInOutput": 2877
+          "bytesInOutput": 4112
         },
         "assets/review-inputs.yaml": {
-          "bytesInOutput": 21350
+          "bytesInOutput": 23745
         },
         "node_modules/@secretlint/core/module/RuleContext.js": {
           "bytesInOutput": 2398
@@ -12560,7 +12560,7 @@
           "bytesInOutput": 2243
         },
         "src/review/inputs.ts": {
-          "bytesInOutput": 19081
+          "bytesInOutput": 19476
         },
         "src/review/pinned-context.ts": {
           "bytesInOutput": 15491
@@ -12569,7 +12569,7 @@
           "bytesInOutput": 118
         },
         "src/review/rubrics.ts": {
-          "bytesInOutput": 4442
+          "bytesInOutput": 4502
         },
         "src/state/approval-rules.ts": {
           "bytesInOutput": 5951
@@ -12706,7 +12706,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3813429,
+      "bytes": 3817210,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -13363,10 +13363,10 @@
       ],
       "inputs": {
         "assets/review-documents.yaml": {
-          "bytesInOutput": 2877
+          "bytesInOutput": 4112
         },
         "assets/review-inputs.yaml": {
-          "bytesInOutput": 21350
+          "bytesInOutput": 23745
         },
         "node_modules/@modelcontextprotocol/core/dist/auth-CUe6YdwF.mjs": {
           "bytesInOutput": 34870
@@ -14248,7 +14248,7 @@
           "bytesInOutput": 2155
         },
         "src/review/inputs.ts": {
-          "bytesInOutput": 18335
+          "bytesInOutput": 18730
         },
         "src/review/pinned-context.ts": {
           "bytesInOutput": 15394
@@ -14257,13 +14257,13 @@
           "bytesInOutput": 118
         },
         "src/review/rubrics.ts": {
-          "bytesInOutput": 4413
+          "bytesInOutput": 4690
         },
         "src/review/simple-context.ts": {
           "bytesInOutput": 8717
         },
         "src/review/simple-review.ts": {
-          "bytesInOutput": 9788
+          "bytesInOutput": 9267
         },
         "src/state/approval-rules.ts": {
           "bytesInOutput": 8079

@@ -124,6 +124,7 @@ describe("package.json dependencies and scripts", () => {
   it("keeps expensive projects outside the fast check and runs the ordinary suite exactly once", () => {
     expect(Object.keys(manifest.scripts).sort()).toEqual([
       "bench:review",
+      "bench:review-efficiency",
       "build:temp",
       "check",
       "check:deep",
@@ -162,6 +163,7 @@ describe("package.json dependencies and scripts", () => {
       "check:release",
       "test:real-host",
       "bench:review",
+      "bench:review-efficiency",
     ]) {
       expect(manifest.scripts["check"], excluded).not.toContain(excluded);
     }

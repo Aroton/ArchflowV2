@@ -1,6 +1,6 @@
 # mcp/DISPATCH
 
-**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
+**Explored:** 2026-09-16 · **Commit:** `e479c26` · **Covers:** `src/dispatch/`, `src/contracts/semantic-workflow.ts`, `src/mcp/handlers/counter-review.ts`, `src/mcp/handlers/session.ts`, `src/state/semantic-actions.ts`, `src/state/workspace-cleanup.ts`
 
 Review delivery uses the existing CLI adapters. Fresh general/test output requires the plain object `{outcome, feedback}`: either actionable issues or explicit `no_issues_found` signoff. Nonblank feedback is required; arbitrary JSON, absent outcomes, and failed processes never imply completion. Valid received feedback is reused after sibling failures; server evidence-construction failures keep diagnostic information without automatically spending another model call.
 

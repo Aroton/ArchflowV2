@@ -1,4 +1,4 @@
-# Server-owned counter-review rubric for the "design" and "phase-design" phase kinds.
+# Server-owned counter-review rubric for the overall "design" phase kind.
 #
 # The MCP server reads and strictly parses this file fresh on every review and
 # status call; a missing or invalid file fails the review closed. `rubric_id` is
@@ -11,10 +11,10 @@ kind: artifact
 mode: adversarial
 criteria:
   - id: substantive-correctness
-    text: "Find consequential design flaws, unsafe behavior, or meaningful verification gaps. Explain what can go wrong, where, and why it matters, using the artifact and available repository evidence; a real defect need not have been anticipated by the PRD."
+    text: "Find consequential architectural flaws or unsafe behavior. Assess the proposed components, ownership, and shared contracts against the product outcomes. Explain what can go wrong, where, and why it matters using available evidence; leave phase-local implementation choices to phase design unless they determine architectural feasibility."
     blocking: true
   - id: upstream-coverage
-    text: "Use the PRD and upstream design as context for intent and constraints. Report a discrepancy or omission only when it would cause a concrete problem for users, implementation, or verification; do not require a traceability checklist."
+    text: "Use the PRD as context for outcomes, scope, and product constraints. Report a discrepancy or omission only when it would cause a concrete problem for users, implementation, or verification; do not require a traceability checklist."
     blocking: true
   - id: interface-reality
     text: "Check existing code and interfaces before reporting a mismatch or missing capability. Identify the concrete incompatibility and its consequence."
@@ -23,16 +23,16 @@ criteria:
     text: "Check arithmetic, limits, and capacity assumptions when they affect a real behavior or constraint. Show the contradiction and its consequence; an unexplained number alone does not require a finding."
     blocking: true
   - id: boundary-and-mechanism-coverage
-    text: "Identify a concrete failure of an isolation, safety, ordering, or recovery property that the proposed mechanism could permit. Check existing behavior and evidence before claiming the mechanism is missing; leave test-selection judgments to test-strategy."
+    text: "Check who owns state, effects, and shared interfaces across components and phases. Identify a concrete failure of an isolation, safety, ordering, or recovery property that the proposed mechanism could permit. Check existing behavior before claiming the mechanism is missing; leave test-selection judgments to test-strategy."
     blocking: true
   - id: evidence-completeness
     text: "Inspect relevant adjacent components before claiming a dependency or integration is missing. Report an omission only when it can break the proposed behavior or an important constraint."
     blocking: true
   - id: proportionality
-    text: "Report layers, custom machinery, or speculative scope only when they create a concrete design problem or disproportionate implementation or maintenance cost. The availability of a library or a preferred simpler design is not itself a defect."
+    text: "Report layers, speculative scope, repeated contracts, or premature implementation detail only when they obscure a decision, create conflicting instructions, or impose disproportionate delivery or maintenance cost. Document length, a preferred format, or an available alternative alone is not a defect."
     blocking: true
   - id: phase-plan-soundness
-    text: "Assess whether settled decisions, explicit interfaces, and usable predecessor guarantees make phases practical for economical implementation agents, normally Sol medium or Astra low. Identify concrete remaining reasoning, coupling, or missing verification that would drive avoidable implementation or rework cost. A tested internal prerequisite is a valid phase even when the whole capability comes later. Suggest settling a decision, isolating a hard mechanism, or merging routine work only when the total benefit justifies another design/review cycle. Do not enforce model quotas, file counts, token budgets, or a scoring worksheet; inherently difficult work can justify stronger effort."
+    text: "Assess whether phase boundaries isolate difficult mechanisms and supply usable interfaces and tested predecessor guarantees to later work. Identify concrete coupling or unresolved architectural decisions that create avoidable implementation or rework cost. A tested internal prerequisite is a valid phase before the whole capability works. Suggest a split or merge only when the benefit justifies another design/review cycle; do not enforce model quotas, file counts, or token budgets. Inherently difficult work can justify stronger effort."
     blocking: true
   - id: test-strategy
     text: "Check existing code and tests before requesting additional verification. Name a concrete failure that could escape the planned and existing checks, accept equivalent behavioral evidence at any credible layer, and prefer the cheapest useful addition. Flag duplicate or expensive fixtures only for a material delivery cost; avoid raw coverage targets and exhaustive matrices."

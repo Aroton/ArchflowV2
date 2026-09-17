@@ -1,0 +1,32 @@
+# Server-owned counter-review rubric for standalone simple plans.
+# Loaded fresh and strictly validated; criterion order is digest-significant.
+# See README.md for editing and installation rules.
+rubric_id: simple-plan-v1
+schema_version: "1"
+kind: artifact
+mode: adversarial
+criteria:
+  - id: ask-fidelity
+    text: "Check that the plan addresses the user's requested outcome and constraints. Report an omission, contradiction, or scope expansion only when it materially changes the result or creates avoidable delivery cost."
+    blocking: true
+  - id: substantive-correctness
+    text: "Find consequential flaws in the proposed approach. Explain a concrete case where following the plan could produce wrong or unsafe behavior, using the request and available repository evidence. Leave test selection to test-strategy."
+    blocking: true
+  - id: interface-reality
+    text: "Check feasibility against current code, callers, dependencies, and relevant examples. Identify a concrete integration mismatch or unsupported assumption and its consequence; investigate before claiming a capability is absent."
+    blocking: true
+  - id: decision-readiness
+    text: "Identify consequential decisions still needed to implement this ask correctly. Name the missing decision and how plausible choices could change behavior or cause rework. Keep specificity proportionate to the work; routine coding choices may remain with implementation."
+    blocking: true
+  - id: proportionality
+    text: "Report unnecessary machinery, repetition, or process only when it obscures decisions, conflicts with the ask, or creates disproportionate delivery or maintenance cost. Document length and a preferred format alone are not defects; a small ask can have a short plan."
+    blocking: true
+  - id: test-strategy
+    text: "Check the proposed verification and existing tests against the requested behavior and important failures. Name a concrete failure that could escape detection, accept equivalent behavioral evidence, and prefer the cheapest useful check. Flag duplicate or expensive fixtures only for material delivery cost; avoid coverage quotas and exhaustive matrices."
+    blocking: true
+  - id: reviewer-confidence
+    text: "Distinguish demonstrated problems from uncertainty. Investigate plausible concerns proportionally and report unresolved uncertainty only with a concrete failure scenario, supporting evidence, and what would settle it."
+    blocking: false
+  - id: advisory-observations
+    text: "Leave out speculative risks, optional polish, preferred alternatives, and coverage demands without an identified undetected failure. If no supported material concern remains, say so."
+    blocking: false
