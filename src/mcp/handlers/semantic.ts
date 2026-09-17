@@ -1,6 +1,6 @@
 import { parseCanonicalDocument } from "../../contracts/canonical.js";
 import type { InvocationContext } from "../../contracts/contexts.js";
-import { createProjectError, type ProjectError, type ProjectResult } from "../../contracts/errors.js";
+import { createProjectError, type ProjectResult } from "../../contracts/errors.js";
 import { parseSafeCode } from "../../contracts/evidence.js";
 import { parseArchivedGateRequest, type WaiverGateContext } from "../../contracts/durable-gate.js";
 import { parseToolCall, type ParsedToolCall } from "../../contracts/mcp-tools.js";
@@ -34,6 +34,7 @@ import {
 } from "../../state/semantic-actions.js";
 import { computeAuthoritativeSemanticStatus } from "../../state/semantic-status.js";
 import { projectSemanticStatus } from "../../state/semantic-view.js";
+import { workflowFailure } from "../../state/workflow-recovery.js";
 import { handleCounterReview } from "./counter-review.js";
 import { handleState } from "./state.js";
 
@@ -46,14 +47,10 @@ const success = (view: WorkflowViewV1): SemanticResultV1 => parseSemanticResultV
   schema_version: "1", ok: true, value: view,
 });
 
-function retryable(error: ProjectError): boolean {
-  return error.code === "IO_ERROR" || error.code === "CANCELLED";
-}
-
-function failure(code: string, message: string, view?: WorkflowViewV1, canRetry = false): SemanticResultV1 {
+function failure(error: Parameters<typeof workflowFailure>[0], view?: WorkflowViewV1): SemanticResultV1 {
   return parseSemanticResultV1({
     schema_version: "1", ok: false,
-    error: { code, message, retryable: canRetry },
+    error: workflowFailure(error, view),
     ...(view === undefined ? {} : { view }),
   });
 }
@@ -90,8 +87,8 @@ async function openSemanticSession(
     : snapshot;
 }
 
-function safeView(session: LiveSemanticSession, invocation?: WorkflowInvocationV1): WorkflowViewV1 {
-  return projectSemanticStatus(session.snapshot, invocation).view;
+function safeView(session: LiveSemanticSession, invocation?: WorkflowInvocationV1, detail?: ArchFlowStatusInputV1["detail"]): WorkflowViewV1 {
+  return projectSemanticStatus(session.snapshot, invocation, detail).view;
 }
 
 async function freshSafeView(
@@ -105,7 +102,7 @@ async function freshSafeView(
 
 function requireProducingHost(invocation: WorkflowInvocationV1 | undefined, context: InvocationContext): SemanticResultV1 | undefined {
   if (invocation !== undefined && context.connection.initialization_candidates.host === "unknown") {
-    return failure("UNSUPPORTED_HOST", "A producing semantic invocation requires an authenticated Claude, Codex, or Antigravity host.");
+    return failure({ code: "UNSUPPORTED_HOST", message: "A producing semantic invocation requires an authenticated Claude, Codex, or Antigravity host." });
   }
   return undefined;
 }
@@ -118,8 +115,8 @@ export async function handleSemanticStatus(
   const unsupported = requireProducingHost(input.invocation, context);
   if (unsupported !== undefined) return unsupported;
   const session = await openSemanticSession(input.task_id, context, "archflow-status");
-  if (!session.ok) return failure(session.error.code, session.error.code, undefined, retryable(session.error));
-  return success(safeView(session.value, input.invocation));
+  if (!session.ok) return failure(session.error);
+  return success(safeView(session.value, input.invocation, input.detail));
 }
 
 async function openComposedGate(
@@ -245,17 +242,17 @@ export async function handleSemanticApply(
   const unsupported = requireProducingHost(input.invocation, context);
   if (unsupported !== undefined) return unsupported;
   const session = await openSemanticSession(input.task_id, context, "archflow-apply");
-  if (!session.ok) return failure(session.error.code, session.error.code, undefined, retryable(session.error));
+  if (!session.ok) return failure(session.error);
   try {
     return success(await executeSemanticAction(
       session.value.services, session.value.snapshot, input, capabilities(session.value, input, context),
     ));
   } catch (error) {
-    const view = await freshSafeView(input.task_id, context, input.invocation);
+    const view = await freshSafeView(input.task_id, context, input.invocation).catch(() => undefined);
     if (error instanceof SemanticActionExecutionError) {
-      return failure(error.result.error.code, error.message, view, retryable(error.result.error));
+      return failure(error.result.error, view);
     }
-    if (error instanceof SemanticActionPlanError) return failure(error.code, error.message, view);
+    if (error instanceof SemanticActionPlanError) return failure(error, view);
     throw error;
   }
 }

@@ -15,6 +15,7 @@ const semanticView = {
   schema_version: "1",
   task_id: "task-1",
   condition: "ready",
+  state: "work-ready",
   headline: "Ready",
   detail: "Inspect the current workflow.",
   resources: [],

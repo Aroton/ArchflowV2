@@ -665,7 +665,7 @@ describe("computeTaskStatus", () => {
       },
     });
     if (status.ok) {
-      expect(status.value.next_action.detail).toContain("fix the YAML");
+      expect(status.value.next_action.detail).toContain("Correct the named configuration fields");
       expect(status.value.next_action.detail).not.toContain("new task or the explicit upgrade flow");
     }
   });

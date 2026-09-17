@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { canonicalJsonBytes, canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
 import * as rubricLoader from "../../src/review/rubrics.js";
 import { taskStateV1Schema } from "../../src/contracts/durable-state.js";
+import { runLocalCommand } from "../../src/local/commands.js";
 import { cleanTaskWorkspace } from "../../src/state/workspace-cleanup.js";
 import { readRetainedResult } from "../../src/state/production.js";
 import { retainedResultDigests } from "../../src/state/retained-result-graph.js";
@@ -539,6 +540,40 @@ describe("semantic implementation journeys", { timeout: TIMEOUT }, () => {
     expect(reviewed.value.findings ?? []).toEqual([]);
     expect(reviewed.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     expect(Number(reviewCount(workspace))).toBe(dispatchesBefore + 1);
+  });
+
+  register("restores a missing output using only the returned recovery recipe", async () => {
+    const workspace = await createTaskWorkspace({ taskId: "semantic-restore-recipe" });
+    workspaces.push(workspace);
+    restorers.push(installSemanticReviewStub(workspace.root, [[]]));
+    const h = semanticJourneyHarness(workspace);
+    const { invocation, view } = await consumeImplementationHandoff(workspace, h);
+    const work = writeClientImplementationWork(workspace, view, {
+      source: SOURCE_BYTES, notes: IMPLEMENTATION_NOTES, transcript: TRANSCRIPT_BYTES,
+    });
+    const submitted = await h.apply(invocation, view, implementationSubmission(workspace, work.outputs));
+    expect(submitted.ok, JSON.stringify(submitted)).toBe(true);
+    if (!submitted.ok) return;
+    rmSync(work.sourceAbsolute);
+    const blocked = await h.status(invocation);
+    expect(blocked).toMatchObject({ condition: "blocked", state: "blocked" });
+    expect(blocked.next_action.restore_targets).toHaveLength(1);
+    const target = blocked.next_action.restore_targets![0]!;
+    expect(target.destination).toBe(work.sourceAbsolute);
+    expect(target.command).toBe("archflow-local");
+    expect(target.args).toEqual(["restore", "--task", workspace.taskId]);
+    const result = await runLocalCommand({ command: "restore", working_directory: workspace.root,
+      task_id: target.args[2]!, value: target.input });
+    expect(result).toMatchObject({ ok: true, value: { state: "present", file_type: "regular" } });
+    const restored = result as { value: { bytes: string; mode: string } };
+    const bytes = Buffer.from(restored.value.bytes, "base64");
+    expect(sha256Bytes(bytes)).toBe(target.content_digest);
+    expect(existsSync(target.destination)).toBe(false); // retrieval has no write effects
+    writeFileSync(target.destination, bytes, { flag: "wx", mode: restored.value.mode === "100755" ? 0o755 : 0o644 });
+    const resumed = await h.status(invocation);
+    expect(resumed.next_action.kind).toBe(submitted.value.next_action.kind);
+    expect(resumed.next_action.restore_targets).toBeUndefined();
+    expect(readFileSync(target.destination, "utf8")).toBe(SOURCE_BYTES);
   });
 
   register("recovers an unrestorable missing projection by re-declaring the deletion in a fresh produce", async () => {

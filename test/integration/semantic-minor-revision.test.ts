@@ -42,14 +42,14 @@ describe("minor review revisions", { timeout: 180_000 }, () => {
     let view = await apply(h, invocation, reached.view);
     expect(view.next_action.kind).toBe("triage");
     const recommendation = view.implementation_recommendation;
-    expect(recommendation.status).toBe("ready");
+    expect(recommendation?.status).toBe("ready");
     const count = readFileSync(join(workspace.root, "semantic-review-count"), "utf8");
     view = await apply(h, invocation, view, { kind: "triage", response: { decision: "revise-minor", rationale: "Explain the existing state terminology without changing the component plan." } });
     view = await apply(h, invocation, view);
     const path = view.resources.find(resource => resource.role === "current-artifact")!.path;
     writeFileSync(join(workspace.root, path), bytes.replace("current state.", "current state (its workflow stage)."));
     view = await apply(h, invocation, view, { kind: "work-result", outcome: "succeeded", review_revision: { classification: "minor", rationale: "Only clarified existing terminology in one sentence." } });
-    expect(view.implementation_recommendation).toEqual(recommendation);
+    expect((await h.status(invocation, "diagnostic")).implementation_recommendation).toEqual(recommendation);
     expect(view.next_action.kind).toBe("commit");
     const commit = view.next_action.commit!;
     expect(commit.paths.some(root => path === root || path.startsWith(`${root}/`))).toBe(true);
@@ -225,7 +225,7 @@ approval_rules:
       return;
     }
     expect(view.review_reports![0]!.subject_digest).toBe(reviewedSubject);
-    expect(view.progress?.review_rounds_completed).toBe(1);
+    expect((await h.status(invocation, "diagnostic")).progress?.review_rounds_completed).toBe(1);
     expect(view.detail).toContain("has not received another AI review");
     const services = await createProductionServices({ working_directory: workspace.root, task_id: workspace.taskId, operation: parseSafeCode("check-minor-predecessor") });
     if (!services.ok || services.value.state === undefined) throw new Error("current production state unavailable");

@@ -38230,10 +38230,18 @@ var adapterOnlyParams = object2({ adapter });
 var adapterAttemptParams = object2(adapterAttempt);
 function describeValidationIssues(error51) {
   if (error51 instanceof external_exports.ZodError) {
-    const issues = error51.issues.slice(0, 5).map((issue4) => {
+    const flatten = (items, prefix = []) => items.flatMap((issue4) => {
+      const path3 = [...prefix, ...issue4.path];
+      if (issue4.code !== "invalid_union" || issue4.errors.length === 0) return [{ ...issue4, path: path3 }];
+      const branches = issue4.errors.map((branch) => flatten(branch, path3));
+      const score3 = (branch) => branch.reduce((sum, item) => sum + (item.code === "invalid_value" && ["kind", "outcome", "decision", "skill"].includes(String(item.path.at(-1))) ? 1e3 : 1), 0);
+      const best = branches.reduce((left, right) => score3(left) <= score3(right) ? left : right);
+      return [...best];
+    });
+    const issues = [...new Set(flatten(error51.issues).map((issue4) => {
       const path3 = issue4.path.length === 0 ? "input" : issue4.path.map(String).join(".");
       return `${path3}: ${issue4.message}`.slice(0, 256);
-    });
+    }))].slice(0, 5);
     if (issues.length > 0) return issues;
   }
   return error51 instanceof Error && error51.message !== "" ? [error51.message.slice(0, 256)] : void 0;
@@ -38263,7 +38271,7 @@ var PROJECT_PARAMETER_SCHEMAS = {
   STALE_SKILLS: digestsParams,
   STATE_MISSING: object2({ phase_instance: phaseInstance3 }),
   STATE_INVALID: object2({ phase_instance: phaseInstance3, issue_code: code }),
-  TRANSITION_INVALID: object2({ phase_instance: phaseInstance3, from: code, to: code }),
+  TRANSITION_INVALID: object2({ phase_instance: phaseInstance3, from: code, to: code, issue_code: code.optional(), issues: validationIssues.optional() }),
   INPUT_FINGERPRINT_MISMATCH: digestsParams,
   STATE_CONFLICT: object2({ expected_revision: integer2, observed_revision: integer2 }),
   INTENT_MISMATCH: digestsParams,
@@ -38310,8 +38318,8 @@ function parser(schema2) {
     return schema2.parse(value);
   } });
 }
-function defineError(owner, retryable2, schema2, action2, projection) {
-  return Object.freeze({ owner, retryable: retryable2, parameter_parser: parser(schema2), action: action2, projection });
+function defineError(owner, retryable, schema2, action2, projection) {
+  return Object.freeze({ owner, retryable, parameter_parser: parser(schema2), action: action2, projection });
 }
 var PROJECT_ERROR_DEFINITIONS = Object.freeze({
   CONTRACT_INVALID: defineError("contracts", false, PROJECT_PARAMETER_SCHEMAS.CONTRACT_INVALID, "correct-contract", "project"),
@@ -39677,16 +39685,8 @@ var IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
   "legacy-evidence",
   "selection-unavailable"
 ];
-var readyImplementationRecommendationSchema = external_exports.discriminatedUnion("model", [
-  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash-high"), effort: external_exports.literal("high"), rationale: external_exports.string().optional() }).strict(),
-  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-6-astra"), effort: external_exports.enum(["low", "high"]), rationale: external_exports.string().optional() }).strict(),
-  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gemini-3.7-flash"), effort: external_exports.literal("max") }).strict(),
-  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("glm-5.3-flash"), effort: external_exports.literal("max") }).strict(),
-  external_exports.object({ status: external_exports.literal("ready"), model: external_exports.literal("gpt-5.6-sol"), effort: external_exports.enum(["medium", "xhigh"]), rationale: external_exports.string().optional() }).strict()
-]);
-var implementationRecommendationV1Schema = external_exports.union([
-  readyImplementationRecommendationSchema,
-  benchmarkRecommendationSchema,
+var implementationRecommendationV1Schema = external_exports.discriminatedUnion("status", [
+  external_exports.object({ status: external_exports.literal("ready"), model: nonBlank5, effort: nonBlank5.optional(), rationale: nonBlank5.optional() }).strict(),
   external_exports.object({
     status: external_exports.literal("unavailable"),
     phase: positiveSafePhaseNumberV1Schema.optional(),
@@ -39743,6 +39743,26 @@ var SEMANTIC_ACTION_KINDS = [
   "none"
 ];
 var APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate-summary", "reopening-request", "decision", "review-dispatch"];
+var WORKFLOW_STATES = [
+  "initialization",
+  "work-ready",
+  "working",
+  "review-ready",
+  "review-running",
+  "triage",
+  "revision-ready",
+  "reopening",
+  "gate-preparation",
+  "awaiting-human",
+  "decision-settlement",
+  "recovery",
+  "blocked",
+  "commit",
+  "handoff",
+  "completion-ready",
+  "complete",
+  "abandoned"
+];
 var SEMANTIC_SUBSTEPS = [
   "initialize-task",
   "begin-work",
@@ -39945,7 +39965,14 @@ var commitInstructionV1Schema = external_exports.object({ paths: external_export
     context2.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
   }
 });
-var semanticNextActionV1Schema = external_exports.object({ kind: external_exports.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank5, offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: external_exports.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank5.optional(), skill_args: external_exports.array(external_exports.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
+var workflowRestoreTargetV1Schema = external_exports.object({
+  destination: nonBlank5,
+  content_digest: digest8,
+  command: external_exports.literal("archflow-local"),
+  args: external_exports.array(nonBlank5).min(1),
+  input: external_exports.object({ result_digest: digest8, output_path: nonBlank5 }).strict()
+}).strict();
+var semanticNextActionV1Schema = external_exports.object({ restore_targets: external_exports.array(workflowRestoreTargetV1Schema).min(1).optional(), kind: external_exports.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank5, actor: external_exports.enum(["caller", "human", "operator", "none"]).optional(), offer: external_exports.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: external_exports.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank5.optional(), skill_args: external_exports.array(external_exports.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
 var configChangeValueV1Schema = external_exports.json();
 var configChangeEntryV1Schema = external_exports.object({
   path: external_exports.string(),
@@ -39995,6 +40022,7 @@ var publicReviewPushThroughAuditV1Schema = external_exports.discriminatedUnion("
   }).strict()
 ]);
 var workflowViewV1Schema = external_exports.object({
+  state: external_exports.enum(WORKFLOW_STATES),
   progress: workflowProgressV1Schema.optional(),
   schema_version: external_exports.literal("1"),
   task_id: taskSlugV1Schema,
@@ -40014,7 +40042,7 @@ var workflowViewV1Schema = external_exports.object({
   partial_review_reports: external_exports.array(reviewReportSchema).optional(),
   review_response: reviewResponseSchema.optional(),
   review_revision: reviewRevisionDeclarationSchema.optional(),
-  implementation_recommendation: implementationRecommendationV1Schema,
+  implementation_recommendation: implementationRecommendationV1Schema.optional(),
   presentation: humanPresentationV1Schema.optional(),
   dispatch_failure: publicDispatchFailureV1Schema.optional(),
   repositories: external_exports.array(repositoryStatusV1Schema).optional(),
@@ -40025,7 +40053,11 @@ var workflowViewV1Schema = external_exports.object({
 var semanticErrorSummaryV1Schema = external_exports.object({
   code: nonBlank5.max(128),
   message: nonBlank5.max(4096),
-  retryable: external_exports.boolean()
+  retryable: external_exports.boolean(),
+  recovery: external_exports.object({
+    kind: external_exports.enum(["correct-input", "refresh-status", "retry", "wait", "repair", "human", "operator"]),
+    instruction: boundedText2
+  }).strict().optional()
 }).strict();
 var semanticSuccessV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(true), value: workflowViewV1Schema }).strict();
 var semanticFailureV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(false), error: semanticErrorSummaryV1Schema, view: workflowViewV1Schema.optional() }).strict();
@@ -40086,7 +40118,7 @@ var archFlowApplyInputV1Schema = external_exports.object({ schema_version: exter
     });
   }
 });
-var archFlowStatusInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict();
+var archFlowStatusInputV1Schema = external_exports.object({ schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional(), detail: external_exports.enum(["standard", "diagnostic"]).optional() }).strict();
 var parseMaterialized = (schema2, value, label) => {
   assertPlainJson(value, label);
   return schema2.parse(structuredClone(value));
@@ -40095,6 +40127,83 @@ var parseWorkflowInvocationV1 = (value) => parseMaterialized(workflowInvocationV
 var parseArchFlowStatusInputV1 = (value) => parseMaterialized(archFlowStatusInputV1Schema, value, "archflow status input");
 var parseArchFlowApplyInputV1 = (value) => parseMaterialized(archFlowApplyInputV1Schema, value, "archflow apply input");
 var parseSemanticResultV1 = (value) => parseMaterialized(semanticResultV1Schema, value, "semantic result");
+
+// src/state/workflow-recovery.ts
+function workflowFailure(error51, view) {
+  const code2 = error51.code;
+  const parameters = "diagnostic" in error51 ? error51.diagnostic.parameters : void 0;
+  const issues = parameters !== void 0 && "issues" in parameters ? parameters.issues : void 0;
+  const issue4 = parameters !== void 0 && "issue_code" in parameters ? parameters.issue_code : void 0;
+  let message = "message" in error51 ? error51.message : (Array.isArray(issues) ? issues.join("; ") : void 0) ?? `${code2.replaceAll("_", " ").toLowerCase()}${issue4 === void 0 ? "" : `: ${issue4}`}.`;
+  if (!("message" in error51) && !Array.isArray(issues) && parameters !== void 0) {
+    if ("model" in parameters) message += ` Model: ${parameters.model}.`;
+    if ("adapter" in parameters) message += ` Reviewer CLI: ${parameters.adapter}.`;
+    if ("repository_name" in parameters) message += ` Repository: ${parameters.repository_name}.`;
+    if ("from" in parameters && "to" in parameters) message += ` Requested transition: ${parameters.from} to ${parameters.to}.`;
+  }
+  let recovery;
+  switch (code2) {
+    case "CONTRACT_INVALID":
+    case "SEMANTIC_SUBMISSION_MISMATCH":
+      recovery = { kind: "correct-input", instruction: "Correct the named submission fields and resubmit through the current offer. Omit submission when expected_submission is none." };
+      break;
+    case "SEMANTIC_OFFER_STALE":
+    case "STATE_CONFLICT":
+    case "INPUT_FINGERPRINT_MISMATCH":
+    case "INTENT_NOT_CURRENT":
+    case "TRANSITION_INVALID":
+    case "GATE_ACTIVE":
+    case "GATE_CANCELLED":
+      recovery = { kind: "refresh-status", instruction: "Call archflow_status with the same task and invocation, then follow its current action. Do not reuse the rejected offer." };
+      break;
+    case "IO_ERROR":
+    case "CANCELLED":
+    case "TIMEOUT":
+    case "MODEL_OUTPUT_INVALID":
+      recovery = { kind: "retry", instruction: "Retry the identical call, preserving its offer, invocation, and submission so the server can resume any recorded substeps." };
+      break;
+    case "RATE_LIMITED":
+      recovery = { kind: "wait", instruction: "Wait for the provider limit to clear, then retry the identical call. Preserve the invocation, offer, and submission." };
+      break;
+    case "CONFIG_INVALID":
+      recovery = { kind: "repair", instruction: "Repair the named task config field or configured repository, then call archflow_status with the same invocation. Do not change recorded repository identity to bypass a mismatch." };
+      break;
+    case "CONFIG_MODEL_UNSUPPORTED":
+    case "UNSUPPORTED_MODEL":
+    case "CLI_MISSING":
+    case "CLI_VERSION_UNSUPPORTED":
+    case "AUTH_UNAVAILABLE":
+    case "REPOSITORY_VIEW_UNAVAILABLE":
+      recovery = { kind: "repair", instruction: "Repair the reported reviewer route, CLI/authentication, or repository access, then read archflow_status. Follow any returned human recovery boundary before retrying review." };
+      break;
+    case "SNAPSHOT_LIMIT":
+    case "ENVELOPE_OVERFLOW":
+      if (parameters !== void 0 && "offending_paths" in parameters) message = `${code2 === "SNAPSHOT_LIMIT" ? "Retained work" : "Review input"} exceeds its byte limit (${parameters.current_bytes}/${parameters.byte_cap}): ${parameters.offending_paths.join(", ")}.`;
+      recovery = { kind: "repair", instruction: "Reduce the named oversized inputs or optional verification transcript. Changed code or verification claims require the normal revision and submission path; then follow fresh status." };
+      break;
+    case "GATE_DECISION_INVALID":
+      recovery = { kind: "human", instruction: "Read fresh status and present its authenticated choices. Submit only the explicit human choice; do not replace a decision already recorded." };
+      break;
+    case "UNSUPPORTED_HOST":
+      recovery = { kind: "repair", instruction: "Reconnect through a supported Claude, Codex, or Antigravity MCP host. A generic read-only status call may omit invocation; producing actions require an authenticated host." };
+      break;
+    case "REPOSITORY_NOT_FOUND":
+    case "REPOSITORY_MISMATCH":
+      recovery = { kind: "repair", instruction: "Reconnect the server in the task's original repository/worktree, then request status for the same task." };
+      break;
+    case "SECRET_DETECTED":
+      recovery = { kind: "repair", instruction: "Remove the detected secret from the declared work and verification inputs, then resubmit through the current work offer. Do not include the secret in messages." };
+      break;
+    default:
+      recovery = { kind: "operator", instruction: "Request archflow_status with detail: diagnostic for this task. If it cannot authenticate a recovery action, report this error for operator repair; do not edit state, receipts, or approval archives." };
+  }
+  if (view?.condition === "awaiting-human") {
+    recovery = { kind: "human", instruction: view.next_action.instruction };
+  } else if (view?.condition === "blocked" && recovery.kind !== "correct-input") {
+    recovery = { kind: "operator", instruction: view.next_action.instruction };
+  }
+  return Object.freeze({ code: code2, message: message.slice(0, 4096), retryable: recovery.kind === "retry" || recovery.kind === "wait", recovery });
+}
 
 // src/mcp/diagnostics.ts
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
@@ -40150,11 +40259,11 @@ function semanticOutcome(tool2, result) {
   outcomes.add(outcome);
   return outcome;
 }
-function semanticFailure(tool2, code2, message, retryable2 = false) {
+function semanticFailure(tool2, code2, message) {
   return semanticOutcome(tool2, parseSemanticResultV1({
     schema_version: "1",
     ok: false,
-    error: { code: code2, message, retryable: retryable2 }
+    error: workflowFailure({ code: code2, message })
   }));
 }
 function copyRegistry(handlers) {
@@ -48054,6 +48163,12 @@ var project_error_schema_default = {
                 },
                 to: {
                   $ref: "#/$defs/code"
+                },
+                issue_code: {
+                  $ref: "#/$defs/code"
+                },
+                issues: {
+                  $ref: "#/$defs/validationIssues"
                 }
               },
               required: [
@@ -54168,6 +54283,62 @@ var semantic_workflow_schema_default = {
     semanticNextAction: {
       type: "object",
       properties: {
+        restore_targets: {
+          minItems: 1,
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              destination: {
+                type: "string",
+                minLength: 1,
+                pattern: "\\S"
+              },
+              content_digest: {
+                $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+              },
+              command: {
+                type: "string",
+                const: "archflow-local"
+              },
+              args: {
+                minItems: 1,
+                type: "array",
+                items: {
+                  type: "string",
+                  minLength: 1,
+                  pattern: "\\S"
+                }
+              },
+              input: {
+                type: "object",
+                properties: {
+                  result_digest: {
+                    $ref: "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                  },
+                  output_path: {
+                    type: "string",
+                    minLength: 1,
+                    pattern: "\\S"
+                  }
+                },
+                required: [
+                  "result_digest",
+                  "output_path"
+                ],
+                additionalProperties: false
+              }
+            },
+            required: [
+              "destination",
+              "content_digest",
+              "command",
+              "args",
+              "input"
+            ],
+            additionalProperties: false
+          }
+        },
         kind: {
           type: "string",
           enum: [
@@ -54194,6 +54365,15 @@ var semantic_workflow_schema_default = {
           type: "string",
           minLength: 1,
           pattern: "\\S"
+        },
+        actor: {
+          type: "string",
+          enum: [
+            "caller",
+            "human",
+            "operator",
+            "none"
+          ]
         },
         offer: {
           type: "string",
@@ -54341,6 +54521,29 @@ var semantic_workflow_schema_default = {
     workflowView: {
       type: "object",
       properties: {
+        state: {
+          type: "string",
+          enum: [
+            "initialization",
+            "work-ready",
+            "working",
+            "review-ready",
+            "review-running",
+            "triage",
+            "revision-ready",
+            "reopening",
+            "gate-preparation",
+            "awaiting-human",
+            "decision-settlement",
+            "recovery",
+            "blocked",
+            "commit",
+            "handoff",
+            "completion-ready",
+            "complete",
+            "abandoned"
+          ]
+        },
         progress: {
           type: "object",
           properties: {
@@ -55443,208 +55646,47 @@ var semantic_workflow_schema_default = {
         }
       },
       required: [
+        "state",
         "schema_version",
         "task_id",
         "condition",
         "headline",
         "detail",
         "resources",
-        "next_action",
-        "implementation_recommendation"
+        "next_action"
       ],
       additionalProperties: false
     },
     implementationRecommendation: {
-      anyOf: [
+      oneOf: [
         {
-          oneOf: [
-            {
-              type: "object",
-              properties: {
-                status: {
-                  type: "string",
-                  const: "ready"
-                },
-                model: {
-                  type: "string",
-                  const: "gemini-3.7-flash-high"
-                },
-                effort: {
-                  type: "string",
-                  const: "high"
-                },
-                rationale: {
-                  type: "string"
-                }
-              },
-              required: [
-                "status",
-                "model",
-                "effort"
-              ],
-              additionalProperties: false
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              const: "ready"
             },
-            {
-              type: "object",
-              properties: {
-                status: {
-                  type: "string",
-                  const: "ready"
-                },
-                model: {
-                  type: "string",
-                  const: "gpt-6-astra"
-                },
-                effort: {
-                  type: "string",
-                  enum: [
-                    "low",
-                    "high"
-                  ]
-                },
-                rationale: {
-                  type: "string"
-                }
-              },
-              required: [
-                "status",
-                "model",
-                "effort"
-              ],
-              additionalProperties: false
+            model: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
             },
-            {
-              type: "object",
-              properties: {
-                status: {
-                  type: "string",
-                  const: "ready"
-                },
-                model: {
-                  type: "string",
-                  const: "gemini-3.7-flash"
-                },
-                effort: {
-                  type: "string",
-                  const: "max"
-                }
-              },
-              required: [
-                "status",
-                "model",
-                "effort"
-              ],
-              additionalProperties: false
+            effort: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
             },
-            {
-              type: "object",
-              properties: {
-                status: {
-                  type: "string",
-                  const: "ready"
-                },
-                model: {
-                  type: "string",
-                  const: "glm-5.3-flash"
-                },
-                effort: {
-                  type: "string",
-                  const: "max"
-                }
-              },
-              required: [
-                "status",
-                "model",
-                "effort"
-              ],
-              additionalProperties: false
-            },
-            {
-              type: "object",
-              properties: {
-                status: {
-                  type: "string",
-                  const: "ready"
-                },
-                model: {
-                  type: "string",
-                  const: "gpt-5.6-sol"
-                },
-                effort: {
-                  type: "string",
-                  enum: [
-                    "medium",
-                    "xhigh"
-                  ]
-                },
-                rationale: {
-                  type: "string"
-                }
-              },
-              required: [
-                "status",
-                "model",
-                "effort"
-              ],
-              additionalProperties: false
+            rationale: {
+              type: "string",
+              minLength: 1,
+              pattern: "\\S"
             }
-          ]
-        },
-        {
-          oneOf: [
-            {
-              type: "object",
-              properties: {
-                status: {
-                  type: "string",
-                  const: "ready"
-                },
-                model: {
-                  type: "string",
-                  pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
-                },
-                effort: {
-                  type: "string",
-                  pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
-                },
-                rationale: {
-                  type: "string",
-                  minLength: 1,
-                  pattern: "\\S"
-                }
-              },
-              required: [
-                "status",
-                "model",
-                "rationale"
-              ],
-              additionalProperties: false
-            },
-            {
-              type: "object",
-              properties: {
-                status: {
-                  type: "string",
-                  const: "unavailable"
-                },
-                reason: {
-                  type: "string",
-                  const: "selection-unavailable"
-                },
-                explanation: {
-                  type: "string",
-                  minLength: 1,
-                  pattern: "\\S"
-                }
-              },
-              required: [
-                "status",
-                "reason",
-                "explanation"
-              ],
-              additionalProperties: false
-            }
-          ]
+          },
+          required: [
+            "status",
+            "model"
+          ],
+          additionalProperties: false
         },
         {
           type: "object",
@@ -56701,6 +56743,13 @@ var semantic_workflow_schema_default = {
         },
         invocation: {
           $ref: "#/$defs/workflowInvocation"
+        },
+        detail: {
+          type: "string",
+          enum: [
+            "standard",
+            "diagnostic"
+          ]
         }
       },
       required: [
@@ -56764,6 +56813,34 @@ var semantic_workflow_schema_default = {
         },
         retryable: {
           type: "boolean"
+        },
+        recovery: {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              enum: [
+                "correct-input",
+                "refresh-status",
+                "retry",
+                "wait",
+                "repair",
+                "human",
+                "operator"
+              ]
+            },
+            instruction: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096,
+              pattern: "\\S"
+            }
+          },
+          required: [
+            "kind",
+            "instruction"
+          ],
+          additionalProperties: false
         }
       },
       required: [
@@ -56833,6 +56910,29 @@ var semantic_workflow_schema_default = {
   },
   type: "object",
   properties: {
+    state: {
+      type: "string",
+      enum: [
+        "initialization",
+        "work-ready",
+        "working",
+        "review-ready",
+        "review-running",
+        "triage",
+        "revision-ready",
+        "reopening",
+        "gate-preparation",
+        "awaiting-human",
+        "decision-settlement",
+        "recovery",
+        "blocked",
+        "commit",
+        "handoff",
+        "completion-ready",
+        "complete",
+        "abandoned"
+      ]
+    },
     progress: {
       type: "object",
       properties: {
@@ -57935,14 +58035,14 @@ var semantic_workflow_schema_default = {
     }
   },
   required: [
+    "state",
     "schema_version",
     "task_id",
     "condition",
     "headline",
     "detail",
     "resources",
-    "next_action",
-    "implementation_recommendation"
+    "next_action"
   ],
   additionalProperties: false
 };
@@ -57950,20 +58050,6 @@ var semantic_workflow_schema_default = {
 // src/mcp/tools.ts
 var JSON_SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 var MCP_SCHEMA_ID = "https://archflow.dev/schemas/v1/mcp-tools";
-var ADVERTISED_IMPLEMENTATION_RECOMMENDATION = deepFreeze3({
-  type: "object",
-  description: "Authenticated advisory implementation agent with optional explanation; never workflow authority.",
-  properties: {
-    status: { enum: ["ready", "unavailable"] },
-    model: { enum: ["gemini-3.7-flash-high", "gpt-6-astra", "gemini-3.7-flash", "glm-5.3-flash", "gpt-5.6-sol"] },
-    effort: { enum: ["low", "medium", "high", "xhigh", "max"] },
-    phase: { type: "integer", minimum: 1 },
-    reason: { enum: ["not-applicable", "not-produced", "subject-stale", "legacy-evidence"] },
-    explanation: { type: "string" },
-    rationale: { type: "string", description: "Advisory explanation of the implementation difficulty; never workflow authority." }
-  },
-  required: ["status"]
-});
 var schemaDocuments = Object.freeze([
   Object.freeze({ key: "mcp-tools", id: MCP_SCHEMA_ID, schema: mcp_tools_schema_default }),
   Object.freeze({ key: "primitives", id: "urn:archflow:schema:v1:primitives", schema: primitives_schema_default }),
@@ -58037,7 +58123,7 @@ function embedSchema(entry2, sourceKey) {
     const localReference = `#/$defs/${name}`;
     placements.set(placementKey, localReference);
     takenNames.add(name);
-    definitions[name] = key2 === "semantic-workflow" && tokens.join("/") === "$defs/implementationRecommendation" ? ADVERTISED_IMPLEMENTATION_RECOMMENDATION : embed(target4, key2);
+    definitions[name] = embed(target4, key2);
     return localReference;
   };
   const embed = (value, fromKey) => {
@@ -63345,726 +63431,11 @@ async function readDispatchRecovery(context2) {
   }
 }
 
-// src/state/approval-rules.ts
-var GATE_SUMMARY_MAX_LENGTH = 4096;
-var RULE_MATCH_SUMMARY_MAX_LENGTH = 1536;
-function displayMatchPaths(match) {
-  return [
-    ...match.paths,
-    ...(match.secondary_paths ?? []).flatMap((section) => section.paths.map((path3) => `${section.repository}/${path3}`))
-  ];
-}
-function describeMatchedPath(path3) {
-  const governing = /^\.archflow\/tasks\/[^/]+\/(design\.md|prd\.md)$/u.exec(path3);
-  if (governing === null) return path3;
-  return governing[1] === "design.md" ? `${path3} (this phase changed the architecture design)` : `${path3} (this phase changed the PRD)`;
-}
-function approvalRuleMatchSummary(match) {
-  if (match.kind === "subject") {
-    return `Approval rule trigger: this project requires human approval for the "${match.subject}" subject.`;
-  }
-  const paths = displayMatchPaths(match).map((path3) => `- ${describeMatchedPath(path3)}`).join("\n");
-  return `Approval rule trigger: these changed paths matched the project's content rules:
-${paths}`;
-}
-function boundedApprovalRuleMatchSummary(match) {
-  const full = approvalRuleMatchSummary(match);
-  if (full.length <= RULE_MATCH_SUMMARY_MAX_LENGTH || match.kind === "subject") return full;
-  const header = "Approval rule trigger: these changed paths matched the project's content rules:";
-  let shown = header;
-  let shownCount = 0;
-  const displayPaths = displayMatchPaths(match);
-  for (const path3 of displayPaths) {
-    const line = `
-- ${path3}`;
-    const remaining = displayPaths.length - shownCount - 1;
-    const notice = remaining === 0 ? "" : `
-- \u2026 ${remaining} additional matched path${remaining === 1 ? "" : "s"} omitted; exact paths remain in durable settlement evidence.`;
-    if (shown.length + line.length + notice.length > RULE_MATCH_SUMMARY_MAX_LENGTH) break;
-    shown += line;
-    shownCount += 1;
-  }
-  const omitted = displayPaths.length - shownCount;
-  return omitted === 0 ? shown : `${shown}
-- \u2026 ${omitted} additional matched path${omitted === 1 ? "" : "s"} omitted; exact paths remain in durable settlement evidence.`;
-}
-function approvalRuleGateSummary(summary, match) {
-  const trigger = boundedApprovalRuleMatchSummary(match);
-  const separator = "\n\n";
-  const prose2 = summary.trimEnd();
-  if (prose2.length + separator.length + trigger.length <= GATE_SUMMARY_MAX_LENGTH) {
-    return `${prose2}${separator}${trigger}`;
-  }
-  const notice = "\n\u2026 Gate summary truncated to preserve the approval-rule trigger.";
-  const proseLimit = GATE_SUMMARY_MAX_LENGTH - separator.length - trigger.length;
-  const shortened = `${prose2.slice(0, Math.max(0, proseLimit - notice.length)).trimEnd()}${notice}`;
-  return `${shortened}${separator}${trigger}`;
-}
-function segmentMatches(pattern, segment, patternAt, segmentAt) {
-  while (patternAt < pattern.length) {
-    const character = pattern[patternAt];
-    if (character === "*") {
-      for (let skip = segmentAt; skip <= segment.length; skip += 1) {
-        if (segmentMatches(pattern, segment, patternAt + 1, skip)) return true;
-      }
-      return false;
-    }
-    if (segmentAt >= segment.length) return false;
-    if (character !== "?" && character !== segment[segmentAt]) return false;
-    patternAt += 1;
-    segmentAt += 1;
-  }
-  return segmentAt === segment.length;
-}
-function segmentsMatch(pattern, path3, patternAt, pathAt) {
-  while (patternAt < pattern.length) {
-    const segment = pattern[patternAt];
-    if (segment === "**") {
-      for (let skip = pathAt; skip <= path3.length; skip += 1) {
-        if (segmentsMatch(pattern, path3, patternAt + 1, skip)) return true;
-      }
-      return false;
-    }
-    if (pathAt >= path3.length || !segmentMatches(segment, path3[pathAt], 0, 0)) return false;
-    patternAt += 1;
-    pathAt += 1;
-  }
-  return pathAt === path3.length;
-}
-function globPatternMatches(pattern, path3) {
-  return segmentsMatch(pattern.split("/"), path3.split("/"), 0, 0);
-}
-function evaluateApprovalRules(config2, subject, changedPaths, secondaryChangedPaths = []) {
-  const rules2 = config2?.approval_rules;
-  if (rules2 !== void 0 && rules2.subjects.includes(subject)) {
-    return Object.freeze({ wait: true, match: Object.freeze({ kind: "subject", subject }) });
-  }
-  if (rules2 !== void 0) {
-    const matched = [...new Set(changedPaths.filter((path3) => rules2.content.some((rule4) => rule4.paths.some((pattern) => globPatternMatches(pattern, path3)))))].sort();
-    const secondaryMatched = secondaryChangedPaths.flatMap((section) => {
-      const paths = [...new Set(section.paths.filter((path3) => rules2.content.some((rule4) => rule4.paths.some((pattern) => globPatternMatches(pattern, path3)))))].sort();
-      return paths.length === 0 ? [] : [Object.freeze({ repository: section.repository, paths: Object.freeze(paths) })];
-    }).sort((left, right) => left.repository < right.repository ? -1 : left.repository > right.repository ? 1 : 0);
-    if (matched.length > 0 || secondaryMatched.length > 0) {
-      return Object.freeze({ wait: true, match: Object.freeze({
-        kind: "content",
-        paths: Object.freeze(matched),
-        ...secondaryMatched.length === 0 ? {} : { secondary_paths: Object.freeze(secondaryMatched) }
-      }) });
-    }
-  }
-  return Object.freeze({ wait: false, match: null });
-}
-var subjectGateKind = Object.freeze({
-  prd: "artifact-approval",
-  design: "design-approval",
-  "phase-design": "design-approval",
-  "phase-impl": "commit-authorization"
-});
-function approvalRuleContext(state, produceSubject, config2, changedDocumentPaths = []) {
-  const artifact = produceSubject?.artifact;
-  const changedPaths = artifact?.artifact_kind === "implementation-output" ? [...new Set(artifact.outputs.flatMap(
-    (output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]
-  ))].sort() : artifact?.artifact_kind === "document" ? [...new Set(changedDocumentPaths)].sort() : [];
-  const secondaryChangedPaths = artifact?.artifact_kind === "implementation-output" ? (artifact.secondary_repositories ?? []).flatMap((section) => {
-    const paths = [...new Set(section.outputs.flatMap(
-      (output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]
-    ))].sort();
-    return paths.length === 0 ? [] : [Object.freeze({ repository: section.repository, paths: Object.freeze(paths) })];
-  }) : [];
-  return Object.freeze({
-    subject: decodePhaseInstance(state.phase_instance).kind,
-    changedPaths: Object.freeze(changedPaths),
-    secondaryChangedPaths: Object.freeze(secondaryChangedPaths),
-    config: config2
-  });
-}
-function buildRuleSettlement(state, subjectDigest, configDigest, conclusion, milestoneBaselineCommit, milestoneTarget, secondaryMilestones = []) {
-  const kind = decodePhaseInstance(state.phase_instance).kind;
-  const baselineAllowed = !conclusion.wait && (kind === "prd" || kind === "design" || kind === "phase-design" || kind === "phase-impl");
-  if (milestoneBaselineCommit !== void 0 !== baselineAllowed) {
-    throw new TypeError("a milestone baseline is required exactly for milestone-bearing wait:false settlements");
-  }
-  if (milestoneTarget !== void 0 !== baselineAllowed) {
-    throw new TypeError("milestone target facts are required exactly for milestone-bearing wait:false settlements");
-  }
-  if (!baselineAllowed && secondaryMilestones.length !== 0) {
-    throw new TypeError("secondary milestones are allowed only for milestone-bearing wait:false settlements");
-  }
-  return Object.freeze({
-    task_id: state.task_id,
-    phase_instance: state.phase_instance,
-    step: state.step,
-    subject_digest: subjectDigest,
-    conclusion: structuredClone(conclusion),
-    config_digest: configDigest,
-    ...milestoneBaselineCommit === void 0 ? {} : { milestone_baseline_commit: milestoneBaselineCommit },
-    ...milestoneTarget === void 0 ? {} : {
-      milestone_target_ref: milestoneTarget.ref,
-      milestone_target_head: milestoneTarget.head
-    },
-    ...secondaryMilestones.length === 0 ? {} : { secondary_milestones: Object.freeze([...secondaryMilestones]) },
-    settled_at_revision: parseSafeInteger(state.revision + 1)
-  });
-}
+// src/state/restart-authority.ts
+import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
 
-// src/review/rubrics.ts
-import { readFile as readFile5 } from "node:fs/promises";
-import { join as join10 } from "node:path";
-
-// src/init/assets.ts
-import { constants } from "node:fs";
-import { access, mkdir as mkdir6, open as open3, readFile as readFile4, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname5, join as join9 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-
-// src/contracts/constitution.ts
-var CONSTITUTION_RULE_NAME = /^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
-var CONSTITUTION_RULE_PATH = /^\.archflow\/constitution\/(?:(?:default|custom)\/)?[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
-var frontmatterSchema = external_exports.object({
-  id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
-  version: external_exports.number().int().positive().safe(),
-  status: external_exports.enum(["active", "deprecated"]),
-  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
-  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
-}).strict();
-var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
-function parseConstitutionRuleV1(value) {
-  assertPlainJson(value, "constitution rule");
-  const parsed = constitutionRuleV1Schema.parse(value);
-  return {
-    id: parsed.id,
-    version: parsed.version,
-    status: parsed.status,
-    text: parsed.text,
-    ...parsed.review_trigger === void 0 ? {} : { review_trigger: parsed.review_trigger },
-    ...parsed.enforced_by === void 0 ? {} : { enforced_by: parsed.enforced_by }
-  };
-}
-function parseConstitutionRuleMarkdown(source, label) {
-  const normalized = source.replaceAll("\r\n", "\n");
-  if (!normalized.startsWith("---\n")) throw new Error(`${label}: expected opening YAML frontmatter delimiter`);
-  const close = normalized.indexOf("\n---\n", 4);
-  if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
-  const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
-  const text5 = normalized.slice(close + 5).trim();
-  return parseConstitutionRuleV1({ ...frontmatter, text: text5 });
-}
-function registryFromRules(rules2) {
-  const registry2 = /* @__PURE__ */ new Map();
-  for (const candidate of rules2) {
-    const rule4 = parseConstitutionRuleV1(candidate);
-    if (registry2.has(rule4.id)) throw new Error(`Duplicate constitution rule id: ${rule4.id}`);
-    registry2.set(rule4.id, Object.freeze(rule4));
-  }
-  return registry2;
-}
-function parseConstitutionRuleFiles(files) {
-  const layers = {
-    legacy: [],
-    default: [],
-    custom: []
-  };
-  for (const path3 of Object.keys(files).sort()) {
-    const relative9 = path3.replace(/^\.archflow\/constitution\//u, "");
-    const layer = relative9.startsWith("default/") ? "default" : relative9.startsWith("custom/") ? "custom" : "legacy";
-    layers[layer].push(parseConstitutionRuleMarkdown(files[path3], path3));
-  }
-  if (layers.legacy.length > 0) {
-    if (layers.default.length > 0 || layers.custom.length > 0) {
-      throw new Error("Mixed flat and split constitution rules; migrate the flat rules with archflow-local init --force");
-    }
-    return registryFromRules(layers.legacy);
-  }
-  const defaults = registryFromRules(layers.default);
-  const custom2 = registryFromRules(layers.custom);
-  return new Map([...defaults, ...custom2]);
-}
-
-// src/init/assets.ts
-var ASSETS = Object.freeze([
-  ["archflow.gitignore", ".archflow/.gitignore"],
-  ["workflow.yaml", ".archflow/workflow.yaml"],
-  ["hazards.yaml", ".archflow/hazards.yaml"],
-  ["constitution/README.md", ".archflow/constitution/README.md"],
-  ["constitution/custom/README.md", ".archflow/constitution/custom/README.md"],
-  ["constitution/default/00-process.md", ".archflow/constitution/default/00-process.md"],
-  ["constitution/default/10-architecture.md", ".archflow/constitution/default/10-architecture.md"],
-  ["constitution/default/15-dependencies.md", ".archflow/constitution/default/15-dependencies.md"],
-  ["constitution/default/20-data.md", ".archflow/constitution/default/20-data.md"],
-  ["constitution/default/25-database.md", ".archflow/constitution/default/25-database.md"],
-  ["constitution/default/30-product.md", ".archflow/constitution/default/30-product.md"],
-  ["constitution/default/35-plan-changes.md", ".archflow/constitution/default/35-plan-changes.md"],
-  ["constitution/default/45-public-contracts.md", ".archflow/constitution/default/45-public-contracts.md"],
-  ["constitution/default/40-authentication.md", ".archflow/constitution/default/40-authentication.md"],
-  ["constitution/default/50-cryptography.md", ".archflow/constitution/default/50-cryptography.md"],
-  ["constitution/default/60-control-plane.md", ".archflow/constitution/default/60-control-plane.md"],
-  ["config.template.yaml", ".archflow/config.yaml"]
-]);
-function errno2(error51, code2) {
-  return error51 instanceof Error && error51.code === code2;
-}
-async function assetRoot() {
-  const candidates = [
-    fileURLToPath2(new URL("../assets/", import.meta.url)),
-    fileURLToPath2(new URL("../../assets/", import.meta.url))
-  ];
-  for (const candidate of candidates) {
-    try {
-      await access(join9(candidate, "workflow.yaml"), constants.R_OK);
-      return candidate;
-    } catch (error51) {
-      if (!errno2(error51, "ENOENT")) throw error51;
-    }
-  }
-  throw Object.assign(new Error("installed ArchFlow assets are missing"), { code: "ENOENT" });
-}
-
-// src/review/rubrics.ts
-function reviewCriterionIds(phaseKind2, rubric, focus, _specialistActive) {
-  const all = rubric.criteria.map((criterion) => criterion.id);
-  const tests = loadReviewInputConfiguration().phases[phaseKind2].rubric.test_criteria;
-  if (focus === "tests") return Object.freeze(all.filter((criterion) => tests.includes(criterion)));
-  return Object.freeze(all.filter((criterion) => !tests.includes(criterion)));
-}
-function reviewAssignment(reviewerId, focus, phaseKind2, rubric, legacySpecialistActiveOrOptions) {
-  const options = typeof legacySpecialistActiveOrOptions === "boolean" ? void 0 : legacySpecialistActiveOrOptions;
-  if (options?.legacy_confirmations !== void 0 && options.legacy_confirmations.length === 0) {
-    throw new TypeError("legacy_confirmations must be non-empty when present");
-  }
-  const criterionIds = Object.freeze([...options?.criterion_ids ?? reviewCriterionIds(phaseKind2, rubric, focus)]);
-  if (criterionIds.length === 0 && options?.expected_upstream_digests === void 0 && options?.legacy_confirmations === void 0) {
-    throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind2} without a present responsibility`);
-  }
-  return Object.freeze({
-    reviewer_id: reviewerId,
-    focus,
-    criterion_ids: criterionIds,
-    ...options?.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: Object.freeze([...options.expected_upstream_digests]) },
-    ...options?.legacy_confirmations === void 0 ? {} : { legacy_confirmations: Object.freeze(options.legacy_confirmations.map((confirmation) => Object.freeze({
-      finding_id: confirmation.finding_id,
-      criterion_ids: Object.freeze([...confirmation.criterion_ids])
-    }))) }
-  });
-}
-function canonicalRubric(rubricId, rubric) {
-  const frozen = Object.freeze({
-    ...rubric,
-    criteria: Object.freeze(rubric.criteria.map((criterion) => Object.freeze({ ...criterion })))
-  });
-  return Object.freeze({
-    rubric_id: rubricId,
-    rubric_digest: canonicalJsonDigest(frozen),
-    rubric: frozen
-  });
-}
-var ok4 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var rubricFailure = (issueCode, issues) => Object.freeze({
-  schema_version: "1",
-  ok: false,
-  error: createProjectError("CONFIG_INVALID", { issue_code: issueCode, issues: issues.slice(0, 5) })
-});
-async function loadRubricFile(input) {
-  const label = `assets/${input.file}`;
-  let document2;
-  try {
-    const bytes = await readFile5(join10(input.root, input.file));
-    document2 = parseSingleYamlDocument(new TextDecoder("utf-8", { fatal: true }).decode(bytes), label);
-  } catch (error51) {
-    if (error51 instanceof SyntaxError) {
-      return rubricFailure("rubric-file-invalid", [error51.message]);
-    }
-    return rubricFailure("rubric-file-missing", [
-      `${label}: the rubric file is missing or unreadable (${error51 instanceof Error ? error51.message : "unknown error"}); reinstall the ArchFlow bundle`
-    ]);
-  }
-  if (document2 === null || typeof document2 !== "object" || Array.isArray(document2)) {
-    return rubricFailure("rubric-file-invalid", [`${label}: the rubric file must be a YAML mapping`]);
-  }
-  const record3 = document2;
-  if (record3.rubric_id !== input.expected_id) {
-    return rubricFailure("rubric-file-invalid", [
-      `${label}: rubric_id ${JSON.stringify(record3.rubric_id)} does not match this file's rubric ${input.expected_id}`
-    ]);
-  }
-  const fields = Object.fromEntries(Object.entries(record3).filter(([key2]) => key2 !== "rubric_id"));
-  try {
-    return ok4(canonicalRubric(input.expected_id, parseRubricV1(fields)));
-  } catch (error51) {
-    const issues = describeValidationIssues(error51);
-    return rubricFailure(
-      "rubric-file-invalid",
-      issues === void 0 ? [`${label}: rubric rejected`] : issues.map((issue4) => `${label}: ${issue4}`)
-    );
-  }
-}
-async function loadCanonicalRubricForPhaseKind(phaseKind2) {
-  return loadInstalledRubric(loadReviewInputConfiguration().phases[phaseKind2].rubric);
-}
-async function loadCanonicalRubricForSimpleStage(stage) {
-  return stage === "plan" ? loadInstalledRubric({ file: "rubrics/simple-plan.yaml", id: "simple-plan-v1" }) : loadCanonicalRubricForPhaseKind("phase-impl");
-}
-async function loadInstalledRubric(expected) {
-  let root;
-  try {
-    root = await assetRoot();
-  } catch (error51) {
-    return rubricFailure("rubric-file-missing", [
-      `assets/rubrics: installed ArchFlow assets are missing (${error51 instanceof Error ? error51.message : "unknown error"})`
-    ]);
-  }
-  return loadRubricFile({ root, file: expected.file, expected_id: expected.id });
-}
-
-// src/review/simple-context.ts
-import { execFile as execFile2 } from "node:child_process";
-import { constants as constants2 } from "node:fs";
-import { lstat as lstat5, open as open4, readdir as readdir2, readlink } from "node:fs/promises";
-import { join as join11 } from "node:path";
-import { promisify } from "node:util";
-var exec = promisify(execFile2);
-var BYTE_CAP = 25 * 1024 * 1024;
-var SimpleReviewError = class extends Error {
-  constructor(code2, message) {
-    super(message);
-    this.code = code2;
-  }
-  code;
-};
-async function simpleGit(root, args2, signal) {
-  const result = await exec("git", ["-C", root, ...args2], { encoding: "utf8", maxBuffer: BYTE_CAP, timeout: 3e4, signal });
-  return result.stdout;
-}
-var absent = (error51) => error51.code === "ENOENT";
-async function safeParents(root, path3) {
-  let parent = root;
-  for (const part of path3.split("/").slice(0, -1)) {
-    parent = join11(parent, part);
-    try {
-      const stat4 = await lstat5(parent);
-      if (!stat4.isDirectory() || stat4.isSymbolicLink()) throw new SimpleReviewError("INPUT_INVALID", "Review paths must not traverse symlinks or non-directories.");
-    } catch (error51) {
-      if (absent(error51)) return;
-      throw error51;
-    }
-  }
-}
-async function regular(root, path3) {
-  await safeParents(root, path3);
-  const handle = await open4(join11(root, path3), constants2.O_RDONLY | constants2.O_NOFOLLOW);
-  try {
-    const stat4 = await handle.stat();
-    if (!stat4.isFile() || stat4.size > BYTE_CAP) throw new SimpleReviewError("INPUT_INVALID", "Review input must be a bounded regular file.");
-    return new TextDecoder("utf-8", { fatal: true }).decode(await handle.readFile());
-  } finally {
-    await handle.close();
-  }
-}
-async function loadSimplePolicy(root) {
-  const assets = await assetRoot();
-  let configText;
-  try {
-    configText = await regular(root, ".archflow/config.yaml");
-  } catch (error51) {
-    if (!absent(error51)) throw error51;
-    configText = await regular(assets, "config.template.yaml");
-  }
-  let config2;
-  try {
-    config2 = parseConfigYaml(configText);
-  } catch {
-    throw new SimpleReviewError("CONFIG_INVALID", "Review configuration is invalid. Check .archflow/config.yaml (or the shipped template when absent) against the config schema.");
-  }
-  let policyRoot = root;
-  let prefix = ".archflow/constitution";
-  try {
-    await safeParents(root, `${prefix}/placeholder`);
-    const directory = await lstat5(join11(root, prefix));
-    if (!directory.isDirectory() || directory.isSymbolicLink()) throw new SimpleReviewError("CONFIG_INVALID", "Constitution must be a regular directory.");
-  } catch (error51) {
-    if (!absent(error51)) throw error51;
-    policyRoot = assets;
-    prefix = "constitution";
-  }
-  const files = {};
-  for (const layer of ["", "default", "custom"]) {
-    const relative9 = layer === "" ? prefix : `${prefix}/${layer}`;
-    let entries;
-    try {
-      await safeParents(policyRoot, `${relative9}/placeholder`);
-      entries = await readdir2(join11(policyRoot, relative9));
-    } catch (error51) {
-      if (absent(error51)) continue;
-      throw error51;
-    }
-    for (const name of entries.filter((name2) => CONSTITUTION_RULE_NAME.test(name2)).sort()) {
-      files[`.archflow/constitution/${layer === "" ? "" : `${layer}/`}${name}`] = await regular(policyRoot, `${relative9}/${name}`);
-    }
-  }
-  let registry2;
-  try {
-    registry2 = parseConstitutionRuleFiles(files);
-  } catch {
-    throw new SimpleReviewError("CONFIG_INVALID", "Constitution rules are invalid. Check rule frontmatter, duplicate IDs, and default/custom layout.");
-  }
-  const rules2 = [...registry2.values()].filter((rule4) => rule4.status === "active").sort((a, b) => `${a.id}:${a.version}`.localeCompare(`${b.id}:${b.version}`));
-  assertPlainJson(config2, "review config");
-  const config_digest = canonicalJsonDigest(structuredClone(config2));
-  const constitution_digest = canonicalJsonDigest(files);
-  return {
-    config: config2,
-    rules: rules2,
-    config_digest,
-    constitution_digest,
-    policy_digest: canonicalJsonDigest({ config_digest, constitution_digest })
-  };
-}
-async function captureSimpleContext(workingDirectory, input, signal) {
-  const root = (await simpleGit(workingDirectory, ["rev-parse", "--show-toplevel"], signal)).trimEnd();
-  const head = (await simpleGit(root, ["rev-parse", "HEAD"], signal)).trim();
-  const branch = await simpleGit(root, ["rev-parse", "--symbolic-full-name", "HEAD"], signal);
-  if (head !== input.base_commit) throw new SimpleReviewError("BASELINE_CHANGED", "HEAD differs from the simple task baseline. Resolve the changed baseline before review.");
-  const policy = await loadSimplePolicy(root);
-  if (input.expected_policy_digest !== void 0 && input.expected_policy_digest !== policy.policy_digest) {
-    throw new SimpleReviewError("POLICY_CHANGED", "Repository review configuration or constitution changed since plan review. Resolve the change with the user before continuing.");
-  }
-  const collect = async () => {
-    const dirty = (await simpleGit(root, ["diff", "--name-only", "-z", "HEAD", "--"], signal)).split("\0");
-    const untracked = (await simpleGit(root, ["ls-files", "--others", "--exclude-standard", "-z"], signal)).split("\0");
-    const paths = [...new Set([...dirty, ...untracked, ...input.paths].filter(Boolean))].sort();
-    const entries = [];
-    let size = 0;
-    for (const path3 of paths) {
-      if (path3 === ".archflow/tasks" || path3.startsWith(".archflow/tasks/")) continue;
-      const claim = parseRepositoryPathClaim(path3);
-      await safeParents(root, path3);
-      let stat4;
-      try {
-        stat4 = await lstat5(join11(root, path3));
-      } catch (error51) {
-        if (absent(error51)) {
-          entries.push({ path: claim, desired: { state: "absent" } });
-          continue;
-        }
-        throw error51;
-      }
-      if (stat4.isSymbolicLink()) {
-        const bytes = new TextEncoder().encode(await readlink(join11(root, path3)));
-        entries.push({ path: claim, desired: { state: "present", file_type: "symlink", mode: "120000", bytes } });
-        size += bytes.byteLength;
-      } else if (stat4.isFile()) {
-        if (stat4.size + size > BYTE_CAP) throw new SimpleReviewError("INPUT_TOO_LARGE", "Simple review snapshot exceeds 25 MiB of changed files.");
-        const handle = await open4(join11(root, path3), constants2.O_RDONLY | constants2.O_NOFOLLOW);
-        let bytes;
-        try {
-          bytes = new Uint8Array(await handle.readFile());
-        } finally {
-          await handle.close();
-        }
-        size += bytes.byteLength;
-        entries.push({ path: claim, desired: { state: "present", file_type: "regular", mode: (stat4.mode & 73) !== 0 ? "100755" : "100644", bytes } });
-      } else throw new SimpleReviewError("INPUT_INVALID", `Review requires file paths; unsupported entry: ${path3}`);
-      if (size > BYTE_CAP) throw new SimpleReviewError("INPUT_TOO_LARGE", "Simple review snapshot exceeds 25 MiB of changed files.");
-    }
-    return { entries };
-  };
-  const fingerprint = (projection2) => canonicalJsonDigest(projection2.entries.map(({ path: path3, desired }) => desired.state === "absent" ? { path: path3, state: "absent" } : { path: path3, state: "present", mode: desired.mode, digest: sha256Bytes(desired.bytes) }));
-  const projection = await collect();
-  const snapshot = fingerprint(projection);
-  const views = [{
-    name: "primary",
-    member_kind: "primary",
-    repository_root: root,
-    repository_identity_digest: canonicalJsonDigest({ root }),
-    commit: parseGitOid(head),
-    projection_plan: projection,
-    snapshot_digest: snapshot
-  }, {
-    name: "baseline",
-    member_kind: "secondary",
-    repository_root: root,
-    repository_identity_digest: canonicalJsonDigest({ root }),
-    commit: parseGitOid(head)
-  }];
-  const assertCurrent = async () => {
-    const currentSnapshot = fingerprint(await collect());
-    const currentPolicy = (await loadSimplePolicy(root)).policy_digest;
-    if (currentSnapshot !== snapshot || currentPolicy !== policy.policy_digest || (await simpleGit(root, ["rev-parse", "HEAD"], signal)).trim() !== head || await simpleGit(root, ["rev-parse", "--symbolic-full-name", "HEAD"], signal) !== branch) {
-      throw new SimpleReviewError("SUBJECT_CHANGED", "Repository bytes, branch, or review policy changed during review. These reports do not cover the current work.");
-    }
-  };
-  await assertCurrent();
-  return { root, policy, views, assertCurrent, subject_digest: canonicalJsonDigest({
-    stage: input.stage,
-    ask: input.ask,
-    plan: input.plan,
-    base_commit: input.base_commit,
-    paths: input.paths,
-    verification: input.verification ?? null,
-    snapshot
-  }) };
-}
-
-// src/review/simple-review.ts
-var failure3 = (code2, message) => ({ schema_version: "1", ok: false, error: { code: code2, message, retryable: false } });
-function jsonSchema(schema2) {
-  const value = JSON.parse(JSON.stringify(schema2.toJSONSchema({ target: "draft-2020-12" })));
-  assertPlainJson(value);
-  return structuredClone(value);
-}
-var envelope = sealDispatchInput;
-async function runSimpleReview(raw, context2, dependencies = {}) {
-  let dispose;
-  try {
-    const input = parseSimpleReviewInput(raw);
-    context2.signal.throwIfAborted();
-    const captured = await captureSimpleContext(context2.connection.startup_repository_candidate.working_directory, input, context2.signal);
-    const { policy } = captured;
-    const host = context2.connection.initialization_candidates.host;
-    const policyPhaseKind = input.stage === "plan" ? "phase-design" : "phase-impl";
-    const rubricResult = await loadCanonicalRubricForSimpleStage(input.stage);
-    if (!rubricResult.ok) return failure3("CONFIG_INVALID", "The installed review rubric is missing or invalid.");
-    const rubric = rubricResult.value.rubric;
-    const roles2 = ["counter-reviewer", "test-reviewer"];
-    if (policy.rules.length > 0) roles2.push("adjudicator");
-    const selected = roles2.flatMap((role2) => {
-      const routes = selectDispatchRouteCandidates(policy.config, policyPhaseKind, role2, input.review_routes?.[role2], void 0, host);
-      if (routes.length === 0) throw new SimpleReviewError("CONFIG_INVALID", `No route is configured for ${role2}.`);
-      return routes.map((candidate, index) => ({ role: role2, reviewer_id: `${role2}-${index + 1}`, route: validateSelectedDispatchRoute(candidate).route }));
-    });
-    const shared = shareRepositoryViewWorkspace(captured.views, captured.root);
-    dispose = shared.dispose;
-    const dispatch = dependencies.dispatch ?? createReviewDispatcher({
-      host,
-      repository_root: captured.root,
-      signal: context2.signal,
-      cancellation_source: "client",
-      shared_workspace: shared
-    });
-    const workspace = projectRepositoryWorkspaceBinding(captured.views);
-    const value = {
-      stage: input.stage,
-      subject_digest: captured.subject_digest,
-      policy_digest: policy.policy_digest,
-      config_digest: policy.config_digest,
-      constitution_digest: policy.constitution_digest,
-      reports: [],
-      constitution: { status: policy.rules.length === 0 ? "not-applicable" : "failed", judgments: [] },
-      human_review_reasons: [],
-      failures: []
-    };
-    const approval = evaluateApprovalRules(policy.config, policyPhaseKind, input.paths);
-    if (approval.wait) value.human_review_reasons.push(approvalRuleMatchSummary(approval.match));
-    const slots = policy.rules.map((rule4, index) => ({ slot: `rule-${index + 1}`, rule_id: rule4.id, rule_version: rule4.version }));
-    const constitutionSchema = slots.length === 0 ? void 0 : createRawAdjudicationV2Schema(slots);
-    const common3 = {
-      subject: { stage: input.stage, subject_digest: captured.subject_digest },
-      ask: input.ask,
-      plan: input.plan,
-      paths: input.paths,
-      verification: input.verification ?? "Plan review: assess the proposed verification strategy.",
-      workspace,
-      scope: "This is a standalone simple task, not an initialized ArchFlow workflow. The primary repository view contains the current work; baseline is the same repository at the starting commit. Inspect declared paths as the subject, with other files only as context. Existing unrelated changes are not findings. There are no task documents, phases, durable gates, or implementation-agent recommendations. The invoking session owns plan review, fixes, explicit human decisions, and execution; do not invent missing workflow records. Custom policy remains applicable; report any conflict rather than silently exempting it. Review once; no follow-up reviewer pass will certify subsequent fixes."
-    };
-    const outcomes2 = await serializeDispatchAll(selected.map((selection) => async () => {
-      const { role: role2, reviewer_id, route: route3 } = selection;
-      try {
-        const assignment = role2 === "adjudicator" ? void 0 : reviewAssignment(
-          reviewer_id,
-          role2 === "test-reviewer" ? "tests" : "general",
-          policyPhaseKind,
-          rubric
-        );
-        const request = role2 === "adjudicator" ? envelope("adjudication", {
-          ...common3,
-          rules: policy.rules.map((rule4, index) => ({
-            slot: slots[index].slot,
-            text: rule4.text,
-            ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
-            enforced_by: [...rule4.enforced_by ?? []]
-          }))
-        }) : envelope("review", {
-          ...common3,
-          assignment,
-          rubric
-        });
-        const schema2 = role2 === "adjudicator" ? constitutionSchema : reviewReportOutputSchema;
-        let returned;
-        for (let attempt = 0; ; attempt++) {
-          context2.signal.throwIfAborted();
-          try {
-            returned = await dispatch(route3, request, jsonSchema(schema2));
-            break;
-          } catch (error51) {
-            if (attempt >= 2 || !isTransientDispatchFailure(error51) || context2.signal.aborted) throw error51;
-            const ms = attempt === 0 ? 1e3 : 4e3;
-            await (dependencies.wait?.(ms, context2.signal) ?? delay2(ms, void 0, { signal: context2.signal }));
-          }
-        }
-        let parsed;
-        try {
-          parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(returned.extracted_output_bytes));
-        } catch {
-          throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer returned invalid JSON.");
-        }
-        const usage = returned.usage === void 0 ? {} : { usage: returned.usage };
-        if (role2 === "adjudicator") {
-          const result2 = constitutionSchema.safeParse(parsed);
-          if (!result2.success) throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Constitution review did not cover every assigned rule with valid judgments.");
-          const judgments = slots.map((slot, index) => {
-            const judgment2 = result2.data.judgments[slot.slot];
-            if (policy.rules[index].review_trigger === void 0 && judgment2.trigger !== "not-matched") {
-              throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Constitution review invented a trigger for a rule without one.");
-            }
-            return { rule_id: slot.rule_id, rule_version: slot.rule_version, ...judgment2 };
-          });
-          return { selection, judgments, report: { role: role2, reviewer_id, route: route3, ...usage, report: judgments.map((entry2) => `${entry2.rule_id}: ${entry2.compliance}. ${entry2.rationale}`).join("\n") } };
-        }
-        const result = reviewReportOutputSchema.strict().safeParse(parsed);
-        if (!result.success) throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer must return an explicit outcome and nonblank feedback.");
-        return { selection, report: { role: role2, reviewer_id, route: route3, ...result.data, ...usage } };
-      } catch (error51) {
-        if (!(error51 instanceof SimpleReviewError) && classifiedDispatchFailure(error51) === void 0) reportInternalError(context2.invocation_id, error51);
-        return { selection, error: error51 };
-      }
-    }));
-    for (const outcome of outcomes2) {
-      const { selection } = outcome;
-      if ("error" in outcome) {
-        const classified = classifiedDispatchFailure(outcome.error);
-        value.failures.push({
-          ...selection,
-          code: outcome.error instanceof SimpleReviewError ? outcome.error.code : classified?.code ?? "DISPATCH_FAILED",
-          message: outcome.error instanceof SimpleReviewError ? outcome.error.message : classified?.message ?? "Reviewer dispatch failed or was cancelled. Repair it before requesting a fresh review."
-        });
-      } else {
-        value.reports.push(outcome.report);
-        if (outcome.judgments !== void 0) {
-          value.constitution = { status: "complete", judgments: outcome.judgments };
-          for (const judgment2 of outcome.judgments) if (judgment2.trigger !== "not-matched") {
-            value.human_review_reasons.push(`${judgment2.rule_id}: ${judgment2.trigger}. ${judgment2.trigger_evidence}`);
-          }
-        }
-      }
-    }
-    await captured.assertCurrent();
-    const ok28 = value.failures.length === 0;
-    return parseSimpleReviewResult({
-      schema_version: "1",
-      ok: ok28,
-      value,
-      ...ok28 ? {} : { error: { code: "REVIEW_INCOMPLETE", message: "Some required reviews failed; available reports do not supply complete coverage.", retryable: false } }
-    });
-  } catch (error51) {
-    const classified = classifiedDispatchFailure(error51);
-    return failure3(
-      error51 instanceof SimpleReviewError ? error51.code : context2.signal.aborted ? "CANCELLED" : classified?.code ?? "REVIEW_FAILED",
-      error51 instanceof SimpleReviewError ? error51.message : classified?.message ?? "Unable to prepare or validate the simple review. Check repository access, paths, configuration, and constitution."
-    );
-  } finally {
-    await dispose?.();
-  }
-}
+// src/state/gate-approvals.ts
+import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
 
 // src/contracts/durable-gate.ts
 function exactCommitAuthorizationContext(context2) {
@@ -64389,1563 +63760,16 @@ function parseActiveGate(value) {
   return archivedOrdinaryActiveGateV1Schema.parse(value);
 }
 
-// src/contracts/mcp-tools.ts
-import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
-
-// src/contracts/secret-scan.ts
-var detectorId = safeIdV1Schema;
-var pathClass2 = external_exports.enum(PATH_CLASSES);
-var position = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
-var secretFindingV1Schema = external_exports.object({
-  detector_id: detectorId,
-  path_class: pathClass2,
-  virtual_path: repositoryPathClaimV1Schema,
-  line: position,
-  column: position
-}).strict();
-var secretScanResultV1Schema = external_exports.discriminatedUnion("outcome", [
-  external_exports.object({
-    schema_version: external_exports.literal("1"),
-    outcome: external_exports.literal("clean"),
-    detector_set_id: detectorId,
-    scanned_paths: external_exports.array(repositoryPathClaimV1Schema)
-  }).strict(),
-  external_exports.object({
-    schema_version: external_exports.literal("1"),
-    outcome: external_exports.literal("detected"),
-    detector_set_id: detectorId,
-    findings: external_exports.array(secretFindingV1Schema)
-  }).strict(),
-  external_exports.object({
-    schema_version: external_exports.literal("1"),
-    outcome: external_exports.literal("unavailable"),
-    reason: safeCodeV1Schema
-  }).strict()
-]);
-function parseSecretScanResult(value) {
-  assertPlainJson(value, "secret scan result");
-  return secretScanResultV1Schema.parse(value);
-}
-
-// src/contracts/durable-implementation-output.ts
-var sha256Digest2 = sha256DigestV1Schema;
-var safeInteger4 = safeIntegerV1Schema;
-var parentDocumentRefV1Schema = external_exports.object({
-  document_path: taskPathClaimV1Schema,
-  content_digest: sha256Digest2,
-  role: external_exports.enum(["prd", "design", "phase-design", "impl-notes"])
-}).strict();
-var rawGitPathMirror = external_exports.string();
-var undeclaredChangeReportV1Schema = external_exports.object({
-  scanned: external_exports.boolean(),
-  undeclared_paths: external_exports.array(rawGitPathMirror).refine((items) => isSortedUniqueBy(items), "undeclared_paths must be sorted with no duplicates"),
-  unrepresentable_count: safeInteger4
-}).strict();
-var verificationEvidenceV1Schema = external_exports.object({
-  transcript_digest: sha256Digest2,
-  byte_count: safeInteger4
-}).strict();
-var implementationRepositorySectionV1Schema = external_exports.object({
-  repository: durableRepositoryNameV1Schema,
-  repository_identity_digest: sha256Digest2,
-  base_commit: gitOidV1Schema,
-  index_identity_digest: sha256Digest2,
-  worktree_identity_digest: sha256Digest2,
-  outputs: external_exports.array(outputEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
-  diff_digest: sha256Digest2,
-  snapshot_digest: sha256Digest2,
-  restore_targets: external_exports.array(repositoryPathClaimV1Schema).refine((items) => isSortedUniqueBy(items), "restore_targets must be sorted with no duplicates"),
-  accounting: snapshotAccountingV1Schema,
-  undeclared_changes: undeclaredChangeReportV1Schema,
-  declared_inputs: external_exports.array(external_exports.object({
-    input_id: safeIdV1Schema,
-    path: repositoryPathClaimV1Schema,
-    digest: sha256Digest2
-  }).strict()).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates")
-}).strict();
-var implementationOutputV1Schema = external_exports.object({
-  editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
-  review_revision: reviewRevisionDeclarationSchema.optional(),
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("implementation-output"),
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  base_commit: gitOidV1Schema,
-  index_identity_digest: sha256Digest2,
-  worktree_identity_digest: sha256Digest2,
-  outputs: external_exports.array(outputEntryV1Schema).min(1).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
-  parent_documents: external_exports.array(parentDocumentRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "parent_documents must be sorted by document_path with no duplicates"),
-  diff_digest: sha256Digest2,
-  snapshot_digest: sha256Digest2,
-  restore_targets: external_exports.array(repositoryPathClaimV1Schema).refine((items) => isSortedUniqueBy(items), "restore_targets must be sorted with no duplicates"),
-  accounting: snapshotAccountingV1Schema,
-  secret_scan: secretScanResultV1Schema,
-  undeclared_changes: undeclaredChangeReportV1Schema,
-  verification_evidence: verificationEvidenceV1Schema.optional(),
-  declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
-  input_fingerprint: sha256Digest2,
-  constitution_edit_gate_id: pathSafeIdV1Schema.optional(),
-  secondary_repositories: external_exports.array(implementationRepositorySectionV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_repositories must be sorted by repository with no duplicates").optional()
-}).strict();
-function parseImplementationOutput(value) {
-  assertPlainJson(value, "implementation output");
-  return implementationOutputV1Schema.parse(value);
-}
-
-// src/contracts/durable-legacy-import.ts
-var sha256Digest3 = sha256DigestV1Schema;
-var safeInteger5 = safeIntegerV1Schema;
-var legacyMappingEntryV1Schema = external_exports.object({
-  legacy_path: repositoryPathClaimV1Schema,
-  destination_path: repositoryPathClaimV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  disposition: external_exports.enum(["draft", "historical"])
-}).strict();
-var stagedPayloadRefV1Schema = external_exports.object({
-  legacy_path: repositoryPathClaimV1Schema,
-  digest: sha256Digest3,
-  byte_count: safeInteger5
-}).strict();
-var legacyImportInitializationV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("legacy-import-initialization"),
-  task_id: taskSlugV1Schema,
-  repository_identity_digest: sha256Digest3,
-  source_identity_digest: sha256Digest3,
-  import_digest: sha256Digest3,
-  import_baseline_commit: gitOidV1Schema,
-  code_baseline_commit: gitOidV1Schema,
-  policy_base_commit: gitOidV1Schema,
-  constitution_digest: sha256Digest3,
-  workflow_digest: sha256Digest3,
-  config_digest: sha256Digest3,
-  canonical_paths: canonicalTaskPathsV1Schema,
-  mapping: external_exports.array(legacyMappingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("destination_path")), "mapping must be sorted by destination_path with no duplicates"),
-  staged_payload_refs: external_exports.array(stagedPayloadRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("legacy_path")), "staged_payload_refs must be sorted by legacy_path with no duplicates"),
-  resume_phase: phaseInstanceIdV1Schema.optional(),
-  planned_final_phase: safeInteger5.optional(),
-  target_ref: external_exports.string().min(1).max(512).optional(),
-  commit_message: external_exports.string().min(1).max(512).optional()
-}).strict();
-function parseLegacyImportInitialization(value) {
-  assertPlainJson(value, "legacy import initialization");
-  return legacyImportInitializationV1Schema.parse(value);
-}
-
-// src/contracts/durable-task-initialization.ts
-var sha256Digest4 = sha256DigestV1Schema;
-var taskInitializationV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("task-initialization"),
-  task_id: taskSlugV1Schema,
-  repository_identity_digest: sha256Digest4,
-  code_baseline_commit: gitOidV1Schema,
-  policy_base_commit: gitOidV1Schema,
-  constitution_digest: sha256Digest4,
-  workflow_digest: sha256Digest4,
-  config_digest: sha256Digest4,
-  canonical_paths: canonicalTaskPathsV1Schema
-}).strict();
-
-// src/contracts/durable-state.ts
-var settlementRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
-var STEP_STATUSES = ["running", "succeeded", "failed"];
-var TERMINAL_STATES = ["complete", "abandoned"];
-var HUMAN_REVISION_CLASSIFICATIONS = ["simple", "significant"];
-var HUMAN_REVISION_GATE_KINDS = [
-  "artifact-approval",
-  "design-approval",
-  "constitution-review",
-  "material-drift",
-  "attempts-exhausted",
-  "commit-authorization",
-  "migration-audit"
-];
-function compareRuleSettlements(left, right) {
-  const phase3 = left.phase_instance < right.phase_instance ? -1 : left.phase_instance > right.phase_instance ? 1 : 0;
-  if (phase3 !== 0) return phase3;
-  const digest12 = left.subject_digest < right.subject_digest ? -1 : left.subject_digest > right.subject_digest ? 1 : 0;
-  if (digest12 !== 0) return digest12;
-  return left.settled_at_revision - right.settled_at_revision;
-}
-function isSortedUniqueRuleSettlements(items) {
-  return items.every((item, index) => index === 0 || compareRuleSettlements(items[index - 1], item) < 0);
-}
-var sha256Digest5 = sha256DigestV1Schema;
-var stepStatusV1Schema = external_exports.enum(STEP_STATUSES);
-var gateKindV1Schema = external_exports.enum(GATE_KINDS);
-var positiveSafeInteger = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
-var authoritativeResultRefV1Schema = external_exports.object({
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  result_digest: sha256Digest5,
-  result_id: safeIdV1Schema,
-  input_fingerprint: sha256Digest5
-}).strict();
-var approvalRefV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  gate_kind: gateKindV1Schema,
-  subject_digest: sha256Digest5,
-  decision_digest: sha256Digest5,
-  resolved_at_revision: positiveSafeInteger
-}).strict();
-var waiverRefV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  rule_id: safeIdV1Schema,
-  rule_version: positiveSafeInteger,
-  subject_digest: sha256Digest5,
-  scope: external_exports.object({
-    operation: external_exports.enum(["review-trigger", "adjudication-failure"]),
-    boundary: external_exports.enum(["subject", "phase", "task"])
-  }).strict(),
-  granted: external_exports.boolean(),
-  expires: external_exports.literal("task-complete"),
-  granted_at_revision: positiveSafeInteger
-}).strict();
-var openGateRefV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  gate_kind: gateKindV1Schema,
-  subject_digest: sha256Digest5,
-  context_digest: sha256Digest5,
-  frozen_state_digest: sha256Digest5,
-  waiver_origin_gate_id: pathSafeIdV1Schema.optional(),
-  opened_at_revision: positiveSafeInteger
-}).strict();
-var humanRevisionClassificationV1Schema = external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS);
-var humanRevisionOverrideV1Schema = external_exports.object({
-  agent_classification: humanRevisionClassificationV1Schema,
-  rationale: external_exports.string().min(1).max(4096).regex(/\S/u)
-}).strict();
-var humanRevisionEvidenceV1Schema = external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "human revision evidence must be sorted by (phase_instance, step) with no duplicates").refine(
-  (items) => items.every((reference) => reference.step === "counter_review" || reference.step === "adjudicate" || reference.step === "triage"),
-  "human revision evidence must contain review, constitution, or triage results"
-);
-var pendingHumanRevisionV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  gate_kind: external_exports.enum(HUMAN_REVISION_GATE_KINDS),
-  predecessor_subject_digest: sha256Digest5,
-  predecessor_input_fingerprint: sha256Digest5,
-  requested_at_revision: positiveSafeInteger,
-  attempt: positiveSafeInteger,
-  evidence: humanRevisionEvidenceV1Schema
-}).strict();
-var humanRevisionRecordV1Schema = external_exports.object({
-  phase_instance: phaseInstanceIdV1Schema,
-  gate_id: pathSafeIdV1Schema,
-  gate_kind: external_exports.enum(HUMAN_REVISION_GATE_KINDS),
-  predecessor_subject_digest: sha256Digest5,
-  predecessor_input_fingerprint: sha256Digest5,
-  resulting_subject_digest: sha256Digest5,
-  resulting_result_digest: sha256Digest5,
-  classification: humanRevisionClassificationV1Schema,
-  rationale: external_exports.string().min(1).max(4096).regex(/\S/u),
-  user_override: humanRevisionOverrideV1Schema.optional(),
-  previous_attempt: positiveSafeInteger,
-  resulting_attempt: positiveSafeInteger,
-  evidence: humanRevisionEvidenceV1Schema
-}).strict().superRefine((record3, context2) => {
-  if (record3.user_override?.agent_classification === record3.classification) {
-    context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
-  }
-  if (record3.classification === "simple" && record3.previous_attempt !== record3.resulting_attempt) {
-    context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a simple revision preserves its attempt" });
-  }
-  if (record3.classification === "significant" && record3.resulting_attempt !== 1) {
-    context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a significant revision resets to attempt 1" });
-  }
-  if (record3.predecessor_subject_digest === record3.resulting_subject_digest) {
-    context2.addIssue({ code: "custom", path: ["resulting_subject_digest"], message: "a human revision must change the subject" });
-  }
-  if (record3.evidence.some((reference) => reference.phase_instance !== record3.phase_instance)) {
-    context2.addIssue({ code: "custom", path: ["evidence"], message: "human revision evidence must belong to its phase" });
-  }
-});
-var planningRestartConnectedHostProvenanceV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  actor_class: external_exports.literal("human"),
-  assurance: external_exports.literal("declared-local-trace"),
-  channel: external_exports.literal("connected-host"),
-  decision_event_id: safeIdV1Schema,
-  connection_id: safeIdV1Schema,
-  request_id_digest: sha256Digest5,
-  recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 })
-}).strict();
-var planningRestartLocalProvenanceV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  actor_class: external_exports.literal("human"),
-  assurance: external_exports.literal("declared-local-trace"),
-  channel: external_exports.literal("archflow-local"),
-  decision_event_id: safeIdV1Schema,
-  helper_invocation_id: safeIdV1Schema,
-  recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 })
-}).strict();
-var planningRestartServerAttestedProvenanceV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  actor_class: external_exports.literal("human"),
-  assurance: external_exports.literal("connected-request-trace"),
-  channel: external_exports.literal("connected-host"),
-  connection_id: safeIdV1Schema,
-  invocation_id: safeIdV1Schema,
-  request_id_digest: sha256Digest5,
-  request_digest: sha256Digest5
-}).strict();
-var planningRestartHumanProvenanceV1Schema = external_exports.union([
-  planningRestartConnectedHostProvenanceV1Schema,
-  planningRestartLocalProvenanceV1Schema,
-  planningRestartServerAttestedProvenanceV1Schema
-]);
-var adoptedProjectionRefV1Schema = external_exports.object({
-  repository: settlementRepositoryNameV1Schema.optional(),
-  path: repositoryPathClaimV1Schema,
-  content_digest: sha256Digest5
-}).strict();
-var repositoryProjectionKey = (value) => {
-  const item = value;
-  return `${item.repository ?? ""}\0${item.path}`;
-};
-var adoptedAbsenceKey = (value) => typeof value === "string" ? `\0${value}` : repositoryProjectionKey(value);
-var baselineAdoptionRecordV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  adopted_at_revision: positiveSafeInteger,
-  adopted_projections: external_exports.array(adoptedProjectionRefV1Schema).refine((items) => isSortedUniqueBy(items, repositoryProjectionKey), "adopted projections must be sorted by repository and path with no duplicates"),
-  adopted_absences: external_exports.array(external_exports.union([
-    repositoryPathClaimV1Schema,
-    external_exports.object({ repository: settlementRepositoryNameV1Schema, path: repositoryPathClaimV1Schema }).strict()
-  ])).optional().refine((items) => isSortedUniqueBy(items, adoptedAbsenceKey), "adopted absences must be sorted by repository and path with no duplicates")
-}).strict();
-var phaseImplInstanceV1Schema = external_exports.string().regex(/^phase-impl-[1-9][0-9]*$/u);
-var archivedHumanDecisionTimeV1Schema = external_exports.string().datetime({ offset: false, local: false, precision: 3 });
-var boundedReasonV1Schema = external_exports.string().min(1).max(4096).regex(/\S/u);
-var requestDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1].localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates");
-var durableDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1] < item), "displaced validations must be ordinal-sorted with no duplicates");
-var durableAcceptedOccurrencesV1Schema = external_exports.array(external_exports.object({
-  review_evidence_digest: sha256Digest5,
-  finding_id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
-}).strict()).min(1).refine((items) => items.every((item, index) => {
-  if (index === 0) return true;
-  const previous = items[index - 1];
-  return previous.review_evidence_digest < item.review_evidence_digest || previous.review_evidence_digest === item.review_evidence_digest && previous.finding_id < item.finding_id;
-}), "accepted occurrences must be ordinal-sorted with no duplicates");
-var pendingValidationOverrideV1Schema = external_exports.object({
-  phase_instance: phaseImplInstanceV1Schema,
-  input_fingerprint: sha256Digest5,
-  governing_phase_design_digest: sha256Digest5,
-  displaced_validations: requestDisplacedValidationsV1Schema,
-  producer_reason: boundedReasonV1Schema,
-  request_digest: sha256Digest5,
-  request_revision: positiveSafeInteger
-}).strict();
-var validationOverrideRecordV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  decision_digest: sha256Digest5,
-  phase_instance: phaseImplInstanceV1Schema,
-  input_fingerprint: sha256Digest5,
-  governing_phase_design_digest: sha256Digest5,
-  subject_digest: sha256Digest5,
-  displaced_validations: durableDisplacedValidationsV1Schema,
-  human_reason: boundedReasonV1Schema,
-  decided_at: archivedHumanDecisionTimeV1Schema,
-  granted_at_revision: positiveSafeInteger
-}).strict();
-var reviewPushThroughRecordV1Schema = external_exports.object({
-  gate_id: pathSafeIdV1Schema,
-  decision_digest: sha256Digest5,
-  phase_instance: phaseInstanceIdV1Schema,
-  subject_digest: sha256Digest5,
-  current_evidence_set_digest: sha256Digest5,
-  triage_result_digest: sha256Digest5,
-  accepted_occurrences: durableAcceptedOccurrencesV1Schema,
-  attempt: positiveSafeInteger,
-  human_reason: boundedReasonV1Schema,
-  decided_at: archivedHumanDecisionTimeV1Schema,
-  resolved_at_revision: positiveSafeInteger
-}).strict();
-var ruleSettlementMatchV1Schema = external_exports.discriminatedUnion("kind", [
-  external_exports.object({ kind: external_exports.literal("subject"), subject: workflowSubjectV1Schema }).strict(),
-  external_exports.object({
-    kind: external_exports.literal("content"),
-    paths: external_exports.array(external_exports.string()).refine((items) => isSortedUniqueBy(items), "content match paths must be sorted with no duplicates"),
-    secondary_paths: external_exports.array(external_exports.object({
-      repository: settlementRepositoryNameV1Schema,
-      paths: external_exports.array(external_exports.string()).min(1).refine((items) => isSortedUniqueBy(items), "secondary content paths must be sorted with no duplicates")
-    }).strict()).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_paths must be sorted by repository with no duplicates").optional()
-  }).strict().superRefine((match, context2) => {
-    if (match.paths.length === 0 && (match.secondary_paths?.length ?? 0) === 0) {
-      context2.addIssue({ code: "custom", message: "content match must contain at least one primary or secondary path" });
-    }
-  })
-]);
-var repositoryCommitMilestoneV1Schema = external_exports.object({
-  repository: settlementRepositoryNameV1Schema,
-  repository_identity_digest: sha256Digest5,
-  baseline_commit: gitOidV1Schema,
-  target_ref: external_exports.string().min(1).max(4096).regex(/\S/u),
-  target_head: gitOidV1Schema,
-  paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => isSortedUniqueBy(items), "paths must be sorted with no duplicates"),
-  commit_message: external_exports.string().min(1).max(4096).regex(/\S/u),
-  diff_digest: sha256Digest5,
-  snapshot_digest: sha256Digest5
-}).strict();
-var ruleSettlementConclusionV1Schema = external_exports.discriminatedUnion("wait", [
-  external_exports.object({ wait: external_exports.literal(false), match: external_exports.literal(null) }).strict(),
-  external_exports.object({ wait: external_exports.literal(true), match: ruleSettlementMatchV1Schema }).strict()
-]);
-var ruleSettlementV1Schema = external_exports.object({
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  subject_digest: sha256Digest5,
-  conclusion: ruleSettlementConclusionV1Schema,
-  config_digest: sha256Digest5,
-  milestone_baseline_commit: gitOidV1Schema.optional(),
-  milestone_target_ref: external_exports.string().min(1).max(4096).regex(/\S/u).optional(),
-  milestone_target_head: gitOidV1Schema.optional(),
-  secondary_milestones: external_exports.array(repositoryCommitMilestoneV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_milestones must be sorted by repository with no duplicates").optional(),
-  settled_at_revision: positiveSafeInteger
-}).strict().superRefine((settlement, context2) => {
-  if (settlement.milestone_target_ref === void 0 !== (settlement.milestone_target_head === void 0)) {
-    context2.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target ref and head must be written together" });
-  }
-  if (settlement.milestone_target_ref !== void 0 && settlement.milestone_baseline_commit === void 0) {
-    context2.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target facts require a milestone baseline" });
-  }
-  const kind = decodePhaseInstance(settlement.phase_instance).kind;
-  if (settlement.secondary_milestones !== void 0 && (kind !== "phase-impl" || settlement.conclusion.wait)) {
-    context2.addIssue({ code: "custom", path: ["secondary_milestones"], message: "secondary milestones are allowed only on a phase-implementation wait:false settlement" });
-  }
-  if (settlement.milestone_baseline_commit !== void 0 && (settlement.conclusion.wait || kind !== "prd" && kind !== "design" && kind !== "phase-design" && kind !== "phase-impl")) {
-    context2.addIssue({
-      code: "custom",
-      path: ["milestone_baseline_commit"],
-      message: "milestone baseline is allowed only on a PRD, design, phase-design, or phase-implementation wait:false settlement"
-    });
-  }
-});
-var milestoneRecoveryRecordV1Schema = external_exports.object({
-  recovery_id: pathSafeIdV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  cause: external_exports.enum(["milestone-proof-missing", "governing-document-drift"]),
-  target_ref: external_exports.string().min(1).max(4096).regex(/\S/u),
-  target_head: gitOidV1Schema,
-  subject_digest: sha256Digest5,
-  recovered_at_revision: positiveSafeInteger,
-  superseded_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
-  cleared_waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
-  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional()
-}).strict();
-var planningRestartRecordV1Schema = external_exports.object({
-  restart_id: pathSafeIdV1Schema,
-  source_phase_instance: phaseInstanceIdV1Schema,
-  target_phase_instance: phaseInstanceIdV1Schema,
-  reason: external_exports.string().min(1).max(4096).regex(/\S/u),
-  restarted_at_revision: positiveSafeInteger,
-  superseded_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
-  cleared_waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
-  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
-  human_provenance: planningRestartHumanProvenanceV1Schema
-}).strict().superRefine((record3, context2) => {
-  if (!isStrictlyEarlierPlanningPhase(record3.target_phase_instance, record3.source_phase_instance)) {
-    context2.addIssue({ code: "custom", path: ["target_phase_instance"], message: "restart target must be a strictly earlier planning phase" });
-  }
-});
-var lastTransitionOutcomeV1Schema = external_exports.json();
-var lastTransitionV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  tool: external_exports.enum(TOOL_NAMES),
-  operation: safeCodeV1Schema,
-  intent_id: pathSafeIdV1Schema,
-  request_digest: sha256Digest5,
-  input_fingerprint: sha256Digest5,
-  result_id: safeIdV1Schema,
-  outcome: lastTransitionOutcomeV1Schema,
-  outcome_digest: sha256Digest5,
-  prior_revision: safeIntegerV1Schema,
-  resulting_revision: positiveSafeInteger
-}).strict();
-var taskConfigRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
-var taskConfigSingleOrArrayRoutesV1Schema = external_exports.union([
-  taskConfigRouteV1Schema,
-  external_exports.array(taskConfigRouteV1Schema).min(1)
-]);
-var taskConfigRolesV1Schema = configRolesSchema.clone({
-  ...configRolesSchema.def,
-  shape: {
-    producer: taskConfigRouteV1Schema.optional(),
-    "counter-reviewer": taskConfigSingleOrArrayRoutesV1Schema.optional(),
-    "counter-reviewers": external_exports.array(taskConfigRouteV1Schema).min(1).optional(),
-    "test-reviewer": taskConfigRouteV1Schema.optional(),
-    "effort-reviewer": taskConfigRouteV1Schema.optional(),
-    adjudicator: taskConfigRouteV1Schema.optional()
-  }
-});
-var taskConfigProducersV1Schema = producersSchema.clone({
-  ...producersSchema.def,
-  shape: {
-    claude: taskConfigRolesV1Schema.optional(),
-    codex: taskConfigRolesV1Schema.optional(),
-    antigravity: taskConfigRolesV1Schema.optional()
-  }
-});
-var taskConfigOverridesV1Schema = configOverridesSchema.clone({
-  ...configOverridesSchema.def,
-  shape: Object.fromEntries(
-    Object.entries(configOverridesSchema.shape).map(([phase3]) => [phase3, taskConfigRolesV1Schema.optional()])
-  )
-});
-var taskConfigApprovalRulesV1Schema = approvalRulesSchema.clone(approvalRulesSchema.def);
-var taskConfigRepositoryModeV1Schema = repositoryModeV1Schema.clone(repositoryModeV1Schema.def);
-var taskConfigRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
-var taskConfigRepositoryDeclarationV1Schema = repositoryDeclarationV1Schema.clone({
-  ...repositoryDeclarationV1Schema.def,
-  shape: {
-    ...repositoryDeclarationV1Schema.shape,
-    mode: taskConfigRepositoryModeV1Schema.optional()
-  }
-});
-var taskConfigRepositoriesV1Schema = repositoriesV1Schema.clone({
-  ...repositoriesV1Schema.def,
-  keyType: taskConfigRepositoryNameV1Schema,
-  valueType: taskConfigRepositoryDeclarationV1Schema
-});
-var taskConfigSnapshotV1Schema = configV1Schema.clone({
-  ...configV1Schema.def,
-  shape: {
-    ...configV1Schema.shape,
-    roles: taskConfigRolesV1Schema,
-    producers: taskConfigProducersV1Schema.optional(),
-    overrides: taskConfigOverridesV1Schema.optional(),
-    approval_rules: taskConfigApprovalRulesV1Schema.optional(),
-    repositories: taskConfigRepositoriesV1Schema.optional()
-  }
-});
-var lastSeenRepositoryBindingV1Schema = external_exports.object({
-  name: external_exports.union([external_exports.literal("primary"), taskConfigRepositoryNameV1Schema]),
-  declared_path: external_exports.string().optional(),
-  repository_identity_digest: sha256Digest5
-}).strict();
-var repositoryBindingOrderKey = (value) => {
-  if (typeof value !== "object" || value === null) return String(value);
-  const descriptor = Object.getOwnPropertyDescriptor(value, "name");
-  const name = String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
-  return name === "primary" ? "" : name;
-};
-var taskStateV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  task_id: taskSlugV1Schema,
-  repository_identity_digest: sha256Digest5,
-  revision: positiveSafeInteger,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  status: stepStatusV1Schema,
-  attempt: positiveSafeInteger,
-  input_fingerprint: sha256Digest5,
-  initialization_digest: sha256Digest5,
-  config_digest: sha256Digest5,
-  workflow_digest: sha256Digest5,
-  constitution_digest: sha256Digest5,
-  policy_base_commit: gitOidV1Schema,
-  authoritative_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "authoritative_results must be sorted by (phase_instance, step) with no duplicates"),
-  approvals: external_exports.array(approvalRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "approvals must be sorted by gate_id with no duplicates"),
-  waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
-  planned_final_phase: positiveSafeInteger.optional(),
-  open_gate: openGateRefV1Schema.optional(),
-  pending_human_revision: pendingHumanRevisionV1Schema.optional(),
-  pending_validation_override: pendingValidationOverrideV1Schema.optional(),
-  superseded_production_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("result_digest")), "superseded production results must be sorted by result_digest with no duplicates").refine((items) => items.every((item) => item.step === "produce" && item.phase_instance.startsWith("phase-impl-")), "superseded production results must reference implementation production").optional(),
-  human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
-  restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
-  milestone_recovery_history: external_exports.array(milestoneRecoveryRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("recovery_id")), "milestone recovery history must be sorted by recovery_id with no duplicates").optional(),
-  baseline_adoptions: external_exports.array(baselineAdoptionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates").optional(),
-  validation_overrides: external_exports.array(validationOverrideRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "gate_id"])), "validation_overrides must be sorted by (phase_instance, gate_id) with no duplicates").refine((items) => new Set(items.map((item) => item.gate_id)).size === items.length, "validation_overrides must contain unique gate IDs").optional(),
-  review_push_throughs: external_exports.array(reviewPushThroughRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "gate_id"])), "review_push_throughs must be sorted by (phase_instance, gate_id) with no duplicates").refine((items) => new Set(items.map((item) => item.gate_id)).size === items.length, "review_push_throughs must contain unique gate IDs").optional(),
-  rule_settlements: external_exports.array(ruleSettlementV1Schema).refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates").optional(),
-  last_seen_config: taskConfigSnapshotV1Schema.optional(),
-  last_seen_repository_bindings: external_exports.array(lastSeenRepositoryBindingV1Schema).refine(
-    (items) => isSortedUniqueBy(items, repositoryBindingOrderKey),
-    "last_seen_repository_bindings must place primary first, followed by ordinal unique names"
-  ).optional(),
-  last_transition: lastTransitionV1Schema.optional(),
-  terminal: external_exports.enum(TERMINAL_STATES).optional()
-}).strict().superRefine((state, context2) => {
-  state.restart_history?.forEach((restart, index) => {
-    if (restart.restarted_at_revision > state.revision) {
-      context2.addIssue({ code: "custom", path: ["restart_history", index, "restarted_at_revision"], message: "restart revision cannot exceed the current state revision" });
-    }
-  });
-  state.milestone_recovery_history?.forEach((recovery, index) => {
-    if (recovery.recovered_at_revision > state.revision) {
-      context2.addIssue({ code: "custom", path: ["milestone_recovery_history", index, "recovered_at_revision"], message: "milestone recovery revision cannot exceed the current state revision" });
-    }
-  });
-  state.baseline_adoptions?.forEach((adoption, index) => {
-    if (adoption.adopted_at_revision > state.revision) {
-      context2.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
-    }
-  });
-  state.validation_overrides?.forEach((record3, index) => {
-    if (record3.granted_at_revision > state.revision) {
-      context2.addIssue({ code: "custom", path: ["validation_overrides", index, "granted_at_revision"], message: "validation override revision cannot exceed the current state revision" });
-    }
-  });
-  state.review_push_throughs?.forEach((record3, index) => {
-    if (record3.resolved_at_revision > state.revision) {
-      context2.addIssue({ code: "custom", path: ["review_push_throughs", index, "resolved_at_revision"], message: "review push-through revision cannot exceed the current state revision" });
-    }
-    const approval = state.approvals.find((candidate) => candidate.gate_id === record3.gate_id);
-    if (approval === void 0 || approval.gate_kind !== "attempts-exhausted" || approval.subject_digest !== record3.subject_digest || approval.decision_digest !== record3.decision_digest || approval.resolved_at_revision !== record3.resolved_at_revision) {
-      context2.addIssue({ code: "custom", path: ["review_push_throughs", index], message: "review push-through must match its attempts-exhausted approval" });
-    }
-  });
-  state.approvals.forEach((approval, index) => {
-    if (approval.gate_kind === "attempts-exhausted" && !(state.review_push_throughs ?? []).some((record3) => record3.gate_id === approval.gate_id)) {
-      context2.addIssue({ code: "custom", path: ["approvals", index], message: "attempts-exhausted advance approval requires its review push-through record" });
-    }
-  });
-  state.rule_settlements?.forEach((settlement, index) => {
-    if (settlement.settled_at_revision > state.revision) {
-      context2.addIssue({ code: "custom", path: ["rule_settlements", index, "settled_at_revision"], message: "rule settlement revision cannot exceed the current state revision" });
-    }
-  });
-  const pending = state.pending_human_revision;
-  if (pending !== void 0 && (state.open_gate !== void 0 || state.terminal !== void 0 || state.step !== "produce" || state.status === "succeeded" || state.attempt !== pending.attempt || pending.requested_at_revision > state.revision || pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance))) {
-    context2.addIssue({ code: "custom", path: ["pending_human_revision"], message: "pending human revision does not match its active produce state" });
-  }
-  const pendingValidation = state.pending_validation_override;
-  let pendingValidationSubject;
-  if (pendingValidation !== void 0) {
-    try {
-      pendingValidationSubject = validationOverrideSubjectDigest({
-        task_id: state.task_id,
-        phase_instance: pendingValidation.phase_instance,
-        input_fingerprint: pendingValidation.input_fingerprint,
-        governing_phase_design_digest: pendingValidation.governing_phase_design_digest,
-        displaced_validations: pendingValidation.displaced_validations
-      });
-    } catch {
-    }
-  }
-  if (pendingValidation !== void 0 && (state.terminal !== void 0 || state.step !== "produce" || state.status !== "failed" || pendingValidation.phase_instance !== state.phase_instance || pendingValidation.input_fingerprint !== state.input_fingerprint || pendingValidation.request_revision > state.revision || state.open_gate === void 0 && pendingValidation.request_revision !== state.revision || state.open_gate !== void 0 && (state.open_gate.gate_kind !== "validation-override" || state.open_gate.subject_digest !== pendingValidationSubject || state.open_gate.opened_at_revision !== pendingValidation.request_revision + 1))) {
-    context2.addIssue({ code: "custom", path: ["pending_validation_override"], message: "pending validation override does not match its failed phase implementation state" });
-  }
-  if (state.open_gate?.gate_kind === "validation-override" && pendingValidation === void 0) {
-    context2.addIssue({ code: "custom", path: ["open_gate"], message: "an open validation override gate requires its pending request" });
-  }
-});
-
-// src/contracts/mcp-tools.ts
-var parsedToolInputBrand = /* @__PURE__ */ Symbol("ParsedToolInput");
-var structuralResultBrand = /* @__PURE__ */ Symbol("StructurallyValidProjectResult");
-var resultExpectationBrand = /* @__PURE__ */ Symbol("ResultExpectation");
-var parsedCalls = /* @__PURE__ */ new WeakSet();
-var structuralResults = /* @__PURE__ */ new WeakSet();
-var resultExpectations = /* @__PURE__ */ new WeakSet();
-var requestDigests = /* @__PURE__ */ new WeakMap();
-var digest10 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
-var safeId2 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
-var text4 = external_exports.string().min(1).max(4096).regex(/\S/u);
-var safeInteger6 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((v) => {
-  try {
-    decodePhaseInstance(v);
-    return true;
-  } catch {
-    return false;
-  }
-});
-var rule3 = external_exports.object({ rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
-var scope2 = external_exports.object({ operation: external_exports.enum(["review-trigger", "adjudication-failure"]), boundary: external_exports.enum(["subject", "phase", "task"]) }).strict();
-var provenance = humanDecisionProvenanceV1Schema.clone(humanDecisionProvenanceV1Schema.def);
-var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger6, input_fingerprint: digest10 };
-var stateValidationOverrideRequestV1Schema = external_exports.object({
-  displaced_validations: external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1].localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates")
-}).strict();
-var def = (name) => Object.freeze({ name, input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`, result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result` });
-var TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") });
-var durableArtifact = external_exports.union([
-  taskInitializationV1Schema,
-  legacyImportInitializationV1Schema,
-  documentArtifactV1Schema,
-  implementationOutputV1Schema,
-  external_exports.object({
-    schema_version: external_exports.literal("1"),
-    artifact_kind: external_exports.literal("triage"),
-    evidence: triageCandidateSchema
-  }).strict()
-]);
-var humanRevisionDeclarationSchema = external_exports.object({
-  classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
-  rationale: text4,
-  user_override: external_exports.object({
-    agent_classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
-    rationale: text4
-  }).strict().optional()
-}).strict().superRefine((revision, context2) => {
-  if (revision.user_override?.agent_classification === revision.classification) {
-    context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
-  }
-});
-var stateBoundaryInputSchema = external_exports.object({ ...common2, phase_instance: phase2, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context2) => {
-  if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) {
-    context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
-  }
-});
-var planningRestartInputSchema = external_exports.object({
-  ...common2,
-  operation: external_exports.literal("planning_restart"),
-  phase_instance: phase2,
-  target_phase_instance: phase2,
-  reason: text4,
-  ask_base_digest: digest10.optional(),
-  step: external_exports.literal("produce"),
-  status: external_exports.literal("running")
-}).strict();
-var stateInputSchema = external_exports.object({
-  ...common2,
-  phase_instance: phase2,
-  step: external_exports.enum(["produce", "counter_review", "triage"]),
-  status: external_exports.enum(["running", "succeeded", "failed"]),
-  artifact: durableArtifact.optional(),
-  human_revision: humanRevisionDeclarationSchema.optional(),
-  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline", "set_commit_authority", "request_validation_override"]).optional(),
-  target_commit: external_exports.string().min(1).max(256).optional(),
-  scope: external_exports.array(external_exports.enum(["milestone", "policy"])).optional(),
-  target_phase_instance: phase2.optional(),
-  reason: text4.optional(),
-  validation_override_request: stateValidationOverrideRequestV1Schema.optional(),
-  ask_base_digest: digest10.optional()
-}).strict().superRefine((input, context2) => {
-  if (input.operation === "request_validation_override") {
-    if (!input.phase_instance.startsWith("phase-impl-")) context2.addIssue({ code: "custom", path: ["phase_instance"], message: "request_validation_override is phase implementation only" });
-    if (input.step !== "produce" || input.status !== "failed") context2.addIssue({ code: "custom", path: ["status"], message: "request_validation_override requires produce/failed" });
-    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "request_validation_override requires reason" });
-    if (input.validation_override_request === void 0) context2.addIssue({ code: "custom", path: ["validation_override_request"], message: "request_validation_override requires validation_override_request" });
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
-      context2.addIssue({ code: "custom", path: ["operation"], message: "request_validation_override carries only its reason and bounded validation request" });
-    }
-    return;
-  }
-  if (input.operation === "planning_restart") {
-    if (input.target_phase_instance === void 0) context2.addIssue({ code: "custom", path: ["target_phase_instance"], message: "planning_restart requires target_phase_instance" });
-    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "planning_restart requires reason" });
-    if (input.step !== "produce" || input.status !== "running") context2.addIssue({ code: "custom", path: ["step"], message: "planning_restart lands at produce/running" });
-    if (input.artifact !== void 0 || input.human_revision !== void 0) context2.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
-    if (input.target_phase_instance === "prd" && input.ask_base_digest === void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
-    if (input.target_phase_instance !== "prd" && input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
-    if (input.target_commit !== void 0 || input.scope !== void 0 || input.validation_override_request !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "planning_restart cannot carry commit authority or validation override fields" });
-    return;
-  }
-  if (input.operation === "set_commit_authority") {
-    if (input.target_commit === void 0) context2.addIssue({ code: "custom", path: ["target_commit"], message: "set_commit_authority requires target_commit" });
-    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "set_commit_authority requires reason" });
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.ask_base_digest !== void 0 || input.validation_override_request !== void 0) {
-      context2.addIssue({ code: "custom", path: ["operation"], message: "set_commit_authority carries no artifact, human revision, restart target, ask digest, or validation override request" });
-    }
-    return;
-  }
-  if (input.operation === "refresh_milestone_baseline") {
-    if (input.step !== "triage" || input.status !== "succeeded") context2.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.validation_override_request !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
-      context2.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, ask digest, or commit authority fields" });
-    }
-    return;
-  }
-  if (input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" || input.operation === "refresh_stale_baseline") {
-    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.validation_override_request !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
-      context2.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, ask digest, or commit authority fields` });
-    }
-    return;
-  }
-  if (input.target_commit !== void 0 || input.scope !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "commit authority fields require set_commit_authority" });
-  if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
-  if (input.validation_override_request !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "validation_override_request requires request_validation_override" });
-  if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
-});
-var reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
-var reviewRouteSetV1Schema = external_exports.object({
-  "counter-reviewer": reviewModelRouteV1Schema.optional(),
-  "test-reviewer": reviewModelRouteV1Schema.optional(),
-  "effort-reviewer": reviewModelRouteV1Schema.optional(),
-  adjudicator: reviewModelRouteV1Schema.optional()
-}).strict().superRefine((routes, context2) => {
-  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes["effort-reviewer"] === void 0 && routes.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
-  }
-});
-var routeOverrideSchema = external_exports.object({
-  reason: text4,
-  "counter-reviewer": reviewModelRouteV1Schema.optional(),
-  "test-reviewer": reviewModelRouteV1Schema.optional(),
-  adjudicator: reviewModelRouteV1Schema.optional()
-}).strict().superRefine((override, context2) => {
-  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
-    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
-  }
-});
-var counterReviewInputSchema = external_exports.object({
-  ...common2,
-  artifact_path: taskPathClaimV1Schema,
-  invocation_routes: reviewRouteSetV1Schema.optional(),
-  route_override: routeOverrideSchema.optional()
-}).strict();
-var humanGateChoiceSchema = external_exports.object({ choice: text4, reason: text4 }).strict();
-var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text4, subject_digest: digest10, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown(), preview_digest: digest10.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
-  try {
-    parseGateContext(input.kind, input.context);
-  } catch (error51) {
-    context2.addIssue({ code: "custom", path: ["context"], message: error51 instanceof Error ? error51.message : "invalid gate context" });
-  }
-  try {
-    if (input.kind === "baseline-adoption") parseBaselineObservationRef(input.current_evidence);
-    else if (input.kind === "validation-override") parseValidationOverrideRequestRef(input.current_evidence);
-    else parseCurrentEvidenceSetRef(input.current_evidence);
-  } catch (error51) {
-    context2.addIssue({ code: "custom", path: ["current_evidence"], message: error51 instanceof Error ? error51.message : "invalid current evidence" });
-  }
-  if (input.kind === "validation-override") {
-    if (!input.phase_instance.startsWith("phase-impl-")) context2.addIssue({ code: "custom", path: ["phase_instance"], message: "validation override gates are phase implementation only" });
-    try {
-      const gateContext = parseGateContext("validation-override", input.context);
-      const evidence = parseValidationOverrideRequestRef(input.current_evidence);
-      const expectedSubject = validationOverrideSubjectDigest({
-        task_id: input.task_id,
-        phase_instance: input.phase_instance,
-        input_fingerprint: gateContext.input_fingerprint,
-        governing_phase_design_digest: gateContext.governing_phase_design_digest,
-        displaced_validations: gateContext.displaced_validations
-      });
-      if (input.input_fingerprint !== gateContext.input_fingerprint || input.subject_digest !== expectedSubject || evidence.task_id !== input.task_id || evidence.phase_instance !== input.phase_instance || evidence.input_fingerprint !== gateContext.input_fingerprint || evidence.governing_phase_design_digest !== gateContext.governing_phase_design_digest || evidence.request_revision !== gateContext.request_revision || evidence.validation_request_subject_digest !== input.subject_digest) {
-        context2.addIssue({ code: "custom", path: ["current_evidence"], message: "validation override evidence must exactly bind the request subject" });
-      }
-    } catch {
-    }
-  }
-  if (input.kind === "attempts-exhausted") {
-    try {
-      const gateContext = parseGateContext("attempts-exhausted", input.context);
-      if (gateContext.review_push_through !== void 0 && parseCurrentEvidenceSetRef(input.current_evidence).set_digest !== gateContext.review_push_through.current_evidence_set_digest) {
-        context2.addIssue({ code: "custom", path: ["context", "review_push_through", "current_evidence_set_digest"], message: "review push-through must bind the gate current evidence set" });
-      }
-    } catch {
-    }
-  }
-  if (input.preview_digest === void 0 !== (input.decision === void 0)) {
-    context2.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call decision) or both omitted (gate opens and awaits the human decision)" });
-  }
-});
-var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest10, origin_context_digest: digest10, task_id: taskSlugV1Schema, phase_instance: phase2, subject_digest: digest10, current_evidence_set_digest: digest10, rule: rule3, scope: scope2 }).strict();
-var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text4, preview_digest: digest10.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
-  if (input.task_id !== input.origin.task_id) context2.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
-  if (input.preview_digest === void 0 !== (input.decision === void 0)) {
-    context2.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call waiver decision) or both omitted (waiver gate opens and awaits the human decision)" });
-  }
-});
-function inputFor(name, value) {
-  const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
-  if (name === "archflow_gate") {
-    const v = parsed;
-    return { ...v, current_evidence: v.kind === "baseline-adoption" ? parseBaselineObservationRef(v.current_evidence) : v.kind === "validation-override" ? parseValidationOverrideRequestRef(v.current_evidence) : parseCurrentEvidenceSetRef(v.current_evidence) };
-  }
-  return parsed;
-}
-function deepFreeze5(value) {
-  if (value !== null && typeof value === "object") {
-    for (const nested of Object.values(value)) deepFreeze5(nested);
-    Object.freeze(value);
-  }
-  return value;
-}
-function assertAuthenticParsedToolCall(value) {
-  if (value === null || typeof value !== "object" || !parsedCalls.has(value)) {
-    throw new TypeError("an authentic parsed tool call is required");
-  }
-}
-function parseToolCall(name, value) {
-  if (!TOOL_NAMES.includes(name)) throw new TypeError("unknown tool");
-  assertPlainJson(value, `${name} input`);
-  const parsed = inputFor(name, structuredClone(value));
-  assertPlainJson(parsed, `${name} parsed input`);
-  const input = structuredClone(parsed);
-  for (const nested of Object.values(input)) deepFreeze5(nested);
-  Object.defineProperty(input, parsedToolInputBrand, { value: name, enumerable: false, writable: false, configurable: false });
-  Object.freeze(input);
-  const call = Object.freeze({ name, input });
-  parsedCalls.add(call);
-  return call;
-}
-function bindParsedToolCallRequest(call, requestDigest) {
-  if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
-  digest10.parse(requestDigest);
-  requestDigests.set(call, requestDigest);
-  return call;
-}
-var toolSuccessSchemas = {
-  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest10.optional() }).strict(),
-  archflow_counter_review: external_exports.union([external_exports.object({ path: repositoryPathClaimV1Schema, reports: external_exports.array(reviewReportSchema).min(1), constitution: external_exports.union([external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict(), external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(["pass", "fail", "uncertain"]), triggers: external_exports.array(rule3) }).strict()]), revision: safeInteger6, request_digest: digest10.optional() }).strict(), external_exports.object({
-    path: repositoryPathClaimV1Schema,
-    verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
-    total_findings: safeInteger6,
-    partition_counts: findingPartitionCountsSchema,
-    alignment: external_exports.union([
-      external_exports.object({ status: external_exports.literal("evaluated"), drift: external_exports.enum(DRIFT_RESULTS), upstream_count: safeInteger6 }).strict(),
-      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("prd-has-no-approved-upstream-plan") }).strict()
-    ]),
-    constitution: external_exports.union([
-      external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), triggers: external_exports.array(rule3) }).strict(),
-      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
-    ]),
-    revision: safeInteger6,
-    request_digest: digest10.optional()
-  }).strict(), external_exports.object({
-    path: repositoryPathClaimV1Schema,
-    verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
-    total_findings: safeInteger6,
-    partition_counts: findingPartitionCountsSchema,
-    constitution: external_exports.union([
-      external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule3) }).strict(),
-      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
-    ]),
-    revision: safeInteger6,
-    request_digest: digest10.optional()
-  }).strict(), external_exports.object({
-    path: repositoryPathClaimV1Schema,
-    verdict: external_exports.enum(["pass", "advisory", "fail"]),
-    blocking_count: safeInteger6,
-    constitution: external_exports.union([
-      external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule3) }).strict(),
-      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
-    ]),
-    revision: safeInteger6,
-    request_digest: digest10.optional()
-  }).strict()]),
-  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text4, revision: safeInteger6, request_digest: digest10.optional() }).strict(),
-  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest10, current_evidence_set_digest: digest10, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text4, revision: safeInteger6, request_digest: digest10.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest10, current_evidence_set_digest: digest10, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text4, revision: safeInteger6, request_digest: digest10.optional() }).strict()])
-};
-var mcpToolsSchemaDefs = Object.freeze({
-  digest: digest10,
-  id: safeId2,
-  text: text4,
-  integer: safeInteger6,
-  phase: phase2,
-  durableArtifact,
-  rule: rule3,
-  scope: scope2
-});
-function successFor(call, value) {
-  const parsed = toolSuccessSchemas[call.name].parse(value);
-  if (call.name === "archflow_state") {
-    const input = call.input;
-    const expectedStatus = input.operation === "planning_restart" || input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" ? "running" : input.status;
-    if (parsed.status !== expectedStatus) throw new TypeError("state status mismatch");
-  }
-  if (call.name === "archflow_gate") {
-    const input = call.input;
-    const result = parsed;
-    const decision3 = parseGateDecisionEnvelope(result.decision);
-    if (result.kind !== input.kind || decision3.kind !== input.kind || decision3.task_id !== input.task_id || decision3.phase_instance !== input.phase_instance || decision3.subject_digest !== input.subject_digest || result.notes !== decision3.payload.reason) throw new TypeError("gate result mismatch");
-    validateGateDecision(input.kind, input.context, decision3.payload);
-  }
-  if (call.name === "archflow_waiver") {
-    const input = call.input;
-    const result = parsed;
-    if (result.origin_gate_id !== input.origin.origin_gate_id || result.task_id !== input.task_id || result.rule_id !== input.origin.rule.rule_id || result.rule_version !== input.origin.rule.rule_version || result.subject_digest !== input.origin.subject_digest || result.current_evidence_set_digest !== input.origin.current_evidence_set_digest || !isDeepStrictEqual3(result.scope, input.origin.scope)) throw new TypeError("waiver result mismatch");
-  }
-  return parsed;
-}
-var projectFailureEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(false), error: external_exports.unknown() }).strict();
-var projectResultBaseEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.boolean() }).passthrough();
-var projectSuccessEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(true), value: external_exports.unknown() }).strict();
-function projectFailureForTool(name, value, label) {
-  assertPlainJson(value, label);
-  const failure6 = projectFailureEnvelopeSchema.parse(value);
-  const error51 = parseProjectError(failure6.error);
-  const parameters = error51.diagnostic.parameters;
-  if (Object.hasOwn(parameters, "tool") && Reflect.get(parameters, "tool") !== name) {
-    throw new TypeError("project failure tool mismatch");
-  }
-  return { schema_version: "1", ok: false, error: error51 };
-}
-function validateProjectResultStructure(call, value) {
-  if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
-  assertPlainJson(value, `${call.name} result`);
-  const base2 = projectResultBaseEnvelopeSchema.parse(value);
-  const result = base2.ok ? (() => {
-    const e = projectSuccessEnvelopeSchema.parse(value);
-    return { ...e, value: successFor(call, e.value) };
-  })() : projectFailureForTool(call.name, value, `${call.name} result`);
-  const branded = Object.freeze({ ...result, [structuralResultBrand]: call.name });
-  structuralResults.add(branded);
-  return branded;
-}
-var resultExpectationDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), tool: external_exports.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest10, request_digest: digest10, result_id: safeId2, resulting_revision: safeInteger6, success: external_exports.unknown() }).strict().superRefine((expectation, context2) => {
-  const success3 = toolSuccessSchemas[expectation.tool].safeParse(expectation.success);
-  if (!success3.success) {
-    context2.addIssue({ code: "custom", path: ["success"], message: `invalid ${expectation.tool} success value` });
-    return;
-  }
-  if (expectation.resulting_revision !== success3.data.revision) context2.addIssue({ code: "custom", path: ["resulting_revision"], message: "expectation resulting revision must equal success revision" });
-});
-function createInternalResultExpectation(value) {
-  assertPlainJson(value, "result expectation");
-  const base2 = resultExpectationDataSchema.parse(value);
-  const success3 = toolSuccessSchemas[base2.tool].parse(base2.success);
-  const expectation = Object.assign({}, base2, { success: success3 });
-  Object.defineProperty(expectation, resultExpectationBrand, { value: value.tool, enumerable: false, writable: false, configurable: false });
-  Object.freeze(expectation);
-  resultExpectations.add(expectation);
-  return expectation;
-}
-function correlateProjectResult(call, expectation, result) {
-  const requestDigest = requestDigests.get(call);
-  if (requestDigest === void 0 || !parsedCalls.has(call) || !resultExpectations.has(expectation) || !structuralResults.has(result)) throw new TypeError("authentic request/result identities are required");
-  if (expectation[resultExpectationBrand] !== call.name || result[structuralResultBrand] !== call.name || expectation.tool !== call.name) throw new TypeError("result correlation tool mismatch");
-  if (expectation.request_digest !== requestDigest || expectation.task_id !== call.input.task_id || expectation.intent_id !== call.input.intent_id || expectation.input_fingerprint !== call.input.input_fingerprint) throw new TypeError("expectation invocation mismatch");
-  if (result.ok && (expectation.resulting_revision !== result.value.revision || !isDeepStrictEqual3(expectation.success, result.value))) throw new TypeError("result expectation mismatch");
-  return result;
-}
-
-// src/repository/repository-set.ts
-import { isAbsolute as isAbsolute4, relative as relative4, resolve as resolveDirectory, sep as sep3 } from "node:path";
-var ok5 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail8 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var repositoryBindings = /* @__PURE__ */ new Map();
-var MAX_REPOSITORY_BINDINGS = 16;
-async function openRepository(workingDirectory, operationContext) {
-  const candidateKey = resolveDirectory(workingDirectory);
-  const discovered = await discoverWorktree(createGitRunner({ cwd: workingDirectory }), operationContext);
-  if (!discovered.ok) return discovered;
-  const rootKey = discovered.value.location.worktreeRoot;
-  const canonicalCached = repositoryBindings.get(rootKey);
-  if (canonicalCached !== void 0) return ok5(canonicalCached);
-  const environment = await preflightGit(discovered.value, operationContext);
-  if (!environment.ok) return environment;
-  const binding2 = Object.freeze({ runner: discovered.value, environment: environment.value });
-  if (repositoryBindings.size >= MAX_REPOSITORY_BINDINGS) {
-    const evictedRoot = repositoryBindings.keys().next().value;
-    repositoryBindings.delete(evictedRoot);
-  }
-  repositoryBindings.set(rootKey, binding2);
-  return ok5(binding2);
-}
-function ordinal5(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-var VIEW_FAILURE_ISSUE_CODES = Object.freeze({
-  open: "repository-open-failed",
-  identity: "repository-identity-unresolved",
-  head: "repository-head-unresolved"
-});
-var VIEW_FAILURE_MESSAGES = Object.freeze({
-  open: "repository could not be opened",
-  identity: "repository identity could not be resolved",
-  head: "repository HEAD could not be resolved"
-});
-var VIEW_FAILURE_REASONS = new Map(
-  Object.keys(VIEW_FAILURE_ISSUE_CODES).map((reason2) => [VIEW_FAILURE_ISSUE_CODES[reason2], reason2])
-);
-var MEMBER_FIELD_PREFIX = "repositories.";
-var MEMBER_FIELD_SUFFIX = ".path";
-function memberField(name) {
-  return name === "primary" ? "repositories.primary" : `${MEMBER_FIELD_PREFIX}${name}${MEMBER_FIELD_SUFFIX}`;
-}
-function memberFromIssue(issue4) {
-  const separator = issue4.indexOf(": ");
-  const field = separator === -1 ? issue4 : issue4.slice(0, separator);
-  if (!field.startsWith(MEMBER_FIELD_PREFIX) || !field.endsWith(MEMBER_FIELD_SUFFIX)) return void 0;
-  const parsed = repositoryNameV1Schema.safeParse(field.slice(MEMBER_FIELD_PREFIX.length, field.length - MEMBER_FIELD_SUFFIX.length));
-  return parsed.success ? parsed.data : void 0;
-}
-function configFailure(field, message, issueCode = "repository-set-invalid") {
-  return fail8(createProjectError("CONFIG_INVALID", {
-    issue_code: issueCode,
-    issues: [`${field}: ${message}`]
-  }));
-}
-function viewFailure(name, reason2) {
-  return configFailure(memberField(name), VIEW_FAILURE_MESSAGES[reason2], VIEW_FAILURE_ISSUE_CODES[reason2]);
-}
-function unavailableRepositoryView(error51) {
-  if (error51.code !== "CONFIG_INVALID") return void 0;
-  const reason2 = VIEW_FAILURE_REASONS.get(error51.diagnostic.parameters.issue_code);
-  const issue4 = error51.diagnostic.parameters.issues?.[0];
-  if (reason2 === void 0 || issue4 === void 0) return void 0;
-  const repositoryName7 = memberFromIssue(issue4);
-  return repositoryName7 === void 0 ? void 0 : Object.freeze({ repository_name: repositoryName7, reason: reason2 });
-}
-function isWithin(parent, candidate) {
-  const path3 = relative4(parent, candidate);
-  return path3 !== "" && path3 !== ".." && !path3.startsWith(`..${sep3}`) && !isAbsolute4(path3);
-}
-async function observeMember(name, mode, binding2, context2, declaredPath) {
-  const identity = await resolveRepositoryIdentity(binding2.runner, binding2.environment, context2);
-  if (!identity.ok) return viewFailure(name, "identity");
-  try {
-    const head = await readHeadCommit(binding2.runner);
-    return ok5(Object.freeze({
-      name,
-      mode,
-      binding: binding2,
-      identity: identity.value,
-      head,
-      ...declaredPath === void 0 ? {} : { declared_path: declaredPath }
-    }));
-  } catch (error51) {
-    if (error51 instanceof GitInvocationError) projectErrorForGitFailure(error51, binding2.runner, context2);
-    else if (!(error51 instanceof TypeError)) throw error51;
-    return viewFailure(name, "head");
-  }
-}
-async function resolveRepositorySet(primaryBinding, config2, context2) {
-  const primary = await observeMember("primary", "writable", primaryBinding, context2);
-  if (!primary.ok) return primary;
-  const members = [primary.value];
-  const declarations = config2.repositories ?? {};
-  for (const rawName of Object.keys(declarations).sort(ordinal5)) {
-    const name = rawName;
-    const declaration = declarations[name];
-    const declaredPath = declaration.path;
-    const candidate = isAbsolute4(declaredPath) ? declaredPath : resolveDirectory(primaryBinding.runner.location.worktreeRoot, declaredPath);
-    const opened = await openRepository(candidate, context2);
-    if (!opened.ok) return viewFailure(name, "open");
-    const observed = await observeMember(name, declaration.mode ?? "context-only", opened.value, context2, declaredPath);
-    if (!observed.ok) return observed;
-    members.push(observed.value);
-  }
-  for (let left = 0; left < members.length; left += 1) {
-    for (let right = left + 1; right < members.length; right += 1) {
-      const leftRoot = members[left].binding.runner.location.worktreeRoot;
-      const rightRoot = members[right].binding.runner.location.worktreeRoot;
-      if (leftRoot === rightRoot || isWithin(leftRoot, rightRoot) || isWithin(rightRoot, leftRoot)) {
-        return configFailure(memberField(members[right].name), `repository must be distinct and non-nested (overlaps ${members[left].name})`);
-      }
-    }
-  }
-  const frozenMembers = Object.freeze(members);
-  const digest12 = sha256Bytes(canonicalJsonBytes(frozenMembers.map((member) => ({
-    name: member.name,
-    mode: member.mode,
-    repository_identity_digest: member.identity.digest
-  }))));
-  return ok5(Object.freeze({ members: frozenMembers, digest: digest12 }));
-}
-
-// src/state/config-change.ts
-import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
-function normalizeForChangeDetection(config2) {
-  if (config2.roles.producer === void 0) return config2;
-  const { producer: _retired, ...roles2 } = config2.roles;
-  return { ...config2, roles: roles2 };
-}
-function isPlainObject3(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function appendEntry(entries, path3, before, after) {
-  entries.push({
-    path: path3,
-    ...before === void 0 ? {} : { before },
-    ...after === void 0 ? {} : { after }
-  });
-}
-function diffConfigValue(before, after, path3, entries) {
-  if (Array.isArray(before) && Array.isArray(after)) {
-    const shared = Math.min(before.length, after.length);
-    for (let index = 0; index < shared; index += 1) {
-      diffConfigValue(before[index], after[index], `${path3}.${index}`, entries);
-    }
-    for (let index = shared; index < before.length; index += 1) {
-      appendEntry(entries, `${path3}.${index}`, before[index], void 0);
-    }
-    for (let index = shared; index < after.length; index += 1) {
-      appendEntry(entries, `${path3}.${index}`, void 0, after[index]);
-    }
-    return;
-  }
-  if (isPlainObject3(before) && isPlainObject3(after)) {
-    const keys = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])].sort();
-    for (const key2 of keys) {
-      diffConfigValue(before[key2], after[key2], path3 === "" ? key2 : `${path3}.${key2}`, entries);
-    }
-    return;
-  }
-  if (before === after) return;
-  appendEntry(entries, path3, before, after);
-}
-function computeConfigChange(before, after) {
-  const entries = [];
-  diffConfigValue(normalizeForChangeDetection(before), normalizeForChangeDetection(after), "", entries);
-  return Object.freeze(entries);
-}
-function repositoryBindingsCheckpoint(repositorySet) {
-  return Object.freeze(repositorySet.members.map((member) => Object.freeze({
-    name: member.name,
-    ...member.declared_path === void 0 ? {} : { declared_path: member.declared_path },
-    repository_identity_digest: member.identity.digest
-  })));
-}
-function validateRepositorySetContinuity(state, repositorySet) {
-  const prior = state.last_seen_repository_bindings;
-  if (prior === void 0) return Object.freeze({ schema_version: "1", ok: true, value: void 0 });
-  const priorByName = new Map(prior.map((entry2) => [entry2.name, entry2]));
-  for (const member of repositorySet.members) {
-    if (member.name === "primary") continue;
-    const checkpoint = priorByName.get(member.name);
-    if (checkpoint === void 0 || checkpoint.declared_path !== member.declared_path) continue;
-    if (checkpoint.repository_identity_digest !== member.identity.digest) {
-      return Object.freeze({
-        schema_version: "1",
-        ok: false,
-        error: createProjectError("CONFIG_INVALID", {
-          issue_code: "repository-identity-changed",
-          issues: [`repositories.${member.name}.path: repository identity changed at the unchanged declared path`]
-        })
-      });
-    }
-  }
-  return Object.freeze({ schema_version: "1", ok: true, value: void 0 });
-}
-function withLastSeenConfig(draft, parsedLiveConfig, repositorySet) {
-  const normalized = normalizeForChangeDetection(parsedLiveConfig);
-  const seen = draft.last_seen_config;
-  const checkpoint = repositoryBindingsCheckpoint(repositorySet);
-  const priorCheckpoint = draft.last_seen_repository_bindings;
-  const configUnchanged = seen !== void 0 && computeConfigChange(seen, normalized).length === 0;
-  const checkpointUnchanged = priorCheckpoint !== void 0 && isDeepStrictEqual4(priorCheckpoint, checkpoint);
-  if (configUnchanged && checkpointUnchanged) return draft;
-  return {
-    ...draft,
-    last_seen_config: normalized,
-    last_seen_repository_bindings: checkpoint
-  };
-}
-
-// src/contracts/fingerprints.ts
-function materialize2(subject, label) {
-  assertPlainJson(subject, label);
-  return structuredClone(subject);
-}
-function ordinal6(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-function sortedSet(items, key2, label) {
-  const seen = /* @__PURE__ */ new Set();
-  for (const item of items) {
-    const value = key2(item);
-    if (seen.has(value)) throw new TypeError(`${label} is a set: duplicate key ${JSON.stringify(value)}`);
-    seen.add(value);
-  }
-  return [...items].sort((left, right) => ordinal6(key2(left), key2(right)));
-}
-var identityJson = (identity) => ({
-  path: identity.path,
-  mode: identity.mode,
-  oid: identity.oid
-});
-var declaredInputJson = (input) => ({
-  input_id: input.input_id,
-  digest: input.digest
-});
-function computeInputFingerprint(subject) {
-  const snapshot = materialize2(subject, "input fingerprint subject");
-  const primary = canonicalJsonDigest({
-    schema_version: snapshot.schema_version,
-    workflow_digest: snapshot.workflow_digest,
-    constitution_digest: snapshot.constitution_digest,
-    artifact_identities: sortedSet(snapshot.artifact_identities, (item) => item.path, "artifact_identities").map(identityJson),
-    upstream_identities: sortedSet(snapshot.upstream_identities, (item) => item.path, "upstream_identities").map(identityJson),
-    rubric_digest: snapshot.rubric_digest,
-    phase_instance: snapshot.phase_instance,
-    declared_inputs: sortedSet(snapshot.declared_inputs, (item) => item.input_id, "declared_inputs").map(declaredInputJson)
-  });
-  const secondary = (snapshot.secondary_declared_inputs ?? []).filter((section) => section.declared_inputs.length > 0);
-  if (secondary.length === 0) return primary;
-  return canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "input-fingerprint-with-secondary-declared-inputs",
-    primary_input_fingerprint: primary,
-    secondary_declared_inputs: sortedSet(secondary, (section) => section.repository, "secondary_declared_inputs").map((section) => ({
-      repository: section.repository,
-      declared_inputs: sortedSet(section.declared_inputs, (input) => input.input_id, `secondary_declared_inputs.${section.repository}.declared_inputs`).map(declaredInputJson)
-    }))
-  });
-}
-function computePinnedConstitutionDigest(files) {
-  const snapshot = materialize2(files, "pinned constitution files");
-  return canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "pinned-constitution",
-    files: sortedSet(snapshot, (file2) => file2.path, "pinned constitution files").map(
-      ({ path: path3, oid }) => ({ path: path3, oid })
-    )
-  });
-}
-var exactFields2 = (value, expected) => {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
-  if (actual.length !== wanted.length || actual.some((key2, index) => key2 !== wanted[index])) {
-    throw new TypeError(`operation_fields must contain exactly ${wanted.join(", ")}`);
-  }
-};
-function closedOperationFields(subject) {
-  switch (subject.tool) {
-    case "archflow_state": {
-      const fields = subject.operation_fields;
-      if (subject.operation === "planning-restart") {
-        const restart = fields;
-        exactFields2(fields, restart.ask_base_digest === void 0 ? ["phase_instance", "target_phase_instance", "reason"] : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
-        return {
-          phase_instance: restart.phase_instance,
-          target_phase_instance: restart.target_phase_instance,
-          reason: restart.reason,
-          ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
-        };
-      }
-      if (subject.operation === "request-validation-override") {
-        const request = fields;
-        exactFields2(fields, ["phase_instance", "step", "status", "reason", "validation_override_request"]);
-        return {
-          phase_instance: request.phase_instance,
-          step: request.step,
-          status: request.status,
-          reason: request.reason,
-          validation_override_request: request.validation_override_request
-        };
-      }
-      if (subject.operation === "set-commit-authority") {
-        const commitAuth = fields;
-        exactFields2(fields, commitAuth.scope === void 0 ? ["phase_instance", "step", "status", "target_commit", "reason"] : ["phase_instance", "step", "status", "target_commit", "reason", "scope"]);
-        return {
-          phase_instance: commitAuth.phase_instance,
-          step: commitAuth.step,
-          status: commitAuth.status,
-          target_commit: commitAuth.target_commit,
-          reason: commitAuth.reason,
-          ...commitAuth.scope === void 0 ? {} : { scope: commitAuth.scope }
-        };
-      }
-      if (subject.operation === "record-state-boundary") {
-        exactFields2(fields, ["phase_instance", "step", "status"]);
-        const boundary = fields;
-        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
-      }
-      if (subject.operation === "refresh-milestone-baseline" || subject.operation === "recover-milestone-authority" || subject.operation === "recover-approval-trigger-authority" || subject.operation === "refresh-stale-baseline") {
-        exactFields2(fields, ["phase_instance", "step", "status", "intent_id"]);
-        const control = fields;
-        return { phase_instance: control.phase_instance, step: control.step, status: control.status, intent_id: control.intent_id };
-      }
-      const artifactFields = fields;
-      const operationForKind = {
-        "task-initialization": "adopt-task-initialization",
-        "legacy-import-initialization": "adopt-legacy-import-initialization",
-        document: "record-document-artifact",
-        "implementation-output": "record-implementation-output",
-        triage: "record-triage"
-      };
-      if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
-        throw new TypeError("invalid archflow_state operation for artifact_kind");
-      }
-      const expected = ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"];
-      if (artifactFields.human_revision !== void 0) expected.push("human_revision");
-      exactFields2(artifactFields, expected);
-      return {
-        phase_instance: artifactFields.phase_instance,
-        step: artifactFields.step,
-        status: artifactFields.status,
-        artifact_kind: artifactFields.artifact_kind,
-        artifact_digest: artifactFields.artifact_digest,
-        ...artifactFields.human_revision === void 0 ? {} : { human_revision: artifactFields.human_revision }
-      };
-    }
-    case "archflow_counter_review": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
-      const expected = ["artifact_path"];
-      if (fields.invocation_routes !== void 0) expected.push("invocation_routes");
-      if (fields.route_override !== void 0) expected.push("route_override");
-      exactFields2(fields, expected);
-      return {
-        artifact_path: fields.artifact_path,
-        ...fields.invocation_routes === void 0 ? {} : { invocation_routes: fields.invocation_routes },
-        ...fields.route_override === void 0 ? {} : { route_override: fields.route_override }
-      };
-    }
-    case "archflow_gate": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
-      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
-      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
-        if (fields.preview_digest === void 0 || fields.decision === void 0) {
-          throw new TypeError("gate preview_digest and decision must appear together");
-        }
-        expected.push("preview_digest", "decision");
-      }
-      exactFields2(fields, expected);
-      const selected = {
-        phase_instance: fields.phase_instance,
-        summary: fields.summary,
-        subject_digest: fields.subject_digest,
-        current_evidence: fields.current_evidence,
-        kind: fields.kind,
-        context: fields.context,
-        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
-      };
-      return selected;
-    }
-    case "archflow_waiver": {
-      const fields = subject.operation_fields;
-      if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
-      const expected = ["origin", "rationale"];
-      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
-        if (fields.preview_digest === void 0 || fields.decision === void 0) {
-          throw new TypeError("waiver preview_digest and decision must appear together");
-        }
-        expected.push("preview_digest", "decision");
-      }
-      exactFields2(fields, expected);
-      return {
-        origin: fields.origin,
-        rationale: fields.rationale,
-        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
-      };
-    }
-    default: {
-      const exhaustive = subject;
-      throw new TypeError(`unknown request tool ${String(exhaustive.tool)}`);
-    }
-  }
-}
-function computeRequestDigest(subject) {
-  const snapshot = materialize2(subject, "request digest subject");
-  const operationFields = closedOperationFields(snapshot);
-  return canonicalJsonDigest({
-    schema_version: snapshot.schema_version,
-    tool: snapshot.tool,
-    repository_identity_digest: snapshot.repository_identity_digest,
-    task_identity_digest: snapshot.task_identity_digest,
-    operation: snapshot.operation,
-    operation_fields: operationFields,
-    input_fingerprint: snapshot.input_fingerprint
-  });
-}
-function computeGateId(subject) {
-  const snapshot = materialize2(subject, "gate identity subject");
-  return `g-${canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "gate-identity",
-    task_identity_digest: snapshot.task_identity_digest,
-    intent_id: snapshot.intent_id,
-    request_digest: snapshot.request_digest
-  })}`;
-}
-function computeGateContextDigest(kind, context2) {
-  const snapshot = materialize2(context2, "gate context digest subject");
-  return kind === "waiver" ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot }) : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot });
-}
-function baselineAdoptionDriftDigest(context2) {
-  const snapshot = materialize2(context2, "baseline adoption drift subject");
-  return canonicalJsonDigest({
-    schema_version: "1",
-    digest_kind: "baseline-adoption-drift",
-    drifted_projections: snapshot.drifted_projections,
-    ...(snapshot.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot.deleted_projections },
-    ...snapshot.target_ref === void 0 ? {} : {
-      target_ref: snapshot.target_ref,
-      target_head: snapshot.target_head,
-      uncommitted_paths: snapshot.uncommitted_paths
-    }
-  });
-}
-function computePinnedConfigDigest(configBytes) {
-  return sha256Bytes(configBytes);
-}
-
-// src/contracts/durable-result-manifest.ts
-var reviewEvidenceArtifactV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("review-evidence"),
-  evidence: reviewEvidenceSchema
-}).strict();
-var triageArtifactV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("triage"),
-  evidence: triageCandidateSchema
-}).strict();
-var adjudicationEvidenceArtifactV1Schema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.literal("adjudication-evidence"),
-  evidence: adjudicationEvidenceSchema
-}).strict();
-var resultSourceArtifactV1Schema = external_exports.union([
-  documentArtifactV1Schema,
-  implementationOutputV1Schema,
-  reviewEvidenceArtifactV1Schema,
-  triageArtifactV1Schema,
-  adjudicationEvidenceArtifactV1Schema
-]);
-var secondaryProjectionSetV1Schema = external_exports.object({
-  repository: durableRepositoryNameV1Schema,
-  repository_identity_digest: sha256DigestV1Schema,
-  projections: external_exports.array(projectionDigestRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "projections must be sorted by path with no duplicates")
-}).strict().superRefine((section, context2) => {
-  if (section.projections.some((projection) => projection.repository !== section.repository)) {
-    context2.addIssue({ code: "custom", path: ["projections"], message: "secondary projection repositories must match their wrapper" });
-  }
-});
-var resultManifestShape = {
-  schema_version: external_exports.literal("1"),
-  task_id: taskSlugV1Schema,
-  repository_identity_digest: sha256DigestV1Schema,
-  result_id: safeIdV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  artifact_digest: sha256DigestV1Schema,
-  source_artifact: resultSourceArtifactV1Schema,
-  input_fingerprint: sha256DigestV1Schema,
-  snapshot_digest: sha256DigestV1Schema,
-  outputs: external_exports.array(outputEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
-  projections: external_exports.array(projectionDigestRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "projections must be sorted by path with no duplicates"),
-  secondary_projections: external_exports.array(secondaryProjectionSetV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_projections must be sorted by repository with no duplicates").optional(),
-  accounting: snapshotAccountingV1Schema,
-  secret_scan: secretScanResultV1Schema
-};
-var resultManifestV1Schema = external_exports.object(resultManifestShape).strict();
-function parseResultManifest(value) {
-  assertPlainJson(value, "result manifest");
-  return resultManifestV1Schema.parse(value);
-}
-var structuralEvidenceBodySchema = external_exports.object({
-  task_id: taskSlugV1Schema,
-  phase_instance: phaseInstanceIdV1Schema,
-  step: external_exports.enum(PIPELINE_STEPS),
-  input_fingerprint: sha256DigestV1Schema
-}).passthrough();
-var structuralEvidenceArtifactSchema = external_exports.object({
-  schema_version: external_exports.literal("1"),
-  artifact_kind: external_exports.enum(["review-evidence", "triage", "adjudication-evidence"]),
-  evidence: structuralEvidenceBodySchema
-}).strict();
-var resultManifestStructureSchema = external_exports.object({
-  ...resultManifestShape,
-  source_artifact: external_exports.union([
-    documentArtifactV1Schema,
-    implementationOutputV1Schema,
-    structuralEvidenceArtifactSchema
-  ])
-}).strict();
-function parseResultManifestStructure(value) {
-  assertPlainJson(value, "result manifest");
-  return resultManifestStructureSchema.parse(value);
-}
-
 // src/contracts/durable.ts
-import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
 function createPreparedIntentSubject(predecessor, receipt) {
-  materialize3(predecessor, "prepared intent predecessor document");
-  materialize3(receipt, "prepared intent receipt document");
+  materialize2(predecessor, "prepared intent predecessor document");
+  materialize2(receipt, "prepared intent receipt document");
   return Object.freeze({ intent_relation: Object.freeze({ mode: "prepared", predecessor, receipt }) });
 }
 function createCommittedIntentSubject(state, receipt) {
-  materialize3(state, "committed intent state document");
-  materialize3(receipt, "committed intent receipt document");
+  materialize2(state, "committed intent state document");
+  materialize2(receipt, "committed intent receipt document");
   return Object.freeze({ intent_relation: Object.freeze({ mode: "committed", state, receipt }) });
 }
 function openGateFrozenStateDigest(state) {
@@ -66095,7 +63919,7 @@ var DURABLE_ISSUE_CODES = Object.freeze({
   openGateFrozenStateMismatch: "open-gate-frozen-state-mismatch"
 });
 var OK = Object.freeze({ schema_version: "1", ok: true, value: void 0 });
-var fail9 = (error51) => ({ schema_version: "1", ok: false, error: error51 });
+var fail8 = (error51) => ({ schema_version: "1", ok: false, error: error51 });
 function ownDataSlot(subject, slot) {
   const descriptor = Object.getOwnPropertyDescriptor(subject, slot);
   if (descriptor === void 0) return void 0;
@@ -66118,7 +63942,7 @@ function ownEnumerableDataField(document2, field, label) {
   }
   return descriptor.value;
 }
-function materialize3(document2, label) {
+function materialize2(document2, label) {
   const value = ownDataField(document2, "value", label);
   const digest12 = ownDataField(document2, "digest", label);
   assertPlainJson(value, `${label} value`);
@@ -66185,17 +64009,17 @@ function validateDurableSemantics(subject) {
   const gateRequestDocument = ownDataSlot(subject, "gate_request");
   const gateDecisionDocument = ownDataSlot(subject, "gate_decision");
   const relationValue = ownDataSlot(subject, "intent_relation");
-  const stateSlot = stateDocument === void 0 ? void 0 : materialize3(stateDocument, "durable state document");
-  const artifactSlot = artifactDocument === void 0 ? void 0 : materialize3(artifactDocument, "durable artifact document");
-  const resultManifestSlot = resultManifestDocument === void 0 ? void 0 : materialize3(resultManifestDocument, "durable result manifest document");
-  const gateRequestSlot = gateRequestDocument === void 0 ? void 0 : materialize3(gateRequestDocument, "durable gate request document");
-  const gateDecisionSlot = gateDecisionDocument === void 0 ? void 0 : materialize3(gateDecisionDocument, "durable gate decision document");
+  const stateSlot = stateDocument === void 0 ? void 0 : materialize2(stateDocument, "durable state document");
+  const artifactSlot = artifactDocument === void 0 ? void 0 : materialize2(artifactDocument, "durable artifact document");
+  const resultManifestSlot = resultManifestDocument === void 0 ? void 0 : materialize2(resultManifestDocument, "durable result manifest document");
+  const gateRequestSlot = gateRequestDocument === void 0 ? void 0 : materialize2(gateRequestDocument, "durable gate request document");
+  const gateDecisionSlot = gateDecisionDocument === void 0 ? void 0 : materialize2(gateDecisionDocument, "durable gate decision document");
   let relation;
   if (relationValue !== void 0) {
     const mode = ownEnumerableDataField(relationValue, "mode", "durable intent relation");
     if (mode !== "prepared" && mode !== "committed") throw new TypeError("durable intent relation: invalid mode");
     const expectedKeys = mode === "prepared" ? ["mode", "predecessor", "receipt"] : ["mode", "state", "receipt"];
-    if (!isDeepStrictEqual5(Object.keys(relationValue).sort(), [...expectedKeys].sort())) {
+    if (!isDeepStrictEqual3(Object.keys(relationValue).sort(), [...expectedKeys].sort())) {
       throw new TypeError("durable intent relation: unexpected or missing slots");
     }
     const stateDocumentForRelation = ownEnumerableDataField(
@@ -66206,8 +64030,8 @@ function validateDurableSemantics(subject) {
     const receiptDocument = ownEnumerableDataField(relationValue, "receipt", "durable intent relation");
     relation = {
       mode,
-      state: materialize3(stateDocumentForRelation, `${mode} intent state document`),
-      receipt: materialize3(receiptDocument, `${mode} intent receipt document`)
+      state: materialize2(stateDocumentForRelation, `${mode} intent state document`),
+      receipt: materialize2(receiptDocument, `${mode} intent receipt document`)
     };
   }
   const state = stateSlot?.value;
@@ -66218,28 +64042,28 @@ function validateDurableSemantics(subject) {
   const intentState = relation?.state.value;
   const receipt = relation?.receipt.value;
   if (state !== void 0 && !decodable(state.phase_instance)) {
-    return fail9(contractInvalid(DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable));
+    return fail8(contractInvalid(DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable));
   }
   if (intentState !== void 0 && !decodable(intentState.phase_instance)) {
-    return fail9(contractInvalid(DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable));
+    return fail8(contractInvalid(DURABLE_ISSUE_CODES.statePhaseInstanceUndecodable));
   }
   if (resultManifest !== void 0 && !decodable(resultManifest.phase_instance)) {
-    return fail9(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
+    return fail8(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
   }
   if (state !== void 0 && canonicalJsonDigest(state) !== stateSlot?.digest) {
-    return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.documentDigestMismatch));
+    return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
   if (artifact !== void 0 && canonicalJsonDigest(artifact) !== artifactSlot?.digest) {
-    return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.documentDigestMismatch));
+    return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
   if (resultManifest !== void 0 && canonicalJsonDigest(resultManifest) !== resultManifestSlot?.digest) {
-    return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.documentDigestMismatch));
+    return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
   if (gateRequest !== void 0 && canonicalJsonDigest(gateRequest) !== gateRequestSlot?.digest) {
-    return fail9(contractInvalid(DURABLE_ISSUE_CODES.documentDigestMismatch));
+    return fail8(contractInvalid(DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
   if (gateDecision !== void 0 && canonicalJsonDigest(gateDecision) !== gateDecisionSlot?.digest) {
-    return fail9(contractInvalid(DURABLE_ISSUE_CODES.documentDigestMismatch));
+    return fail8(contractInvalid(DURABLE_ISSUE_CODES.documentDigestMismatch));
   }
   if (gateRequest?.kind === "validation-override") {
     const evidence = gateRequest.current_evidence;
@@ -66252,86 +64076,86 @@ function validateDurableSemantics(subject) {
       displaced_validations: context2.displaced_validations
     });
     if (evidence.task_id !== gateRequest.task_id || evidence.phase_instance !== gateRequest.phase_instance || evidence.input_fingerprint !== context2.input_fingerprint || evidence.governing_phase_design_digest !== context2.governing_phase_design_digest || evidence.request_revision !== context2.request_revision || evidence.validation_request_subject_digest !== gateRequest.subject_digest || expectedSubject !== gateRequest.subject_digest) {
-      return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateValidationEvidenceMismatch));
+      return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateValidationEvidenceMismatch));
     }
   }
   if (gateRequest?.kind === "attempts-exhausted" && gateRequest.context.review_push_through !== void 0 && gateRequest.current_evidence.set_digest !== gateRequest.context.review_push_through.current_evidence_set_digest) {
-    return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateReviewPushThroughEvidenceMismatch));
+    return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateReviewPushThroughEvidenceMismatch));
   }
   if (state?.pending_validation_override !== void 0) {
     const pending = state.pending_validation_override;
     const transition = state.last_transition;
     const originMatches = transition !== void 0 && transition.tool === "archflow_state" && transition.operation === "request-validation-override" && transition.request_digest === pending.request_digest && transition.input_fingerprint === pending.input_fingerprint && transition.resulting_revision === pending.request_revision;
     if (state.open_gate === void 0 && !originMatches || state.open_gate?.gate_kind === "validation-override" && transition !== void 0) {
-      return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.pendingValidationTransitionMismatch));
+      return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.pendingValidationTransitionMismatch));
     }
   }
   if (state?.open_gate !== void 0 && openGateFrozenStateDigest(state) !== state.open_gate.frozen_state_digest) {
-    return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.openGateFrozenStateMismatch));
+    return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.openGateFrozenStateMismatch));
   }
   if (state?.last_transition !== void 0 && canonicalJsonDigest(state.last_transition.outcome) !== state.last_transition.outcome_digest) {
-    return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.lastTransitionOutcomeDigestMismatch));
+    return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.lastTransitionOutcomeDigestMismatch));
   }
   if (state?.last_transition !== void 0 && (state.last_transition.resulting_revision !== state.revision || state.last_transition.prior_revision === Number.MAX_SAFE_INTEGER || state.last_transition.resulting_revision !== state.last_transition.prior_revision + 1)) {
-    return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.lastTransitionRevisionMismatch));
+    return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.lastTransitionRevisionMismatch));
   }
   if (state !== void 0 && !repositoryCheckpointCorresponds(state)) {
-    return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.repositoryCheckpointMismatch));
+    return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.repositoryCheckpointMismatch));
   }
   if (intentState !== void 0 && !repositoryCheckpointCorresponds(intentState)) {
-    return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.repositoryCheckpointMismatch));
+    return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.repositoryCheckpointMismatch));
   }
   if (receipt !== void 0 && canonicalJsonDigest(receipt) !== relation?.receipt.digest) {
-    return fail9(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptSelfDigestMismatch));
+    return fail8(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptSelfDigestMismatch));
   }
   if (gateRequest !== void 0 && gateDecision !== void 0) {
-    if (gateDecision.gate_id !== gateRequest.gate_id) return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionGateIdMismatch));
-    if (gateDecision.task_id !== gateRequest.task_id) return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionTaskMismatch));
-    if (gateDecision.phase_instance !== gateRequest.phase_instance) return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPhaseMismatch));
-    if (gateDecision.kind !== gateRequest.kind) return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionKindMismatch));
-    if (gateDecision.subject_digest !== gateRequest.subject_digest) return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionSubjectMismatch));
-    if (gateDecision.context_digest !== gateRequest.context_digest) return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionContextMismatch));
+    if (gateDecision.gate_id !== gateRequest.gate_id) return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionGateIdMismatch));
+    if (gateDecision.task_id !== gateRequest.task_id) return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionTaskMismatch));
+    if (gateDecision.phase_instance !== gateRequest.phase_instance) return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPhaseMismatch));
+    if (gateDecision.kind !== gateRequest.kind) return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionKindMismatch));
+    if (gateDecision.subject_digest !== gateRequest.subject_digest) return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionSubjectMismatch));
+    if (gateDecision.context_digest !== gateRequest.context_digest) return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionContextMismatch));
     if (gateDecision.outcome === "decided") {
       const envelope2 = gateDecision.envelope;
       if (envelope2.gate_id !== gateRequest.gate_id || envelope2.task_id !== gateRequest.task_id || envelope2.phase_instance !== gateRequest.phase_instance || envelope2.kind !== gateRequest.kind || envelope2.subject_digest !== gateRequest.subject_digest || envelope2.context_digest !== gateRequest.context_digest) {
-        return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionEnvelopeMismatch));
+        return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionEnvelopeMismatch));
       }
-      if ("origin" in gateRequest.context) return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
+      if ("origin" in gateRequest.context) return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       try {
         validateArchivedGateDecision(gateRequest.kind, gateRequest.context, envelope2.payload);
       } catch {
-        return fail9(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
+        return fail8(contractInvalid(DURABLE_ISSUE_CODES.gateDecisionPayloadInvalid));
       }
     } else if (gateDecision.outcome === "waiver-decided") {
       const waiverContext2 = gateRequest.context;
-      if (!("origin" in waiverContext2) || !isDeepStrictEqual5(gateDecision.origin, waiverContext2.origin) || !isDeepStrictEqual5(gateDecision.scope, waiverContext2.origin.scope) || gateDecision.kind !== "constitution-review") {
-        return fail9(contractInvalid(DURABLE_ISSUE_CODES.waiverDecisionOriginMismatch));
+      if (!("origin" in waiverContext2) || !isDeepStrictEqual3(gateDecision.origin, waiverContext2.origin) || !isDeepStrictEqual3(gateDecision.scope, waiverContext2.origin.scope) || gateDecision.kind !== "constitution-review") {
+        return fail8(contractInvalid(DURABLE_ISSUE_CODES.waiverDecisionOriginMismatch));
       }
     }
   }
   if (state !== void 0) {
     for (const result of state.authoritative_results) {
       if (!decodable(result.phase_instance)) {
-        return fail9(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
+        return fail8(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
       }
     }
   }
   if (artifact !== void 0) {
     const stepped = durableSteppedPayload(artifact);
     if (stepped !== void 0 && !decodable(stepped.phase_instance)) {
-      return fail9(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
+      return fail8(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
     }
     if (artifact.artifact_kind === "legacy-import-initialization") {
       for (const entry2 of artifact.mapping) {
         if (!decodable(entry2.phase_instance)) {
-          return fail9(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
+          return fail8(contractInvalid(DURABLE_ISSUE_CODES.phaseInstanceUndecodable));
         }
       }
     }
   }
   if (artifact !== void 0 && artifact.artifact_kind === "implementation-output") {
     if (decodePhaseInstance(artifact.phase_instance).kind !== "phase-impl") {
-      return fail9(contractInvalid(DURABLE_ISSUE_CODES.implementationOutputPhaseKind));
+      return fail8(contractInvalid(DURABLE_ISSUE_CODES.implementationOutputPhaseKind));
     }
   }
   if (resultManifest !== void 0) {
@@ -66342,43 +64166,43 @@ function validateDurableSemantics(subject) {
     }
     const correlatedSource = isEvidenceArtifact(source) ? source.evidence : source;
     if (resultManifest.artifact_digest !== canonicalJsonDigest(correlatedSource)) {
-      return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestArtifactDigestMismatch));
+      return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestArtifactDigestMismatch));
     }
     if (resultManifest.task_id !== correlatedSource.task_id) {
-      return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestTaskMismatch));
+      return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestTaskMismatch));
     }
     if (resultManifest.phase_instance !== correlatedSource.phase_instance) {
-      return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestPhaseMismatch));
+      return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestPhaseMismatch));
     }
     if (resultManifest.step !== correlatedSource.step) {
-      return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestStepMismatch));
+      return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestStepMismatch));
     }
     if (resultManifest.input_fingerprint !== correlatedSource.input_fingerprint) {
-      return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestInputFingerprintMismatch));
+      return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestInputFingerprintMismatch));
     }
     if (!isEvidenceArtifact(source) && resultManifest.snapshot_digest !== source.snapshot_digest) {
-      return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSnapshotMismatch));
+      return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSnapshotMismatch));
     }
     if (source.artifact_kind === "implementation-output") {
-      if (!isDeepStrictEqual5(resultManifest.outputs, source.outputs)) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
+      if (!isDeepStrictEqual3(resultManifest.outputs, source.outputs)) {
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
       }
-      if (!isDeepStrictEqual5(resultManifest.accounting, source.accounting)) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestAccountingMismatch));
+      if (!isDeepStrictEqual3(resultManifest.accounting, source.accounting)) {
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestAccountingMismatch));
       }
-      if (!isDeepStrictEqual5(resultManifest.secret_scan, source.secret_scan)) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSecretScanMismatch));
+      if (!isDeepStrictEqual3(resultManifest.secret_scan, source.secret_scan)) {
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestSecretScanMismatch));
       }
       if (resultManifest.projections.some((projection) => projection.repository !== void 0)) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
       const expectedProjectionPaths = source.outputs.filter((output) => output.operation !== "delete").map((output) => output.path);
-      if (!isDeepStrictEqual5(resultManifest.projections.map((projection) => projection.path), expectedProjectionPaths)) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+      if (!isDeepStrictEqual3(resultManifest.projections.map((projection) => projection.path), expectedProjectionPaths)) {
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
       for (const [index, output] of source.outputs.filter((entry2) => entry2.operation !== "delete").entries()) {
         if (output.storage === "raw-payload" && resultManifest.projections[index]?.content_digest !== output.payload_digest) {
-          return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+          return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
         }
       }
       const changedSecondaries = (source.secondary_repositories ?? []).filter((section) => section.outputs.length > 0);
@@ -66392,10 +64216,10 @@ function validateDurableSemantics(subject) {
           const projection = wrapper.projections[outputIndex];
           return projection === void 0 || projection.repository !== section.repository || projection.path !== output.path || output.storage === "raw-payload" && projection.content_digest !== output.payload_digest;
         });
-      })) return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+      })) return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
     } else if (source.artifact_kind === "document") {
       if (resultManifest.secondary_projections !== void 0) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
       const declaredDocuments = [{
         projection_target: source.projection_target,
@@ -66407,42 +64231,42 @@ function validateDurableSemantics(subject) {
         return document2 !== void 0 && output.operation === "add" && output.storage === "raw-payload" && output.file_type === "regular" && output.path === document2.projection_target && output.path_class === "document" && output.payload_bytes === document2.byte_count && output.payload_digest === document2.content_digest && output.after.mode === "100644";
       });
       if (!outputsMatch) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
       }
       const projectionsMatch = resultManifest.projections.length === declaredDocuments.length && resultManifest.projections.every((projection, index) => {
         const document2 = declaredDocuments[index];
         return document2 !== void 0 && projection.path === document2.projection_target && projection.content_digest === document2.content_digest;
       });
       if (!projectionsMatch) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
     } else {
       if (resultManifest.outputs.length !== 0) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestOutputsMismatch));
       }
       if (resultManifest.projections.length !== 0) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
       if (resultManifest.secondary_projections !== void 0) {
-        return fail9(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
+        return fail8(resultManifestInvalid(resultManifest, DURABLE_ISSUE_CODES.resultManifestProjectionsMismatch));
       }
     }
   }
   if (receipt !== void 0) {
     if (canonicalJsonDigest(receipt.outcome) !== receipt.outcome_digest) {
-      return fail9(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptOutcomeDigestMismatch));
+      return fail8(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptOutcomeDigestMismatch));
     }
     if (canonicalJsonDigest(receipt.prepared_state) !== receipt.prepared_state_digest) {
-      return fail9(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateDigestMismatch));
+      return fail8(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateDigestMismatch));
     }
     if (receipt.prior_revision === Number.MAX_SAFE_INTEGER || receipt.resulting_revision !== receipt.prior_revision + 1) {
-      return fail9(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptRevisionNotSuccessor));
+      return fail8(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptRevisionNotSuccessor));
     }
     if (receipt.prepared_state.revision !== receipt.resulting_revision) {
-      return fail9(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateRevisionMismatch));
+      return fail8(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateRevisionMismatch));
     }
     if (receipt.prepared_state.last_transition !== void 0) {
-      return fail9(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateLastTransitionPresent));
+      return fail8(receiptInvalid(receipt, DURABLE_ISSUE_CODES.intentReceiptPreparedStateLastTransitionPresent));
     }
   }
   if (artifact !== void 0 && artifact.artifact_kind === "implementation-output") {
@@ -66452,12 +64276,12 @@ function validateDurableSemantics(subject) {
     ];
     const inputIds = /* @__PURE__ */ new Set();
     for (const input of artifact.declared_inputs) {
-      if (inputIds.has(input.input_id)) return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationInputIdDuplicate));
+      if (inputIds.has(input.input_id)) return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationInputIdDuplicate));
       inputIds.add(input.input_id);
     }
     for (const section of artifact.secondary_repositories ?? []) {
       for (const input of section.declared_inputs) {
-        if (inputIds.has(input.input_id)) return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationInputIdDuplicate));
+        if (inputIds.has(input.input_id)) return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationInputIdDuplicate));
         inputIds.add(input.input_id);
       }
       const secondaryPaths = [
@@ -66465,18 +64289,18 @@ function validateDurableSemantics(subject) {
         ...section.restore_targets,
         ...section.declared_inputs.map((input) => input.path)
       ];
-      if (section.outputs.some((output) => output.path_class !== "repository-source") || secondaryPaths.some((path3) => path3 === ".archflow" || path3.startsWith(".archflow/"))) return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationSecondaryPathInvalid));
+      if (section.outputs.some((output) => output.path_class !== "repository-source") || secondaryPaths.some((path3) => path3 === ".archflow" || path3.startsWith(".archflow/"))) return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationSecondaryPathInvalid));
     }
     for (const section of sections) {
       for (const output of section.outputs) {
         if (output.operation === "rename" && output.previous_path === output.path) {
-          return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.renamePreviousPathEqualsPath));
+          return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.renamePreviousPathEqualsPath));
         }
       }
       const declaredPaths = new Set(section.outputs.map((output) => output.path));
       for (const target4 of section.restore_targets) {
         if (!declaredPaths.has(target4)) {
-          return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.restoreTargetNotDeclared));
+          return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.restoreTargetNotDeclared));
         }
       }
     }
@@ -66484,14 +64308,14 @@ function validateDurableSemantics(subject) {
     let storedTotal = 0;
     for (const entry2 of accounting2.counted_entries) storedTotal += entry2.stored_bytes;
     if (accounting2.result_bytes !== storedTotal) {
-      return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingResultBytesSum));
+      return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingResultBytesSum));
     }
     if (accounting2.task_bytes < accounting2.result_bytes) {
-      return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingTaskBytesBelowResult));
+      return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingTaskBytesBelowResult));
     }
     const aggregateResultBytes = sections.reduce((sum, section) => sum + section.accounting.result_bytes, 0);
     if (aggregateResultBytes > accounting2.result_byte_cap || accounting2.task_bytes < aggregateResultBytes) {
-      return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationAggregateAccountingInvalid));
+      return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.implementationAggregateAccountingInvalid));
     }
     const outputsByPath = /* @__PURE__ */ new Map();
     for (const output of artifact.outputs) {
@@ -66507,41 +64331,41 @@ function validateDurableSemantics(subject) {
     }
     for (const entry2 of accounting2.counted_entries) {
       if (outputsByPath.get(entry2.path)?.length !== 1) {
-        return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingEntryUnmatched));
+        return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingEntryUnmatched));
       }
     }
     for (const output of artifact.outputs) {
       if (entriesByPath.get(output.path)?.length !== 1) {
-        return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingOutputUnmatched));
+        return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingOutputUnmatched));
       }
     }
     for (const entry2 of accounting2.counted_entries) {
       const output = outputsByPath.get(entry2.path)[0];
       if (output.storage !== entry2.storage) {
-        return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStorageMismatch));
+        return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStorageMismatch));
       }
     }
     for (const entry2 of accounting2.counted_entries) {
       const output = outputsByPath.get(entry2.path)[0];
       if (entry2.storage === "raw-payload" && output.storage === "raw-payload") {
         if (entry2.stored_bytes !== output.payload_bytes) {
-          return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStoredBytesMismatch));
+          return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStoredBytesMismatch));
         }
       }
     }
     for (const section of artifact.secondary_repositories ?? []) {
       const localTotal = section.accounting.counted_entries.reduce((sum, entry2) => sum + entry2.stored_bytes, 0);
       if (section.accounting.result_bytes !== localTotal) {
-        return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingResultBytesSum));
+        return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingResultBytesSum));
       }
       const outputByPath = new Map(section.outputs.map((output) => [output.path, output]));
       const entryByPath = new Map(section.accounting.counted_entries.map((entry2) => [entry2.path, entry2]));
-      if (section.accounting.counted_entries.some((entry2) => !outputByPath.has(entry2.path)) || section.outputs.some((output) => !entryByPath.has(output.path))) return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingEntryUnmatched));
+      if (section.accounting.counted_entries.some((entry2) => !outputByPath.has(entry2.path)) || section.outputs.some((output) => !entryByPath.has(output.path))) return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingEntryUnmatched));
       for (const entry2 of section.accounting.counted_entries) {
         const output = outputByPath.get(entry2.path);
-        if (output.storage !== entry2.storage) return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStorageMismatch));
+        if (output.storage !== entry2.storage) return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStorageMismatch));
         if (entry2.storage === "raw-payload" && output.storage === "raw-payload" && entry2.stored_bytes !== output.payload_bytes) {
-          return fail9(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStoredBytesMismatch));
+          return fail8(artifactInvalid(artifact, DURABLE_ISSUE_CODES.accountingStoredBytesMismatch));
         }
       }
     }
@@ -66549,326 +64373,787 @@ function validateDurableSemantics(subject) {
   if (state !== void 0) {
     const initialization = artifact !== void 0 && isInitialization(artifact) ? artifact : void 0;
     if (initialization !== void 0 && state.initialization_digest !== canonicalJsonDigest(initialization)) {
-      return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.initializationDigestMismatch));
+      return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.initializationDigestMismatch));
     }
     if (artifact !== void 0 && state.task_id !== durableArtifactTaskId(artifact)) {
-      return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.artifactTaskIdMismatch));
+      return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.artifactTaskIdMismatch));
     }
     if (initialization !== void 0) {
       if (state.repository_identity_digest !== initialization.repository_identity_digest) {
-        return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.repositoryIdentityDigestMismatch));
+        return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.repositoryIdentityDigestMismatch));
       }
       if (state.config_digest !== initialization.config_digest) {
-        return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.configDigestMismatch));
+        return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.configDigestMismatch));
       }
       if (state.workflow_digest !== initialization.workflow_digest) {
-        return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.workflowDigestMismatch));
+        return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.workflowDigestMismatch));
       }
       if (state.constitution_digest !== initialization.constitution_digest) {
-        return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.constitutionDigestMismatch));
+        return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.constitutionDigestMismatch));
       }
       if (state.policy_base_commit !== initialization.policy_base_commit) {
-        return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.policyBaseCommitMismatch));
+        return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.policyBaseCommitMismatch));
       }
     }
     if (state.baseline_adoptions?.some(
       (adoption) => !state.approvals.some((approval) => approval.gate_id === adoption.gate_id && approval.gate_kind === "baseline-adoption")
     )) {
-      return fail9(stateInvalid(state, DURABLE_ISSUE_CODES.baselineAdoptionApprovalMissing));
+      return fail8(stateInvalid(state, DURABLE_ISSUE_CODES.baselineAdoptionApprovalMissing));
     }
     const stepped = artifact === void 0 ? void 0 : durableSteppedPayload(artifact);
     if (stepped !== void 0 && stepped.phase_instance === state.phase_instance && stepped.step === state.step && stepped.input_fingerprint !== state.input_fingerprint) {
       const expected = state.input_fingerprint;
       const observed = stepped.input_fingerprint;
-      return fail9(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
+      return fail8(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: expected, observed_digest: observed }));
     }
   }
   if (relation !== void 0 && receipt !== void 0 && intentState !== void 0) {
     if (receipt.task_id !== receipt.prepared_state.task_id) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptTaskMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptTaskMismatch));
     }
     if (receipt.repository_identity_digest !== receipt.prepared_state.repository_identity_digest) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRepositoryMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRepositoryMismatch));
     }
     if (receipt.input_fingerprint !== receipt.prepared_state.input_fingerprint) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptInputFingerprintMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptInputFingerprintMismatch));
     }
   }
   if (relation?.mode === "prepared" && receipt !== void 0 && intentState !== void 0) {
     const prepared = receipt.prepared_state;
     if (receipt.prior_revision > intentState.revision) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFutureRevision));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFutureRevision));
     }
     if (receipt.prior_revision < intentState.revision) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRevisionNotSuccessor));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRevisionNotSuccessor));
     }
     if (receipt.task_id !== intentState.task_id || prepared.task_id !== intentState.task_id) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptTaskMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptTaskMismatch));
     }
     if (receipt.repository_identity_digest !== intentState.repository_identity_digest || prepared.repository_identity_digest !== intentState.repository_identity_digest) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRepositoryMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRepositoryMismatch));
     }
     if (prepared.initialization_digest !== intentState.initialization_digest) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptInitializationMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptInitializationMismatch));
     }
     if (prepared.config_digest !== intentState.config_digest) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptConfigMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptConfigMismatch));
     }
     if (prepared.workflow_digest !== intentState.workflow_digest) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptWorkflowMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptWorkflowMismatch));
     }
     const isPolicyUpdate = receipt.operation === "set-commit-authority" && prepared.policy_base_commit !== intentState.policy_base_commit && prepared.constitution_digest !== void 0;
     if (!isPolicyUpdate && prepared.constitution_digest !== intentState.constitution_digest) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptConstitutionMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptConstitutionMismatch));
     }
     if (!isPolicyUpdate && prepared.policy_base_commit !== intentState.policy_base_commit) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptPolicyBaseMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptPolicyBaseMismatch));
     }
   }
   if (relation?.mode === "committed" && receipt !== void 0 && intentState !== void 0) {
     const reference = intentState.last_transition;
     if (reference === void 0 || reference.intent_id !== receipt.intent_id) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptIntentMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptIntentMismatch));
     }
     if (reference.request_digest !== receipt.request_digest) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRequestMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptRequestMismatch));
     }
     if (reference.outcome_digest !== receipt.outcome_digest) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceOutcomeMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceOutcomeMismatch));
     }
     if (reference.prior_revision !== receipt.prior_revision || reference.resulting_revision !== receipt.resulting_revision) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceRevisionMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceRevisionMismatch));
     }
     if (reference.result_id !== receipt.result_id) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceResultMismatch));
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptReferenceResultMismatch));
     }
-    if (reference.schema_version !== "1" || reference.tool !== receipt.tool || reference.operation !== receipt.operation || reference.input_fingerprint !== receipt.input_fingerprint || !isDeepStrictEqual5(reference.outcome, receipt.outcome)) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch));
+    if (reference.schema_version !== "1" || reference.tool !== receipt.tool || reference.operation !== receipt.operation || reference.input_fingerprint !== receipt.input_fingerprint || !isDeepStrictEqual3(reference.outcome, receipt.outcome)) {
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch));
     }
     const expectedState = { ...receipt.prepared_state, last_transition: reference };
-    if (!isDeepStrictEqual5(intentState, expectedState)) {
-      return fail9(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch));
+    if (!isDeepStrictEqual3(intentState, expectedState)) {
+      return fail8(stateInvalid(intentState, DURABLE_ISSUE_CODES.intentReceiptFinalStateMismatch));
     }
   }
   return OK;
 }
 
-// src/contracts/renderers.ts
-var encoder2 = new TextEncoder();
-var ESCAPE = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069`<>&]/gu;
-var visibleJsonString = (value) => JSON.stringify(value).replace(/\\n/gu, "\\u000a").replace(/\\r/gu, "\\u000d").replace(/\\t/gu, "\\u0009").replace(/\\b/gu, "\\u0008").replace(/\\f/gu, "\\u000c").replace(ESCAPE, (character) => `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`);
-var canonical = (value) => typeof value === "string" ? visibleJsonString(value) : JSON.stringify(value);
-var optional2 = (value) => value === void 0 ? "none" : canonical(value);
-var linesToBytes = (lines) => encoder2.encode(`${lines.join("\n")}
-`);
-var metadata = (entries) => entries.map(([key2, value]) => `${key2}: ${optional2(value)}`);
-var prose = (label, value, indent = "  ") => `${indent}${label}: ${visibleJsonString(value)}`;
-function provenanceMetadata(evidence) {
-  return [
-    ["assurance", evidence.assurance],
-    ["adapter", evidence.assurance === "server-attested" ? evidence.adapter : void 0],
-    ["cli_version", evidence.assurance === "server-attested" ? evidence.cli_version : void 0],
-    ["model_family", evidence.model_family],
-    ["model", evidence.model],
-    ["effort", evidence.effort],
-    ["provider", evidence.assurance === "server-attested" ? evidence.provider : void 0],
-    ["invocation_id", evidence.assurance === "server-attested" ? evidence.invocation_id : void 0],
-    ["result_id", evidence.assurance === "server-attested" ? evidence.result_id : void 0]
-  ];
-}
-function renderReviewFinding(finding) {
-  const display = reviewFindingDisplayDetail(finding);
-  if ("claim_type" in finding) {
-    return [
-      `### Finding ${visibleJsonString(finding.finding_id)} [${finding.claim_type}: ${finding.confidence}]`,
-      prose("falsifier", finding.falsifier),
-      ..."reviewer_id" in finding ? [
-        `reviewer_id: ${canonical(finding.reviewer_id)}`,
-        `reviewer_focus: ${canonical(finding.reviewer_focus)}`,
-        `routing_role: ${canonical(finding.routing_role)}`,
-        `criterion_id: ${canonical(finding.criterion_id)}`
-      ] : [],
-      prose("summary", display.summary),
-      prose("evidence", display.evidence),
-      prose("suggested_resolution", display.suggested_resolution)
-    ];
-  }
-  return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", display.summary), prose("evidence", display.evidence), prose("suggested_resolution", display.suggested_resolution)];
-}
-function renderRouteOverride(override) {
-  const displaced = override.pinned_model === void 0 ? ["pinned_route: none configured for this role"] : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`, `pinned_provider: ${optional2(override.pinned_provider)}`];
-  return ["", "## Route Override", ...displaced, prose("reason", override.reason)];
-}
-function renderRouteSource(source) {
-  const lines = ["", "## Route Source", `provenance: ${canonical(source.provenance)}`];
-  if (source.displaced === void 0) return lines;
-  return [
-    ...lines,
-    `displaced_source: ${canonical(source.displaced.source)}`,
-    `displaced_model: ${canonical(source.displaced.model)}`,
-    `displaced_effort: ${canonical(source.displaced.effort)}`,
-    `displaced_provider: ${optional2(source.displaced.provider)}`
-  ];
-}
-function renderReviewEvidence(value) {
-  const evidence = value.evidence;
-  const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
-  if (!authenticated) throw new TypeError("authenticated review evidence is required");
-  if (isFeedbackReview(evidence)) return new TextEncoder().encode([
-    "# ArchFlow Review Feedback",
-    `Reviewed subject: ${evidence.subject_digest}`,
-    ...provenanceMetadata(evidence),
-    ...renderRouteSource(evidence.route_source),
-    ...evidence.route_override === void 0 ? [] : renderRouteOverride(evidence.route_override),
-    ...evidence.reports.flatMap((report2) => ["", `## ${report2.reviewer_id} (${report2.focus})`, "", ..."outcome" in report2 ? [`Outcome: ${report2.outcome}`, "", report2.feedback] : [report2.report]])
-  ].join("\n"));
-  const summaryMetadata = evidence.schema_version === "2" || evidence.schema_version === "3" ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] : [["blocking_count", evidence.blocking_count]];
-  const lines = ["# ArchFlow Review Evidence", ...metadata([
-    ["schema_version", evidence.schema_version],
-    ["task_id", evidence.task_id],
-    ["phase_instance", evidence.phase_instance],
-    ["step", evidence.step],
-    ["role", evidence.role],
-    ["subject_digest", evidence.subject_digest],
-    ["input_fingerprint", evidence.input_fingerprint],
-    ["evidence_digest", value.evidence_digest],
-    ["verdict", evidence.verdict],
-    ...summaryMetadata,
-    ...evidence.schema_version === "3" ? [] : [["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)]],
-    ...provenanceMetadata(evidence)
-  ]), "", "## Findings"];
-  for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
-  if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
-  if (evidence.assurance === "server-attested" && evidence.route_source !== void 0) lines.push(...renderRouteSource(evidence.route_source));
-  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
-  return linesToBytes(lines);
-}
-function renderDisposition(disposition) {
-  const lines = [`### ${canonical(disposition.disposition)} ${visibleJsonString(disposition.review_evidence_digest)} ${visibleJsonString(disposition.finding_id)}`, prose("rationale", disposition.rationale)];
-  if (disposition.disposition === "rejected") {
-    lines.push(prose("evidence", disposition.evidence));
-  } else if (disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial") {
-    lines.push(prose("revision_intent", disposition.revision_intent));
-  } else if (disposition.disposition === "deferred" && disposition.evidence !== void 0) {
-    lines.push(prose("evidence", disposition.evidence));
-  }
-  return lines;
-}
-function renderTriage(value) {
-  if (!authenticValidatedTriage(value)) throw new TypeError("validated triage is required");
-  if (value.response !== void 0) return new TextEncoder().encode(`# Review response
-
-${value.response.decision}
-
-${value.response.rationale}
-${value.response.decision === "revise" ? value.response.reviewers.map((reviewer) => `${reviewer.reviewer_id}: ${reviewer.request}`).join("\n") : ""}`);
-  const lines = ["# ArchFlow Review Triage", ...metadata([
-    ["schema_version", value.schema_version],
-    ["task_id", value.task_id],
-    ["phase_instance", value.phase_instance],
-    ["step", value.step],
-    ["subject_digest", value.subject_digest],
-    ["input_fingerprint", value.input_fingerprint],
-    ["current_evidence_set_digest", value.current_evidence_set_digest],
-    ["source_evidence_digests", value.source_evidence_digests],
-    ["accepted_count", value.accepted_count],
-    ["accepted_editorial_count", value.accepted_editorial_count],
-    ["rejected_count", value.rejected_count],
-    ["escalated_human_count", value.escalated_human_count],
-    ["deferred_count", value.deferred_count]
-  ]), "", "## Dispositions"];
-  for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
-  if (value.disposition_ledger !== void 0 && value.disposition_ledger.length > 0) {
-    lines.push(
-      "",
-      "## Disposition Ledger",
-      "Carried reviewer memory: earlier rounds' dispositions of this phase instance, each embedded with its round's finding details at install time."
-    );
-    for (const entry2 of value.disposition_ledger) {
-      lines.push("", `### ${canonical(entry2.disposition)} ${visibleJsonString(entry2.finding_id)} (attempt ${entry2.attempt})`);
-      lines.push(`review_evidence_digest: ${canonical(entry2.review_evidence_digest)}`);
-      if (entry2.rationale !== void 0) lines.push(prose("rationale", entry2.rationale));
-      if (entry2.revision_intent !== void 0) lines.push(prose("revision_intent", entry2.revision_intent));
-      if (entry2.evidence !== void 0) lines.push(prose("evidence", entry2.evidence));
-      if ("reviewer_focus" in entry2) {
-        lines.push(
-          `reviewer_id: ${canonical(entry2.reviewer_id)}`,
-          `reviewer_focus: ${canonical(entry2.reviewer_focus)}`,
-          `routing_role: ${canonical(entry2.routing_role)}`,
-          `criterion_id: ${canonical(entry2.criterion_id)}`
-        );
-        if (entry2.disposition_evidence !== void 0) {
-          lines.push(prose("disposition_evidence", entry2.disposition_evidence));
-        }
-        if (entry2.reviewer_focus === "tests") {
-          lines.push(
-            prose("required_behavior_or_risk_boundary", entry2.required_behavior_or_risk_boundary),
-            prose("coverage_or_oracle_problem", entry2.coverage_or_oracle_problem),
-            prose("consequence", entry2.consequence),
-            prose("proposed_verification_change", entry2.proposed_verification_change)
-          );
-        }
-      }
-      if ("claim_type" in entry2) {
-        lines.push(`[${entry2.claim_type}: ${entry2.confidence}]`, prose("falsifier", entry2.falsifier));
-      } else if ("severity" in entry2) {
-        lines.push(`severity: ${canonical(entry2.severity)}`, `blocking: ${canonical(entry2.blocking)}`);
-      }
-      if (entry2.summary !== void 0) lines.push(prose("summary", entry2.summary));
-      if (entry2.suggested_resolution !== void 0) lines.push(prose("suggested_resolution", entry2.suggested_resolution));
-    }
-  }
-  return linesToBytes(lines);
-}
-function renderAdjudicationEvidence(value) {
-  const evidence = value.evidence;
-  const authenticated = authenticQualifiedEvidence(value, "adjudication", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "adjudication", assurance: evidence.assurance });
-  if (!authenticated) throw new TypeError("authenticated adjudication evidence is required");
-  const lines = ["# ArchFlow Adjudication Evidence", ...metadata([
-    ["schema_version", evidence.schema_version],
-    ["task_id", evidence.task_id],
-    ["phase_instance", evidence.phase_instance],
-    ["step", evidence.step],
-    ["subject_digest", evidence.subject_digest],
-    ["input_fingerprint", evidence.input_fingerprint],
-    ["evidence_digest", value.evidence_digest],
-    ["pinned_constitution_digest", evidence.pinned_constitution_digest],
-    ...evidence.schema_version === "1" ? [["approved_upstream_digests", evidence.approved_upstream_digests], ["drift", evidence.drift]] : [],
-    ["source_review_envelope_digest", evidence.source_review_envelope_digest],
-    ["constitution", evidence.constitution],
-    ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
-    ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
-    ...provenanceMetadata(evidence)
-  ]), "", "## Constitution Findings"];
-  for (const finding of evidence.rule_findings) {
-    lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence));
-  }
-  if (evidence.schema_version === "1") {
-    lines.push("", "## Drift Findings");
-    for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
-  }
-  if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
-  if (evidence.assurance === "server-attested" && evidence.route_source !== void 0) lines.push(...renderRouteSource(evidence.route_source));
-  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
-  return linesToBytes(lines);
-}
-
-// src/state/produce-subject.ts
-import { readFile as readFile7 } from "node:fs/promises";
-
 // src/state/gate-core.ts
 import { constants as fsConstants3 } from "node:fs";
-import { isDeepStrictEqual as isDeepStrictEqual8 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
 
 // src/state/snapshots.ts
-import { chmod as chmod3, lstat as lstat7, readlink as readlink3 } from "node:fs/promises";
+import { chmod as chmod3, lstat as lstat6, readlink as readlink2 } from "node:fs/promises";
 import { resolve as resolvePath5 } from "node:path";
-import { isDeepStrictEqual as isDeepStrictEqual7 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual5 } from "node:util";
+
+// src/contracts/secret-scan.ts
+var detectorId = safeIdV1Schema;
+var pathClass2 = external_exports.enum(PATH_CLASSES);
+var position = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+var secretFindingV1Schema = external_exports.object({
+  detector_id: detectorId,
+  path_class: pathClass2,
+  virtual_path: repositoryPathClaimV1Schema,
+  line: position,
+  column: position
+}).strict();
+var secretScanResultV1Schema = external_exports.discriminatedUnion("outcome", [
+  external_exports.object({
+    schema_version: external_exports.literal("1"),
+    outcome: external_exports.literal("clean"),
+    detector_set_id: detectorId,
+    scanned_paths: external_exports.array(repositoryPathClaimV1Schema)
+  }).strict(),
+  external_exports.object({
+    schema_version: external_exports.literal("1"),
+    outcome: external_exports.literal("detected"),
+    detector_set_id: detectorId,
+    findings: external_exports.array(secretFindingV1Schema)
+  }).strict(),
+  external_exports.object({
+    schema_version: external_exports.literal("1"),
+    outcome: external_exports.literal("unavailable"),
+    reason: safeCodeV1Schema
+  }).strict()
+]);
+function parseSecretScanResult(value) {
+  assertPlainJson(value, "secret scan result");
+  return secretScanResultV1Schema.parse(value);
+}
+
+// src/contracts/durable-implementation-output.ts
+var sha256Digest2 = sha256DigestV1Schema;
+var safeInteger4 = safeIntegerV1Schema;
+var parentDocumentRefV1Schema = external_exports.object({
+  document_path: taskPathClaimV1Schema,
+  content_digest: sha256Digest2,
+  role: external_exports.enum(["prd", "design", "phase-design", "impl-notes"])
+}).strict();
+var rawGitPathMirror = external_exports.string();
+var undeclaredChangeReportV1Schema = external_exports.object({
+  scanned: external_exports.boolean(),
+  undeclared_paths: external_exports.array(rawGitPathMirror).refine((items) => isSortedUniqueBy(items), "undeclared_paths must be sorted with no duplicates"),
+  unrepresentable_count: safeInteger4
+}).strict();
+var verificationEvidenceV1Schema = external_exports.object({
+  transcript_digest: sha256Digest2,
+  byte_count: safeInteger4
+}).strict();
+var implementationRepositorySectionV1Schema = external_exports.object({
+  repository: durableRepositoryNameV1Schema,
+  repository_identity_digest: sha256Digest2,
+  base_commit: gitOidV1Schema,
+  index_identity_digest: sha256Digest2,
+  worktree_identity_digest: sha256Digest2,
+  outputs: external_exports.array(outputEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
+  diff_digest: sha256Digest2,
+  snapshot_digest: sha256Digest2,
+  restore_targets: external_exports.array(repositoryPathClaimV1Schema).refine((items) => isSortedUniqueBy(items), "restore_targets must be sorted with no duplicates"),
+  accounting: snapshotAccountingV1Schema,
+  undeclared_changes: undeclaredChangeReportV1Schema,
+  declared_inputs: external_exports.array(external_exports.object({
+    input_id: safeIdV1Schema,
+    path: repositoryPathClaimV1Schema,
+    digest: sha256Digest2
+  }).strict()).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates")
+}).strict();
+var implementationOutputV1Schema = external_exports.object({
+  editorial_predecessor: editorialPredecessorRefV1Schema.optional(),
+  review_revision: reviewRevisionDeclarationSchema.optional(),
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("implementation-output"),
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  base_commit: gitOidV1Schema,
+  index_identity_digest: sha256Digest2,
+  worktree_identity_digest: sha256Digest2,
+  outputs: external_exports.array(outputEntryV1Schema).min(1).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
+  parent_documents: external_exports.array(parentDocumentRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("document_path")), "parent_documents must be sorted by document_path with no duplicates"),
+  diff_digest: sha256Digest2,
+  snapshot_digest: sha256Digest2,
+  restore_targets: external_exports.array(repositoryPathClaimV1Schema).refine((items) => isSortedUniqueBy(items), "restore_targets must be sorted with no duplicates"),
+  accounting: snapshotAccountingV1Schema,
+  secret_scan: secretScanResultV1Schema,
+  undeclared_changes: undeclaredChangeReportV1Schema,
+  verification_evidence: verificationEvidenceV1Schema.optional(),
+  declared_inputs: external_exports.array(declaredInputRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("input_id")), "declared_inputs must be sorted by input_id with no duplicates"),
+  input_fingerprint: sha256Digest2,
+  constitution_edit_gate_id: pathSafeIdV1Schema.optional(),
+  secondary_repositories: external_exports.array(implementationRepositorySectionV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_repositories must be sorted by repository with no duplicates").optional()
+}).strict();
+function parseImplementationOutput(value) {
+  assertPlainJson(value, "implementation output");
+  return implementationOutputV1Schema.parse(value);
+}
+
+// src/contracts/durable-result-manifest.ts
+var reviewEvidenceArtifactV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("review-evidence"),
+  evidence: reviewEvidenceSchema
+}).strict();
+var triageArtifactV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("triage"),
+  evidence: triageCandidateSchema
+}).strict();
+var adjudicationEvidenceArtifactV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("adjudication-evidence"),
+  evidence: adjudicationEvidenceSchema
+}).strict();
+var resultSourceArtifactV1Schema = external_exports.union([
+  documentArtifactV1Schema,
+  implementationOutputV1Schema,
+  reviewEvidenceArtifactV1Schema,
+  triageArtifactV1Schema,
+  adjudicationEvidenceArtifactV1Schema
+]);
+var secondaryProjectionSetV1Schema = external_exports.object({
+  repository: durableRepositoryNameV1Schema,
+  repository_identity_digest: sha256DigestV1Schema,
+  projections: external_exports.array(projectionDigestRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "projections must be sorted by path with no duplicates")
+}).strict().superRefine((section, context2) => {
+  if (section.projections.some((projection) => projection.repository !== section.repository)) {
+    context2.addIssue({ code: "custom", path: ["projections"], message: "secondary projection repositories must match their wrapper" });
+  }
+});
+var resultManifestShape = {
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256DigestV1Schema,
+  result_id: safeIdV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  artifact_digest: sha256DigestV1Schema,
+  source_artifact: resultSourceArtifactV1Schema,
+  input_fingerprint: sha256DigestV1Schema,
+  snapshot_digest: sha256DigestV1Schema,
+  outputs: external_exports.array(outputEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "outputs must be sorted by path with no duplicates"),
+  projections: external_exports.array(projectionDigestRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("path")), "projections must be sorted by path with no duplicates"),
+  secondary_projections: external_exports.array(secondaryProjectionSetV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_projections must be sorted by repository with no duplicates").optional(),
+  accounting: snapshotAccountingV1Schema,
+  secret_scan: secretScanResultV1Schema
+};
+var resultManifestV1Schema = external_exports.object(resultManifestShape).strict();
+function parseResultManifest(value) {
+  assertPlainJson(value, "result manifest");
+  return resultManifestV1Schema.parse(value);
+}
+var structuralEvidenceBodySchema = external_exports.object({
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  input_fingerprint: sha256DigestV1Schema
+}).passthrough();
+var structuralEvidenceArtifactSchema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.enum(["review-evidence", "triage", "adjudication-evidence"]),
+  evidence: structuralEvidenceBodySchema
+}).strict();
+var resultManifestStructureSchema = external_exports.object({
+  ...resultManifestShape,
+  source_artifact: external_exports.union([
+    documentArtifactV1Schema,
+    implementationOutputV1Schema,
+    structuralEvidenceArtifactSchema
+  ])
+}).strict();
+function parseResultManifestStructure(value) {
+  assertPlainJson(value, "result manifest");
+  return resultManifestStructureSchema.parse(value);
+}
 
 // src/state/implementation-manifest.ts
-import { lstat as lstat6, readFile as readFile6, readlink as readlink2 } from "node:fs/promises";
+import { lstat as lstat5, readFile as readFile4, readlink } from "node:fs/promises";
 import { resolve as resolvePath4 } from "node:path";
-import { isDeepStrictEqual as isDeepStrictEqual6 } from "node:util";
+import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
+
+// src/contracts/durable-state.ts
+var settlementRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
+var STEP_STATUSES = ["running", "succeeded", "failed"];
+var TERMINAL_STATES = ["complete", "abandoned"];
+var HUMAN_REVISION_CLASSIFICATIONS = ["simple", "significant"];
+var HUMAN_REVISION_GATE_KINDS = [
+  "artifact-approval",
+  "design-approval",
+  "constitution-review",
+  "material-drift",
+  "attempts-exhausted",
+  "commit-authorization",
+  "migration-audit"
+];
+function compareRuleSettlements(left, right) {
+  const phase3 = left.phase_instance < right.phase_instance ? -1 : left.phase_instance > right.phase_instance ? 1 : 0;
+  if (phase3 !== 0) return phase3;
+  const digest12 = left.subject_digest < right.subject_digest ? -1 : left.subject_digest > right.subject_digest ? 1 : 0;
+  if (digest12 !== 0) return digest12;
+  return left.settled_at_revision - right.settled_at_revision;
+}
+function isSortedUniqueRuleSettlements(items) {
+  return items.every((item, index) => index === 0 || compareRuleSettlements(items[index - 1], item) < 0);
+}
+var sha256Digest3 = sha256DigestV1Schema;
+var stepStatusV1Schema = external_exports.enum(STEP_STATUSES);
+var gateKindV1Schema = external_exports.enum(GATE_KINDS);
+var positiveSafeInteger = external_exports.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+var authoritativeResultRefV1Schema = external_exports.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  result_digest: sha256Digest3,
+  result_id: safeIdV1Schema,
+  input_fingerprint: sha256Digest3
+}).strict();
+var approvalRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: gateKindV1Schema,
+  subject_digest: sha256Digest3,
+  decision_digest: sha256Digest3,
+  resolved_at_revision: positiveSafeInteger
+}).strict();
+var waiverRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  rule_id: safeIdV1Schema,
+  rule_version: positiveSafeInteger,
+  subject_digest: sha256Digest3,
+  scope: external_exports.object({
+    operation: external_exports.enum(["review-trigger", "adjudication-failure"]),
+    boundary: external_exports.enum(["subject", "phase", "task"])
+  }).strict(),
+  granted: external_exports.boolean(),
+  expires: external_exports.literal("task-complete"),
+  granted_at_revision: positiveSafeInteger
+}).strict();
+var openGateRefV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: gateKindV1Schema,
+  subject_digest: sha256Digest3,
+  context_digest: sha256Digest3,
+  frozen_state_digest: sha256Digest3,
+  waiver_origin_gate_id: pathSafeIdV1Schema.optional(),
+  opened_at_revision: positiveSafeInteger
+}).strict();
+var humanRevisionClassificationV1Schema = external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS);
+var humanRevisionOverrideV1Schema = external_exports.object({
+  agent_classification: humanRevisionClassificationV1Schema,
+  rationale: external_exports.string().min(1).max(4096).regex(/\S/u)
+}).strict();
+var humanRevisionEvidenceV1Schema = external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "human revision evidence must be sorted by (phase_instance, step) with no duplicates").refine(
+  (items) => items.every((reference) => reference.step === "counter_review" || reference.step === "adjudicate" || reference.step === "triage"),
+  "human revision evidence must contain review, constitution, or triage results"
+);
+var pendingHumanRevisionV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: external_exports.enum(HUMAN_REVISION_GATE_KINDS),
+  predecessor_subject_digest: sha256Digest3,
+  predecessor_input_fingerprint: sha256Digest3,
+  requested_at_revision: positiveSafeInteger,
+  attempt: positiveSafeInteger,
+  evidence: humanRevisionEvidenceV1Schema
+}).strict();
+var humanRevisionRecordV1Schema = external_exports.object({
+  phase_instance: phaseInstanceIdV1Schema,
+  gate_id: pathSafeIdV1Schema,
+  gate_kind: external_exports.enum(HUMAN_REVISION_GATE_KINDS),
+  predecessor_subject_digest: sha256Digest3,
+  predecessor_input_fingerprint: sha256Digest3,
+  resulting_subject_digest: sha256Digest3,
+  resulting_result_digest: sha256Digest3,
+  classification: humanRevisionClassificationV1Schema,
+  rationale: external_exports.string().min(1).max(4096).regex(/\S/u),
+  user_override: humanRevisionOverrideV1Schema.optional(),
+  previous_attempt: positiveSafeInteger,
+  resulting_attempt: positiveSafeInteger,
+  evidence: humanRevisionEvidenceV1Schema
+}).strict().superRefine((record3, context2) => {
+  if (record3.user_override?.agent_classification === record3.classification) {
+    context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
+  }
+  if (record3.classification === "simple" && record3.previous_attempt !== record3.resulting_attempt) {
+    context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a simple revision preserves its attempt" });
+  }
+  if (record3.classification === "significant" && record3.resulting_attempt !== 1) {
+    context2.addIssue({ code: "custom", path: ["resulting_attempt"], message: "a significant revision resets to attempt 1" });
+  }
+  if (record3.predecessor_subject_digest === record3.resulting_subject_digest) {
+    context2.addIssue({ code: "custom", path: ["resulting_subject_digest"], message: "a human revision must change the subject" });
+  }
+  if (record3.evidence.some((reference) => reference.phase_instance !== record3.phase_instance)) {
+    context2.addIssue({ code: "custom", path: ["evidence"], message: "human revision evidence must belong to its phase" });
+  }
+});
+var planningRestartConnectedHostProvenanceV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  actor_class: external_exports.literal("human"),
+  assurance: external_exports.literal("declared-local-trace"),
+  channel: external_exports.literal("connected-host"),
+  decision_event_id: safeIdV1Schema,
+  connection_id: safeIdV1Schema,
+  request_id_digest: sha256Digest3,
+  recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 })
+}).strict();
+var planningRestartLocalProvenanceV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  actor_class: external_exports.literal("human"),
+  assurance: external_exports.literal("declared-local-trace"),
+  channel: external_exports.literal("archflow-local"),
+  decision_event_id: safeIdV1Schema,
+  helper_invocation_id: safeIdV1Schema,
+  recorded_at: external_exports.string().datetime({ offset: false, local: false, precision: 3 })
+}).strict();
+var planningRestartServerAttestedProvenanceV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  actor_class: external_exports.literal("human"),
+  assurance: external_exports.literal("connected-request-trace"),
+  channel: external_exports.literal("connected-host"),
+  connection_id: safeIdV1Schema,
+  invocation_id: safeIdV1Schema,
+  request_id_digest: sha256Digest3,
+  request_digest: sha256Digest3
+}).strict();
+var planningRestartHumanProvenanceV1Schema = external_exports.union([
+  planningRestartConnectedHostProvenanceV1Schema,
+  planningRestartLocalProvenanceV1Schema,
+  planningRestartServerAttestedProvenanceV1Schema
+]);
+var adoptedProjectionRefV1Schema = external_exports.object({
+  repository: settlementRepositoryNameV1Schema.optional(),
+  path: repositoryPathClaimV1Schema,
+  content_digest: sha256Digest3
+}).strict();
+var repositoryProjectionKey = (value) => {
+  const item = value;
+  return `${item.repository ?? ""}\0${item.path}`;
+};
+var adoptedAbsenceKey = (value) => typeof value === "string" ? `\0${value}` : repositoryProjectionKey(value);
+var baselineAdoptionRecordV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  adopted_at_revision: positiveSafeInteger,
+  adopted_projections: external_exports.array(adoptedProjectionRefV1Schema).refine((items) => isSortedUniqueBy(items, repositoryProjectionKey), "adopted projections must be sorted by repository and path with no duplicates"),
+  adopted_absences: external_exports.array(external_exports.union([
+    repositoryPathClaimV1Schema,
+    external_exports.object({ repository: settlementRepositoryNameV1Schema, path: repositoryPathClaimV1Schema }).strict()
+  ])).optional().refine((items) => isSortedUniqueBy(items, adoptedAbsenceKey), "adopted absences must be sorted by repository and path with no duplicates")
+}).strict();
+var phaseImplInstanceV1Schema = external_exports.string().regex(/^phase-impl-[1-9][0-9]*$/u);
+var archivedHumanDecisionTimeV1Schema = external_exports.string().datetime({ offset: false, local: false, precision: 3 });
+var boundedReasonV1Schema = external_exports.string().min(1).max(4096).regex(/\S/u);
+var requestDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1].localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates");
+var durableDisplacedValidationsV1Schema = external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1] < item), "displaced validations must be ordinal-sorted with no duplicates");
+var durableAcceptedOccurrencesV1Schema = external_exports.array(external_exports.object({
+  review_evidence_digest: sha256Digest3,
+  finding_id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
+}).strict()).min(1).refine((items) => items.every((item, index) => {
+  if (index === 0) return true;
+  const previous = items[index - 1];
+  return previous.review_evidence_digest < item.review_evidence_digest || previous.review_evidence_digest === item.review_evidence_digest && previous.finding_id < item.finding_id;
+}), "accepted occurrences must be ordinal-sorted with no duplicates");
+var pendingValidationOverrideV1Schema = external_exports.object({
+  phase_instance: phaseImplInstanceV1Schema,
+  input_fingerprint: sha256Digest3,
+  governing_phase_design_digest: sha256Digest3,
+  displaced_validations: requestDisplacedValidationsV1Schema,
+  producer_reason: boundedReasonV1Schema,
+  request_digest: sha256Digest3,
+  request_revision: positiveSafeInteger
+}).strict();
+var validationOverrideRecordV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  decision_digest: sha256Digest3,
+  phase_instance: phaseImplInstanceV1Schema,
+  input_fingerprint: sha256Digest3,
+  governing_phase_design_digest: sha256Digest3,
+  subject_digest: sha256Digest3,
+  displaced_validations: durableDisplacedValidationsV1Schema,
+  human_reason: boundedReasonV1Schema,
+  decided_at: archivedHumanDecisionTimeV1Schema,
+  granted_at_revision: positiveSafeInteger
+}).strict();
+var reviewPushThroughRecordV1Schema = external_exports.object({
+  gate_id: pathSafeIdV1Schema,
+  decision_digest: sha256Digest3,
+  phase_instance: phaseInstanceIdV1Schema,
+  subject_digest: sha256Digest3,
+  current_evidence_set_digest: sha256Digest3,
+  triage_result_digest: sha256Digest3,
+  accepted_occurrences: durableAcceptedOccurrencesV1Schema,
+  attempt: positiveSafeInteger,
+  human_reason: boundedReasonV1Schema,
+  decided_at: archivedHumanDecisionTimeV1Schema,
+  resolved_at_revision: positiveSafeInteger
+}).strict();
+var ruleSettlementMatchV1Schema = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ kind: external_exports.literal("subject"), subject: workflowSubjectV1Schema }).strict(),
+  external_exports.object({
+    kind: external_exports.literal("content"),
+    paths: external_exports.array(external_exports.string()).refine((items) => isSortedUniqueBy(items), "content match paths must be sorted with no duplicates"),
+    secondary_paths: external_exports.array(external_exports.object({
+      repository: settlementRepositoryNameV1Schema,
+      paths: external_exports.array(external_exports.string()).min(1).refine((items) => isSortedUniqueBy(items), "secondary content paths must be sorted with no duplicates")
+    }).strict()).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_paths must be sorted by repository with no duplicates").optional()
+  }).strict().superRefine((match, context2) => {
+    if (match.paths.length === 0 && (match.secondary_paths?.length ?? 0) === 0) {
+      context2.addIssue({ code: "custom", message: "content match must contain at least one primary or secondary path" });
+    }
+  })
+]);
+var repositoryCommitMilestoneV1Schema = external_exports.object({
+  repository: settlementRepositoryNameV1Schema,
+  repository_identity_digest: sha256Digest3,
+  baseline_commit: gitOidV1Schema,
+  target_ref: external_exports.string().min(1).max(4096).regex(/\S/u),
+  target_head: gitOidV1Schema,
+  paths: external_exports.array(repositoryPathClaimV1Schema).min(1).refine((items) => isSortedUniqueBy(items), "paths must be sorted with no duplicates"),
+  commit_message: external_exports.string().min(1).max(4096).regex(/\S/u),
+  diff_digest: sha256Digest3,
+  snapshot_digest: sha256Digest3
+}).strict();
+var ruleSettlementConclusionV1Schema = external_exports.discriminatedUnion("wait", [
+  external_exports.object({ wait: external_exports.literal(false), match: external_exports.literal(null) }).strict(),
+  external_exports.object({ wait: external_exports.literal(true), match: ruleSettlementMatchV1Schema }).strict()
+]);
+var ruleSettlementV1Schema = external_exports.object({
+  task_id: taskSlugV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  subject_digest: sha256Digest3,
+  conclusion: ruleSettlementConclusionV1Schema,
+  config_digest: sha256Digest3,
+  milestone_baseline_commit: gitOidV1Schema.optional(),
+  milestone_target_ref: external_exports.string().min(1).max(4096).regex(/\S/u).optional(),
+  milestone_target_head: gitOidV1Schema.optional(),
+  secondary_milestones: external_exports.array(repositoryCommitMilestoneV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("repository")), "secondary_milestones must be sorted by repository with no duplicates").optional(),
+  settled_at_revision: positiveSafeInteger
+}).strict().superRefine((settlement, context2) => {
+  if (settlement.milestone_target_ref === void 0 !== (settlement.milestone_target_head === void 0)) {
+    context2.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target ref and head must be written together" });
+  }
+  if (settlement.milestone_target_ref !== void 0 && settlement.milestone_baseline_commit === void 0) {
+    context2.addIssue({ code: "custom", path: ["milestone_target_ref"], message: "milestone target facts require a milestone baseline" });
+  }
+  const kind = decodePhaseInstance(settlement.phase_instance).kind;
+  if (settlement.secondary_milestones !== void 0 && (kind !== "phase-impl" || settlement.conclusion.wait)) {
+    context2.addIssue({ code: "custom", path: ["secondary_milestones"], message: "secondary milestones are allowed only on a phase-implementation wait:false settlement" });
+  }
+  if (settlement.milestone_baseline_commit !== void 0 && (settlement.conclusion.wait || kind !== "prd" && kind !== "design" && kind !== "phase-design" && kind !== "phase-impl")) {
+    context2.addIssue({
+      code: "custom",
+      path: ["milestone_baseline_commit"],
+      message: "milestone baseline is allowed only on a PRD, design, phase-design, or phase-implementation wait:false settlement"
+    });
+  }
+});
+var milestoneRecoveryRecordV1Schema = external_exports.object({
+  recovery_id: pathSafeIdV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  cause: external_exports.enum(["milestone-proof-missing", "governing-document-drift"]),
+  target_ref: external_exports.string().min(1).max(4096).regex(/\S/u),
+  target_head: gitOidV1Schema,
+  subject_digest: sha256Digest3,
+  recovered_at_revision: positiveSafeInteger,
+  superseded_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
+  cleared_waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
+  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional()
+}).strict();
+var planningRestartRecordV1Schema = external_exports.object({
+  restart_id: pathSafeIdV1Schema,
+  source_phase_instance: phaseInstanceIdV1Schema,
+  target_phase_instance: phaseInstanceIdV1Schema,
+  reason: external_exports.string().min(1).max(4096).regex(/\S/u),
+  restarted_at_revision: positiveSafeInteger,
+  superseded_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "superseded_results must be sorted by (phase_instance, step) with no duplicates"),
+  cleared_waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "cleared_waivers must be sorted by gate_id with no duplicates"),
+  cleared_pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  human_provenance: planningRestartHumanProvenanceV1Schema
+}).strict().superRefine((record3, context2) => {
+  if (!isStrictlyEarlierPlanningPhase(record3.target_phase_instance, record3.source_phase_instance)) {
+    context2.addIssue({ code: "custom", path: ["target_phase_instance"], message: "restart target must be a strictly earlier planning phase" });
+  }
+});
+var lastTransitionOutcomeV1Schema = external_exports.json();
+var lastTransitionV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  tool: external_exports.enum(TOOL_NAMES),
+  operation: safeCodeV1Schema,
+  intent_id: pathSafeIdV1Schema,
+  request_digest: sha256Digest3,
+  input_fingerprint: sha256Digest3,
+  result_id: safeIdV1Schema,
+  outcome: lastTransitionOutcomeV1Schema,
+  outcome_digest: sha256Digest3,
+  prior_revision: safeIntegerV1Schema,
+  resulting_revision: positiveSafeInteger
+}).strict();
+var taskConfigRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+var taskConfigSingleOrArrayRoutesV1Schema = external_exports.union([
+  taskConfigRouteV1Schema,
+  external_exports.array(taskConfigRouteV1Schema).min(1)
+]);
+var taskConfigRolesV1Schema = configRolesSchema.clone({
+  ...configRolesSchema.def,
+  shape: {
+    producer: taskConfigRouteV1Schema.optional(),
+    "counter-reviewer": taskConfigSingleOrArrayRoutesV1Schema.optional(),
+    "counter-reviewers": external_exports.array(taskConfigRouteV1Schema).min(1).optional(),
+    "test-reviewer": taskConfigRouteV1Schema.optional(),
+    "effort-reviewer": taskConfigRouteV1Schema.optional(),
+    adjudicator: taskConfigRouteV1Schema.optional()
+  }
+});
+var taskConfigProducersV1Schema = producersSchema.clone({
+  ...producersSchema.def,
+  shape: {
+    claude: taskConfigRolesV1Schema.optional(),
+    codex: taskConfigRolesV1Schema.optional(),
+    antigravity: taskConfigRolesV1Schema.optional()
+  }
+});
+var taskConfigOverridesV1Schema = configOverridesSchema.clone({
+  ...configOverridesSchema.def,
+  shape: Object.fromEntries(
+    Object.entries(configOverridesSchema.shape).map(([phase3]) => [phase3, taskConfigRolesV1Schema.optional()])
+  )
+});
+var taskConfigApprovalRulesV1Schema = approvalRulesSchema.clone(approvalRulesSchema.def);
+var taskConfigRepositoryModeV1Schema = repositoryModeV1Schema.clone(repositoryModeV1Schema.def);
+var taskConfigRepositoryNameV1Schema = repositoryNameV1Schema.clone(repositoryNameV1Schema.def);
+var taskConfigRepositoryDeclarationV1Schema = repositoryDeclarationV1Schema.clone({
+  ...repositoryDeclarationV1Schema.def,
+  shape: {
+    ...repositoryDeclarationV1Schema.shape,
+    mode: taskConfigRepositoryModeV1Schema.optional()
+  }
+});
+var taskConfigRepositoriesV1Schema = repositoriesV1Schema.clone({
+  ...repositoriesV1Schema.def,
+  keyType: taskConfigRepositoryNameV1Schema,
+  valueType: taskConfigRepositoryDeclarationV1Schema
+});
+var taskConfigSnapshotV1Schema = configV1Schema.clone({
+  ...configV1Schema.def,
+  shape: {
+    ...configV1Schema.shape,
+    roles: taskConfigRolesV1Schema,
+    producers: taskConfigProducersV1Schema.optional(),
+    overrides: taskConfigOverridesV1Schema.optional(),
+    approval_rules: taskConfigApprovalRulesV1Schema.optional(),
+    repositories: taskConfigRepositoriesV1Schema.optional()
+  }
+});
+var lastSeenRepositoryBindingV1Schema = external_exports.object({
+  name: external_exports.union([external_exports.literal("primary"), taskConfigRepositoryNameV1Schema]),
+  declared_path: external_exports.string().optional(),
+  repository_identity_digest: sha256Digest3
+}).strict();
+var repositoryBindingOrderKey = (value) => {
+  if (typeof value !== "object" || value === null) return String(value);
+  const descriptor = Object.getOwnPropertyDescriptor(value, "name");
+  const name = String(descriptor !== void 0 && "value" in descriptor ? descriptor.value : void 0);
+  return name === "primary" ? "" : name;
+};
+var taskStateV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256Digest3,
+  revision: positiveSafeInteger,
+  phase_instance: phaseInstanceIdV1Schema,
+  step: external_exports.enum(PIPELINE_STEPS),
+  status: stepStatusV1Schema,
+  attempt: positiveSafeInteger,
+  input_fingerprint: sha256Digest3,
+  initialization_digest: sha256Digest3,
+  config_digest: sha256Digest3,
+  workflow_digest: sha256Digest3,
+  constitution_digest: sha256Digest3,
+  policy_base_commit: gitOidV1Schema,
+  authoritative_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "step"])), "authoritative_results must be sorted by (phase_instance, step) with no duplicates"),
+  approvals: external_exports.array(approvalRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "approvals must be sorted by gate_id with no duplicates"),
+  waivers: external_exports.array(waiverRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "waivers must be sorted by gate_id with no duplicates"),
+  planned_final_phase: positiveSafeInteger.optional(),
+  open_gate: openGateRefV1Schema.optional(),
+  pending_human_revision: pendingHumanRevisionV1Schema.optional(),
+  pending_validation_override: pendingValidationOverrideV1Schema.optional(),
+  superseded_production_results: external_exports.array(authoritativeResultRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("result_digest")), "superseded production results must be sorted by result_digest with no duplicates").refine((items) => items.every((item) => item.step === "produce" && item.phase_instance.startsWith("phase-impl-")), "superseded production results must reference implementation production").optional(),
+  human_revision_history: external_exports.array(humanRevisionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "human_revision_history must be sorted by gate_id with no duplicates").optional(),
+  restart_history: external_exports.array(planningRestartRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("restart_id")), "restart_history must be sorted by restart_id with no duplicates").optional(),
+  milestone_recovery_history: external_exports.array(milestoneRecoveryRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("recovery_id")), "milestone recovery history must be sorted by recovery_id with no duplicates").optional(),
+  baseline_adoptions: external_exports.array(baselineAdoptionRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("gate_id")), "baseline_adoptions must be sorted by gate_id with no duplicates").optional(),
+  validation_overrides: external_exports.array(validationOverrideRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "gate_id"])), "validation_overrides must be sorted by (phase_instance, gate_id) with no duplicates").refine((items) => new Set(items.map((item) => item.gate_id)).size === items.length, "validation_overrides must contain unique gate IDs").optional(),
+  review_push_throughs: external_exports.array(reviewPushThroughRecordV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey(["phase_instance", "gate_id"])), "review_push_throughs must be sorted by (phase_instance, gate_id) with no duplicates").refine((items) => new Set(items.map((item) => item.gate_id)).size === items.length, "review_push_throughs must contain unique gate IDs").optional(),
+  rule_settlements: external_exports.array(ruleSettlementV1Schema).refine(isSortedUniqueRuleSettlements, "rule_settlements must be sorted by (phase_instance, subject_digest, settled_at_revision) with no duplicates").optional(),
+  last_seen_config: taskConfigSnapshotV1Schema.optional(),
+  last_seen_repository_bindings: external_exports.array(lastSeenRepositoryBindingV1Schema).refine(
+    (items) => isSortedUniqueBy(items, repositoryBindingOrderKey),
+    "last_seen_repository_bindings must place primary first, followed by ordinal unique names"
+  ).optional(),
+  last_transition: lastTransitionV1Schema.optional(),
+  terminal: external_exports.enum(TERMINAL_STATES).optional()
+}).strict().superRefine((state, context2) => {
+  state.restart_history?.forEach((restart, index) => {
+    if (restart.restarted_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["restart_history", index, "restarted_at_revision"], message: "restart revision cannot exceed the current state revision" });
+    }
+  });
+  state.milestone_recovery_history?.forEach((recovery, index) => {
+    if (recovery.recovered_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["milestone_recovery_history", index, "recovered_at_revision"], message: "milestone recovery revision cannot exceed the current state revision" });
+    }
+  });
+  state.baseline_adoptions?.forEach((adoption, index) => {
+    if (adoption.adopted_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["baseline_adoptions", index, "adopted_at_revision"], message: "baseline adoption revision cannot exceed the current state revision" });
+    }
+  });
+  state.validation_overrides?.forEach((record3, index) => {
+    if (record3.granted_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["validation_overrides", index, "granted_at_revision"], message: "validation override revision cannot exceed the current state revision" });
+    }
+  });
+  state.review_push_throughs?.forEach((record3, index) => {
+    if (record3.resolved_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["review_push_throughs", index, "resolved_at_revision"], message: "review push-through revision cannot exceed the current state revision" });
+    }
+    const approval = state.approvals.find((candidate) => candidate.gate_id === record3.gate_id);
+    if (approval === void 0 || approval.gate_kind !== "attempts-exhausted" || approval.subject_digest !== record3.subject_digest || approval.decision_digest !== record3.decision_digest || approval.resolved_at_revision !== record3.resolved_at_revision) {
+      context2.addIssue({ code: "custom", path: ["review_push_throughs", index], message: "review push-through must match its attempts-exhausted approval" });
+    }
+  });
+  state.approvals.forEach((approval, index) => {
+    if (approval.gate_kind === "attempts-exhausted" && !(state.review_push_throughs ?? []).some((record3) => record3.gate_id === approval.gate_id)) {
+      context2.addIssue({ code: "custom", path: ["approvals", index], message: "attempts-exhausted advance approval requires its review push-through record" });
+    }
+  });
+  state.rule_settlements?.forEach((settlement, index) => {
+    if (settlement.settled_at_revision > state.revision) {
+      context2.addIssue({ code: "custom", path: ["rule_settlements", index, "settled_at_revision"], message: "rule settlement revision cannot exceed the current state revision" });
+    }
+  });
+  const pending = state.pending_human_revision;
+  if (pending !== void 0 && (state.open_gate !== void 0 || state.terminal !== void 0 || state.step !== "produce" || state.status === "succeeded" || state.attempt !== pending.attempt || pending.requested_at_revision > state.revision || pending.evidence.some((reference) => reference.phase_instance !== state.phase_instance))) {
+    context2.addIssue({ code: "custom", path: ["pending_human_revision"], message: "pending human revision does not match its active produce state" });
+  }
+  const pendingValidation = state.pending_validation_override;
+  let pendingValidationSubject;
+  if (pendingValidation !== void 0) {
+    try {
+      pendingValidationSubject = validationOverrideSubjectDigest({
+        task_id: state.task_id,
+        phase_instance: pendingValidation.phase_instance,
+        input_fingerprint: pendingValidation.input_fingerprint,
+        governing_phase_design_digest: pendingValidation.governing_phase_design_digest,
+        displaced_validations: pendingValidation.displaced_validations
+      });
+    } catch {
+    }
+  }
+  if (pendingValidation !== void 0 && (state.terminal !== void 0 || state.step !== "produce" || state.status !== "failed" || pendingValidation.phase_instance !== state.phase_instance || pendingValidation.input_fingerprint !== state.input_fingerprint || pendingValidation.request_revision > state.revision || state.open_gate === void 0 && pendingValidation.request_revision !== state.revision || state.open_gate !== void 0 && (state.open_gate.gate_kind !== "validation-override" || state.open_gate.subject_digest !== pendingValidationSubject || state.open_gate.opened_at_revision !== pendingValidation.request_revision + 1))) {
+    context2.addIssue({ code: "custom", path: ["pending_validation_override"], message: "pending validation override does not match its failed phase implementation state" });
+  }
+  if (state.open_gate?.gate_kind === "validation-override" && pendingValidation === void 0) {
+    context2.addIssue({ code: "custom", path: ["open_gate"], message: "an open validation override gate requires its pending request" });
+  }
+});
 
 // src/repository/index-entries.ts
 var LS_FILES_OPERATION = "git-ls-files";
@@ -66876,10 +65161,10 @@ var TREE_MODE_ILLEGAL = "archflow-tree-mode-illegal";
 var PATH_MISMATCH = "git-path-mismatch";
 var ARCHFLOW_PREFIX = ".archflow/";
 var GITLINK_MODE = "160000";
-function ok6(value) {
+function ok4(value) {
   return Object.freeze({ schema_version: "1", ok: true, value });
 }
-function fail10(error51) {
+function fail9(error51) {
   return Object.freeze({ schema_version: "1", ok: false, error: error51 });
 }
 function taskInvalid(context2, issueCode) {
@@ -66899,7 +65184,7 @@ function parseStage(value) {
   return value === "0" ? 0 : value === "1" ? 1 : value === "2" ? 2 : value === "3" ? 3 : void 0;
 }
 async function readIndexEntries(runner, paths, context2) {
-  if (paths.length === 0) return ok6(Object.freeze([]));
+  if (paths.length === 0) return ok4(Object.freeze([]));
   let fields;
   try {
     fields = await runner.runNulFields({
@@ -66914,7 +65199,7 @@ async function readIndexEntries(runner, paths, context2) {
     });
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail10(projectErrorForGitFailure(error51, runner, context2));
+      return fail9(projectErrorForGitFailure(error51, runner, context2));
     }
     throw error51;
   }
@@ -66922,38 +65207,38 @@ async function readIndexEntries(runner, paths, context2) {
   const entries = [];
   for (const field of fields) {
     const tab = field.indexOf("	");
-    if (tab < 0) return fail10(taskInvalid(context2, PATH_MISMATCH));
+    if (tab < 0) return fail9(taskInvalid(context2, PATH_MISMATCH));
     const meta3 = field.slice(0, tab).split(" ");
-    if (meta3.length !== 3) return fail10(taskInvalid(context2, PATH_MISMATCH));
+    if (meta3.length !== 3) return fail9(taskInvalid(context2, PATH_MISMATCH));
     const [modeText, oidText, stageText] = meta3;
     const claim = requested.get(field.slice(tab + 1));
-    if (claim === void 0) return fail10(taskInvalid(context2, PATH_MISMATCH));
+    if (claim === void 0) return fail9(taskInvalid(context2, PATH_MISMATCH));
     let mode;
     try {
       mode = normalizeGitTreeMode(modeText);
     } catch {
-      return fail10(taskInvalid(context2, TREE_MODE_ILLEGAL));
+      return fail9(taskInvalid(context2, TREE_MODE_ILLEGAL));
     }
-    if (mode === GITLINK_MODE) return fail10(taskInvalid(context2, TREE_MODE_ILLEGAL));
+    if (mode === GITLINK_MODE) return fail9(taskInvalid(context2, TREE_MODE_ILLEGAL));
     let oid;
     try {
       oid = parseGitOid(oidText);
     } catch {
-      return fail10(taskInvalid(context2, PATH_MISMATCH));
+      return fail9(taskInvalid(context2, PATH_MISMATCH));
     }
     const stage = parseStage(stageText);
-    if (stage === void 0) return fail10(taskInvalid(context2, PATH_MISMATCH));
+    if (stage === void 0) return fail9(taskInvalid(context2, PATH_MISMATCH));
     const entry2 = Object.freeze({ path: claim, mode, oid, stage });
     if (claim.startsWith(ARCHFLOW_PREFIX)) {
       try {
         assertArchflowIndexEntry(entry2);
       } catch {
-        return fail10(taskInvalid(context2, TREE_MODE_ILLEGAL));
+        return fail9(taskInvalid(context2, TREE_MODE_ILLEGAL));
       }
     }
     entries.push(entry2);
   }
-  return ok6(Object.freeze(entries));
+  return ok4(Object.freeze(entries));
 }
 
 // src/state/secret-scan.ts
@@ -69668,7 +67953,7 @@ function toBufferSource(data) {
   copy2.set(data);
   return copy2;
 }
-async function digest11(hash2, data) {
+async function digest10(hash2, data) {
   return new Uint8Array(await globalThis.crypto.subtle.digest(hash2.name, toBufferSource(data)));
 }
 function padToMultipleOf(src, blockSize) {
@@ -69702,9 +67987,9 @@ async function deriveMacKey(hash2, password, salt, iterations) {
   DI.set(D, 0);
   DI.set(S, D.length);
   DI.set(P, D.length + S.length);
-  let A = await digest11(hash2, DI);
+  let A = await digest10(hash2, DI);
   for (let i = 1; i < iterations; i++) {
-    A = await digest11(hash2, A);
+    A = await digest10(hash2, A);
   }
   return A.subarray(0, u);
 }
@@ -71621,7 +69906,7 @@ var FILTER_RULE = "@secretlint/secretlint-rule-filter-comments";
 var RULE_PREFIX = "@secretlint/secretlint-rule-";
 var RULE_ID = /^@secretlint\/secretlint-rule-(?<suffix>[a-z0-9][a-z0-9-]*)$/u;
 var utf82 = new TextDecoder("utf-8", { fatal: true });
-var ordinal7 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal5 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 var enabledCreators = rules.filter((creator) => creator.meta.id !== FILTER_RULE);
 var enabledRuleIds = Object.freeze(enabledCreators.map((creator) => creator.meta.id).sort());
 if (new Set(enabledRuleIds).size !== enabledRuleIds.length || enabledRuleIds.some((id6) => !RULE_ID.test(id6))) {
@@ -71684,7 +69969,7 @@ function createSecretlintScanner() {
     const seen = /* @__PURE__ */ new Set();
     const findings = [];
     try {
-      for (const candidate of candidates.sort((left, right) => ordinal7(left.virtual_path, right.virtual_path))) {
+      for (const candidate of candidates.sort((left, right) => ordinal5(left.virtual_path, right.virtual_path))) {
         if (seen.has(candidate.virtual_path)) throw new TypeError("duplicate secret-scan candidate path");
         seen.add(candidate.virtual_path);
         const extension = sourceExtension(candidate.virtual_path);
@@ -71722,7 +70007,7 @@ function createSecretlintScanner() {
       await releaseSecretlintProfilerEntries();
     }
     if (findings.length > 0) {
-      findings.sort((left, right) => ordinal7(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal7(left.detector_id, right.detector_id));
+      findings.sort((left, right) => ordinal5(left.virtual_path, right.virtual_path) || left.line - right.line || left.column - right.column || ordinal5(left.detector_id, right.detector_id));
       return Object.freeze({
         schema_version: "1",
         outcome: "detected",
@@ -71816,14 +70101,14 @@ async function proveImplementationCommit(runner, subject, facts, options) {
       operation: `${options.operation_prefix}-implementation-commit-message`
     });
     if (message !== facts.commit_message) return missing(pin.target_ref, pin.target_head, "message-mismatch");
-    const authorizedPaths = [...facts.paths].sort(ordinal8);
+    const authorizedPaths = [...facts.paths].sort(ordinal6);
     if (JSON.stringify(authorizedPaths) !== JSON.stringify(sortedUniqueImplementationPaths(subject))) {
       return missing(pin.target_ref, pin.target_head, "paths-mismatch");
     }
     const changedPaths = [...new Set(await runner.runNulFields({
       argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", facts.baseline_commit, pin.candidate, "--"],
       operation: `${options.operation_prefix}-implementation-commit-paths`
-    }))].sort(ordinal8);
+    }))].sort(ordinal6);
     if (JSON.stringify(changedPaths) !== JSON.stringify(authorizedPaths)) {
       return missing(pin.target_ref, pin.target_head, "paths-mismatch", changedPaths);
     }
@@ -72008,7 +70293,7 @@ async function resolveAutonomousDesignMilestoneProofUnchecked(runner, state, art
   const changed = [...new Set(await runner.runNulFields({
     argv: ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-z", "-r", baselineCommit, pin.candidate, "--"],
     operation: "git-autonomous-design-commit-paths"
-  }))].sort(ordinal8);
+  }))].sort(ordinal6);
   if (changed.length === 0 || changed.some((path3) => !path3.startsWith(prefix))) return missing(pin.target_ref, pin.target_head, "paths-outside-task", changed);
   if (!changed.includes(`${prefix}state.json`)) return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
   for (const path3 of approvedPaths) {
@@ -72028,7 +70313,7 @@ async function resolveAutonomousDesignMilestoneProofUnchecked(runner, state, art
   try {
     const decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(committedStateBytes));
     historicalState = taskStateV1Schema.parse(decoded);
-    if (!isDeepStrictEqual6(canonicalJsonBytes(historicalState), committedStateBytes)) {
+    if (!isDeepStrictEqual4(canonicalJsonBytes(historicalState), committedStateBytes)) {
       return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
     }
   } catch {
@@ -72036,7 +70321,7 @@ async function resolveAutonomousDesignMilestoneProofUnchecked(runner, state, art
   }
   const subjectDigest = canonicalJsonDigest(artifact);
   const historicalSettlement = historicalState.rule_settlements?.find((settlement) => settlement.task_id === state.task_id && settlement.phase_instance === artifact.phase_instance && settlement.subject_digest === subjectDigest && settlement.conclusion.wait === false && settlement.milestone_baseline_commit === baselineCommit);
-  const currentSettlement = state.rule_settlements?.find((settlement) => historicalSettlement !== void 0 && isDeepStrictEqual6(settlement, historicalSettlement));
+  const currentSettlement = state.rule_settlements?.find((settlement) => historicalSettlement !== void 0 && isDeepStrictEqual4(settlement, historicalSettlement));
   if (historicalSettlement === void 0 || currentSettlement === void 0) {
     return missing(pin.target_ref, pin.target_head, "missing-recovery-authority");
   }
@@ -72104,7 +70389,7 @@ async function approvedDesignWorktreeMatchesRetainedArtifact(runner, taskId, art
   }
   return true;
 }
-var ordinal8 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+var ordinal6 = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 function ownEnumerableData(value, key2) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key2);
   if (descriptor === void 0 || !("value" in descriptor) || !descriptor.enumerable) {
@@ -72124,13 +70409,13 @@ function sortedUniqueImplementationPaths(output) {
       paths.add(entry2.previous_path);
     }
   }
-  return Object.freeze([...paths].sort(ordinal8));
+  return Object.freeze([...paths].sort(ordinal6));
 }
 function deriveSnapshotDigest(entries) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-output-snapshot",
-    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path))
+    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path))
   });
 }
 function deriveImplementationDiffDigest(baseCommit, outputs) {
@@ -72152,7 +70437,7 @@ function deriveImplementationDiffDigest(baseCommit, outputs) {
     schema_version: "1",
     digest_kind: "implementation-diff",
     base_commit: baseCommit,
-    entries: entries.sort((left, right) => ordinal8(left.path, right.path))
+    entries: entries.sort((left, right) => ordinal6(left.path, right.path))
   });
 }
 function deriveOverallImplementationDiffDigest(primaryDigest, sections) {
@@ -72161,7 +70446,7 @@ function deriveOverallImplementationDiffDigest(primaryDigest, sections) {
     schema_version: "1",
     digest_kind: "multi-repository-implementation-diff",
     primary_diff_digest: primaryDigest,
-    secondary_repositories: [...sections].sort((a, b) => ordinal8(a.repository, b.repository)).map((section) => ({
+    secondary_repositories: [...sections].sort((a, b) => ordinal6(a.repository, b.repository)).map((section) => ({
       repository: section.repository,
       repository_identity_digest: section.repository_identity_digest,
       base_commit: section.base_commit,
@@ -72175,7 +70460,7 @@ function deriveOverallImplementationSnapshotDigest(primaryDigest, sections) {
     schema_version: "1",
     digest_kind: "multi-repository-implementation-snapshot",
     primary_snapshot_digest: primaryDigest,
-    secondary_repositories: [...sections].sort((a, b) => ordinal8(a.repository, b.repository)).map((section) => ({
+    secondary_repositories: [...sections].sort((a, b) => ordinal6(a.repository, b.repository)).map((section) => ({
       repository: section.repository,
       repository_identity_digest: section.repository_identity_digest,
       base_commit: section.base_commit,
@@ -72187,7 +70472,7 @@ function deriveIndexIdentityDigest(entries, undeclaredChanges) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-index-identity",
-    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path)),
+    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path)),
     undeclared_changes: undeclaredChanges
   });
 }
@@ -72195,7 +70480,7 @@ function deriveWorktreeIdentityDigest(entries, undeclaredChanges) {
   return canonicalJsonDigest({
     schema_version: "1",
     digest_kind: "declared-worktree-identity",
-    entries: [...entries].sort((left, right) => ordinal8(left.path, right.path)),
+    entries: [...entries].sort((left, right) => ordinal6(left.path, right.path)),
     undeclared_changes: undeclaredChanges
   });
 }
@@ -72206,7 +70491,7 @@ async function observePath(runner, resolved) {
   const lexicalPath = resolvePath4(runner.location.worktreeRoot, resolved.repositoryRelative);
   let stat4;
   try {
-    stat4 = await lstat6(lexicalPath);
+    stat4 = await lstat5(lexicalPath);
   } catch (error51) {
     if (error51.code === "ENOENT") {
       return { observation: Object.freeze({ path: resolved.repositoryRelative, path_class: resolved.path_class, state: "absent" }) };
@@ -72218,7 +70503,7 @@ async function observePath(runner, resolved) {
   let mode;
   let oid;
   if (stat4.isSymbolicLink()) {
-    bytes = new Uint8Array(await readlink2(lexicalPath, { encoding: "buffer" }));
+    bytes = new Uint8Array(await readlink(lexicalPath, { encoding: "buffer" }));
     fileType = "symlink";
     mode = "120000";
     oid = gitBlobOid(bytes);
@@ -72320,9 +70605,9 @@ async function resolveReadablePath(dependencies, authority, path3) {
   });
 }
 async function readRegularBytes(path3, label) {
-  const stat4 = await lstat6(path3.absolute);
+  const stat4 = await lstat5(path3.absolute);
   if (!stat4.isFile()) throw new TypeError(`${label} is not a regular file`);
-  return new Uint8Array(await readFile6(path3.absolute));
+  return new Uint8Array(await readFile4(path3.absolute));
 }
 async function readRenameSources(runner, baseCommit) {
   const fields = await runner.runNulFields({
@@ -72345,7 +70630,7 @@ async function readRenameSources(runner, baseCommit) {
       if (status === "D") deleted.push(parseRepositoryPathClaim(path3));
     }
   }
-  return Object.freeze({ renames, deleted: Object.freeze(deleted.sort(ordinal8)) });
+  return Object.freeze({ renames, deleted: Object.freeze(deleted.sort(ordinal6)) });
 }
 function identityOf(observation) {
   return Object.freeze({
@@ -72376,7 +70661,7 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
       error: createProjectError("CONTRACT_INVALID", { issue_code: "secondary-base-commit-mismatch" })
     });
   }
-  const outputPaths = [...declaration.outputs].sort(ordinal8);
+  const outputPaths = [...declaration.outputs].sort(ordinal6);
   if (new Set(outputPaths).size !== outputPaths.length) throw new TypeError(`secondary repository ${member.name} outputs must be unique`);
   const renameChanges = await readRenameSources(runner, base2.value);
   const observations = /* @__PURE__ */ new Map();
@@ -72404,7 +70689,7 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
       const candidates = [];
       for (const deletedPath of renameChanges.deleted) {
         const deletedIdentity = await baseIdentity(runner, base2.value, deletedPath);
-        if (deletedIdentity !== void 0 && isDeepStrictEqual6(deletedIdentity, identityOf(after.observation))) candidates.push(deletedPath);
+        if (deletedIdentity !== void 0 && isDeepStrictEqual4(deletedIdentity, identityOf(after.observation))) candidates.push(deletedPath);
       }
       if (candidates.length === 1) previousPath = candidates[0];
     }
@@ -72414,7 +70699,7 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
       const previousIdentity = await baseIdentity(runner, base2.value, previousPath);
       if (previousIdentity === void 0 || after.observation.state !== "present") throw new TypeError("secondary rename does not match base/worktree state");
       const afterIdentity = identityOf(after.observation);
-      const retainedByGit = isDeepStrictEqual6(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(runner, base2.value);
+      const retainedByGit = isDeepStrictEqual4(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(runner, base2.value);
       outputs.push(Object.freeze(retainedByGit ? {
         path: path3,
         path_class: "repository-source",
@@ -72470,12 +70755,12 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
       }));
     } else throw new TypeError("secondary declared output is absent from both base and worktree");
   }
-  outputs.sort((a, b) => ordinal8(a.path, b.path));
-  const restoreTargets = [...declaration.restore_targets].sort(ordinal8);
+  outputs.sort((a, b) => ordinal6(a.path, b.path));
+  const restoreTargets = [...declaration.restore_targets].sort(ordinal6);
   if (new Set(restoreTargets).size !== restoreTargets.length || restoreTargets.some((path3) => !outputPaths.includes(path3))) {
     throw new TypeError(`secondary repository ${member.name} restore targets must be unique declared outputs`);
   }
-  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal8);
+  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal6);
   const changed = await readChangedGitPaths(runner);
   const scopeSet = new Set(scope3);
   const callerChanges = changed.paths.filter((path3) => !path3.startsWith(".archflow/runtime/"));
@@ -72495,7 +70780,7 @@ async function buildSecondaryRepositorySection(authority, member, declaration, m
     return Object.freeze({ path: path3, state: "present", stage: 0, mode: entry2.mode, oid: entry2.oid });
   });
   const declaredInputs = [];
-  for (const declared of [...declaration.declared_inputs].sort((a, b) => ordinal8(a.input_id, b.input_id))) {
+  for (const declared of [...declaration.declared_inputs].sort((a, b) => ordinal6(a.input_id, b.input_id))) {
     if (declared.path === ".archflow" || declared.path.startsWith(".archflow/")) throw new TypeError(`secondary repository ${member.name} input is not repository source`);
     const resolved = await resolveRepositoryPath({ runner, claim: declared.path, context: authority.context });
     if (!resolved.ok) return resolved;
@@ -72538,7 +70823,7 @@ async function verifyImplementationRepositorySection(authority, member, section)
     declared_inputs: section.declared_inputs.map((input) => ({ input_id: input.input_id, path: input.path }))
   }, section.accounting.measured_at_revision);
   if (!built.ok) throw built.error;
-  if (!isDeepStrictEqual6(built.value.section, section)) {
+  if (!isDeepStrictEqual4(built.value.section, section)) {
     throw new TypeError(`secondary repository ${section.repository} manifest disagrees with authenticated observations`);
   }
   const snapshotEntries = sortedUniqueImplementationPaths(section).map((path3) => built.value.observations.get(path3)?.observation);
@@ -72565,7 +70850,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
   if (dependencies.read_retained_task_bytes === void 0) {
     throw new TypeError("retained byte accounting is unavailable");
   }
-  const outputPaths = [...input.outputs].sort(ordinal8);
+  const outputPaths = [...input.outputs].sort(ordinal6);
   if (outputPaths.length === 0 || new Set(outputPaths).size !== outputPaths.length) {
     throw new TypeError("implementation outputs must be non-empty and unique");
   }
@@ -72598,7 +70883,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
       const candidates = [];
       for (const deletedPath of renameChanges.deleted) {
         const deletedIdentity = await baseIdentity(dependencies.runner, input.base_commit, deletedPath);
-        if (deletedIdentity !== void 0 && isDeepStrictEqual6(deletedIdentity, afterIdentity)) {
+        if (deletedIdentity !== void 0 && isDeepStrictEqual4(deletedIdentity, afterIdentity)) {
           candidates.push(deletedPath);
         }
       }
@@ -72615,7 +70900,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
         throw new TypeError("rename does not match base/worktree state");
       }
       const afterIdentity = identityOf(after.observation);
-      const retainedByGit = isDeepStrictEqual6(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(dependencies.runner, input.base_commit);
+      const retainedByGit = isDeepStrictEqual4(previousIdentity, afterIdentity) && await isCommitAncestorOfHead(dependencies.runner, input.base_commit);
       outputs.push(Object.freeze(retainedByGit ? {
         path: path3,
         path_class: pathClass3,
@@ -72673,12 +70958,12 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
       throw new TypeError("declared output is absent from both base and worktree");
     }
   }
-  outputs.sort((left, right) => ordinal8(left.path, right.path));
-  const restoreTargets = [...input.restore_targets].sort(ordinal8);
+  outputs.sort((left, right) => ordinal6(left.path, right.path));
+  const restoreTargets = [...input.restore_targets].sort(ordinal6);
   if (new Set(restoreTargets).size !== restoreTargets.length || restoreTargets.some((path3) => !outputPaths.includes(path3))) {
     throw new TypeError("restore targets must be unique declared output paths");
   }
-  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal8);
+  const scope3 = [...new Set(outputs.flatMap((output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]))].sort(ordinal6);
   const changed = await readChangedGitPaths(dependencies.runner);
   const scopeSet = new Set(scope3);
   const callerChanges = changed.paths.filter((path3) => !path3.startsWith(".archflow/runtime/"));
@@ -72698,7 +70983,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
     return Object.freeze({ path: path3, state: "present", stage: 0, mode: entry2.mode, oid: entry2.oid });
   });
   const parentDocuments = [];
-  for (const parent of [...input.parent_documents].sort((left, right) => ordinal8(left.document_path, right.document_path))) {
+  for (const parent of [...input.parent_documents].sort((left, right) => ordinal6(left.document_path, right.document_path))) {
     const resolved = await resolveTaskPath({
       runner: dependencies.runner,
       taskId: authority.task_id,
@@ -72717,7 +71002,7 @@ async function buildImplementationOutput(dependencies, authority, state, supplie
     throw new TypeError("parent documents must be unique");
   }
   const declaredInputs = [];
-  for (const declared of [...input.declared_inputs].sort((left, right) => ordinal8(left.input_id, right.input_id))) {
+  for (const declared of [...input.declared_inputs].sort((left, right) => ordinal6(left.input_id, right.input_id))) {
     const resolved = await resolveReadablePath(dependencies, authority, declared.path);
     if (!resolved.ok) return resolved;
     declaredInputs.push(Object.freeze({
@@ -72881,7 +71166,7 @@ async function verifyImplementationManifest(runner, supplied, context2, supplied
     undeclared_paths: callerChanges.filter((path3) => !scopeSet.has(path3)).map(rawGitPath),
     unrepresentable_count: parseSafeInteger(changed.unrepresentable_count)
   };
-  if (!isDeepStrictEqual6(undeclaredChanges, output.undeclared_changes)) {
+  if (!isDeepStrictEqual4(undeclaredChanges, output.undeclared_changes)) {
     throw new TypeError("undeclared change report does not match the live Git working set");
   }
   const resolved = await resolveAll(runner, output, context2);
@@ -72980,8 +71265,8 @@ function repositoryPathKey(repository, path3) {
 }
 var RESULT_BYTE_CAP2 = 25 * 1024 * 1024;
 var TASK_BYTE_CAP2 = 250 * 1024 * 1024;
-var ok7 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok5 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail10 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 function deriveDeclaredSnapshotDigest(outputs, projections) {
   const projectionDigests = new Map(projections.map((projection) => [projection.path, projection.content_digest]));
   if (projectionDigests.size !== projections.length) throw new TypeError("duplicate snapshot projection path");
@@ -73012,7 +71297,7 @@ function deriveDeclaredSnapshotDigest(outputs, projections) {
   return deriveSnapshotDigest([...entries.values()]);
 }
 function snapshotInvalid(digest12, issue_code) {
-  return fail11(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest12, issue_code }));
+  return fail10(createProjectError("SNAPSHOT_INVALID", { snapshot_digest: digest12, issue_code }));
 }
 function ownEnumerableData2(value, key2) {
   const descriptor = Object.getOwnPropertyDescriptor(value, key2);
@@ -73084,7 +71369,7 @@ function prepareSnapshot(input) {
     }
   }
   if (resultBytes > RESULT_BYTE_CAP2) {
-    return fail11(createProjectError("SNAPSHOT_LIMIT", {
+    return fail10(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "result",
       offending_paths: payloads.map((payload) => `${payload.repository === void 0 ? "" : `${payload.repository}/`}${payload.path}`).sort(),
       current_bytes: resultBytes,
@@ -73093,7 +71378,7 @@ function prepareSnapshot(input) {
   }
   const taskBytes = input.retained_task_bytes + resultBytes;
   if (taskBytes > TASK_BYTE_CAP2) {
-    return fail11(createProjectError("SNAPSHOT_LIMIT", {
+    return fail10(createProjectError("SNAPSHOT_LIMIT", {
       limit_scope: "task",
       offending_paths: payloads.map((payload) => `${payload.repository === void 0 ? "" : `${payload.repository}/`}${payload.path}`).sort(),
       current_bytes: taskBytes,
@@ -73104,7 +71389,7 @@ function prepareSnapshot(input) {
   if (accountedResultBytes !== resultBytes || manifest.accounting.task_bytes !== taskBytes) {
     return snapshotInvalid(manifest.snapshot_digest, "accounting-mismatch");
   }
-  return ok7(Object.freeze({ manifest: document2, result_digest: document2.digest, payloads: Object.freeze(payloads) }));
+  return ok5(Object.freeze({ manifest: document2, result_digest: document2.digest, payloads: Object.freeze(payloads) }));
 }
 async function prepareDocumentSnapshot(input) {
   const manifestValue = ownEnumerableData2(input, "manifest");
@@ -73159,7 +71444,7 @@ async function installSnapshot(atomic, prepared, manifestTarget, worktreeRoot) {
       if (await installOne(atomic, atLexicalLeaf(payload.target, worktreeRoot), payload.bytes) === "created") payloadsCreated += 1;
     }
     const manifest = await installOne(atomic, atLexicalLeaf(manifestTarget, worktreeRoot), prepared.manifest.bytes);
-    return ok7(Object.freeze({ manifest, payloads_created: payloadsCreated }));
+    return ok5(Object.freeze({ manifest, payloads_created: payloadsCreated }));
   } catch {
     return snapshotInvalid(prepared.manifest.value.snapshot_digest, "immutable-install-disagreement");
   }
@@ -73220,7 +71505,7 @@ async function readSnapshot(input) {
       }
     }
   }
-  return ok7(document2);
+  return ok5(document2);
 }
 var retainedAccountingProjectionSchema = external_exports.object({
   result_id: external_exports.string(),
@@ -73255,7 +71540,7 @@ async function readSnapshotAccounting(input) {
   if (projection.source_artifact.artifact_kind === "implementation-output") {
     total += (projection.source_artifact.secondary_repositories ?? []).reduce((sum, section) => sum + section.accounting.result_bytes, 0);
   }
-  return ok7(parseSafeInteger(total));
+  return ok5(parseSafeInteger(total));
 }
 async function restoreSnapshotOutput(input) {
   const read2 = await readSnapshot({
@@ -73267,7 +71552,7 @@ async function restoreSnapshotOutput(input) {
   if (!read2.ok) return read2;
   const output = read2.value.value.outputs.find((candidate) => candidate.path === input.output_path);
   if (output === void 0) return snapshotInvalid(read2.value.value.snapshot_digest, "output-not-declared");
-  if (output.operation === "delete") return ok7(Object.freeze({ state: "absent" }));
+  if (output.operation === "delete") return ok5(Object.freeze({ state: "absent" }));
   let bytes;
   if (output.storage === "git-object") {
     try {
@@ -73295,9 +71580,9 @@ async function restoreSnapshotOutput(input) {
     bytes = payload.value;
   }
   if (output.file_type === "symlink") {
-    return ok7(Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }));
+    return ok5(Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes }));
   }
-  return ok7(Object.freeze({ state: "present", file_type: "regular", mode: output.after.mode, bytes }));
+  return ok5(Object.freeze({ state: "present", file_type: "regular", mode: output.after.mode, bytes }));
 }
 async function readSnapshotPayload(input) {
   if (input.target.path_class !== "workspace-result-payload") throw new TypeError("payload target has wrong class");
@@ -73307,16 +71592,16 @@ async function readSnapshotPayload(input) {
     if (bytes.byteLength !== input.expected_bytes || sha256Bytes(bytes) !== input.expected_digest) {
       return snapshotInvalid(input.snapshot_digest, "payload-identity-mismatch");
     }
-    return ok7(bytes);
+    return ok5(bytes);
   } catch {
     return snapshotInvalid(input.snapshot_digest, "payload-unreadable");
   }
 }
 async function captureProjectionTarget(path3) {
   try {
-    const stat4 = await lstat7(path3.absolute);
+    const stat4 = await lstat6(path3.absolute);
     if (stat4.isSymbolicLink()) {
-      const bytes2 = Buffer.from(await readlink3(path3.absolute), "utf8");
+      const bytes2 = Buffer.from(await readlink2(path3.absolute), "utf8");
       return Object.freeze({
         observation: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", size_bytes: bytes2.byteLength, content_digest: sha256Bytes(bytes2) }),
         rollback: Object.freeze({ state: "present", file_type: "symlink", mode: "120000", bytes: bytes2 })
@@ -73434,24 +71719,24 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
   if (scan.outcome === "detected") {
     const finding = scan.findings[0];
     if (finding === void 0) throw new TypeError("detected scan must contain a finding");
-    return fail11(createProjectError("SECRET_DETECTED", { path_class: finding.path_class, detector_id: finding.detector_id }));
+    return fail10(createProjectError("SECRET_DETECTED", { path_class: finding.path_class, detector_id: finding.detector_id }));
   }
   if (scan.outcome === "unavailable") {
     const first = materialized.find((source) => source.git_tracked);
-    return fail11(createProjectError("SECRET_DETECTED", { path_class: first?.target.path_class ?? "repository-source", detector_id: "scanner-unavailable" }));
+    return fail10(createProjectError("SECRET_DETECTED", { path_class: first?.target.path_class ?? "repository-source", detector_id: "scanner-unavailable" }));
   }
   const entries = [];
   for (const source of materialized) {
     const observed = await observe(source.target);
     if (source.authenticated_before.state === "present") {
-      if (source.rollback === void 0 || !isDeepStrictEqual7(desiredObservation(source.rollback), source.authenticated_before)) {
+      if (source.rollback === void 0 || !isDeepStrictEqual5(desiredObservation(source.rollback), source.authenticated_before)) {
         throw new TypeError("present authenticated before-image requires matching rollback bytes");
       }
     } else if (source.rollback !== void 0 && source.rollback.state !== "absent") {
       throw new TypeError("absent authenticated before-image cannot carry present rollback bytes");
     }
-    const exact = isDeepStrictEqual7(observed, desiredObservation(source.desired));
-    const before = isDeepStrictEqual7(observed, source.authenticated_before);
+    const exact = isDeepStrictEqual5(observed, desiredObservation(source.desired));
+    const before = isDeepStrictEqual5(observed, source.authenticated_before);
     const renameDestinationBlocked = source.rename_pair?.role === "destination" && observed.state !== "absent" && !exact;
     entries.push(Object.freeze({
       path: source.path,
@@ -73465,7 +71750,7 @@ async function prepareProjectionPlan(sources, scanner, worktreeRoot) {
     }));
   }
   const collisions = entries.filter((entry2) => entry2.disposition === "collision").map((entry2) => Object.freeze({ path: entry2.path, path_class: entry2.target.path_class }));
-  return ok7(Object.freeze({
+  return ok5(Object.freeze({
     entries: Object.freeze(entries),
     collisions: Object.freeze(collisions),
     collision_choices: Object.freeze(["discard-and-restore", "adopt-as-new-generation", "abort"])
@@ -73480,14 +71765,14 @@ async function applyDesired(writer, entry2) {
 async function applyProjectionPlan(writer, plan) {
   if (plan.collisions.length !== 0) return Object.freeze({ outcome: "collision", path: plan.collisions[0].path, writes: 0 });
   for (const entry2 of plan.entries) {
-    if (!isDeepStrictEqual7(await observe(entry2.target), entry2.observed_before)) {
+    if (!isDeepStrictEqual5(await observe(entry2.target), entry2.observed_before)) {
       return Object.freeze({ outcome: "collision", path: entry2.path, writes: 0 });
     }
   }
   const applied = [];
   for (const entry2 of plan.entries) {
     if (entry2.disposition === "exact") continue;
-    if (!isDeepStrictEqual7(await observe(entry2.target), entry2.observed_before)) {
+    if (!isDeepStrictEqual5(await observe(entry2.target), entry2.observed_before)) {
       return rollback(writer, applied, entry2.path);
     }
     if (entry2.rename_pair?.role === "destination" && (await observe(entry2.target)).state !== "absent") {
@@ -73504,7 +71789,7 @@ async function rollback(writer, applied, collisionPath) {
 }
 async function rollbackEntries(writer, applied) {
   for (const entry2 of [...applied].reverse()) {
-    if (!isDeepStrictEqual7(await observe(entry2.target), desiredObservation(entry2.desired))) {
+    if (!isDeepStrictEqual5(await observe(entry2.target), desiredObservation(entry2.desired))) {
       return Object.freeze({ outcome: "repair-required", path: entry2.path });
     }
     if (entry2.observed_before.state === "absent") await writer.remove(entry2.target);
@@ -73520,7 +71805,7 @@ async function applyRepositoryProjectionPlans(writer, plans) {
       return Object.freeze({ outcome: "collision", repository: repositoryPlan.repository, path: collision.path });
     }
     for (const entry2 of repositoryPlan.plan.entries) {
-      if (!isDeepStrictEqual7(await observe(entry2.target), entry2.observed_before)) {
+      if (!isDeepStrictEqual5(await observe(entry2.target), entry2.observed_before)) {
         return Object.freeze({ outcome: "collision", repository: repositoryPlan.repository, path: entry2.path });
       }
     }
@@ -73574,10 +71859,10 @@ function decisionsForGate(kind, context2) {
   }
   return DECISIONS[kind];
 }
-var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
-var issue2 = (code2, state, issueCode) => fail12(code2 === "STATE_INVALID" ? createProjectError(code2, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code2, { issue_code: issueCode }));
-var io = (authority, operation) => fail12(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
+var ok6 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail11 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var issue2 = (code2, state, issueCode) => fail11(code2 === "STATE_INVALID" ? createProjectError(code2, { phase_instance: state.phase_instance, issue_code: issueCode }) : createProjectError(code2, { issue_code: issueCode }));
+var io = (authority, operation) => fail11(createProjectError("IO_ERROR", { operation, attempt: authority.context.attempt }));
 async function resolvePath6(dependencies, authority, claim, expectedClass) {
   if (expectedClass === "workspace-gate-interface") {
     return resolveTaskWorkspacePath({
@@ -73675,7 +71960,7 @@ function parseInterface(value, request) {
   if (request.context !== null && typeof request.context === "object" && "origin" in request.context) {
     const candidate = value;
     const context2 = request.context;
-    if (candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest || !isDeepStrictEqual8(candidate.origin, context2.origin) || !isDeepStrictEqual8(candidate.scope, context2.origin.scope)) throw new TypeError("waiver decision does not bind origin");
+    if (candidate.gate_id !== request.gate_id || candidate.task_id !== request.task_id || candidate.phase_instance !== request.phase_instance || candidate.subject_digest !== request.subject_digest || candidate.context_digest !== request.context_digest || !isDeepStrictEqual6(candidate.origin, context2.origin) || !isDeepStrictEqual6(candidate.scope, context2.origin.scope)) throw new TypeError("waiver decision does not bind origin");
     return parseGateDecisionRecord({ schema_version: "1", gate_id: request.gate_id, task_id: request.task_id, phase_instance: request.phase_instance, kind: request.kind, subject_digest: request.subject_digest, context_digest: request.context_digest, outcome: "waiver-decided", granted: candidate.granted, scope: candidate.scope, origin: candidate.origin, notes: candidate.notes, human_provenance: candidate.human_provenance });
   }
   const envelope2 = parseGateDecisionEnvelope(value);
@@ -73684,61 +71969,10 @@ function parseInterface(value, request) {
 }
 async function stateOrFailure(dependencies, authority) {
   const read2 = await dependencies.read_state(authority.state);
-  return read2.kind === "canonical" ? ok8(read2.document) : read2.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read2.kind}`);
+  return read2.kind === "canonical" ? ok6(read2.document) : read2.kind === "unreadable" ? io(authority, "gate-state-read") : issue2("CONTRACT_INVALID", void 0, `gate-state-${read2.kind}`);
 }
-
-// src/state/legacy-import-resume.ts
-async function findLegacyImportResumePhase(dependencies, authority, state) {
-  const loaded = await loadLegacyImportInitialization(dependencies, authority, state);
-  if (!loaded.ok) return loaded;
-  if (loaded.value === void 0) return ok8(void 0);
-  const document2 = loaded.value;
-  if (document2.resume_phase !== void 0) return ok8(document2.resume_phase);
-  const designs = /* @__PURE__ */ new Set();
-  const implementations = /* @__PURE__ */ new Set();
-  for (const entry2 of document2.mapping) {
-    const decoded = decodePhaseInstance(entry2.phase_instance);
-    if (decoded.kind === "phase-design") designs.add(Number(decoded.phase));
-    if (decoded.kind === "phase-impl") implementations.add(Number(decoded.phase));
-  }
-  let highest = 0;
-  while (implementations.has(highest + 1)) highest += 1;
-  const next = highest + 1;
-  return ok8(encodePhaseInstance({
-    kind: designs.has(next) ? "phase-impl" : "phase-design",
-    phase: parsePositiveSafePhaseNumber(next)
-  }));
-}
-async function loadLegacyImportInitialization(dependencies, authority, state) {
-  const resolved = await resolveTaskPath({
-    runner: dependencies.runner,
-    taskId: authority.task_id,
-    claim: initializationAuthorityClaim(),
-    expectedClass: "authority-initialization",
-    context: authority.context
-  });
-  if (!resolved.ok) return resolved;
-  const document2 = await readCanonical(
-    resolved.value,
-    "legacy import initialization authority",
-    parseLegacyImportInitialization
-  );
-  if (document2 === "missing" || document2 === "invalid" || document2.digest !== state.initialization_digest) {
-    return ok8(void 0);
-  }
-  return ok8(document2.value);
-}
-async function loadLegacyImportResumePhase(dependencies, authority, state) {
-  const found = await findLegacyImportResumePhase(dependencies, authority, state);
-  if (!found.ok) return found;
-  return found.value === void 0 ? issue2("STATE_INVALID", state, "legacy-import-manifest-missing") : ok8(found.value);
-}
-
-// src/state/restart-authority.ts
-import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
 
 // src/state/gate-approvals.ts
-import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
 var authenticatedGateApprovals = /* @__PURE__ */ new WeakSet();
 var authenticatedGateApprovalBrand = /* @__PURE__ */ Symbol("AuthenticatedGateApproval");
 var authenticatedGateDecisionArchives = /* @__PURE__ */ new WeakSet();
@@ -73767,7 +72001,7 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
     authority.repository_identity
   ).ok) return issue2("STATE_INVALID", current.value.value, "gate-approval-state-authority-mismatch");
   const durable = current.value.value.approvals.find((entry2) => entry2.gate_id === claimed.gate_id);
-  if (durable === void 0 || !isDeepStrictEqual9(durable, claimed)) {
+  if (durable === void 0 || !isDeepStrictEqual7(durable, claimed)) {
     return issue2("STATE_INVALID", current.value.value, "gate-approval-not-current");
   }
   const requestPath = await resolvePath6(
@@ -73821,7 +72055,7 @@ async function loadAuthenticatedGateApproval(dependencies, authority, approval) 
   });
   Object.freeze(authenticated);
   authenticatedGateApprovals.add(authenticated);
-  return ok8(authenticated);
+  return ok6(authenticated);
 }
 async function loadAuthenticatedGateDecisionArchive(dependencies, authority, gateId) {
   assertInternalTransactionAuthority(authority, {
@@ -73872,7 +72106,310 @@ async function loadAuthenticatedGateDecisionArchive(dependencies, authority, gat
   });
   Object.freeze(authenticated);
   authenticatedGateDecisionArchives.add(authenticated);
-  return ok8(authenticated);
+  return ok6(authenticated);
+}
+
+// src/contracts/constitution.ts
+var CONSTITUTION_RULE_NAME = /^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
+var CONSTITUTION_RULE_PATH = /^\.archflow\/constitution\/(?:(?:default|custom)\/)?[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
+var frontmatterSchema = external_exports.object({
+  id: external_exports.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+  version: external_exports.number().int().positive().safe(),
+  status: external_exports.enum(["active", "deprecated"]),
+  review_trigger: external_exports.string().min(1).regex(/\S/, "review_trigger must contain a non-whitespace character").optional(),
+  enforced_by: external_exports.array(external_exports.string().min(1).regex(/\S/, "enforced_by entries must contain a non-whitespace character")).min(1).optional()
+}).strict();
+var constitutionRuleV1Schema = frontmatterSchema.extend({ text: external_exports.string().min(1).regex(/\S/, "text must contain a non-whitespace character") }).strict();
+function parseConstitutionRuleV1(value) {
+  assertPlainJson(value, "constitution rule");
+  const parsed = constitutionRuleV1Schema.parse(value);
+  return {
+    id: parsed.id,
+    version: parsed.version,
+    status: parsed.status,
+    text: parsed.text,
+    ...parsed.review_trigger === void 0 ? {} : { review_trigger: parsed.review_trigger },
+    ...parsed.enforced_by === void 0 ? {} : { enforced_by: parsed.enforced_by }
+  };
+}
+function parseConstitutionRuleMarkdown(source, label) {
+  const normalized = source.replaceAll("\r\n", "\n");
+  if (!normalized.startsWith("---\n")) throw new Error(`${label}: expected opening YAML frontmatter delimiter`);
+  const close = normalized.indexOf("\n---\n", 4);
+  if (close < 0) throw new Error(`${label}: expected closing YAML frontmatter delimiter`);
+  const frontmatter = parseSingleYamlDocument(normalized.slice(4, close), `${label} frontmatter`);
+  const text5 = normalized.slice(close + 5).trim();
+  return parseConstitutionRuleV1({ ...frontmatter, text: text5 });
+}
+function registryFromRules(rules2) {
+  const registry2 = /* @__PURE__ */ new Map();
+  for (const candidate of rules2) {
+    const rule4 = parseConstitutionRuleV1(candidate);
+    if (registry2.has(rule4.id)) throw new Error(`Duplicate constitution rule id: ${rule4.id}`);
+    registry2.set(rule4.id, Object.freeze(rule4));
+  }
+  return registry2;
+}
+function parseConstitutionRuleFiles(files) {
+  const layers = {
+    legacy: [],
+    default: [],
+    custom: []
+  };
+  for (const path3 of Object.keys(files).sort()) {
+    const relative9 = path3.replace(/^\.archflow\/constitution\//u, "");
+    const layer = relative9.startsWith("default/") ? "default" : relative9.startsWith("custom/") ? "custom" : "legacy";
+    layers[layer].push(parseConstitutionRuleMarkdown(files[path3], path3));
+  }
+  if (layers.legacy.length > 0) {
+    if (layers.default.length > 0 || layers.custom.length > 0) {
+      throw new Error("Mixed flat and split constitution rules; migrate the flat rules with archflow-local init --force");
+    }
+    return registryFromRules(layers.legacy);
+  }
+  const defaults = registryFromRules(layers.default);
+  const custom2 = registryFromRules(layers.custom);
+  return new Map([...defaults, ...custom2]);
+}
+
+// src/contracts/fingerprints.ts
+function materialize3(subject, label) {
+  assertPlainJson(subject, label);
+  return structuredClone(subject);
+}
+function ordinal7(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+function sortedSet(items, key2, label) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const item of items) {
+    const value = key2(item);
+    if (seen.has(value)) throw new TypeError(`${label} is a set: duplicate key ${JSON.stringify(value)}`);
+    seen.add(value);
+  }
+  return [...items].sort((left, right) => ordinal7(key2(left), key2(right)));
+}
+var identityJson = (identity) => ({
+  path: identity.path,
+  mode: identity.mode,
+  oid: identity.oid
+});
+var declaredInputJson = (input) => ({
+  input_id: input.input_id,
+  digest: input.digest
+});
+function computeInputFingerprint(subject) {
+  const snapshot = materialize3(subject, "input fingerprint subject");
+  const primary = canonicalJsonDigest({
+    schema_version: snapshot.schema_version,
+    workflow_digest: snapshot.workflow_digest,
+    constitution_digest: snapshot.constitution_digest,
+    artifact_identities: sortedSet(snapshot.artifact_identities, (item) => item.path, "artifact_identities").map(identityJson),
+    upstream_identities: sortedSet(snapshot.upstream_identities, (item) => item.path, "upstream_identities").map(identityJson),
+    rubric_digest: snapshot.rubric_digest,
+    phase_instance: snapshot.phase_instance,
+    declared_inputs: sortedSet(snapshot.declared_inputs, (item) => item.input_id, "declared_inputs").map(declaredInputJson)
+  });
+  const secondary = (snapshot.secondary_declared_inputs ?? []).filter((section) => section.declared_inputs.length > 0);
+  if (secondary.length === 0) return primary;
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "input-fingerprint-with-secondary-declared-inputs",
+    primary_input_fingerprint: primary,
+    secondary_declared_inputs: sortedSet(secondary, (section) => section.repository, "secondary_declared_inputs").map((section) => ({
+      repository: section.repository,
+      declared_inputs: sortedSet(section.declared_inputs, (input) => input.input_id, `secondary_declared_inputs.${section.repository}.declared_inputs`).map(declaredInputJson)
+    }))
+  });
+}
+function computePinnedConstitutionDigest(files) {
+  const snapshot = materialize3(files, "pinned constitution files");
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "pinned-constitution",
+    files: sortedSet(snapshot, (file2) => file2.path, "pinned constitution files").map(
+      ({ path: path3, oid }) => ({ path: path3, oid })
+    )
+  });
+}
+var exactFields2 = (value, expected) => {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (actual.length !== wanted.length || actual.some((key2, index) => key2 !== wanted[index])) {
+    throw new TypeError(`operation_fields must contain exactly ${wanted.join(", ")}`);
+  }
+};
+function closedOperationFields(subject) {
+  switch (subject.tool) {
+    case "archflow_state": {
+      const fields = subject.operation_fields;
+      if (subject.operation === "planning-restart") {
+        const restart = fields;
+        exactFields2(fields, restart.ask_base_digest === void 0 ? ["phase_instance", "target_phase_instance", "reason"] : ["phase_instance", "target_phase_instance", "reason", "ask_base_digest"]);
+        return {
+          phase_instance: restart.phase_instance,
+          target_phase_instance: restart.target_phase_instance,
+          reason: restart.reason,
+          ...restart.ask_base_digest === void 0 ? {} : { ask_base_digest: restart.ask_base_digest }
+        };
+      }
+      if (subject.operation === "request-validation-override") {
+        const request = fields;
+        exactFields2(fields, ["phase_instance", "step", "status", "reason", "validation_override_request"]);
+        return {
+          phase_instance: request.phase_instance,
+          step: request.step,
+          status: request.status,
+          reason: request.reason,
+          validation_override_request: request.validation_override_request
+        };
+      }
+      if (subject.operation === "set-commit-authority") {
+        const commitAuth = fields;
+        exactFields2(fields, commitAuth.scope === void 0 ? ["phase_instance", "step", "status", "target_commit", "reason"] : ["phase_instance", "step", "status", "target_commit", "reason", "scope"]);
+        return {
+          phase_instance: commitAuth.phase_instance,
+          step: commitAuth.step,
+          status: commitAuth.status,
+          target_commit: commitAuth.target_commit,
+          reason: commitAuth.reason,
+          ...commitAuth.scope === void 0 ? {} : { scope: commitAuth.scope }
+        };
+      }
+      if (subject.operation === "record-state-boundary") {
+        exactFields2(fields, ["phase_instance", "step", "status"]);
+        const boundary = fields;
+        return { phase_instance: boundary.phase_instance, step: boundary.step, status: boundary.status };
+      }
+      if (subject.operation === "refresh-milestone-baseline" || subject.operation === "recover-milestone-authority" || subject.operation === "recover-approval-trigger-authority" || subject.operation === "refresh-stale-baseline") {
+        exactFields2(fields, ["phase_instance", "step", "status", "intent_id"]);
+        const control = fields;
+        return { phase_instance: control.phase_instance, step: control.step, status: control.status, intent_id: control.intent_id };
+      }
+      const artifactFields = fields;
+      const operationForKind = {
+        "task-initialization": "adopt-task-initialization",
+        "legacy-import-initialization": "adopt-legacy-import-initialization",
+        document: "record-document-artifact",
+        "implementation-output": "record-implementation-output",
+        triage: "record-triage"
+      };
+      if (operationForKind[artifactFields.artifact_kind] !== subject.operation) {
+        throw new TypeError("invalid archflow_state operation for artifact_kind");
+      }
+      const expected = ["phase_instance", "step", "status", "artifact_kind", "artifact_digest"];
+      if (artifactFields.human_revision !== void 0) expected.push("human_revision");
+      exactFields2(artifactFields, expected);
+      return {
+        phase_instance: artifactFields.phase_instance,
+        step: artifactFields.step,
+        status: artifactFields.status,
+        artifact_kind: artifactFields.artifact_kind,
+        artifact_digest: artifactFields.artifact_digest,
+        ...artifactFields.human_revision === void 0 ? {} : { human_revision: artifactFields.human_revision }
+      };
+    }
+    case "archflow_counter_review": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "counter-review") throw new TypeError("invalid archflow_counter_review operation");
+      const expected = ["artifact_path"];
+      if (fields.invocation_routes !== void 0) expected.push("invocation_routes");
+      if (fields.route_override !== void 0) expected.push("route_override");
+      exactFields2(fields, expected);
+      return {
+        artifact_path: fields.artifact_path,
+        ...fields.invocation_routes === void 0 ? {} : { invocation_routes: fields.invocation_routes },
+        ...fields.route_override === void 0 ? {} : { route_override: fields.route_override }
+      };
+    }
+    case "archflow_gate": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "gate") throw new TypeError("invalid archflow_gate operation");
+      const expected = ["phase_instance", "summary", "subject_digest", "current_evidence", "kind", "context"];
+      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
+        if (fields.preview_digest === void 0 || fields.decision === void 0) {
+          throw new TypeError("gate preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields2(fields, expected);
+      const selected = {
+        phase_instance: fields.phase_instance,
+        summary: fields.summary,
+        subject_digest: fields.subject_digest,
+        current_evidence: fields.current_evidence,
+        kind: fields.kind,
+        context: fields.context,
+        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
+      };
+      return selected;
+    }
+    case "archflow_waiver": {
+      const fields = subject.operation_fields;
+      if (subject.operation !== "waiver") throw new TypeError("invalid archflow_waiver operation");
+      const expected = ["origin", "rationale"];
+      if (fields.preview_digest !== void 0 || fields.decision !== void 0) {
+        if (fields.preview_digest === void 0 || fields.decision === void 0) {
+          throw new TypeError("waiver preview_digest and decision must appear together");
+        }
+        expected.push("preview_digest", "decision");
+      }
+      exactFields2(fields, expected);
+      return {
+        origin: fields.origin,
+        rationale: fields.rationale,
+        ...fields.preview_digest === void 0 || fields.decision === void 0 ? {} : { preview_digest: fields.preview_digest, decision: fields.decision }
+      };
+    }
+    default: {
+      const exhaustive = subject;
+      throw new TypeError(`unknown request tool ${String(exhaustive.tool)}`);
+    }
+  }
+}
+function computeRequestDigest(subject) {
+  const snapshot = materialize3(subject, "request digest subject");
+  const operationFields = closedOperationFields(snapshot);
+  return canonicalJsonDigest({
+    schema_version: snapshot.schema_version,
+    tool: snapshot.tool,
+    repository_identity_digest: snapshot.repository_identity_digest,
+    task_identity_digest: snapshot.task_identity_digest,
+    operation: snapshot.operation,
+    operation_fields: operationFields,
+    input_fingerprint: snapshot.input_fingerprint
+  });
+}
+function computeGateId(subject) {
+  const snapshot = materialize3(subject, "gate identity subject");
+  return `g-${canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "gate-identity",
+    task_identity_digest: snapshot.task_identity_digest,
+    intent_id: snapshot.intent_id,
+    request_digest: snapshot.request_digest
+  })}`;
+}
+function computeGateContextDigest(kind, context2) {
+  const snapshot = materialize3(context2, "gate context digest subject");
+  return kind === "waiver" ? canonicalJsonDigest({ schema_version: "1", digest_kind: "waiver-context", ...snapshot }) : canonicalJsonDigest({ schema_version: "1", digest_kind: "gate-context", kind, context: snapshot });
+}
+function baselineAdoptionDriftDigest(context2) {
+  const snapshot = materialize3(context2, "baseline adoption drift subject");
+  return canonicalJsonDigest({
+    schema_version: "1",
+    digest_kind: "baseline-adoption-drift",
+    drifted_projections: snapshot.drifted_projections,
+    ...(snapshot.deleted_projections ?? []).length === 0 ? {} : { deleted_projections: snapshot.deleted_projections },
+    ...snapshot.target_ref === void 0 ? {} : {
+      target_ref: snapshot.target_ref,
+      target_head: snapshot.target_head,
+      uncommitted_paths: snapshot.uncommitted_paths
+    }
+  });
+}
+function computePinnedConfigDigest(configBytes) {
+  return sha256Bytes(configBytes);
 }
 
 // src/state/constitution.ts
@@ -73999,8 +72536,8 @@ function immutableRegistry(rules2) {
   });
   return registry2;
 }
-var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
-var fail13 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var ok7 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail12 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
 async function readConstitutionTreeFiles(runner, commit) {
   const listed = await readCommitTreeEntries(runner, commit, CONSTITUTION_DIRECTORY);
   return Object.freeze(listed.filter((entry2) => CONSTITUTION_RULE_PATH.test(entry2.path)).map((entry2) => Object.freeze({
@@ -74024,9 +72561,9 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
   try {
     cacheKey = `${runner.location.worktreeRoot}\0${policyBaseCommit}`;
     const cached2 = resolvedConstitutionCache.get(cacheKey);
-    if (cached2 !== void 0) return ok9(cached2);
+    if (cached2 !== void 0) return ok7(cached2);
     const selected = await readConstitutionTreeFiles(runner, policyBaseCommit);
-    if (selected.length === 0) return fail13(invalidPolicyBase(policyBaseCommit));
+    if (selected.length === 0) return fail12(invalidPolicyBase(policyBaseCommit));
     const sources = {};
     for (const file2 of selected) {
       sources[file2.path] = decoder2.decode(await readGitBlobBytes(runner, file2.oid));
@@ -74035,9 +72572,9 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
     try {
       rules2 = parseConstitutionRuleFiles(sources);
     } catch {
-      return fail13(invalidPolicyBase(policyBaseCommit));
+      return fail12(invalidPolicyBase(policyBaseCommit));
     }
-    if (rules2.size === 0) return fail13(invalidPolicyBase(policyBaseCommit));
+    if (rules2.size === 0) return fail12(invalidPolicyBase(policyBaseCommit));
     const resolved = Object.freeze({
       policy_base_commit: policyBaseCommit,
       digest: computePinnedConstitutionDigest(selected),
@@ -74049,13 +72586,13 @@ async function resolvePinnedConstitution(runner, policyBaseCommit, context2) {
       resolvedConstitutionCache.delete(resolvedConstitutionCache.keys().next().value);
     }
     resolvedConstitutionCache.set(cacheKey, resolved);
-    return ok9(resolved);
+    return ok7(resolved);
   } catch (error51) {
     if (error51 instanceof GitInvocationError) {
-      return fail13(projectErrorForGitFailure(error51, runner, context2));
+      return fail12(projectErrorForGitFailure(error51, runner, context2));
     }
     if (error51 instanceof TypeError || error51 instanceof RangeError) {
-      return fail13(invalidPolicyBase(policyBaseCommit));
+      return fail12(invalidPolicyBase(policyBaseCommit));
     }
     throw error51;
   }
@@ -74134,12 +72671,12 @@ function isExactPlanningRestartDraft(current, next) {
   if (following.length !== previous.length + 1) return false;
   const previousById = new Map(previous.map((record3) => [record3.restart_id, record3]));
   const additions = following.filter((record3) => !previousById.has(record3.restart_id));
-  if (additions.length !== 1 || previous.some((record3) => !isDeepStrictEqual10(record3, following.find((candidate) => candidate.restart_id === record3.restart_id)))) return false;
+  if (additions.length !== 1 || previous.some((record3) => !isDeepStrictEqual8(record3, following.find((candidate) => candidate.restart_id === record3.restart_id)))) return false;
   const restart = additions[0];
-  if (restart.source_phase_instance !== current.phase_instance || restart.target_phase_instance !== next.phase_instance || restart.restarted_at_revision !== current.revision + 1 || restart.reason.trim() === "" || comparePhaseInstances(restart.target_phase_instance, current.phase_instance) >= 0 || decodePhaseInstance(restart.target_phase_instance).kind === "phase-impl" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual10(restart.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual10(restart.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual10(next.approvals, current.approvals)) return false;
+  if (restart.source_phase_instance !== current.phase_instance || restart.target_phase_instance !== next.phase_instance || restart.restarted_at_revision !== current.revision + 1 || restart.reason.trim() === "" || comparePhaseInstances(restart.target_phase_instance, current.phase_instance) >= 0 || decodePhaseInstance(restart.target_phase_instance).kind === "phase-impl" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual8(restart.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual8(restart.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual8(next.approvals, current.approvals)) return false;
   const retained = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) < 0);
   const superseded = current.authoritative_results.filter((reference) => comparePhaseInstances(reference.phase_instance, restart.target_phase_instance) >= 0);
-  if (!isDeepStrictEqual10(next.authoritative_results, retained) || !isDeepStrictEqual10(restart.superseded_results, superseded)) return false;
+  if (!isDeepStrictEqual8(next.authoritative_results, retained) || !isDeepStrictEqual8(restart.superseded_results, superseded)) return false;
   const targetKind = decodePhaseInstance(restart.target_phase_instance).kind;
   if (targetKind === "prd" || targetKind === "design" ? next.planned_final_phase !== void 0 : next.planned_final_phase !== current.planned_final_phase) return false;
   const {
@@ -74152,7 +72689,7 @@ function isExactPlanningRestartDraft(current, next) {
   const expectedHistory = Object.freeze(
     [...previous, restart].sort((left, right) => left.restart_id.localeCompare(right.restart_id))
   );
-  if (!isDeepStrictEqual10(following, expectedHistory)) return false;
+  if (!isDeepStrictEqual8(following, expectedHistory)) return false;
   const expected = {
     ...preserved,
     phase_instance: restart.target_phase_instance,
@@ -74165,7 +72702,7 @@ function isExactPlanningRestartDraft(current, next) {
     restart_history: expectedHistory,
     ...targetKind === "prd" || targetKind === "design" || plannedFinalPhase === void 0 ? {} : { planned_final_phase: plannedFinalPhase }
   };
-  return isDeepStrictEqual10(next, expected);
+  return isDeepStrictEqual8(next, expected);
 }
 function isExactMilestoneRecoveryDraft(current, next) {
   if (current.terminal !== void 0 || current.open_gate !== void 0 || next.open_gate !== void 0) return false;
@@ -74174,12 +72711,12 @@ function isExactMilestoneRecoveryDraft(current, next) {
   if (following.length !== previous.length + 1) return false;
   const priorById = new Map(previous.map((record3) => [record3.recovery_id, record3]));
   const additions = following.filter((record3) => !priorById.has(record3.recovery_id));
-  if (additions.length !== 1 || previous.some((record3) => !isDeepStrictEqual10(record3, following.find((candidate) => candidate.recovery_id === record3.recovery_id)))) return false;
+  if (additions.length !== 1 || previous.some((record3) => !isDeepStrictEqual8(record3, following.find((candidate) => candidate.recovery_id === record3.recovery_id)))) return false;
   const recovery = additions[0];
-  if (recovery.phase_instance !== current.phase_instance || next.phase_instance !== current.phase_instance || recovery.recovered_at_revision !== current.revision + 1 || recovery.target_ref.trim() === "" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual10(recovery.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual10(recovery.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual10(next.approvals, current.approvals) || next.planned_final_phase !== current.planned_final_phase) return false;
+  if (recovery.phase_instance !== current.phase_instance || next.phase_instance !== current.phase_instance || recovery.recovered_at_revision !== current.revision + 1 || recovery.target_ref.trim() === "" || next.step !== "produce" || next.status !== "running" || next.attempt !== 1 || !isDeepStrictEqual8(recovery.cleared_waivers, current.waivers) || next.waivers.length !== 0 || !isDeepStrictEqual8(recovery.cleared_pending_human_revision, current.pending_human_revision) || next.pending_human_revision !== void 0 || !isDeepStrictEqual8(next.approvals, current.approvals) || next.planned_final_phase !== current.planned_final_phase) return false;
   const superseded = current.authoritative_results.filter((reference) => reference.phase_instance === current.phase_instance);
   const retained = current.authoritative_results.filter((reference) => reference.phase_instance !== current.phase_instance);
-  if (!isDeepStrictEqual10(recovery.superseded_results, superseded) || !isDeepStrictEqual10(next.authoritative_results, retained)) return false;
+  if (!isDeepStrictEqual8(recovery.superseded_results, superseded) || !isDeepStrictEqual8(next.authoritative_results, retained)) return false;
   const {
     revision: _revision,
     last_transition: _lastTransition,
@@ -74200,7 +72737,1571 @@ function isExactMilestoneRecoveryDraft(current, next) {
     waivers: [],
     milestone_recovery_history: expectedHistory
   };
-  return isDeepStrictEqual10(next, expected);
+  return isDeepStrictEqual8(next, expected);
+}
+
+// src/state/approval-rules.ts
+function currentRuleSettlement(state, subject, live) {
+  const predecessor = subject.artifact.editorial_predecessor?.subject_digest;
+  const recorded = latestEligibleRuleSettlement(state, subject.artifact_digest, subject.artifact.phase_instance) ?? (predecessor === void 0 ? void 0 : latestEligibleRuleSettlement(state, predecessor, subject.artifact.phase_instance));
+  if (recorded !== void 0 || live === void 0) return recorded;
+  const context2 = approvalRuleContext(state, subject, live.config, live.changed_documents);
+  return Object.freeze({
+    task_id: state.task_id,
+    phase_instance: state.phase_instance,
+    step: subject.artifact.step,
+    subject_digest: subject.artifact_digest,
+    config_digest: live.digest,
+    settled_at_revision: state.revision,
+    conclusion: evaluateApprovalRules(context2.config, context2.subject, context2.changedPaths, context2.secondaryChangedPaths)
+  });
+}
+var GATE_SUMMARY_MAX_LENGTH = 4096;
+var RULE_MATCH_SUMMARY_MAX_LENGTH = 1536;
+function displayMatchPaths(match) {
+  return [
+    ...match.paths,
+    ...(match.secondary_paths ?? []).flatMap((section) => section.paths.map((path3) => `${section.repository}/${path3}`))
+  ];
+}
+function describeMatchedPath(path3) {
+  const governing = /^\.archflow\/tasks\/[^/]+\/(design\.md|prd\.md)$/u.exec(path3);
+  if (governing === null) return path3;
+  return governing[1] === "design.md" ? `${path3} (this phase changed the architecture design)` : `${path3} (this phase changed the PRD)`;
+}
+function approvalRuleMatchSummary(match) {
+  if (match.kind === "subject") {
+    return `Approval rule trigger: this project requires human approval for the "${match.subject}" subject.`;
+  }
+  const paths = displayMatchPaths(match).map((path3) => `- ${describeMatchedPath(path3)}`).join("\n");
+  return `Approval rule trigger: these changed paths matched the project's content rules:
+${paths}`;
+}
+function boundedApprovalRuleMatchSummary(match) {
+  const full = approvalRuleMatchSummary(match);
+  if (full.length <= RULE_MATCH_SUMMARY_MAX_LENGTH || match.kind === "subject") return full;
+  const header = "Approval rule trigger: these changed paths matched the project's content rules:";
+  let shown = header;
+  let shownCount = 0;
+  const displayPaths = displayMatchPaths(match);
+  for (const path3 of displayPaths) {
+    const line = `
+- ${path3}`;
+    const remaining = displayPaths.length - shownCount - 1;
+    const notice = remaining === 0 ? "" : `
+- \u2026 ${remaining} additional matched path${remaining === 1 ? "" : "s"} omitted; exact paths remain in durable settlement evidence.`;
+    if (shown.length + line.length + notice.length > RULE_MATCH_SUMMARY_MAX_LENGTH) break;
+    shown += line;
+    shownCount += 1;
+  }
+  const omitted = displayPaths.length - shownCount;
+  return omitted === 0 ? shown : `${shown}
+- \u2026 ${omitted} additional matched path${omitted === 1 ? "" : "s"} omitted; exact paths remain in durable settlement evidence.`;
+}
+function approvalRuleGateSummary(summary, match) {
+  const trigger = boundedApprovalRuleMatchSummary(match);
+  const separator = "\n\n";
+  const prose2 = summary.trimEnd();
+  if (prose2.length + separator.length + trigger.length <= GATE_SUMMARY_MAX_LENGTH) {
+    return `${prose2}${separator}${trigger}`;
+  }
+  const notice = "\n\u2026 Gate summary truncated to preserve the approval-rule trigger.";
+  const proseLimit = GATE_SUMMARY_MAX_LENGTH - separator.length - trigger.length;
+  const shortened = `${prose2.slice(0, Math.max(0, proseLimit - notice.length)).trimEnd()}${notice}`;
+  return `${shortened}${separator}${trigger}`;
+}
+function segmentMatches(pattern, segment, patternAt, segmentAt) {
+  while (patternAt < pattern.length) {
+    const character = pattern[patternAt];
+    if (character === "*") {
+      for (let skip = segmentAt; skip <= segment.length; skip += 1) {
+        if (segmentMatches(pattern, segment, patternAt + 1, skip)) return true;
+      }
+      return false;
+    }
+    if (segmentAt >= segment.length) return false;
+    if (character !== "?" && character !== segment[segmentAt]) return false;
+    patternAt += 1;
+    segmentAt += 1;
+  }
+  return segmentAt === segment.length;
+}
+function segmentsMatch(pattern, path3, patternAt, pathAt) {
+  while (patternAt < pattern.length) {
+    const segment = pattern[patternAt];
+    if (segment === "**") {
+      for (let skip = pathAt; skip <= path3.length; skip += 1) {
+        if (segmentsMatch(pattern, path3, patternAt + 1, skip)) return true;
+      }
+      return false;
+    }
+    if (pathAt >= path3.length || !segmentMatches(segment, path3[pathAt], 0, 0)) return false;
+    patternAt += 1;
+    pathAt += 1;
+  }
+  return pathAt === path3.length;
+}
+function globPatternMatches(pattern, path3) {
+  return segmentsMatch(pattern.split("/"), path3.split("/"), 0, 0);
+}
+function evaluateApprovalRules(config2, subject, changedPaths, secondaryChangedPaths = []) {
+  const rules2 = config2?.approval_rules;
+  if (rules2 !== void 0 && rules2.subjects.includes(subject)) {
+    return Object.freeze({ wait: true, match: Object.freeze({ kind: "subject", subject }) });
+  }
+  if (rules2 !== void 0) {
+    const matched = [...new Set(changedPaths.filter((path3) => rules2.content.some((rule4) => rule4.paths.some((pattern) => globPatternMatches(pattern, path3)))))].sort();
+    const secondaryMatched = secondaryChangedPaths.flatMap((section) => {
+      const paths = [...new Set(section.paths.filter((path3) => rules2.content.some((rule4) => rule4.paths.some((pattern) => globPatternMatches(pattern, path3)))))].sort();
+      return paths.length === 0 ? [] : [Object.freeze({ repository: section.repository, paths: Object.freeze(paths) })];
+    }).sort((left, right) => left.repository < right.repository ? -1 : left.repository > right.repository ? 1 : 0);
+    if (matched.length > 0 || secondaryMatched.length > 0) {
+      return Object.freeze({ wait: true, match: Object.freeze({
+        kind: "content",
+        paths: Object.freeze(matched),
+        ...secondaryMatched.length === 0 ? {} : { secondary_paths: Object.freeze(secondaryMatched) }
+      }) });
+    }
+  }
+  return Object.freeze({ wait: false, match: null });
+}
+var subjectGateKind = Object.freeze({
+  prd: "artifact-approval",
+  design: "design-approval",
+  "phase-design": "design-approval",
+  "phase-impl": "commit-authorization"
+});
+function approvalRuleContext(state, produceSubject, config2, changedDocumentPaths = []) {
+  const artifact = produceSubject?.artifact;
+  const changedPaths = artifact?.artifact_kind === "implementation-output" ? [...new Set(artifact.outputs.flatMap(
+    (output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]
+  ))].sort() : artifact?.artifact_kind === "document" ? [...new Set(changedDocumentPaths)].sort() : [];
+  const secondaryChangedPaths = artifact?.artifact_kind === "implementation-output" ? (artifact.secondary_repositories ?? []).flatMap((section) => {
+    const paths = [...new Set(section.outputs.flatMap(
+      (output) => output.operation === "rename" ? [output.path, output.previous_path] : [output.path]
+    ))].sort();
+    return paths.length === 0 ? [] : [Object.freeze({ repository: section.repository, paths: Object.freeze(paths) })];
+  }) : [];
+  return Object.freeze({
+    subject: decodePhaseInstance(state.phase_instance).kind,
+    changedPaths: Object.freeze(changedPaths),
+    secondaryChangedPaths: Object.freeze(secondaryChangedPaths),
+    config: config2
+  });
+}
+function buildRuleSettlement(state, subjectDigest, configDigest, conclusion, milestoneBaselineCommit, milestoneTarget, secondaryMilestones = []) {
+  const kind = decodePhaseInstance(state.phase_instance).kind;
+  const baselineAllowed = !conclusion.wait && (kind === "prd" || kind === "design" || kind === "phase-design" || kind === "phase-impl");
+  if (milestoneBaselineCommit !== void 0 !== baselineAllowed) {
+    throw new TypeError("a milestone baseline is required exactly for milestone-bearing wait:false settlements");
+  }
+  if (milestoneTarget !== void 0 !== baselineAllowed) {
+    throw new TypeError("milestone target facts are required exactly for milestone-bearing wait:false settlements");
+  }
+  if (!baselineAllowed && secondaryMilestones.length !== 0) {
+    throw new TypeError("secondary milestones are allowed only for milestone-bearing wait:false settlements");
+  }
+  return Object.freeze({
+    task_id: state.task_id,
+    phase_instance: state.phase_instance,
+    step: state.step,
+    subject_digest: subjectDigest,
+    conclusion: structuredClone(conclusion),
+    config_digest: configDigest,
+    ...milestoneBaselineCommit === void 0 ? {} : { milestone_baseline_commit: milestoneBaselineCommit },
+    ...milestoneTarget === void 0 ? {} : {
+      milestone_target_ref: milestoneTarget.ref,
+      milestone_target_head: milestoneTarget.head
+    },
+    ...secondaryMilestones.length === 0 ? {} : { secondary_milestones: Object.freeze([...secondaryMilestones]) },
+    settled_at_revision: parseSafeInteger(state.revision + 1)
+  });
+}
+
+// src/review/rubrics.ts
+import { readFile as readFile6 } from "node:fs/promises";
+import { join as join10 } from "node:path";
+
+// src/init/assets.ts
+import { constants } from "node:fs";
+import { access, mkdir as mkdir6, open as open3, readFile as readFile5, unlink as unlink2 } from "node:fs/promises";
+import { dirname as dirname5, join as join9 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+var ASSETS = Object.freeze([
+  ["archflow.gitignore", ".archflow/.gitignore"],
+  ["workflow.yaml", ".archflow/workflow.yaml"],
+  ["hazards.yaml", ".archflow/hazards.yaml"],
+  ["constitution/README.md", ".archflow/constitution/README.md"],
+  ["constitution/custom/README.md", ".archflow/constitution/custom/README.md"],
+  ["constitution/default/00-process.md", ".archflow/constitution/default/00-process.md"],
+  ["constitution/default/10-architecture.md", ".archflow/constitution/default/10-architecture.md"],
+  ["constitution/default/15-dependencies.md", ".archflow/constitution/default/15-dependencies.md"],
+  ["constitution/default/20-data.md", ".archflow/constitution/default/20-data.md"],
+  ["constitution/default/25-database.md", ".archflow/constitution/default/25-database.md"],
+  ["constitution/default/30-product.md", ".archflow/constitution/default/30-product.md"],
+  ["constitution/default/35-plan-changes.md", ".archflow/constitution/default/35-plan-changes.md"],
+  ["constitution/default/45-public-contracts.md", ".archflow/constitution/default/45-public-contracts.md"],
+  ["constitution/default/40-authentication.md", ".archflow/constitution/default/40-authentication.md"],
+  ["constitution/default/50-cryptography.md", ".archflow/constitution/default/50-cryptography.md"],
+  ["constitution/default/60-control-plane.md", ".archflow/constitution/default/60-control-plane.md"],
+  ["config.template.yaml", ".archflow/config.yaml"]
+]);
+function errno2(error51, code2) {
+  return error51 instanceof Error && error51.code === code2;
+}
+async function assetRoot() {
+  const candidates = [
+    fileURLToPath2(new URL("../assets/", import.meta.url)),
+    fileURLToPath2(new URL("../../assets/", import.meta.url))
+  ];
+  for (const candidate of candidates) {
+    try {
+      await access(join9(candidate, "workflow.yaml"), constants.R_OK);
+      return candidate;
+    } catch (error51) {
+      if (!errno2(error51, "ENOENT")) throw error51;
+    }
+  }
+  throw Object.assign(new Error("installed ArchFlow assets are missing"), { code: "ENOENT" });
+}
+
+// src/review/rubrics.ts
+function reviewCriterionIds(phaseKind2, rubric, focus, _specialistActive) {
+  const all = rubric.criteria.map((criterion) => criterion.id);
+  const tests = loadReviewInputConfiguration().phases[phaseKind2].rubric.test_criteria;
+  if (focus === "tests") return Object.freeze(all.filter((criterion) => tests.includes(criterion)));
+  return Object.freeze(all.filter((criterion) => !tests.includes(criterion)));
+}
+function reviewAssignment(reviewerId, focus, phaseKind2, rubric, legacySpecialistActiveOrOptions) {
+  const options = typeof legacySpecialistActiveOrOptions === "boolean" ? void 0 : legacySpecialistActiveOrOptions;
+  if (options?.legacy_confirmations !== void 0 && options.legacy_confirmations.length === 0) {
+    throw new TypeError("legacy_confirmations must be non-empty when present");
+  }
+  const criterionIds = Object.freeze([...options?.criterion_ids ?? reviewCriterionIds(phaseKind2, rubric, focus)]);
+  if (criterionIds.length === 0 && options?.expected_upstream_digests === void 0 && options?.legacy_confirmations === void 0) {
+    throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind2} without a present responsibility`);
+  }
+  return Object.freeze({
+    reviewer_id: reviewerId,
+    focus,
+    criterion_ids: criterionIds,
+    ...options?.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: Object.freeze([...options.expected_upstream_digests]) },
+    ...options?.legacy_confirmations === void 0 ? {} : { legacy_confirmations: Object.freeze(options.legacy_confirmations.map((confirmation) => Object.freeze({
+      finding_id: confirmation.finding_id,
+      criterion_ids: Object.freeze([...confirmation.criterion_ids])
+    }))) }
+  });
+}
+function canonicalRubric(rubricId, rubric) {
+  const frozen = Object.freeze({
+    ...rubric,
+    criteria: Object.freeze(rubric.criteria.map((criterion) => Object.freeze({ ...criterion })))
+  });
+  return Object.freeze({
+    rubric_id: rubricId,
+    rubric_digest: canonicalJsonDigest(frozen),
+    rubric: frozen
+  });
+}
+var ok8 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var rubricFailure = (issueCode, issues) => Object.freeze({
+  schema_version: "1",
+  ok: false,
+  error: createProjectError("CONFIG_INVALID", { issue_code: issueCode, issues: issues.slice(0, 5) })
+});
+async function loadRubricFile(input) {
+  const label = `assets/${input.file}`;
+  let document2;
+  try {
+    const bytes = await readFile6(join10(input.root, input.file));
+    document2 = parseSingleYamlDocument(new TextDecoder("utf-8", { fatal: true }).decode(bytes), label);
+  } catch (error51) {
+    if (error51 instanceof SyntaxError) {
+      return rubricFailure("rubric-file-invalid", [error51.message]);
+    }
+    return rubricFailure("rubric-file-missing", [
+      `${label}: the rubric file is missing or unreadable (${error51 instanceof Error ? error51.message : "unknown error"}); reinstall the ArchFlow bundle`
+    ]);
+  }
+  if (document2 === null || typeof document2 !== "object" || Array.isArray(document2)) {
+    return rubricFailure("rubric-file-invalid", [`${label}: the rubric file must be a YAML mapping`]);
+  }
+  const record3 = document2;
+  if (record3.rubric_id !== input.expected_id) {
+    return rubricFailure("rubric-file-invalid", [
+      `${label}: rubric_id ${JSON.stringify(record3.rubric_id)} does not match this file's rubric ${input.expected_id}`
+    ]);
+  }
+  const fields = Object.fromEntries(Object.entries(record3).filter(([key2]) => key2 !== "rubric_id"));
+  try {
+    return ok8(canonicalRubric(input.expected_id, parseRubricV1(fields)));
+  } catch (error51) {
+    const issues = describeValidationIssues(error51);
+    return rubricFailure(
+      "rubric-file-invalid",
+      issues === void 0 ? [`${label}: rubric rejected`] : issues.map((issue4) => `${label}: ${issue4}`)
+    );
+  }
+}
+async function loadCanonicalRubricForPhaseKind(phaseKind2) {
+  return loadInstalledRubric(loadReviewInputConfiguration().phases[phaseKind2].rubric);
+}
+async function loadCanonicalRubricForSimpleStage(stage) {
+  return stage === "plan" ? loadInstalledRubric({ file: "rubrics/simple-plan.yaml", id: "simple-plan-v1" }) : loadCanonicalRubricForPhaseKind("phase-impl");
+}
+async function loadInstalledRubric(expected) {
+  let root;
+  try {
+    root = await assetRoot();
+  } catch (error51) {
+    return rubricFailure("rubric-file-missing", [
+      `assets/rubrics: installed ArchFlow assets are missing (${error51 instanceof Error ? error51.message : "unknown error"})`
+    ]);
+  }
+  return loadRubricFile({ root, file: expected.file, expected_id: expected.id });
+}
+
+// src/review/simple-context.ts
+import { execFile as execFile2 } from "node:child_process";
+import { constants as constants2 } from "node:fs";
+import { lstat as lstat7, open as open4, readdir as readdir2, readlink as readlink3 } from "node:fs/promises";
+import { join as join11 } from "node:path";
+import { promisify } from "node:util";
+var exec = promisify(execFile2);
+var BYTE_CAP = 25 * 1024 * 1024;
+var SimpleReviewError = class extends Error {
+  constructor(code2, message) {
+    super(message);
+    this.code = code2;
+  }
+  code;
+};
+async function simpleGit(root, args2, signal) {
+  const result = await exec("git", ["-C", root, ...args2], { encoding: "utf8", maxBuffer: BYTE_CAP, timeout: 3e4, signal });
+  return result.stdout;
+}
+var absent = (error51) => error51.code === "ENOENT";
+async function safeParents(root, path3) {
+  let parent = root;
+  for (const part of path3.split("/").slice(0, -1)) {
+    parent = join11(parent, part);
+    try {
+      const stat4 = await lstat7(parent);
+      if (!stat4.isDirectory() || stat4.isSymbolicLink()) throw new SimpleReviewError("INPUT_INVALID", "Review paths must not traverse symlinks or non-directories.");
+    } catch (error51) {
+      if (absent(error51)) return;
+      throw error51;
+    }
+  }
+}
+async function regular(root, path3) {
+  await safeParents(root, path3);
+  const handle = await open4(join11(root, path3), constants2.O_RDONLY | constants2.O_NOFOLLOW);
+  try {
+    const stat4 = await handle.stat();
+    if (!stat4.isFile() || stat4.size > BYTE_CAP) throw new SimpleReviewError("INPUT_INVALID", "Review input must be a bounded regular file.");
+    return new TextDecoder("utf-8", { fatal: true }).decode(await handle.readFile());
+  } finally {
+    await handle.close();
+  }
+}
+async function loadSimplePolicy(root) {
+  const assets = await assetRoot();
+  let configText;
+  try {
+    configText = await regular(root, ".archflow/config.yaml");
+  } catch (error51) {
+    if (!absent(error51)) throw error51;
+    configText = await regular(assets, "config.template.yaml");
+  }
+  let config2;
+  try {
+    config2 = parseConfigYaml(configText);
+  } catch {
+    throw new SimpleReviewError("CONFIG_INVALID", "Review configuration is invalid. Check .archflow/config.yaml (or the shipped template when absent) against the config schema.");
+  }
+  let policyRoot = root;
+  let prefix = ".archflow/constitution";
+  try {
+    await safeParents(root, `${prefix}/placeholder`);
+    const directory = await lstat7(join11(root, prefix));
+    if (!directory.isDirectory() || directory.isSymbolicLink()) throw new SimpleReviewError("CONFIG_INVALID", "Constitution must be a regular directory.");
+  } catch (error51) {
+    if (!absent(error51)) throw error51;
+    policyRoot = assets;
+    prefix = "constitution";
+  }
+  const files = {};
+  for (const layer of ["", "default", "custom"]) {
+    const relative9 = layer === "" ? prefix : `${prefix}/${layer}`;
+    let entries;
+    try {
+      await safeParents(policyRoot, `${relative9}/placeholder`);
+      entries = await readdir2(join11(policyRoot, relative9));
+    } catch (error51) {
+      if (absent(error51)) continue;
+      throw error51;
+    }
+    for (const name of entries.filter((name2) => CONSTITUTION_RULE_NAME.test(name2)).sort()) {
+      files[`.archflow/constitution/${layer === "" ? "" : `${layer}/`}${name}`] = await regular(policyRoot, `${relative9}/${name}`);
+    }
+  }
+  let registry2;
+  try {
+    registry2 = parseConstitutionRuleFiles(files);
+  } catch {
+    throw new SimpleReviewError("CONFIG_INVALID", "Constitution rules are invalid. Check rule frontmatter, duplicate IDs, and default/custom layout.");
+  }
+  const rules2 = [...registry2.values()].filter((rule4) => rule4.status === "active").sort((a, b) => `${a.id}:${a.version}`.localeCompare(`${b.id}:${b.version}`));
+  assertPlainJson(config2, "review config");
+  const config_digest = canonicalJsonDigest(structuredClone(config2));
+  const constitution_digest = canonicalJsonDigest(files);
+  return {
+    config: config2,
+    rules: rules2,
+    config_digest,
+    constitution_digest,
+    policy_digest: canonicalJsonDigest({ config_digest, constitution_digest })
+  };
+}
+async function captureSimpleContext(workingDirectory, input, signal) {
+  const root = (await simpleGit(workingDirectory, ["rev-parse", "--show-toplevel"], signal)).trimEnd();
+  const head = (await simpleGit(root, ["rev-parse", "HEAD"], signal)).trim();
+  const branch = await simpleGit(root, ["rev-parse", "--symbolic-full-name", "HEAD"], signal);
+  if (head !== input.base_commit) throw new SimpleReviewError("BASELINE_CHANGED", "HEAD differs from the simple task baseline. Resolve the changed baseline before review.");
+  const policy = await loadSimplePolicy(root);
+  if (input.expected_policy_digest !== void 0 && input.expected_policy_digest !== policy.policy_digest) {
+    throw new SimpleReviewError("POLICY_CHANGED", "Repository review configuration or constitution changed since plan review. Resolve the change with the user before continuing.");
+  }
+  const collect = async () => {
+    const dirty = (await simpleGit(root, ["diff", "--name-only", "-z", "HEAD", "--"], signal)).split("\0");
+    const untracked = (await simpleGit(root, ["ls-files", "--others", "--exclude-standard", "-z"], signal)).split("\0");
+    const paths = [...new Set([...dirty, ...untracked, ...input.paths].filter(Boolean))].sort();
+    const entries = [];
+    let size = 0;
+    for (const path3 of paths) {
+      if (path3 === ".archflow/tasks" || path3.startsWith(".archflow/tasks/")) continue;
+      const claim = parseRepositoryPathClaim(path3);
+      await safeParents(root, path3);
+      let stat4;
+      try {
+        stat4 = await lstat7(join11(root, path3));
+      } catch (error51) {
+        if (absent(error51)) {
+          entries.push({ path: claim, desired: { state: "absent" } });
+          continue;
+        }
+        throw error51;
+      }
+      if (stat4.isSymbolicLink()) {
+        const bytes = new TextEncoder().encode(await readlink3(join11(root, path3)));
+        entries.push({ path: claim, desired: { state: "present", file_type: "symlink", mode: "120000", bytes } });
+        size += bytes.byteLength;
+      } else if (stat4.isFile()) {
+        if (stat4.size + size > BYTE_CAP) throw new SimpleReviewError("INPUT_TOO_LARGE", "Simple review snapshot exceeds 25 MiB of changed files.");
+        const handle = await open4(join11(root, path3), constants2.O_RDONLY | constants2.O_NOFOLLOW);
+        let bytes;
+        try {
+          bytes = new Uint8Array(await handle.readFile());
+        } finally {
+          await handle.close();
+        }
+        size += bytes.byteLength;
+        entries.push({ path: claim, desired: { state: "present", file_type: "regular", mode: (stat4.mode & 73) !== 0 ? "100755" : "100644", bytes } });
+      } else throw new SimpleReviewError("INPUT_INVALID", `Review requires file paths; unsupported entry: ${path3}`);
+      if (size > BYTE_CAP) throw new SimpleReviewError("INPUT_TOO_LARGE", "Simple review snapshot exceeds 25 MiB of changed files.");
+    }
+    return { entries };
+  };
+  const fingerprint = (projection2) => canonicalJsonDigest(projection2.entries.map(({ path: path3, desired }) => desired.state === "absent" ? { path: path3, state: "absent" } : { path: path3, state: "present", mode: desired.mode, digest: sha256Bytes(desired.bytes) }));
+  const projection = await collect();
+  const snapshot = fingerprint(projection);
+  const views = [{
+    name: "primary",
+    member_kind: "primary",
+    repository_root: root,
+    repository_identity_digest: canonicalJsonDigest({ root }),
+    commit: parseGitOid(head),
+    projection_plan: projection,
+    snapshot_digest: snapshot
+  }, {
+    name: "baseline",
+    member_kind: "secondary",
+    repository_root: root,
+    repository_identity_digest: canonicalJsonDigest({ root }),
+    commit: parseGitOid(head)
+  }];
+  const assertCurrent = async () => {
+    const currentSnapshot = fingerprint(await collect());
+    const currentPolicy = (await loadSimplePolicy(root)).policy_digest;
+    if (currentSnapshot !== snapshot || currentPolicy !== policy.policy_digest || (await simpleGit(root, ["rev-parse", "HEAD"], signal)).trim() !== head || await simpleGit(root, ["rev-parse", "--symbolic-full-name", "HEAD"], signal) !== branch) {
+      throw new SimpleReviewError("SUBJECT_CHANGED", "Repository bytes, branch, or review policy changed during review. These reports do not cover the current work.");
+    }
+  };
+  await assertCurrent();
+  return { root, policy, views, assertCurrent, subject_digest: canonicalJsonDigest({
+    stage: input.stage,
+    ask: input.ask,
+    plan: input.plan,
+    base_commit: input.base_commit,
+    paths: input.paths,
+    verification: input.verification ?? null,
+    snapshot
+  }) };
+}
+
+// src/review/simple-review.ts
+var failure3 = (code2, message) => ({ schema_version: "1", ok: false, error: { code: code2, message, retryable: false } });
+function jsonSchema(schema2) {
+  const value = JSON.parse(JSON.stringify(schema2.toJSONSchema({ target: "draft-2020-12" })));
+  assertPlainJson(value);
+  return structuredClone(value);
+}
+var envelope = sealDispatchInput;
+async function runSimpleReview(raw, context2, dependencies = {}) {
+  let dispose;
+  try {
+    const input = parseSimpleReviewInput(raw);
+    context2.signal.throwIfAborted();
+    const captured = await captureSimpleContext(context2.connection.startup_repository_candidate.working_directory, input, context2.signal);
+    const { policy } = captured;
+    const host = context2.connection.initialization_candidates.host;
+    const policyPhaseKind = input.stage === "plan" ? "phase-design" : "phase-impl";
+    const rubricResult = await loadCanonicalRubricForSimpleStage(input.stage);
+    if (!rubricResult.ok) return failure3("CONFIG_INVALID", "The installed review rubric is missing or invalid.");
+    const rubric = rubricResult.value.rubric;
+    const roles2 = ["counter-reviewer", "test-reviewer"];
+    if (policy.rules.length > 0) roles2.push("adjudicator");
+    const selected = roles2.flatMap((role2) => {
+      const routes = selectDispatchRouteCandidates(policy.config, policyPhaseKind, role2, input.review_routes?.[role2], void 0, host);
+      if (routes.length === 0) throw new SimpleReviewError("CONFIG_INVALID", `No route is configured for ${role2}.`);
+      return routes.map((candidate, index) => ({ role: role2, reviewer_id: `${role2}-${index + 1}`, route: validateSelectedDispatchRoute(candidate).route }));
+    });
+    const shared = shareRepositoryViewWorkspace(captured.views, captured.root);
+    dispose = shared.dispose;
+    const dispatch = dependencies.dispatch ?? createReviewDispatcher({
+      host,
+      repository_root: captured.root,
+      signal: context2.signal,
+      cancellation_source: "client",
+      shared_workspace: shared
+    });
+    const workspace = projectRepositoryWorkspaceBinding(captured.views);
+    const value = {
+      stage: input.stage,
+      subject_digest: captured.subject_digest,
+      policy_digest: policy.policy_digest,
+      config_digest: policy.config_digest,
+      constitution_digest: policy.constitution_digest,
+      reports: [],
+      constitution: { status: policy.rules.length === 0 ? "not-applicable" : "failed", judgments: [] },
+      human_review_reasons: [],
+      failures: []
+    };
+    const approval = evaluateApprovalRules(policy.config, policyPhaseKind, input.paths);
+    if (approval.wait) value.human_review_reasons.push(approvalRuleMatchSummary(approval.match));
+    const slots = policy.rules.map((rule4, index) => ({ slot: `rule-${index + 1}`, rule_id: rule4.id, rule_version: rule4.version }));
+    const constitutionSchema = slots.length === 0 ? void 0 : createRawAdjudicationV2Schema(slots);
+    const common3 = {
+      subject: { stage: input.stage, subject_digest: captured.subject_digest },
+      ask: input.ask,
+      plan: input.plan,
+      paths: input.paths,
+      verification: input.verification ?? "Plan review: assess the proposed verification strategy.",
+      workspace,
+      scope: "This is a standalone simple task, not an initialized ArchFlow workflow. The primary repository view contains the current work; baseline is the same repository at the starting commit. Inspect declared paths as the subject, with other files only as context. Existing unrelated changes are not findings. There are no task documents, phases, durable gates, or implementation-agent recommendations. The invoking session owns plan review, fixes, explicit human decisions, and execution; do not invent missing workflow records. Custom policy remains applicable; report any conflict rather than silently exempting it. Review once; no follow-up reviewer pass will certify subsequent fixes."
+    };
+    const outcomes2 = await serializeDispatchAll(selected.map((selection) => async () => {
+      const { role: role2, reviewer_id, route: route3 } = selection;
+      try {
+        const assignment = role2 === "adjudicator" ? void 0 : reviewAssignment(
+          reviewer_id,
+          role2 === "test-reviewer" ? "tests" : "general",
+          policyPhaseKind,
+          rubric
+        );
+        const request = role2 === "adjudicator" ? envelope("adjudication", {
+          ...common3,
+          rules: policy.rules.map((rule4, index) => ({
+            slot: slots[index].slot,
+            text: rule4.text,
+            ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
+            enforced_by: [...rule4.enforced_by ?? []]
+          }))
+        }) : envelope("review", {
+          ...common3,
+          assignment,
+          rubric
+        });
+        const schema2 = role2 === "adjudicator" ? constitutionSchema : reviewReportOutputSchema;
+        let returned;
+        for (let attempt = 0; ; attempt++) {
+          context2.signal.throwIfAborted();
+          try {
+            returned = await dispatch(route3, request, jsonSchema(schema2));
+            break;
+          } catch (error51) {
+            if (attempt >= 2 || !isTransientDispatchFailure(error51) || context2.signal.aborted) throw error51;
+            const ms = attempt === 0 ? 1e3 : 4e3;
+            await (dependencies.wait?.(ms, context2.signal) ?? delay2(ms, void 0, { signal: context2.signal }));
+          }
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(returned.extracted_output_bytes));
+        } catch {
+          throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer returned invalid JSON.");
+        }
+        const usage = returned.usage === void 0 ? {} : { usage: returned.usage };
+        if (role2 === "adjudicator") {
+          const result2 = constitutionSchema.safeParse(parsed);
+          if (!result2.success) throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Constitution review did not cover every assigned rule with valid judgments.");
+          const judgments = slots.map((slot, index) => {
+            const judgment2 = result2.data.judgments[slot.slot];
+            if (policy.rules[index].review_trigger === void 0 && judgment2.trigger !== "not-matched") {
+              throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Constitution review invented a trigger for a rule without one.");
+            }
+            return { rule_id: slot.rule_id, rule_version: slot.rule_version, ...judgment2 };
+          });
+          return { selection, judgments, report: { role: role2, reviewer_id, route: route3, ...usage, report: judgments.map((entry2) => `${entry2.rule_id}: ${entry2.compliance}. ${entry2.rationale}`).join("\n") } };
+        }
+        const result = reviewReportOutputSchema.strict().safeParse(parsed);
+        if (!result.success) throw new SimpleReviewError("MODEL_OUTPUT_INVALID", "Reviewer must return an explicit outcome and nonblank feedback.");
+        return { selection, report: { role: role2, reviewer_id, route: route3, ...result.data, ...usage } };
+      } catch (error51) {
+        if (!(error51 instanceof SimpleReviewError) && classifiedDispatchFailure(error51) === void 0) reportInternalError(context2.invocation_id, error51);
+        return { selection, error: error51 };
+      }
+    }));
+    for (const outcome of outcomes2) {
+      const { selection } = outcome;
+      if ("error" in outcome) {
+        const classified = classifiedDispatchFailure(outcome.error);
+        value.failures.push({
+          ...selection,
+          code: outcome.error instanceof SimpleReviewError ? outcome.error.code : classified?.code ?? "DISPATCH_FAILED",
+          message: outcome.error instanceof SimpleReviewError ? outcome.error.message : classified?.message ?? "Reviewer dispatch failed or was cancelled. Repair it before requesting a fresh review."
+        });
+      } else {
+        value.reports.push(outcome.report);
+        if (outcome.judgments !== void 0) {
+          value.constitution = { status: "complete", judgments: outcome.judgments };
+          for (const judgment2 of outcome.judgments) if (judgment2.trigger !== "not-matched") {
+            value.human_review_reasons.push(`${judgment2.rule_id}: ${judgment2.trigger}. ${judgment2.trigger_evidence}`);
+          }
+        }
+      }
+    }
+    await captured.assertCurrent();
+    const ok28 = value.failures.length === 0;
+    return parseSimpleReviewResult({
+      schema_version: "1",
+      ok: ok28,
+      value,
+      ...ok28 ? {} : { error: { code: "REVIEW_INCOMPLETE", message: "Some required reviews failed; available reports do not supply complete coverage.", retryable: false } }
+    });
+  } catch (error51) {
+    const classified = classifiedDispatchFailure(error51);
+    return failure3(
+      error51 instanceof SimpleReviewError ? error51.code : context2.signal.aborted ? "CANCELLED" : classified?.code ?? "REVIEW_FAILED",
+      error51 instanceof SimpleReviewError ? error51.message : classified?.message ?? "Unable to prepare or validate the simple review. Check repository access, paths, configuration, and constitution."
+    );
+  } finally {
+    await dispose?.();
+  }
+}
+
+// src/contracts/mcp-tools.ts
+import { isDeepStrictEqual as isDeepStrictEqual9 } from "node:util";
+
+// src/contracts/durable-legacy-import.ts
+var sha256Digest4 = sha256DigestV1Schema;
+var safeInteger5 = safeIntegerV1Schema;
+var legacyMappingEntryV1Schema = external_exports.object({
+  legacy_path: repositoryPathClaimV1Schema,
+  destination_path: repositoryPathClaimV1Schema,
+  phase_instance: phaseInstanceIdV1Schema,
+  disposition: external_exports.enum(["draft", "historical"])
+}).strict();
+var stagedPayloadRefV1Schema = external_exports.object({
+  legacy_path: repositoryPathClaimV1Schema,
+  digest: sha256Digest4,
+  byte_count: safeInteger5
+}).strict();
+var legacyImportInitializationV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("legacy-import-initialization"),
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256Digest4,
+  source_identity_digest: sha256Digest4,
+  import_digest: sha256Digest4,
+  import_baseline_commit: gitOidV1Schema,
+  code_baseline_commit: gitOidV1Schema,
+  policy_base_commit: gitOidV1Schema,
+  constitution_digest: sha256Digest4,
+  workflow_digest: sha256Digest4,
+  config_digest: sha256Digest4,
+  canonical_paths: canonicalTaskPathsV1Schema,
+  mapping: external_exports.array(legacyMappingEntryV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("destination_path")), "mapping must be sorted by destination_path with no duplicates"),
+  staged_payload_refs: external_exports.array(stagedPayloadRefV1Schema).refine((items) => isSortedUniqueBy(items, tupleKey("legacy_path")), "staged_payload_refs must be sorted by legacy_path with no duplicates"),
+  resume_phase: phaseInstanceIdV1Schema.optional(),
+  planned_final_phase: safeInteger5.optional(),
+  target_ref: external_exports.string().min(1).max(512).optional(),
+  commit_message: external_exports.string().min(1).max(512).optional()
+}).strict();
+function parseLegacyImportInitialization(value) {
+  assertPlainJson(value, "legacy import initialization");
+  return legacyImportInitializationV1Schema.parse(value);
+}
+
+// src/contracts/durable-task-initialization.ts
+var sha256Digest5 = sha256DigestV1Schema;
+var taskInitializationV1Schema = external_exports.object({
+  schema_version: external_exports.literal("1"),
+  artifact_kind: external_exports.literal("task-initialization"),
+  task_id: taskSlugV1Schema,
+  repository_identity_digest: sha256Digest5,
+  code_baseline_commit: gitOidV1Schema,
+  policy_base_commit: gitOidV1Schema,
+  constitution_digest: sha256Digest5,
+  workflow_digest: sha256Digest5,
+  config_digest: sha256Digest5,
+  canonical_paths: canonicalTaskPathsV1Schema
+}).strict();
+
+// src/contracts/mcp-tools.ts
+var parsedToolInputBrand = /* @__PURE__ */ Symbol("ParsedToolInput");
+var structuralResultBrand = /* @__PURE__ */ Symbol("StructurallyValidProjectResult");
+var resultExpectationBrand = /* @__PURE__ */ Symbol("ResultExpectation");
+var parsedCalls = /* @__PURE__ */ new WeakSet();
+var structuralResults = /* @__PURE__ */ new WeakSet();
+var resultExpectations = /* @__PURE__ */ new WeakSet();
+var requestDigests = /* @__PURE__ */ new WeakMap();
+var digest11 = external_exports.string().regex(/^[0-9a-f]{64}$/u);
+var safeId2 = external_exports.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u);
+var text4 = external_exports.string().min(1).max(4096).regex(/\S/u);
+var safeInteger6 = external_exports.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+var phase2 = external_exports.string().regex(/^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$/u).refine((v) => {
+  try {
+    decodePhaseInstance(v);
+    return true;
+  } catch {
+    return false;
+  }
+});
+var rule3 = external_exports.object({ rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER) }).strict();
+var scope2 = external_exports.object({ operation: external_exports.enum(["review-trigger", "adjudication-failure"]), boundary: external_exports.enum(["subject", "phase", "task"]) }).strict();
+var provenance = humanDecisionProvenanceV1Schema.clone(humanDecisionProvenanceV1Schema.def);
+var common2 = { schema_version: external_exports.literal("1"), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, expected_revision: safeInteger6, input_fingerprint: digest11 };
+var stateValidationOverrideRequestV1Schema = external_exports.object({
+  displaced_validations: external_exports.array(external_exports.string().min(1).max(1024).regex(/\S/u)).min(1).max(32).refine((items) => items.every((item, index) => index === 0 || items[index - 1].localeCompare(item) < 0), "displaced validations must be localeCompare-sorted with no duplicates")
+}).strict();
+var def = (name) => Object.freeze({ name, input_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/input`, result_schema_id: `https://archflow.dev/schemas/v1/mcp-tools#/$defs/${name}/result` });
+var TOOL_DEFINITIONS = Object.freeze({ archflow_state: def("archflow_state"), archflow_counter_review: def("archflow_counter_review"), archflow_gate: def("archflow_gate"), archflow_waiver: def("archflow_waiver") });
+var durableArtifact = external_exports.union([
+  taskInitializationV1Schema,
+  legacyImportInitializationV1Schema,
+  documentArtifactV1Schema,
+  implementationOutputV1Schema,
+  external_exports.object({
+    schema_version: external_exports.literal("1"),
+    artifact_kind: external_exports.literal("triage"),
+    evidence: triageCandidateSchema
+  }).strict()
+]);
+var humanRevisionDeclarationSchema = external_exports.object({
+  classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
+  rationale: text4,
+  user_override: external_exports.object({
+    agent_classification: external_exports.enum(HUMAN_REVISION_CLASSIFICATIONS),
+    rationale: text4
+  }).strict().optional()
+}).strict().superRefine((revision, context2) => {
+  if (revision.user_override?.agent_classification === revision.classification) {
+    context2.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
+  }
+});
+var stateBoundaryInputSchema = external_exports.object({ ...common2, phase_instance: phase2, step: external_exports.enum(["produce", "counter_review", "triage"]), status: external_exports.enum(["running", "succeeded", "failed"]), artifact: durableArtifact.optional(), human_revision: humanRevisionDeclarationSchema.optional() }).strict().superRefine((input, context2) => {
+  if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) {
+    context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
+  }
+});
+var planningRestartInputSchema = external_exports.object({
+  ...common2,
+  operation: external_exports.literal("planning_restart"),
+  phase_instance: phase2,
+  target_phase_instance: phase2,
+  reason: text4,
+  ask_base_digest: digest11.optional(),
+  step: external_exports.literal("produce"),
+  status: external_exports.literal("running")
+}).strict();
+var stateInputSchema = external_exports.object({
+  ...common2,
+  phase_instance: phase2,
+  step: external_exports.enum(["produce", "counter_review", "triage"]),
+  status: external_exports.enum(["running", "succeeded", "failed"]),
+  artifact: durableArtifact.optional(),
+  human_revision: humanRevisionDeclarationSchema.optional(),
+  operation: external_exports.enum(["planning_restart", "refresh_milestone_baseline", "recover_milestone_authority", "recover_approval_trigger_authority", "refresh_stale_baseline", "set_commit_authority", "request_validation_override"]).optional(),
+  target_commit: external_exports.string().min(1).max(256).optional(),
+  scope: external_exports.array(external_exports.enum(["milestone", "policy"])).optional(),
+  target_phase_instance: phase2.optional(),
+  reason: text4.optional(),
+  validation_override_request: stateValidationOverrideRequestV1Schema.optional(),
+  ask_base_digest: digest11.optional()
+}).strict().superRefine((input, context2) => {
+  if (input.operation === "request_validation_override") {
+    if (!input.phase_instance.startsWith("phase-impl-")) context2.addIssue({ code: "custom", path: ["phase_instance"], message: "request_validation_override is phase implementation only" });
+    if (input.step !== "produce" || input.status !== "failed") context2.addIssue({ code: "custom", path: ["status"], message: "request_validation_override requires produce/failed" });
+    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "request_validation_override requires reason" });
+    if (input.validation_override_request === void 0) context2.addIssue({ code: "custom", path: ["validation_override_request"], message: "request_validation_override requires validation_override_request" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "request_validation_override carries only its reason and bounded validation request" });
+    }
+    return;
+  }
+  if (input.operation === "planning_restart") {
+    if (input.target_phase_instance === void 0) context2.addIssue({ code: "custom", path: ["target_phase_instance"], message: "planning_restart requires target_phase_instance" });
+    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "planning_restart requires reason" });
+    if (input.step !== "produce" || input.status !== "running") context2.addIssue({ code: "custom", path: ["step"], message: "planning_restart lands at produce/running" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0) context2.addIssue({ code: "custom", path: ["artifact"], message: "planning_restart cannot carry an artifact or human revision" });
+    if (input.target_phase_instance === "prd" && input.ask_base_digest === void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "PRD planning_restart requires ask_base_digest" });
+    if (input.target_phase_instance !== "prd" && input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["ask_base_digest"], message: "ask_base_digest is PRD-only" });
+    if (input.target_commit !== void 0 || input.scope !== void 0 || input.validation_override_request !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "planning_restart cannot carry commit authority or validation override fields" });
+    return;
+  }
+  if (input.operation === "set_commit_authority") {
+    if (input.target_commit === void 0) context2.addIssue({ code: "custom", path: ["target_commit"], message: "set_commit_authority requires target_commit" });
+    if (input.reason === void 0) context2.addIssue({ code: "custom", path: ["reason"], message: "set_commit_authority requires reason" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.ask_base_digest !== void 0 || input.validation_override_request !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "set_commit_authority carries no artifact, human revision, restart target, ask digest, or validation override request" });
+    }
+    return;
+  }
+  if (input.operation === "refresh_milestone_baseline") {
+    if (input.step !== "triage" || input.status !== "succeeded") context2.addIssue({ code: "custom", path: ["step"], message: "refresh_milestone_baseline requires triage/succeeded" });
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.validation_override_request !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: "refresh_milestone_baseline carries no artifact, revision, restart target, reason, ask digest, or commit authority fields" });
+    }
+    return;
+  }
+  if (input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" || input.operation === "refresh_stale_baseline") {
+    if (input.artifact !== void 0 || input.human_revision !== void 0 || input.target_phase_instance !== void 0 || input.reason !== void 0 || input.validation_override_request !== void 0 || input.ask_base_digest !== void 0 || input.target_commit !== void 0 || input.scope !== void 0) {
+      context2.addIssue({ code: "custom", path: ["operation"], message: `${input.operation} carries no artifact, revision, restart target, reason, ask digest, or commit authority fields` });
+    }
+    return;
+  }
+  if (input.target_commit !== void 0 || input.scope !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "commit authority fields require set_commit_authority" });
+  if (input.target_phase_instance !== void 0 || input.reason !== void 0 || input.ask_base_digest !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "restart fields require planning_restart" });
+  if (input.validation_override_request !== void 0) context2.addIssue({ code: "custom", path: ["operation"], message: "validation_override_request requires request_validation_override" });
+  if (input.human_revision !== void 0 && (input.step !== "produce" || input.status !== "succeeded")) context2.addIssue({ code: "custom", path: ["human_revision"], message: "human_revision is allowed only on a succeeded produce result" });
+});
+var reviewModelRouteV1Schema = configRouteSchema.clone(configRouteSchema.def);
+var reviewRouteSetV1Schema = external_exports.object({
+  "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  "test-reviewer": reviewModelRouteV1Schema.optional(),
+  "effort-reviewer": reviewModelRouteV1Schema.optional(),
+  adjudicator: reviewModelRouteV1Schema.optional()
+}).strict().superRefine((routes, context2) => {
+  if (routes["counter-reviewer"] === void 0 && routes["test-reviewer"] === void 0 && routes["effort-reviewer"] === void 0 && routes.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "review routes must name counter-reviewer, test-reviewer, effort-reviewer, adjudicator, or a combination" });
+  }
+});
+var routeOverrideSchema = external_exports.object({
+  reason: text4,
+  "counter-reviewer": reviewModelRouteV1Schema.optional(),
+  "test-reviewer": reviewModelRouteV1Schema.optional(),
+  adjudicator: reviewModelRouteV1Schema.optional()
+}).strict().superRefine((override, context2) => {
+  if (override["counter-reviewer"] === void 0 && override["test-reviewer"] === void 0 && override.adjudicator === void 0) {
+    context2.addIssue({ code: "custom", message: "route_override must name counter-reviewer, test-reviewer, adjudicator, or a combination" });
+  }
+});
+var counterReviewInputSchema = external_exports.object({
+  ...common2,
+  artifact_path: taskPathClaimV1Schema,
+  invocation_routes: reviewRouteSetV1Schema.optional(),
+  route_override: routeOverrideSchema.optional()
+}).strict();
+var humanGateChoiceSchema = external_exports.object({ choice: text4, reason: text4 }).strict();
+var gateInputSchema = external_exports.object({ ...common2, phase_instance: phase2, summary: text4, subject_digest: digest11, current_evidence: external_exports.unknown(), kind: external_exports.enum(GATE_KINDS), context: external_exports.unknown(), preview_digest: digest11.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
+  try {
+    parseGateContext(input.kind, input.context);
+  } catch (error51) {
+    context2.addIssue({ code: "custom", path: ["context"], message: error51 instanceof Error ? error51.message : "invalid gate context" });
+  }
+  try {
+    if (input.kind === "baseline-adoption") parseBaselineObservationRef(input.current_evidence);
+    else if (input.kind === "validation-override") parseValidationOverrideRequestRef(input.current_evidence);
+    else parseCurrentEvidenceSetRef(input.current_evidence);
+  } catch (error51) {
+    context2.addIssue({ code: "custom", path: ["current_evidence"], message: error51 instanceof Error ? error51.message : "invalid current evidence" });
+  }
+  if (input.kind === "validation-override") {
+    if (!input.phase_instance.startsWith("phase-impl-")) context2.addIssue({ code: "custom", path: ["phase_instance"], message: "validation override gates are phase implementation only" });
+    try {
+      const gateContext = parseGateContext("validation-override", input.context);
+      const evidence = parseValidationOverrideRequestRef(input.current_evidence);
+      const expectedSubject = validationOverrideSubjectDigest({
+        task_id: input.task_id,
+        phase_instance: input.phase_instance,
+        input_fingerprint: gateContext.input_fingerprint,
+        governing_phase_design_digest: gateContext.governing_phase_design_digest,
+        displaced_validations: gateContext.displaced_validations
+      });
+      if (input.input_fingerprint !== gateContext.input_fingerprint || input.subject_digest !== expectedSubject || evidence.task_id !== input.task_id || evidence.phase_instance !== input.phase_instance || evidence.input_fingerprint !== gateContext.input_fingerprint || evidence.governing_phase_design_digest !== gateContext.governing_phase_design_digest || evidence.request_revision !== gateContext.request_revision || evidence.validation_request_subject_digest !== input.subject_digest) {
+        context2.addIssue({ code: "custom", path: ["current_evidence"], message: "validation override evidence must exactly bind the request subject" });
+      }
+    } catch {
+    }
+  }
+  if (input.kind === "attempts-exhausted") {
+    try {
+      const gateContext = parseGateContext("attempts-exhausted", input.context);
+      if (gateContext.review_push_through !== void 0 && parseCurrentEvidenceSetRef(input.current_evidence).set_digest !== gateContext.review_push_through.current_evidence_set_digest) {
+        context2.addIssue({ code: "custom", path: ["context", "review_push_through", "current_evidence_set_digest"], message: "review push-through must bind the gate current evidence set" });
+      }
+    } catch {
+    }
+  }
+  if (input.preview_digest === void 0 !== (input.decision === void 0)) {
+    context2.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call decision) or both omitted (gate opens and awaits the human decision)" });
+  }
+});
+var waiverOrigin = external_exports.object({ origin_gate_id: pathSafeIdV1Schema, origin_decision_digest: digest11, origin_context_digest: digest11, task_id: taskSlugV1Schema, phase_instance: phase2, subject_digest: digest11, current_evidence_set_digest: digest11, rule: rule3, scope: scope2 }).strict();
+var waiverInputSchema = external_exports.object({ ...common2, origin: waiverOrigin, rationale: text4, preview_digest: digest11.optional(), decision: humanGateChoiceSchema.optional() }).strict().superRefine((input, context2) => {
+  if (input.task_id !== input.origin.task_id) context2.addIssue({ code: "custom", path: ["task_id"], message: "waiver task_id must match origin task_id" });
+  if (input.preview_digest === void 0 !== (input.decision === void 0)) {
+    context2.addIssue({ code: "custom", path: ["preview_digest"], message: "preview_digest and decision must be supplied together (bounded single-call waiver decision) or both omitted (waiver gate opens and awaits the human decision)" });
+  }
+});
+function inputFor(name, value) {
+  const parsed = name === "archflow_state" ? stateInputSchema.parse(value) : name === "archflow_counter_review" ? counterReviewInputSchema.parse(value) : name === "archflow_waiver" ? waiverInputSchema.parse(value) : gateInputSchema.parse(value);
+  if (name === "archflow_gate") {
+    const v = parsed;
+    return { ...v, current_evidence: v.kind === "baseline-adoption" ? parseBaselineObservationRef(v.current_evidence) : v.kind === "validation-override" ? parseValidationOverrideRequestRef(v.current_evidence) : parseCurrentEvidenceSetRef(v.current_evidence) };
+  }
+  return parsed;
+}
+function deepFreeze5(value) {
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) deepFreeze5(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+function assertAuthenticParsedToolCall(value) {
+  if (value === null || typeof value !== "object" || !parsedCalls.has(value)) {
+    throw new TypeError("an authentic parsed tool call is required");
+  }
+}
+function parseToolCall(name, value) {
+  if (!TOOL_NAMES.includes(name)) throw new TypeError("unknown tool");
+  assertPlainJson(value, `${name} input`);
+  const parsed = inputFor(name, structuredClone(value));
+  assertPlainJson(parsed, `${name} parsed input`);
+  const input = structuredClone(parsed);
+  for (const nested of Object.values(input)) deepFreeze5(nested);
+  Object.defineProperty(input, parsedToolInputBrand, { value: name, enumerable: false, writable: false, configurable: false });
+  Object.freeze(input);
+  const call = Object.freeze({ name, input });
+  parsedCalls.add(call);
+  return call;
+}
+function bindParsedToolCallRequest(call, requestDigest) {
+  if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
+  digest11.parse(requestDigest);
+  requestDigests.set(call, requestDigest);
+  return call;
+}
+var toolSuccessSchemas = {
+  archflow_state: external_exports.object({ path: taskPathClaimV1Schema, revision: safeInteger6, status: external_exports.enum(["running", "succeeded", "failed"]), request_digest: digest11.optional() }).strict(),
+  archflow_counter_review: external_exports.union([external_exports.object({ path: repositoryPathClaimV1Schema, reports: external_exports.array(reviewReportSchema).min(1), constitution: external_exports.union([external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict(), external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(["pass", "fail", "uncertain"]), triggers: external_exports.array(rule3) }).strict()]), revision: safeInteger6, request_digest: digest11.optional() }).strict(), external_exports.object({
+    path: repositoryPathClaimV1Schema,
+    verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
+    total_findings: safeInteger6,
+    partition_counts: findingPartitionCountsSchema,
+    alignment: external_exports.union([
+      external_exports.object({ status: external_exports.literal("evaluated"), drift: external_exports.enum(DRIFT_RESULTS), upstream_count: safeInteger6 }).strict(),
+      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("prd-has-no-approved-upstream-plan") }).strict()
+    ]),
+    constitution: external_exports.union([
+      external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), triggers: external_exports.array(rule3) }).strict(),
+      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
+    ]),
+    revision: safeInteger6,
+    request_digest: digest11.optional()
+  }).strict(), external_exports.object({
+    path: repositoryPathClaimV1Schema,
+    verdict: external_exports.enum(["pass", "advisory", "review-raised"]),
+    total_findings: safeInteger6,
+    partition_counts: findingPartitionCountsSchema,
+    constitution: external_exports.union([
+      external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule3) }).strict(),
+      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
+    ]),
+    revision: safeInteger6,
+    request_digest: digest11.optional()
+  }).strict(), external_exports.object({
+    path: repositoryPathClaimV1Schema,
+    verdict: external_exports.enum(["pass", "advisory", "fail"]),
+    blocking_count: safeInteger6,
+    constitution: external_exports.union([
+      external_exports.object({ status: external_exports.literal("evaluated"), path: repositoryPathClaimV1Schema, constitution: external_exports.enum(CONSTITUTION_RESULTS), drift: external_exports.enum(DRIFT_RESULTS), triggers: external_exports.array(rule3) }).strict(),
+      external_exports.object({ status: external_exports.literal("not-run"), reason: external_exports.literal("no-active-constitution-rules") }).strict()
+    ]),
+    revision: safeInteger6,
+    request_digest: digest11.optional()
+  }).strict()]),
+  archflow_gate: external_exports.object({ kind: external_exports.enum(GATE_KINDS), decision: gateDecisionEnvelopeV1Schema, notes: text4, revision: safeInteger6, request_digest: digest11.optional() }).strict(),
+  archflow_waiver: external_exports.union([external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest11, current_evidence_set_digest: digest11, scope: scope2, human_provenance: provenance, granted: external_exports.literal(true), expires: external_exports.literal("task-complete"), notes: text4, revision: safeInteger6, request_digest: digest11.optional() }).strict(), external_exports.object({ origin_gate_id: pathSafeIdV1Schema, waiver_gate_id: pathSafeIdV1Schema, task_id: taskSlugV1Schema, rule_id: safeId2, rule_version: external_exports.number().int().positive().max(Number.MAX_SAFE_INTEGER), subject_digest: digest11, current_evidence_set_digest: digest11, scope: scope2, human_provenance: provenance, granted: external_exports.literal(false), notes: text4, revision: safeInteger6, request_digest: digest11.optional() }).strict()])
+};
+var mcpToolsSchemaDefs = Object.freeze({
+  digest: digest11,
+  id: safeId2,
+  text: text4,
+  integer: safeInteger6,
+  phase: phase2,
+  durableArtifact,
+  rule: rule3,
+  scope: scope2
+});
+function successFor(call, value) {
+  const parsed = toolSuccessSchemas[call.name].parse(value);
+  if (call.name === "archflow_state") {
+    const input = call.input;
+    const expectedStatus = input.operation === "planning_restart" || input.operation === "recover_milestone_authority" || input.operation === "recover_approval_trigger_authority" ? "running" : input.status;
+    if (parsed.status !== expectedStatus) throw new TypeError("state status mismatch");
+  }
+  if (call.name === "archflow_gate") {
+    const input = call.input;
+    const result = parsed;
+    const decision3 = parseGateDecisionEnvelope(result.decision);
+    if (result.kind !== input.kind || decision3.kind !== input.kind || decision3.task_id !== input.task_id || decision3.phase_instance !== input.phase_instance || decision3.subject_digest !== input.subject_digest || result.notes !== decision3.payload.reason) throw new TypeError("gate result mismatch");
+    validateGateDecision(input.kind, input.context, decision3.payload);
+  }
+  if (call.name === "archflow_waiver") {
+    const input = call.input;
+    const result = parsed;
+    if (result.origin_gate_id !== input.origin.origin_gate_id || result.task_id !== input.task_id || result.rule_id !== input.origin.rule.rule_id || result.rule_version !== input.origin.rule.rule_version || result.subject_digest !== input.origin.subject_digest || result.current_evidence_set_digest !== input.origin.current_evidence_set_digest || !isDeepStrictEqual9(result.scope, input.origin.scope)) throw new TypeError("waiver result mismatch");
+  }
+  return parsed;
+}
+var projectFailureEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(false), error: external_exports.unknown() }).strict();
+var projectResultBaseEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.boolean() }).passthrough();
+var projectSuccessEnvelopeSchema = external_exports.object({ schema_version: external_exports.literal("1"), ok: external_exports.literal(true), value: external_exports.unknown() }).strict();
+function projectFailureForTool(name, value, label) {
+  assertPlainJson(value, label);
+  const failure6 = projectFailureEnvelopeSchema.parse(value);
+  const error51 = parseProjectError(failure6.error);
+  const parameters = error51.diagnostic.parameters;
+  if (Object.hasOwn(parameters, "tool") && Reflect.get(parameters, "tool") !== name) {
+    throw new TypeError("project failure tool mismatch");
+  }
+  return { schema_version: "1", ok: false, error: error51 };
+}
+function validateProjectResultStructure(call, value) {
+  if (!parsedCalls.has(call)) throw new TypeError("an authentic parsed tool call is required");
+  assertPlainJson(value, `${call.name} result`);
+  const base2 = projectResultBaseEnvelopeSchema.parse(value);
+  const result = base2.ok ? (() => {
+    const e = projectSuccessEnvelopeSchema.parse(value);
+    return { ...e, value: successFor(call, e.value) };
+  })() : projectFailureForTool(call.name, value, `${call.name} result`);
+  const branded = Object.freeze({ ...result, [structuralResultBrand]: call.name });
+  structuralResults.add(branded);
+  return branded;
+}
+var resultExpectationDataSchema = external_exports.object({ schema_version: external_exports.literal("1"), tool: external_exports.enum(TOOL_NAMES), task_id: taskSlugV1Schema, intent_id: pathSafeIdV1Schema, input_fingerprint: digest11, request_digest: digest11, result_id: safeId2, resulting_revision: safeInteger6, success: external_exports.unknown() }).strict().superRefine((expectation, context2) => {
+  const success3 = toolSuccessSchemas[expectation.tool].safeParse(expectation.success);
+  if (!success3.success) {
+    context2.addIssue({ code: "custom", path: ["success"], message: `invalid ${expectation.tool} success value` });
+    return;
+  }
+  if (expectation.resulting_revision !== success3.data.revision) context2.addIssue({ code: "custom", path: ["resulting_revision"], message: "expectation resulting revision must equal success revision" });
+});
+function createInternalResultExpectation(value) {
+  assertPlainJson(value, "result expectation");
+  const base2 = resultExpectationDataSchema.parse(value);
+  const success3 = toolSuccessSchemas[base2.tool].parse(base2.success);
+  const expectation = Object.assign({}, base2, { success: success3 });
+  Object.defineProperty(expectation, resultExpectationBrand, { value: value.tool, enumerable: false, writable: false, configurable: false });
+  Object.freeze(expectation);
+  resultExpectations.add(expectation);
+  return expectation;
+}
+function correlateProjectResult(call, expectation, result) {
+  const requestDigest = requestDigests.get(call);
+  if (requestDigest === void 0 || !parsedCalls.has(call) || !resultExpectations.has(expectation) || !structuralResults.has(result)) throw new TypeError("authentic request/result identities are required");
+  if (expectation[resultExpectationBrand] !== call.name || result[structuralResultBrand] !== call.name || expectation.tool !== call.name) throw new TypeError("result correlation tool mismatch");
+  if (expectation.request_digest !== requestDigest || expectation.task_id !== call.input.task_id || expectation.intent_id !== call.input.intent_id || expectation.input_fingerprint !== call.input.input_fingerprint) throw new TypeError("expectation invocation mismatch");
+  if (result.ok && (expectation.resulting_revision !== result.value.revision || !isDeepStrictEqual9(expectation.success, result.value))) throw new TypeError("result expectation mismatch");
+  return result;
+}
+
+// src/repository/repository-set.ts
+import { isAbsolute as isAbsolute4, relative as relative4, resolve as resolveDirectory, sep as sep3 } from "node:path";
+var ok9 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
+var fail13 = (error51) => Object.freeze({ schema_version: "1", ok: false, error: error51 });
+var repositoryBindings = /* @__PURE__ */ new Map();
+var MAX_REPOSITORY_BINDINGS = 16;
+async function openRepository(workingDirectory, operationContext) {
+  const candidateKey = resolveDirectory(workingDirectory);
+  const discovered = await discoverWorktree(createGitRunner({ cwd: workingDirectory }), operationContext);
+  if (!discovered.ok) return discovered;
+  const rootKey = discovered.value.location.worktreeRoot;
+  const canonicalCached = repositoryBindings.get(rootKey);
+  if (canonicalCached !== void 0) return ok9(canonicalCached);
+  const environment = await preflightGit(discovered.value, operationContext);
+  if (!environment.ok) return environment;
+  const binding2 = Object.freeze({ runner: discovered.value, environment: environment.value });
+  if (repositoryBindings.size >= MAX_REPOSITORY_BINDINGS) {
+    const evictedRoot = repositoryBindings.keys().next().value;
+    repositoryBindings.delete(evictedRoot);
+  }
+  repositoryBindings.set(rootKey, binding2);
+  return ok9(binding2);
+}
+function ordinal8(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+var VIEW_FAILURE_ISSUE_CODES = Object.freeze({
+  open: "repository-open-failed",
+  identity: "repository-identity-unresolved",
+  head: "repository-head-unresolved"
+});
+var VIEW_FAILURE_MESSAGES = Object.freeze({
+  open: "repository could not be opened",
+  identity: "repository identity could not be resolved",
+  head: "repository HEAD could not be resolved"
+});
+var VIEW_FAILURE_REASONS = new Map(
+  Object.keys(VIEW_FAILURE_ISSUE_CODES).map((reason2) => [VIEW_FAILURE_ISSUE_CODES[reason2], reason2])
+);
+var MEMBER_FIELD_PREFIX = "repositories.";
+var MEMBER_FIELD_SUFFIX = ".path";
+function memberField(name) {
+  return name === "primary" ? "repositories.primary" : `${MEMBER_FIELD_PREFIX}${name}${MEMBER_FIELD_SUFFIX}`;
+}
+function memberFromIssue(issue4) {
+  const separator = issue4.indexOf(": ");
+  const field = separator === -1 ? issue4 : issue4.slice(0, separator);
+  if (!field.startsWith(MEMBER_FIELD_PREFIX) || !field.endsWith(MEMBER_FIELD_SUFFIX)) return void 0;
+  const parsed = repositoryNameV1Schema.safeParse(field.slice(MEMBER_FIELD_PREFIX.length, field.length - MEMBER_FIELD_SUFFIX.length));
+  return parsed.success ? parsed.data : void 0;
+}
+function configFailure(field, message, issueCode = "repository-set-invalid") {
+  return fail13(createProjectError("CONFIG_INVALID", {
+    issue_code: issueCode,
+    issues: [`${field}: ${message}`]
+  }));
+}
+function viewFailure(name, reason2) {
+  return configFailure(memberField(name), VIEW_FAILURE_MESSAGES[reason2], VIEW_FAILURE_ISSUE_CODES[reason2]);
+}
+function unavailableRepositoryView(error51) {
+  if (error51.code !== "CONFIG_INVALID") return void 0;
+  const reason2 = VIEW_FAILURE_REASONS.get(error51.diagnostic.parameters.issue_code);
+  const issue4 = error51.diagnostic.parameters.issues?.[0];
+  if (reason2 === void 0 || issue4 === void 0) return void 0;
+  const repositoryName7 = memberFromIssue(issue4);
+  return repositoryName7 === void 0 ? void 0 : Object.freeze({ repository_name: repositoryName7, reason: reason2 });
+}
+function isWithin(parent, candidate) {
+  const path3 = relative4(parent, candidate);
+  return path3 !== "" && path3 !== ".." && !path3.startsWith(`..${sep3}`) && !isAbsolute4(path3);
+}
+async function observeMember(name, mode, binding2, context2, declaredPath) {
+  const identity = await resolveRepositoryIdentity(binding2.runner, binding2.environment, context2);
+  if (!identity.ok) return viewFailure(name, "identity");
+  try {
+    const head = await readHeadCommit(binding2.runner);
+    return ok9(Object.freeze({
+      name,
+      mode,
+      binding: binding2,
+      identity: identity.value,
+      head,
+      ...declaredPath === void 0 ? {} : { declared_path: declaredPath }
+    }));
+  } catch (error51) {
+    if (error51 instanceof GitInvocationError) projectErrorForGitFailure(error51, binding2.runner, context2);
+    else if (!(error51 instanceof TypeError)) throw error51;
+    return viewFailure(name, "head");
+  }
+}
+async function resolveRepositorySet(primaryBinding, config2, context2) {
+  const primary = await observeMember("primary", "writable", primaryBinding, context2);
+  if (!primary.ok) return primary;
+  const members = [primary.value];
+  const declarations = config2.repositories ?? {};
+  for (const rawName of Object.keys(declarations).sort(ordinal8)) {
+    const name = rawName;
+    const declaration = declarations[name];
+    const declaredPath = declaration.path;
+    const candidate = isAbsolute4(declaredPath) ? declaredPath : resolveDirectory(primaryBinding.runner.location.worktreeRoot, declaredPath);
+    const opened = await openRepository(candidate, context2);
+    if (!opened.ok) return viewFailure(name, "open");
+    const observed = await observeMember(name, declaration.mode ?? "context-only", opened.value, context2, declaredPath);
+    if (!observed.ok) return observed;
+    members.push(observed.value);
+  }
+  for (let left = 0; left < members.length; left += 1) {
+    for (let right = left + 1; right < members.length; right += 1) {
+      const leftRoot = members[left].binding.runner.location.worktreeRoot;
+      const rightRoot = members[right].binding.runner.location.worktreeRoot;
+      if (leftRoot === rightRoot || isWithin(leftRoot, rightRoot) || isWithin(rightRoot, leftRoot)) {
+        return configFailure(memberField(members[right].name), `repository must be distinct and non-nested (overlaps ${members[left].name})`);
+      }
+    }
+  }
+  const frozenMembers = Object.freeze(members);
+  const digest12 = sha256Bytes(canonicalJsonBytes(frozenMembers.map((member) => ({
+    name: member.name,
+    mode: member.mode,
+    repository_identity_digest: member.identity.digest
+  }))));
+  return ok9(Object.freeze({ members: frozenMembers, digest: digest12 }));
+}
+
+// src/state/config-change.ts
+import { isDeepStrictEqual as isDeepStrictEqual10 } from "node:util";
+function normalizeForChangeDetection(config2) {
+  if (config2.roles.producer === void 0) return config2;
+  const { producer: _retired, ...roles2 } = config2.roles;
+  return { ...config2, roles: roles2 };
+}
+function isPlainObject3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function appendEntry(entries, path3, before, after) {
+  entries.push({
+    path: path3,
+    ...before === void 0 ? {} : { before },
+    ...after === void 0 ? {} : { after }
+  });
+}
+function diffConfigValue(before, after, path3, entries) {
+  if (Array.isArray(before) && Array.isArray(after)) {
+    const shared = Math.min(before.length, after.length);
+    for (let index = 0; index < shared; index += 1) {
+      diffConfigValue(before[index], after[index], `${path3}.${index}`, entries);
+    }
+    for (let index = shared; index < before.length; index += 1) {
+      appendEntry(entries, `${path3}.${index}`, before[index], void 0);
+    }
+    for (let index = shared; index < after.length; index += 1) {
+      appendEntry(entries, `${path3}.${index}`, void 0, after[index]);
+    }
+    return;
+  }
+  if (isPlainObject3(before) && isPlainObject3(after)) {
+    const keys = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+    for (const key2 of keys) {
+      diffConfigValue(before[key2], after[key2], path3 === "" ? key2 : `${path3}.${key2}`, entries);
+    }
+    return;
+  }
+  if (before === after) return;
+  appendEntry(entries, path3, before, after);
+}
+function computeConfigChange(before, after) {
+  const entries = [];
+  diffConfigValue(normalizeForChangeDetection(before), normalizeForChangeDetection(after), "", entries);
+  return Object.freeze(entries);
+}
+function repositoryBindingsCheckpoint(repositorySet) {
+  return Object.freeze(repositorySet.members.map((member) => Object.freeze({
+    name: member.name,
+    ...member.declared_path === void 0 ? {} : { declared_path: member.declared_path },
+    repository_identity_digest: member.identity.digest
+  })));
+}
+function validateRepositorySetContinuity(state, repositorySet) {
+  const prior = state.last_seen_repository_bindings;
+  if (prior === void 0) return Object.freeze({ schema_version: "1", ok: true, value: void 0 });
+  const priorByName = new Map(prior.map((entry2) => [entry2.name, entry2]));
+  for (const member of repositorySet.members) {
+    if (member.name === "primary") continue;
+    const checkpoint = priorByName.get(member.name);
+    if (checkpoint === void 0 || checkpoint.declared_path !== member.declared_path) continue;
+    if (checkpoint.repository_identity_digest !== member.identity.digest) {
+      return Object.freeze({
+        schema_version: "1",
+        ok: false,
+        error: createProjectError("CONFIG_INVALID", {
+          issue_code: "repository-identity-changed",
+          issues: [`repositories.${member.name}.path: repository identity changed at the unchanged declared path`]
+        })
+      });
+    }
+  }
+  return Object.freeze({ schema_version: "1", ok: true, value: void 0 });
+}
+function withLastSeenConfig(draft, parsedLiveConfig, repositorySet) {
+  const normalized = normalizeForChangeDetection(parsedLiveConfig);
+  const seen = draft.last_seen_config;
+  const checkpoint = repositoryBindingsCheckpoint(repositorySet);
+  const priorCheckpoint = draft.last_seen_repository_bindings;
+  const configUnchanged = seen !== void 0 && computeConfigChange(seen, normalized).length === 0;
+  const checkpointUnchanged = priorCheckpoint !== void 0 && isDeepStrictEqual10(priorCheckpoint, checkpoint);
+  if (configUnchanged && checkpointUnchanged) return draft;
+  return {
+    ...draft,
+    last_seen_config: normalized,
+    last_seen_repository_bindings: checkpoint
+  };
+}
+
+// src/contracts/renderers.ts
+var encoder2 = new TextEncoder();
+var ESCAPE = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069`<>&]/gu;
+var visibleJsonString = (value) => JSON.stringify(value).replace(/\\n/gu, "\\u000a").replace(/\\r/gu, "\\u000d").replace(/\\t/gu, "\\u0009").replace(/\\b/gu, "\\u0008").replace(/\\f/gu, "\\u000c").replace(ESCAPE, (character) => `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`);
+var canonical = (value) => typeof value === "string" ? visibleJsonString(value) : JSON.stringify(value);
+var optional2 = (value) => value === void 0 ? "none" : canonical(value);
+var linesToBytes = (lines) => encoder2.encode(`${lines.join("\n")}
+`);
+var metadata = (entries) => entries.map(([key2, value]) => `${key2}: ${optional2(value)}`);
+var prose = (label, value, indent = "  ") => `${indent}${label}: ${visibleJsonString(value)}`;
+function provenanceMetadata(evidence) {
+  return [
+    ["assurance", evidence.assurance],
+    ["adapter", evidence.assurance === "server-attested" ? evidence.adapter : void 0],
+    ["cli_version", evidence.assurance === "server-attested" ? evidence.cli_version : void 0],
+    ["model_family", evidence.model_family],
+    ["model", evidence.model],
+    ["effort", evidence.effort],
+    ["provider", evidence.assurance === "server-attested" ? evidence.provider : void 0],
+    ["invocation_id", evidence.assurance === "server-attested" ? evidence.invocation_id : void 0],
+    ["result_id", evidence.assurance === "server-attested" ? evidence.result_id : void 0]
+  ];
+}
+function renderReviewFinding(finding) {
+  const display = reviewFindingDisplayDetail(finding);
+  if ("claim_type" in finding) {
+    return [
+      `### Finding ${visibleJsonString(finding.finding_id)} [${finding.claim_type}: ${finding.confidence}]`,
+      prose("falsifier", finding.falsifier),
+      ..."reviewer_id" in finding ? [
+        `reviewer_id: ${canonical(finding.reviewer_id)}`,
+        `reviewer_focus: ${canonical(finding.reviewer_focus)}`,
+        `routing_role: ${canonical(finding.routing_role)}`,
+        `criterion_id: ${canonical(finding.criterion_id)}`
+      ] : [],
+      prose("summary", display.summary),
+      prose("evidence", display.evidence),
+      prose("suggested_resolution", display.suggested_resolution)
+    ];
+  }
+  return [`### Finding ${visibleJsonString(finding.finding_id)}`, `severity: ${canonical(finding.severity)}`, `blocking: ${canonical(finding.blocking)}`, prose("summary", display.summary), prose("evidence", display.evidence), prose("suggested_resolution", display.suggested_resolution)];
+}
+function renderRouteOverride(override) {
+  const displaced = override.pinned_model === void 0 ? ["pinned_route: none configured for this role"] : [`pinned_model: ${canonical(override.pinned_model)}`, `pinned_effort: ${canonical(override.pinned_effort)}`, `pinned_provider: ${optional2(override.pinned_provider)}`];
+  return ["", "## Route Override", ...displaced, prose("reason", override.reason)];
+}
+function renderRouteSource(source) {
+  const lines = ["", "## Route Source", `provenance: ${canonical(source.provenance)}`];
+  if (source.displaced === void 0) return lines;
+  return [
+    ...lines,
+    `displaced_source: ${canonical(source.displaced.source)}`,
+    `displaced_model: ${canonical(source.displaced.model)}`,
+    `displaced_effort: ${canonical(source.displaced.effort)}`,
+    `displaced_provider: ${optional2(source.displaced.provider)}`
+  ];
+}
+function renderReviewEvidence(value) {
+  const evidence = value.evidence;
+  const authenticated = authenticQualifiedEvidence(value, "review", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "review", assurance: evidence.assurance });
+  if (!authenticated) throw new TypeError("authenticated review evidence is required");
+  if (isFeedbackReview(evidence)) return new TextEncoder().encode([
+    "# ArchFlow Review Feedback",
+    `Reviewed subject: ${evidence.subject_digest}`,
+    ...provenanceMetadata(evidence),
+    ...renderRouteSource(evidence.route_source),
+    ...evidence.route_override === void 0 ? [] : renderRouteOverride(evidence.route_override),
+    ...evidence.reports.flatMap((report2) => ["", `## ${report2.reviewer_id} (${report2.focus})`, "", ..."outcome" in report2 ? [`Outcome: ${report2.outcome}`, "", report2.feedback] : [report2.report]])
+  ].join("\n"));
+  const summaryMetadata = evidence.schema_version === "2" || evidence.schema_version === "3" ? [["total_findings", evidence.total_findings], ["partition_counts", evidence.partition_counts]] : [["blocking_count", evidence.blocking_count]];
+  const lines = ["# ArchFlow Review Evidence", ...metadata([
+    ["schema_version", evidence.schema_version],
+    ["task_id", evidence.task_id],
+    ["phase_instance", evidence.phase_instance],
+    ["step", evidence.step],
+    ["role", evidence.role],
+    ["subject_digest", evidence.subject_digest],
+    ["input_fingerprint", evidence.input_fingerprint],
+    ["evidence_digest", value.evidence_digest],
+    ["verdict", evidence.verdict],
+    ...summaryMetadata,
+    ...evidence.schema_version === "3" ? [] : [["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)]],
+    ...provenanceMetadata(evidence)
+  ]), "", "## Findings"];
+  for (const finding of evidence.findings) lines.push("", ...renderReviewFinding(finding));
+  if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_source !== void 0) lines.push(...renderRouteSource(evidence.route_source));
+  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
+  return linesToBytes(lines);
+}
+function renderDisposition(disposition) {
+  const lines = [`### ${canonical(disposition.disposition)} ${visibleJsonString(disposition.review_evidence_digest)} ${visibleJsonString(disposition.finding_id)}`, prose("rationale", disposition.rationale)];
+  if (disposition.disposition === "rejected") {
+    lines.push(prose("evidence", disposition.evidence));
+  } else if (disposition.disposition === "accepted" || disposition.disposition === "accepted-editorial") {
+    lines.push(prose("revision_intent", disposition.revision_intent));
+  } else if (disposition.disposition === "deferred" && disposition.evidence !== void 0) {
+    lines.push(prose("evidence", disposition.evidence));
+  }
+  return lines;
+}
+function renderTriage(value) {
+  if (!authenticValidatedTriage(value)) throw new TypeError("validated triage is required");
+  if (value.response !== void 0) return new TextEncoder().encode(`# Review response
+
+${value.response.decision}
+
+${value.response.rationale}
+${value.response.decision === "revise" ? value.response.reviewers.map((reviewer) => `${reviewer.reviewer_id}: ${reviewer.request}`).join("\n") : ""}`);
+  const lines = ["# ArchFlow Review Triage", ...metadata([
+    ["schema_version", value.schema_version],
+    ["task_id", value.task_id],
+    ["phase_instance", value.phase_instance],
+    ["step", value.step],
+    ["subject_digest", value.subject_digest],
+    ["input_fingerprint", value.input_fingerprint],
+    ["current_evidence_set_digest", value.current_evidence_set_digest],
+    ["source_evidence_digests", value.source_evidence_digests],
+    ["accepted_count", value.accepted_count],
+    ["accepted_editorial_count", value.accepted_editorial_count],
+    ["rejected_count", value.rejected_count],
+    ["escalated_human_count", value.escalated_human_count],
+    ["deferred_count", value.deferred_count]
+  ]), "", "## Dispositions"];
+  for (const disposition of value.dispositions) lines.push("", ...renderDisposition(disposition));
+  if (value.disposition_ledger !== void 0 && value.disposition_ledger.length > 0) {
+    lines.push(
+      "",
+      "## Disposition Ledger",
+      "Carried reviewer memory: earlier rounds' dispositions of this phase instance, each embedded with its round's finding details at install time."
+    );
+    for (const entry2 of value.disposition_ledger) {
+      lines.push("", `### ${canonical(entry2.disposition)} ${visibleJsonString(entry2.finding_id)} (attempt ${entry2.attempt})`);
+      lines.push(`review_evidence_digest: ${canonical(entry2.review_evidence_digest)}`);
+      if (entry2.rationale !== void 0) lines.push(prose("rationale", entry2.rationale));
+      if (entry2.revision_intent !== void 0) lines.push(prose("revision_intent", entry2.revision_intent));
+      if (entry2.evidence !== void 0) lines.push(prose("evidence", entry2.evidence));
+      if ("reviewer_focus" in entry2) {
+        lines.push(
+          `reviewer_id: ${canonical(entry2.reviewer_id)}`,
+          `reviewer_focus: ${canonical(entry2.reviewer_focus)}`,
+          `routing_role: ${canonical(entry2.routing_role)}`,
+          `criterion_id: ${canonical(entry2.criterion_id)}`
+        );
+        if (entry2.disposition_evidence !== void 0) {
+          lines.push(prose("disposition_evidence", entry2.disposition_evidence));
+        }
+        if (entry2.reviewer_focus === "tests") {
+          lines.push(
+            prose("required_behavior_or_risk_boundary", entry2.required_behavior_or_risk_boundary),
+            prose("coverage_or_oracle_problem", entry2.coverage_or_oracle_problem),
+            prose("consequence", entry2.consequence),
+            prose("proposed_verification_change", entry2.proposed_verification_change)
+          );
+        }
+      }
+      if ("claim_type" in entry2) {
+        lines.push(`[${entry2.claim_type}: ${entry2.confidence}]`, prose("falsifier", entry2.falsifier));
+      } else if ("severity" in entry2) {
+        lines.push(`severity: ${canonical(entry2.severity)}`, `blocking: ${canonical(entry2.blocking)}`);
+      }
+      if (entry2.summary !== void 0) lines.push(prose("summary", entry2.summary));
+      if (entry2.suggested_resolution !== void 0) lines.push(prose("suggested_resolution", entry2.suggested_resolution));
+    }
+  }
+  return linesToBytes(lines);
+}
+function renderAdjudicationEvidence(value) {
+  const evidence = value.evidence;
+  const authenticated = authenticQualifiedEvidence(value, "adjudication", evidence.assurance) || authenticVerifiedEvidence(value, { kind: "adjudication", assurance: evidence.assurance });
+  if (!authenticated) throw new TypeError("authenticated adjudication evidence is required");
+  const lines = ["# ArchFlow Adjudication Evidence", ...metadata([
+    ["schema_version", evidence.schema_version],
+    ["task_id", evidence.task_id],
+    ["phase_instance", evidence.phase_instance],
+    ["step", evidence.step],
+    ["subject_digest", evidence.subject_digest],
+    ["input_fingerprint", evidence.input_fingerprint],
+    ["evidence_digest", value.evidence_digest],
+    ["pinned_constitution_digest", evidence.pinned_constitution_digest],
+    ...evidence.schema_version === "1" ? [["approved_upstream_digests", evidence.approved_upstream_digests], ["drift", evidence.drift]] : [],
+    ["source_review_envelope_digest", evidence.source_review_envelope_digest],
+    ["constitution", evidence.constitution],
+    ["matched_rule_versions", evidence.matched_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
+    ["uncertain_rule_versions", evidence.uncertain_rule_versions.map((rule4) => `${rule4.rule_id}@${rule4.rule_version}`)],
+    ...provenanceMetadata(evidence)
+  ]), "", "## Constitution Findings"];
+  for (const finding of evidence.rule_findings) {
+    lines.push("", `### Rule ${visibleJsonString(`${finding.rule_id}@${finding.rule_version}`)}`, `compliance: ${canonical(finding.compliance)}`, `trigger: ${canonical(finding.trigger)}`, prose("rationale", finding.rationale), prose("trigger_evidence", finding.trigger_evidence));
+  }
+  if (evidence.schema_version === "1") {
+    lines.push("", "## Drift Findings");
+    for (const finding of evidence.drift_findings) lines.push("", `### Upstream ${visibleJsonString(finding.upstream_digest)}`, `drift: ${canonical(finding.drift)}`, `affected_claim_ids: ${canonical(finding.affected_claim_ids)}`, prose("rationale", finding.rationale));
+  }
+  if (evidence.assurance === "degraded") lines.push("", "## Degraded Assurance", prose("reason", evidence.reason));
+  if (evidence.assurance === "server-attested" && evidence.route_source !== void 0) lines.push(...renderRouteSource(evidence.route_source));
+  if (evidence.assurance === "server-attested" && evidence.route_override !== void 0) lines.push(...renderRouteOverride(evidence.route_override));
+  return linesToBytes(lines);
+}
+
+// src/state/produce-subject.ts
+import { readFile as readFile7 } from "node:fs/promises";
+
+// src/state/legacy-import-resume.ts
+async function findLegacyImportResumePhase(dependencies, authority, state) {
+  const loaded = await loadLegacyImportInitialization(dependencies, authority, state);
+  if (!loaded.ok) return loaded;
+  if (loaded.value === void 0) return ok6(void 0);
+  const document2 = loaded.value;
+  if (document2.resume_phase !== void 0) return ok6(document2.resume_phase);
+  const designs = /* @__PURE__ */ new Set();
+  const implementations = /* @__PURE__ */ new Set();
+  for (const entry2 of document2.mapping) {
+    const decoded = decodePhaseInstance(entry2.phase_instance);
+    if (decoded.kind === "phase-design") designs.add(Number(decoded.phase));
+    if (decoded.kind === "phase-impl") implementations.add(Number(decoded.phase));
+  }
+  let highest = 0;
+  while (implementations.has(highest + 1)) highest += 1;
+  const next = highest + 1;
+  return ok6(encodePhaseInstance({
+    kind: designs.has(next) ? "phase-impl" : "phase-design",
+    phase: parsePositiveSafePhaseNumber(next)
+  }));
+}
+async function loadLegacyImportInitialization(dependencies, authority, state) {
+  const resolved = await resolveTaskPath({
+    runner: dependencies.runner,
+    taskId: authority.task_id,
+    claim: initializationAuthorityClaim(),
+    expectedClass: "authority-initialization",
+    context: authority.context
+  });
+  if (!resolved.ok) return resolved;
+  const document2 = await readCanonical(
+    resolved.value,
+    "legacy import initialization authority",
+    parseLegacyImportInitialization
+  );
+  if (document2 === "missing" || document2 === "invalid" || document2.digest !== state.initialization_digest) {
+    return ok6(void 0);
+  }
+  return ok6(document2.value);
+}
+async function loadLegacyImportResumePhase(dependencies, authority, state) {
+  const found = await findLegacyImportResumePhase(dependencies, authority, state);
+  if (!found.ok) return found;
+  return found.value === void 0 ? issue2("STATE_INVALID", state, "legacy-import-manifest-missing") : ok6(found.value);
 }
 
 // src/state/produce-subject.ts
@@ -76375,7 +76476,7 @@ function plannedFinalPhaseFromDesign(bytes) {
   return phases.length;
 }
 async function loadApprovedDesignFinalPhase(dependencies, current, record3) {
-  if (record3.outcome !== "decided" || record3.kind !== "artifact-approval" && record3.kind !== "design-approval" || record3.phase_instance !== "design" || record3.envelope.payload.decision !== "approve") return ok8(void 0);
+  if (record3.outcome !== "decided" || record3.kind !== "artifact-approval" && record3.kind !== "design-approval" || record3.phase_instance !== "design" || record3.envelope.payload.decision !== "approve") return ok6(void 0);
   const reference = current.authoritative_results.find((entry2) => entry2.phase_instance === "design" && entry2.step === "produce");
   if (reference === void 0 || dependencies.load_retained_result === void 0) {
     return issue2("STATE_INVALID", current, "approved-design-result-missing");
@@ -76390,7 +76491,7 @@ async function loadApprovedDesignFinalPhase(dependencies, current, record3) {
     return issue2("STATE_INVALID", current, "approved-design-authority-mismatch");
   }
   try {
-    return ok8(plannedFinalPhaseFromDesign(payload.bytes));
+    return ok6(plannedFinalPhaseFromDesign(payload.bytes));
   } catch {
     return issue2("STATE_INVALID", current, "approved-design-phase-count-invalid");
   }
@@ -76415,7 +76516,7 @@ async function loadAutonomousDesignFinalPhase(dependencies, current, subjectDige
     return issue2("STATE_INVALID", current, "autonomous-design-authority-mismatch");
   }
   try {
-    return ok8(plannedFinalPhaseFromDesign(payload.bytes));
+    return ok6(plannedFinalPhaseFromDesign(payload.bytes));
   } catch {
     return issue2("STATE_INVALID", current, "autonomous-design-phase-count-invalid");
   }
@@ -76471,14 +76572,14 @@ function parseWorkflowYaml(source, label = "workflow.yaml") {
 // src/state/transitions.ts
 var ok11 = (value) => Object.freeze({ schema_version: "1", ok: true, value });
 function restartInvalid(input, issue4) {
-  void issue4;
   return Object.freeze({
     schema_version: "1",
     ok: false,
     error: createProjectError("TRANSITION_INVALID", {
       phase_instance: input.target_phase_instance,
       from: `${input.current.step}-${input.current.status}`,
-      to: "planning-restart"
+      to: "planning-restart",
+      issue_code: issue4
     })
   });
 }
@@ -76607,14 +76708,16 @@ function planApprovalTriggerAuthorityRecovery(value) {
     authoritative_results: Object.freeze(retained)
   }));
 }
-function invalid(input, from, to) {
+function invalid(input, from, to, issue4 = "transition-not-allowed", explanation) {
   return Object.freeze({
     schema_version: "1",
     ok: false,
     error: createProjectError("TRANSITION_INVALID", {
       phase_instance: input.target.phase_instance,
       from,
-      to
+      to,
+      issue_code: issue4,
+      ...explanation === void 0 ? {} : { issues: [explanation] }
     })
   });
 }
@@ -76636,9 +76739,6 @@ function pipeline(instance) {
   const configured = WORKFLOW_V1.phases.find((phase3) => phase3.id === kind);
   if (configured === void 0) throw new TypeError("phase instance is absent from the fixed workflow");
   return configured.pipeline;
-}
-function sameSubject(current, target4) {
-  return current.phase_instance === target4.phase_instance && current.step === target4.step;
 }
 function artifactApprovalKind(instance) {
   const kind = decodePhaseInstance(instance).kind;
@@ -76693,24 +76793,22 @@ function hasAuthenticatedMigrationAudit(input) {
 function legalMovement(input) {
   const { current, target: target4 } = input;
   if (current.terminal !== void 0 || current.open_gate !== void 0) return false;
-  if (sameSubject(current, target4)) {
-    if (current.status === "running") {
+  if (current.phase_instance === target4.phase_instance) {
+    const allowed = legalRunStepStatus(current, target4.step);
+    if (allowed === void 0) return false;
+    if (allowed === "succeeded") {
       return target4.attempt === current.attempt && (target4.status === "succeeded" || target4.status === "failed");
     }
-    if (current.status === "failed") {
-      return target4.status === "running" && target4.attempt === current.attempt + 1;
+    if (target4.status !== "running") return false;
+    if (current.step === target4.step && current.status === "failed") return target4.attempt === current.attempt + 1;
+    if (target4.step === "produce") {
+      return target4.attempt === current.attempt + (input.human_revision_reentry === true ? 0 : 1);
     }
-  }
-  if (target4.phase_instance === current.phase_instance && target4.step === "produce" && target4.status === "running") {
-    return input.human_revision_reentry === true ? target4.attempt === current.attempt : target4.attempt === current.attempt + 1;
+    return target4.attempt === current.attempt;
   }
   if (current.status !== "succeeded" || target4.status !== "running") return false;
   const steps = pipeline(current.phase_instance);
-  const index = steps.indexOf(current.step);
-  if (index < 0) return false;
-  if (index + 1 < steps.length) {
-    return target4.phase_instance === current.phase_instance && target4.step === steps[index + 1] && target4.attempt === current.attempt;
-  }
+  if (steps.at(-1) !== current.step) return false;
   if (current.phase_instance === "design" && target4.step === "produce" && target4.attempt === 1 && target4.phase_instance !== nextPhaseInstance(current.phase_instance) && hasAuthenticatedMigrationAudit(input)) return true;
   const following = nextPhaseInstance(current.phase_instance);
   return following !== void 0 && target4.phase_instance === following && target4.step === pipeline(following)[0] && target4.attempt === 1;
@@ -76804,6 +76902,17 @@ function hasAuthenticatedRuleAcceptance(input) {
   );
   return settlement !== void 0 && isDeepStrictEqual12(settlement, accepted.settlement);
 }
+function transitionBoundaryFailure(input, crossesPhase) {
+  if (!(legalMovement(input) || crossesPhase && legalSettledProduceExitMovement(input))) {
+    return { issue: "movement-not-allowed", explanation: "This step cannot follow the recorded state. Read fresh status and use its offered action." };
+  }
+  if (!artifactMatches(input)) return { issue: "artifact-binding-mismatch", explanation: "The work artifact does not match this task, phase, or current input. Submit the result through the current work offer." };
+  if (!resultReferenceMatches(input)) return { issue: "result-binding-mismatch", explanation: "The retained result does not match the producing step. The server must repair the result binding before this transition can proceed." };
+  if (!constitutionReferenceMatches(input)) return { issue: "constitution-binding-mismatch", explanation: "Review and constitution evidence do not belong to the same completed review. Resume the offered review or recovery action." };
+  if (!pendingHumanRevisionMatches(input)) return { issue: "human-revision-mismatch", explanation: "The work does not satisfy the pending human revision. Include the requested human_revision classification and rationale on its succeeded work-result." };
+  if (!pendingValidationOverrideMatches(input)) return { issue: "validation-override-mismatch", explanation: "The validation exception is not bound to this failed production. Read fresh status and resolve its pending decision before resubmitting." };
+  return void 0;
+}
 function planStateTransition(value) {
   const {
     authenticated_gate_approvals: authenticatedApprovals,
@@ -76825,7 +76934,7 @@ function planStateTransition(value) {
   }
   const ruleSettlement = input.rule_settlement;
   if (ruleSettlement !== void 0 && !validRuleSettlementBoundary(input, ruleSettlement)) {
-    return invalid(input, from, to);
+    return invalid(input, from, to, "settlement-binding-mismatch", "The approval-rule settlement does not belong to this transition. Refresh status; server repair is required if the binding still fails.");
   }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
   const ruleAccepted = hasAuthenticatedRuleAcceptance(input);
@@ -76836,16 +76945,14 @@ function planStateTransition(value) {
     const { revision: _revision2, last_transition: _transition2, ...preserved2 } = input.current;
     return ok11(Object.freeze({ ...preserved2, terminal: "complete" }));
   }
-  if (decodedCurrent.kind === "phase-impl" && crossesPhase && !committedOutput) return invalid(input, from, to);
+  if (decodedCurrent.kind === "phase-impl" && crossesPhase && !committedOutput) return invalid(input, from, to, "implementation-commit-unproved", "The implementation commit has not been authenticated. Follow the returned commit facts and refresh status before advancing.");
   if (decodedCurrent.kind !== "phase-impl" && crossesPhase && !hasAuthenticatedArtifactApproval(input) && !ruleAccepted && // An accepted migration audit is the design phase's exit authority for a legacy import: the
   // same authenticated approval legalMovement's design-jump rule settles on.
-  !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))) return invalid(input, from, to);
-  if ((decodedCurrent.kind === "prd" || decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedPlanningCommitApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to);
-  if (decodedCurrent.kind === "design" && crossesPhase && ruleAccepted && input.derived_planned_final_phase === void 0) return invalid(input, from, to);
-  const legalMovementFromCurrentCursor = legalMovement(input) || crossesPhase && legalSettledProduceExitMovement(input);
-  if (!legalMovementFromCurrentCursor || !artifactMatches(input) || !resultReferenceMatches(input) || !constitutionReferenceMatches(input) || !pendingHumanRevisionMatches(input) || !pendingValidationOverrideMatches(input)) {
-    return invalid(input, from, to);
-  }
+  !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))) return invalid(input, from, to, "approval-required", "This phase has neither authenticated approval nor rule-based advancement authority. Resolve the action returned by status before advancing.");
+  if ((decodedCurrent.kind === "prd" || decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") && crossesPhase && (hasAuthenticatedPlanningCommitApproval(input) || ruleAccepted) && input.commit_observed !== true) return invalid(input, from, to, "planning-commit-unproved", "The planning milestone commit has not been authenticated. Follow the returned commit facts and refresh status before advancing.");
+  if (decodedCurrent.kind === "design" && crossesPhase && ruleAccepted && input.derived_planned_final_phase === void 0) return invalid(input, from, to, "phase-bound-unavailable", "The reviewed task design does not supply an authenticated final phase bound. Request diagnostic status for operator repair.");
+  const rejection = transitionBoundaryFailure(input, crossesPhase);
+  if (rejection !== void 0) return invalid(input, from, to, rejection.issue, rejection.explanation);
   const {
     revision: _revision,
     last_transition: _transition,
@@ -79052,7 +79159,7 @@ function deriveNextAction(input) {
     const readIssue = input.config_issue === "config-missing" ? "missing" : input.config_issue === "config-unreadable" || input.config_issue === "config-unresolvable" ? "unreadable" : "invalid";
     return action(
       "inspect-state",
-      `The task's config.yaml is ${readIssue}: fix the YAML so the configuration parses, then retry.`,
+      `The task's config.yaml is ${readIssue}${input.config_issues?.length ? `: ${input.config_issues.join("; ")}` : "."} ${readIssue === "missing" ? "Restore the task configuration from its recorded version" : readIssue === "unreadable" ? "Repair file access to the task configuration" : "Correct the named configuration fields"}, then call archflow_status with the same invocation.`,
       true,
       state
     );
@@ -79116,7 +79223,7 @@ function deriveNextAction(input) {
         }
         return action(
           "inspect-state",
-          "A file ArchFlow recorded from reviewed work is missing from the worktree; inspect the projection and restore its recorded bytes per output before continuing.",
+          `Recorded files are missing: ${missing2.map((item) => `${item.repository ?? "primary"}/${item.path}`).join(", ")}. Use the returned restore targets to retrieve their recorded bytes, restore only still-missing paths, then call archflow_status.`,
           true,
           state
         );
@@ -79130,11 +79237,17 @@ function deriveNextAction(input) {
         { gate_kind: "baseline-adoption" }
       );
     }
-    return action(finding.next_action, `Resolve reconciliation finding ${finding.kind}.`, true, state);
+    const guidance = {
+      "receipt-only": "An interrupted operation has a retained receipt. Retry the identical original apply call if available; otherwise request diagnostic status and operator recovery of that receipt. Do not invent a new decision or edit the receipt.",
+      "receipt-invalid": "A retained operation receipt failed authentication. Request diagnostic status and operator repair; repeating apply or editing the receipt cannot establish authority.",
+      "intent-mismatch": "The recorded operation differs from the submitted one. Read fresh status and use its current offer. An already-recorded human decision must settle unchanged.",
+      "active-gate-mismatch": "The active gate does not match recorded authority. Request diagnostic status for operator repair of the gate projection; do not author a replacement approval archive."
+    }[finding.kind];
+    return action(finding.next_action, guidance, true, state);
   }
   const discoveryBlocker = input.reconciliation_blocking_reasons?.[0];
   if (discoveryBlocker !== void 0) {
-    return discoveryBlocker === "retained-receipt-ambiguity" ? action("inspect-retained-receipt", "Inspect the ambiguous retained successor receipts.", true, state) : action("inspect-state", `Inspect reconciliation discovery blocker ${discoveryBlocker}.`, true, state);
+    return discoveryBlocker === "retained-receipt-ambiguity" ? action("inspect-retained-receipt", "Multiple retained successor receipts prevent selecting a unique recovery. Request diagnostic status and operator inspection of the reported receipt ambiguity; do not delete receipts or guess which operation committed.", true, state) : action("inspect-state", `Reconciliation cannot authenticate current authority (${discoveryBlocker}). Request archflow_status with detail: diagnostic and report this blocker for operator repair. Do not edit durable state or repeatedly apply an old offer.`, true, state);
   }
   if (input.milestone_repair_guidance !== void 0) {
     return action("inspect-state", input.milestone_repair_guidance, true, state);
@@ -79555,7 +79668,7 @@ async function loadAuthenticatedValidationOverride(dependencies, authority, reco
   });
   Object.freeze(authenticated);
   authenticatedValidationOverrides.add(authenticated);
-  return ok8(authenticated);
+  return ok6(authenticated);
 }
 function authenticatedValidationOverrideIsCurrent(override, state, governingPhaseDesignDigest) {
   assertAuthenticatedValidationOverride(override);
@@ -79632,7 +79745,7 @@ async function loadAuthenticatedReviewPushThrough(dependencies, authority, value
   });
   Object.freeze(authenticated);
   authenticatedReviewPushThroughs.add(authenticated);
-  return ok8(authenticated);
+  return ok6(authenticated);
 }
 
 // src/state/status.ts
@@ -79970,9 +80083,6 @@ function pendingAdjudicationGates(state, constitution, retained, authenticated) 
     if (!approved && !waived) pending.push(gate);
   }
   return Object.freeze(pending);
-}
-function pendingAdjudicationGate(state, constitution, retained, authenticated) {
-  return pendingAdjudicationGates(state, constitution, retained, authenticated)[0];
 }
 function compareCodeUnits(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -81027,34 +81137,13 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
   const adjudicationGateKind = pendingGates[0]?.kind;
-  let eligibleTriggerSettlement = produceSubject === void 0 ? void 0 : latestEligibleRuleSettlement(
-    state,
-    produceSubject.artifact_digest,
-    produceSubject.artifact.phase_instance
-  ) ?? (produceSubject.artifact.editorial_predecessor !== void 0 ? latestEligibleRuleSettlement(
-    state,
-    produceSubject.artifact.editorial_predecessor.subject_digest,
-    produceSubject.artifact.phase_instance
-  ) : void 0);
+  let eligibleTriggerSettlement = produceSubject === void 0 ? void 0 : currentRuleSettlement(state, produceSubject);
   if (eligibleTriggerSettlement === void 0 && produceSubject !== void 0 && config2.verified === true && parsedConfig !== void 0 && liveConfigDigest !== void 0) {
     const changedDocs = await changedCoProducedDocumentPaths(dependencies, state, produceSubject);
-    const changedPaths = changedDocs.ok ? changedDocs.value : [];
-    const ruleContext = approvalRuleContext(state, produceSubject, parsedConfig, changedPaths);
-    const conclusion = evaluateApprovalRules(
-      ruleContext.config,
-      ruleContext.subject,
-      ruleContext.changedPaths,
-      ruleContext.secondaryChangedPaths
-    );
-    eligibleTriggerSettlement = Object.freeze({
-      schema_version: "1",
-      task_id: state.task_id,
-      phase_instance: state.phase_instance,
-      step: produceSubject.artifact.step,
-      subject_digest: produceSubject.artifact_digest,
-      config_digest: liveConfigDigest,
-      settled_at_revision: state.revision,
-      conclusion
+    eligibleTriggerSettlement = currentRuleSettlement(state, produceSubject, {
+      config: parsedConfig,
+      digest: liveConfigDigest,
+      changed_documents: changedDocs.ok ? changedDocs.value : []
     });
   }
   const currentSimpleRevision = produceSubject === void 0 ? void 0 : [...state.human_revision_history ?? []].filter((record3) => record3.phase_instance === state.phase_instance && record3.classification === "simple" && record3.resulting_subject_digest === produceSubject.artifact_digest && record3.resulting_result_digest === produceSubject.reference.result_digest).sort((left, right) => right.resulting_attempt - left.resulting_attempt)[0];
@@ -81073,7 +81162,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     state,
     ...state.pending_validation_override === void 0 ? {} : { pending_validation_override: true },
     config_verified: config2.verified,
-    ...config2.verified !== true && config2.issue !== void 0 ? { config_issue: config2.issue } : {},
+    ...config2.verified !== true && config2.issue !== void 0 ? { config_issue: config2.issue, ...config2.issues === void 0 ? {} : { config_issues: config2.issues } } : {},
     ...statusReconciliation === void 0 ? {} : { reconciliation_findings: statusReconciliation.findings },
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,
@@ -81146,6 +81235,30 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     } catch (error51) {
       if (!(error51 instanceof BaselineRepositoryUnavailableError)) throw error51;
       blockers.push(`baseline-repository-${error51.repository}-unavailable`);
+    }
+  }
+  const restoreTargets = [];
+  const missingProjections = statusReconciliation?.findings.filter((finding) => finding.kind === "projection-mismatch" && finding.observed_digest === void 0 && finding.restore_unavailable !== true) ?? [];
+  if (nextAction.code === "inspect-state" && missingProjections.length > 0) {
+    const newest = await discoverNewestProjections(dependencies, authority, stateDocument, repositorySet);
+    if (newest.ok) for (const entry2 of orderedNewestProjections(newest.value)) {
+      if (entry2.retired || entry2.reference === void 0 || !missingProjections.some((finding) => finding.kind === "projection-mismatch" && finding.repository === entry2.repository && finding.path === entry2.path && finding.recorded_digest === entry2.projection.content_digest)) continue;
+      restoreTargets.push(Object.freeze({
+        destination: entry2.target.absolute,
+        content_digest: entry2.projection.content_digest,
+        command: "archflow-local",
+        args: Object.freeze([
+          "restore",
+          "--task",
+          state.task_id,
+          ...entry2.repository === void 0 ? [] : ["--repository", entry2.repository]
+        ]),
+        input: { result_digest: entry2.reference.result_digest, output_path: entry2.path }
+      }));
+    }
+    if (restoreTargets.length !== missingProjections.length) {
+      nextAction = Object.freeze({ ...nextAction, detail: "Recorded files are missing, but their retained restore sources could not all be authenticated. Request diagnostic status for operator repair; do not guess a result digest or restore from an older version." });
+      restoreTargets.length = 0;
     }
   }
   let workspace;
@@ -81237,6 +81350,7 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
   );
   if (!reviewPolicy.ok) return reviewPolicy;
   const status = Object.freeze({
+    ...restoreTargets.length === 0 ? {} : { restore_targets: Object.freeze(restoreTargets) },
     task_id: authority.task_id,
     review_round_limit: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
     state: state.terminal ?? "active",
@@ -81278,7 +81392,16 @@ async function computeTaskStatusDetailedInternal(dependencies, authority) {
     state_document_digest: stateDocument.digest,
     ...liveConfigDigest === void 0 ? {} : { live_config_digest: liveConfigDigest },
     ...legacyInitialization.ok && legacyInitialization.value !== void 0 ? { legacy_import_initialization: true } : {},
-    retained
+    retained,
+    ...produceSubject === void 0 ? {} : { gate_facts: Object.freeze({
+      subject: produceSubject,
+      ...constitution === void 0 ? {} : { constitution },
+      ...eligibleTriggerSettlement === void 0 ? {} : { settlement: eligibleTriggerSettlement },
+      ...assessment === void 0 ? {} : { assessment },
+      ...pendingGates[0] === void 0 ? {} : { pending_gate: pendingGates[0] },
+      ...reviewPushThroughCandidate === void 0 ? {} : { review_push_through: reviewPushThroughCandidate },
+      ...!legacyInitialization.ok || legacyInitialization.value === void 0 ? {} : { legacy_initialization: legacyInitialization.value }
+    }) }
   }));
 }
 async function computeTaskStatusDetailed(dependencies, authority) {
@@ -81302,7 +81425,7 @@ async function validateLiveGateState(dependencies, authority, current, inputFing
   if (!validateDurableSemantics({ state: current }).ok) return issue2("STATE_INVALID", current.value, "gate-state-semantics-invalid");
   const config2 = await dependencies.read_config(authority.config);
   if (config2.kind !== "valid") {
-    return config2.kind === "invalid" ? fail12(createProjectError("CONFIG_INVALID", {
+    return config2.kind === "invalid" ? fail11(createProjectError("CONFIG_INVALID", {
       issue_code: "task-config-invalid",
       ...config2.issues === void 0 ? {} : { issues: config2.issues }
     })) : io(authority, "gate-config-read");
@@ -81315,8 +81438,8 @@ async function validateLiveGateState(dependencies, authority, current, inputFing
   if (!repositorySet.ok) return repositorySet;
   const continuity = validateRepositorySetContinuity(current.value, repositorySet.value);
   if (!continuity.ok) return continuity;
-  if (inputFingerprint !== current.value.input_fingerprint) return fail12(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: current.value.input_fingerprint, observed_digest: inputFingerprint }));
-  return ok8(Object.freeze({ config: config2.snapshot.parsed, repository_set: repositorySet.value }));
+  if (inputFingerprint !== current.value.input_fingerprint) return fail11(createProjectError("INPUT_FINGERPRINT_MISMATCH", { expected_digest: current.value.input_fingerprint, observed_digest: inputFingerprint }));
+  return ok6(Object.freeze({ config: config2.snapshot.parsed, repository_set: repositorySet.value }));
 }
 async function authenticateWaiverOrigin(dependencies, authority, context2) {
   const requestPath = await resolvePath6(dependencies, authority, gateRequestClaim(context2.origin.origin_gate_id), "authority-decision");
@@ -81331,7 +81454,7 @@ async function authenticateWaiverOrigin(dependencies, authority, context2) {
   const payload = decision3.value.envelope.payload;
   const requestContext = request.value.context;
   if (!("eligible_waivers" in requestContext) || request.value.gate_id !== context2.origin.origin_gate_id || request.value.context_digest !== context2.origin.origin_context_digest || request.value.task_id !== context2.origin.task_id || request.value.phase_instance !== context2.origin.phase_instance || request.value.subject_digest !== context2.origin.subject_digest || request.value.current_evidence.set_digest !== context2.origin.current_evidence_set_digest || !isDeepStrictEqual15(payload.rule, context2.origin.rule) || payload.operation !== context2.origin.scope.operation || !requestContext.eligible_waivers.some((eligible) => isDeepStrictEqual15(eligible.rule, context2.origin.rule) && isDeepStrictEqual15(eligible.scope, context2.origin.scope))) return issue2("CONTRACT_INVALID", void 0, "waiver-origin-binding-invalid");
-  return ok8(void 0);
+  return ok6(void 0);
 }
 async function openDurableGate(dependencies, input) {
   assertInternalTransactionAuthority(input.authority, { runner: dependencies.runner, environment: dependencies.environment });
@@ -81360,13 +81483,13 @@ async function openDurableGate(dependencies, input) {
         if (archived === "invalid" || requestRead === "missing" || requestRead === "invalid") return issue2("STATE_INVALID", current.value, "gate-archive-invalid");
         if (!validateDurableSemantics({ gate_request: requestRead, gate_decision: archived }).ok) return issue2("STATE_INVALID", current.value, "gate-archive-binding-invalid");
         if (!enactsReentry(archived.value) && !enactsPlanningRestart(archived.value) && input.input_fingerprint !== current.value.input_fingerprint) {
-          return fail12(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+          return fail11(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
             expected_digest: current.value.input_fingerprint,
             observed_digest: input.input_fingerprint
           }));
         }
         if (current.value.open_gate?.gate_id === gateId) {
-          return ok8({ gate_id: gateId, state: current, request: requestRead, replay: archived });
+          return ok6({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
         if (current.value.last_transition?.intent_id === input.intent_id) {
           const transition = current.value.last_transition;
@@ -81376,9 +81499,9 @@ async function openDurableGate(dependencies, input) {
           if (expectedOutcome === void 0 || transition.tool !== expectedTool || transition.operation !== expectedOperation || transition.request_digest !== requestRead.value.request_digest || transition.input_fingerprint !== input.input_fingerprint || String(transition.result_id) !== String(archived.value.gate_id) || transition.resulting_revision !== current.value.revision || transition.prior_revision + 1 !== transition.resulting_revision || !isDeepStrictEqual15(transition.outcome, expectedOutcome) || transition.outcome_digest !== intentOutcomeDigest(expectedOutcome)) {
             return issue2("STATE_INVALID", current.value, "gate-replay-transition-invalid");
           }
-          return ok8({ gate_id: gateId, state: current, request: requestRead, replay: archived });
+          return ok6({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
-        if (archived.value.outcome === "cancelled" && requestRead.value.intent_id === input.intent_id && requestRead.value.request_digest === input.request_digest) return ok8({ gate_id: gateId, state: current, request: requestRead, replay: archived });
+        if (archived.value.outcome === "cancelled" && requestRead.value.intent_id === input.intent_id && requestRead.value.request_digest === input.request_digest) return ok6({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         if ((enactsReentry(archived.value) || enactsPlanningRestart(archived.value)) && requestRead.value.intent_id === input.intent_id && requestRead.value.request_digest === input.request_digest) {
           const replay = enactsPlanningRestart(archived.value) ? await validateCompletedPlanningRestart(
             dependencies,
@@ -81394,12 +81517,12 @@ async function openDurableGate(dependencies, input) {
             archived.value
           );
           if (!replay.ok) return replay;
-          return ok8({ gate_id: gateId, state: current, request: requestRead, replay: archived });
+          return ok6({ gate_id: gateId, state: current, request: requestRead, replay: archived });
         }
-        return fail12(createProjectError("INTENT_NOT_CURRENT", { intent_id: input.intent_id, receipt_revision: requestRead.value.opened_at_revision, current_revision: current.value.revision }));
+        return fail11(createProjectError("INTENT_NOT_CURRENT", { intent_id: input.intent_id, receipt_revision: requestRead.value.opened_at_revision, current_revision: current.value.revision }));
       }
       if (input.input_fingerprint !== current.value.input_fingerprint) {
-        return fail12(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
+        return fail11(createProjectError("INPUT_FINGERPRINT_MISMATCH", {
           expected_digest: current.value.input_fingerprint,
           observed_digest: input.input_fingerprint
         }));
@@ -81410,9 +81533,9 @@ async function openDurableGate(dependencies, input) {
         const activeRequest = await readCanonical(activeRequestPath.value, "active gate request", parsePersistedGateRequest);
         if (activeRequest === "missing" || activeRequest === "invalid") return issue2("STATE_INVALID", current.value, "active-gate-request-invalid");
         if (activeRequest.value.intent_id === input.intent_id && activeRequest.value.request_digest !== input.request_digest) {
-          return fail12(createProjectError("INTENT_MISMATCH", { expected_digest: activeRequest.value.request_digest, observed_digest: input.request_digest }));
+          return fail11(createProjectError("INTENT_MISMATCH", { expected_digest: activeRequest.value.request_digest, observed_digest: input.request_digest }));
         }
-        if (current.value.open_gate.gate_id !== gateId) return fail12(createProjectError("GATE_ACTIVE", { gate_id: current.value.open_gate.gate_id, gate_kind: current.value.open_gate.gate_kind }));
+        if (current.value.open_gate.gate_id !== gateId) return fail11(createProjectError("GATE_ACTIVE", { gate_id: current.value.open_gate.gate_id, gate_kind: current.value.open_gate.gate_kind }));
         const gateJson2 = await resolvePath6(dependencies, input.authority, "gate.json", "workspace-gate-interface");
         if (!gateJson2.ok) return gateJson2;
         const projected = await readCanonical(gateJson2.value, "active gate", parseActiveGate);
@@ -81420,9 +81543,9 @@ async function openDurableGate(dependencies, input) {
           await ensureWorkspaceProjectionParent(input.authority, gateJson2.value.absolute);
           await dependencies.atomic.replace(gateJson2.value, canonicalDocument(parseActiveGate(activeProjection(activeRequest.value))).bytes);
         }
-        return ok8({ gate_id: gateId, state: current, request: activeRequest });
+        return ok6({ gate_id: gateId, state: current, request: activeRequest });
       }
-      if (current.value.revision !== input.expected_revision) return fail12(createProjectError("STATE_CONFLICT", { expected_revision: input.expected_revision, observed_revision: current.value.revision }));
+      if (current.value.revision !== input.expected_revision) return fail11(createProjectError("STATE_CONFLICT", { expected_revision: input.expected_revision, observed_revision: current.value.revision }));
       if (input.kind === "validation-override") {
         const pending2 = current.value.pending_validation_override;
         const transition = current.value.last_transition;
@@ -81686,7 +81809,7 @@ async function openDurableGate(dependencies, input) {
       await ensureWorkspaceProjectionParent(input.authority, gateJson.value.absolute);
       await dependencies.atomic.replace(gateJson.value, canonicalDocument(parseActiveGate(activeProjection(request))).bytes);
       await dependencies.atomic.replace(input.authority.state, openState.bytes);
-      return ok8({ gate_id: gateId, state: openState, request: requestDocument });
+      return ok6({ gate_id: gateId, state: openState, request: requestDocument });
     });
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(input.authority, `gate-lock-${error51.stage}`) : io(input.authority, "gate-open");
@@ -81735,7 +81858,7 @@ async function stateAfterPolicyWaiverSettlement(dependencies, authority, current
   const finalTriage = current.value.step === "triage";
   const editorialReentry = current.value.step === "produce" && produce.value.artifact.editorial_predecessor !== void 0 && current.value.pending_human_revision === void 0;
   if (!finalTriage && !editorialReentry) {
-    return ok8(nextStateForRecord(current.value, record3, digest12));
+    return ok6(nextStateForRecord(current.value, record3, digest12));
   }
   if (dependencies.load_retained_manifest === void 0) {
     return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-evidence-unavailable");
@@ -81804,7 +81927,7 @@ async function stateAfterPolicyWaiverSettlement(dependencies, authority, current
   } catch {
     return issue2("STATE_INVALID", current.value, "policy-waiver-settlement-fixed-point-invalid");
   }
-  if (assessment.escalated_human_findings === true || assessment.next !== "advance") return ok8(prospective);
+  if (assessment.escalated_human_findings === true || assessment.next !== "advance") return ok6(prospective);
   const changedDocuments = await changedCoProducedDocumentPaths(dependencies, current.value, produce.value);
   if (!changedDocuments.ok) return changedDocuments;
   const ruleContext = approvalRuleContext(current.value, produce.value, config2.snapshot.parsed, changedDocuments.value);
@@ -81862,7 +81985,7 @@ async function stateAfterPolicyWaiverSettlement(dependencies, authority, current
     ...settled.value.rule_settlements ?? [],
     settlement
   ].sort(compareRuleSettlements));
-  return ok8(canonicalDocument({ ...settled.value, rule_settlements: ruleSettlements }));
+  return ok6(canonicalDocument({ ...settled.value, rule_settlements: ruleSettlements }));
 }
 function enactsReentry(record3) {
   if (record3.outcome !== "decided") return false;
@@ -81908,7 +82031,7 @@ function planStaleBaselineGateRefresh(current, request, liveContext) {
     live_context_digest: liveContextDigest,
     superseded_at_revision: resultingRevision
   });
-  return ok8(Object.freeze({ state: next, supersession }));
+  return ok6(Object.freeze({ state: next, supersession }));
 }
 async function refreshStaleBaselineGate(dependencies, authority, expectedRevision, discoverLiveSubject) {
   try {
@@ -81958,7 +82081,7 @@ async function refreshStaleBaselineGate(dependencies, authority, expectedRevisio
       } else {
         if (existing.value.gate_id !== request.gate_id || existing.value.task_id !== request.task_id || existing.value.phase_instance !== request.phase_instance || existing.value.subject_digest !== request.subject_digest || existing.value.context_digest !== request.context_digest || existing.value.superseded_at_revision !== current.value.revision + 1) return issue2("STATE_INVALID", current.value, "stale-baseline-archive-binding-invalid");
         const { open_gate: _openGate, last_transition: _transition, ...preserved } = current.value;
-        plan = ok8({
+        plan = ok6({
           state: canonicalDocument({ ...preserved, revision: parseSafeInteger(current.value.revision + 1) }),
           supersession: existing
         });
@@ -81969,7 +82092,7 @@ async function refreshStaleBaselineGate(dependencies, authority, expectedRevisio
         const path3 = await resolvePath6(dependencies, authority, projection, "workspace-gate-interface");
         if (path3.ok) await dependencies.atomic.removeGateInterface(path3.value);
       }
-      return ok8(Object.freeze({ ...plan.value, replayed: existing !== "missing" }));
+      return ok6(Object.freeze({ ...plan.value, replayed: existing !== "missing" }));
     });
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(authority, `stale-baseline-lock-${error51.stage}`) : io(authority, "stale-baseline-refresh");
@@ -82019,7 +82142,7 @@ async function planGateAuthorizedReentry(dependencies, authority, current, reque
   if (!transition.ok) return transition;
   const revision = parseSafeInteger(current.value.revision + 1);
   const evidence = current.value.authoritative_results.filter((entry2) => entry2.phase_instance === current.value.phase_instance && (entry2.step === "counter_review" || entry2.step === "adjudicate" || entry2.step === "triage"));
-  return ok8(canonicalDocument({
+  return ok6(canonicalDocument({
     ...transition.value,
     revision,
     ...beginsHumanRevision(record3) ? {
@@ -82139,7 +82262,7 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       return issue2("STATE_INVALID", current.value, "review-push-through-settlement-fixed-point-invalid");
     }
     if (postPushAssessment.escalated_human_findings === true || postPushAssessment.next !== "advance") {
-      return ok8(prospective);
+      return ok6(prospective);
     }
     const changedDocuments = await changedCoProducedDocumentPaths(
       dependencies,
@@ -82210,7 +82333,7 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       ...prospective.value,
       rule_settlements: ruleSettlements
     });
-    return ok8(prospective);
+    return ok6(prospective);
   }
   if (request.kind === "validation-override" && record3.kind === "validation-override") {
     const pending = current.value.pending_validation_override;
@@ -82253,7 +82376,7 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       });
       validationOverrides = Object.freeze([...validationOverrides ?? [], override].sort((left, right) => left.phase_instance < right.phase_instance ? -1 : left.phase_instance > right.phase_instance ? 1 : left.gate_id < right.gate_id ? -1 : left.gate_id > right.gate_id ? 1 : 0));
     }
-    return ok8(canonicalDocument({
+    return ok6(canonicalDocument({
       ...preserved,
       revision,
       ...validationOverrides === void 0 ? {} : { validation_overrides: validationOverrides }
@@ -82323,7 +82446,7 @@ async function closedStateForRecord(dependencies, authority, current, request, r
       recomputed_input_fingerprint: fingerprint,
       human_provenance: humanProvenance.data
     });
-    return planned.ok ? ok8(canonicalDocument(withLastSeenConfig(
+    return planned.ok ? ok6(canonicalDocument(withLastSeenConfig(
       { ...planned.value, revision: parseSafeInteger(current.value.revision + 1) },
       liveConfig.snapshot.parsed,
       repositorySet2.value
@@ -82386,7 +82509,7 @@ async function closedStateForRecord(dependencies, authority, current, request, r
     const next = nextStateForRecord(current.value, record3, digest12, plannedFinalPhase2.value);
     const adoptedSecondaryBytes = (request.context.secondary_targets ?? []).map(({ deleted_projections: _deleted, ...target4 }) => target4);
     const baseline_adoptions = [...next.value.baseline_adoptions ?? [], baselineAdoptionRecord(record3.gate_id, next.value.revision, request.context.drifted_projections, [], adoptedSecondaryBytes)].sort((left, right) => left.gate_id.localeCompare(right.gate_id));
-    return ok8(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) }));
+    return ok6(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) }));
   }
   if (record3.outcome === "decided" && record3.kind === "baseline-adoption" && record3.envelope.payload.decision === "adopt-committed-deletions" && request.kind === "baseline-adoption") {
     if (repositorySet === void 0) return issue2("STATE_INVALID", current.value, "baseline-adoption-repository-set-unavailable");
@@ -82407,7 +82530,7 @@ async function closedStateForRecord(dependencies, authority, current, request, r
     if (!plannedFinalPhase2.ok) return plannedFinalPhase2;
     const next = nextStateForRecord(current.value, record3, digest12, plannedFinalPhase2.value);
     const baseline_adoptions = [...next.value.baseline_adoptions ?? [], baselineAdoptionRecord(record3.gate_id, next.value.revision, request.context.drifted_projections, request.context.deleted_projections ?? [], request.context.secondary_targets ?? [])].sort((left, right) => left.gate_id.localeCompare(right.gate_id));
-    return ok8(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) }));
+    return ok6(canonicalDocument({ ...next.value, baseline_adoptions: Object.freeze(baseline_adoptions) }));
   }
   if (record3.outcome === "decided" && record3.kind === "baseline-adoption" && record3.envelope.payload.decision === "restore-recorded-bytes" && request.kind === "baseline-adoption") {
     if (dependencies.load_retained_result === void 0) {
@@ -82443,13 +82566,13 @@ async function closedStateForRecord(dependencies, authority, current, request, r
   }
   const plannedFinalPhase = await loadApprovedDesignFinalPhase(dependencies, current.value, record3);
   if (plannedFinalPhase.ok && plannedFinalPhase.value === void 0 && record3.outcome === "decided" && record3.kind === "migration-audit" && record3.envelope.payload.decision === "accept-import-audit" && request.kind === "migration-audit" && request.context.planned_final_phase !== void 0) {
-    return ok8(nextStateForRecord(current.value, record3, digest12, request.context.planned_final_phase));
+    return ok6(nextStateForRecord(current.value, record3, digest12, request.context.planned_final_phase));
   }
-  return plannedFinalPhase.ok ? ok8(nextStateForRecord(current.value, record3, digest12, plannedFinalPhase.value)) : plannedFinalPhase;
+  return plannedFinalPhase.ok ? ok6(nextStateForRecord(current.value, record3, digest12, plannedFinalPhase.value)) : plannedFinalPhase;
 }
 async function validateCompletedReentry(dependencies, authority, current, request, record3) {
   if (!enactsReentry(record3) || current.value.revision <= request.opened_at_revision) return issue2("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
-  if (current.value.revision > request.opened_at_revision + 1) return ok8(void 0);
+  if (current.value.revision > request.opened_at_revision + 1) return ok6(void 0);
   if (current.value.phase_instance !== request.phase_instance || current.value.step !== "produce" || current.value.status !== "running" || request.kind === "attempts-exhausted" && current.value.attempt !== (beginsHumanRevision(record3) ? request.context.attempts : request.context.attempts + 1) || beginsHumanRevision(record3) && (current.value.pending_human_revision?.gate_id !== record3.gate_id || current.value.pending_human_revision.attempt !== current.value.attempt)) return issue2("STATE_INVALID", current.value, "gate-reentry-replay-state-mismatch");
   if (dependencies.resolve_gate_reentry_fingerprint === void 0) {
     return issue2("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
@@ -82461,7 +82584,7 @@ async function validateCompletedReentry(dependencies, authority, current, reques
     expected_input_fingerprint: current.value.input_fingerprint
   });
   if (!fingerprint.ok) return fingerprint;
-  return current.value.input_fingerprint === fingerprint.value ? ok8(void 0) : issue2("STATE_INVALID", current.value, "gate-reentry-replay-fingerprint-mismatch");
+  return current.value.input_fingerprint === fingerprint.value ? ok6(void 0) : issue2("STATE_INVALID", current.value, "gate-reentry-replay-fingerprint-mismatch");
 }
 async function validateCompletedPlanningRestart(dependencies, authority, current, request, record3) {
   if (!enactsPlanningRestart(record3) || current.value.revision <= request.opened_at_revision) {
@@ -82471,7 +82594,7 @@ async function validateCompletedPlanningRestart(dependencies, authority, current
   if (restart === void 0 || restart.source_phase_instance !== request.phase_instance) {
     return issue2("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
   }
-  if (current.value.revision > request.opened_at_revision + 1) return ok8(void 0);
+  if (current.value.revision > request.opened_at_revision + 1) return ok6(void 0);
   if (current.value.phase_instance !== restart.target_phase_instance || current.value.step !== "produce" || current.value.status !== "running" || current.value.attempt !== 1) return issue2("STATE_INVALID", current.value, "gate-restart-replay-state-mismatch");
   if (dependencies.resolve_gate_reentry_fingerprint === void 0) {
     return issue2("STATE_INVALID", current.value, "gate-reentry-fingerprint-unavailable");
@@ -82484,7 +82607,7 @@ async function validateCompletedPlanningRestart(dependencies, authority, current
     expected_input_fingerprint: current.value.input_fingerprint
   });
   if (!fingerprint.ok) return fingerprint;
-  return current.value.input_fingerprint === fingerprint.value ? ok8(void 0) : issue2("STATE_INVALID", current.value, "gate-restart-replay-fingerprint-mismatch");
+  return current.value.input_fingerprint === fingerprint.value ? ok6(void 0) : issue2("STATE_INVALID", current.value, "gate-restart-replay-fingerprint-mismatch");
 }
 function earnsReceipt(record3) {
   return record3.outcome === "decided" ? gateDecisionEffect(record3.envelope.payload) === "advance" : record3.outcome === "waiver-decided" && record3.granted;
@@ -82514,7 +82637,7 @@ function receiptOutcome(record3, revision) {
   throw new TypeError("non-success gate record has no receipt outcome");
 }
 function withGateTransition(authority, request, record3, predecessor, prepared, inputFingerprint) {
-  if (record3.outcome === "cancelled") return ok8(prepared);
+  if (record3.outcome === "cancelled") return ok6(prepared);
   const outcome = receiptOutcome(record3, prepared.value.revision);
   const transition = {
     schema_version: "1",
@@ -82530,7 +82653,7 @@ function withGateTransition(authority, request, record3, predecessor, prepared, 
     resulting_revision: prepared.value.revision
   };
   const final = canonicalDocument({ ...prepared.value, last_transition: transition });
-  return validateDurableSemantics({ state: final }).ok ? ok8(final) : issue2("STATE_INVALID", predecessor.value, "gate-transition-invalid");
+  return validateDurableSemantics({ state: final }).ok ? ok6(final) : issue2("STATE_INVALID", predecessor.value, "gate-transition-invalid");
 }
 async function installReceipt(dependencies, authority, request, record3, predecessor, prepared, inputFingerprint) {
   await ensureIntentDirectory(authority);
@@ -82587,7 +82710,7 @@ async function installReceipt(dependencies, authority, request, record3, predece
   if (!validateDurableSemantics(createCommittedIntentSubject(final, receipt)).ok) {
     return issue2("STATE_INVALID", predecessor.value, "gate-receipt-committed-invalid");
   }
-  return ok8({ receipt, final });
+  return ok6({ receipt, final });
 }
 function directSemanticDecisionIntent(operationDigest, substep) {
   return parsePathSafeId(`afop-${operationDigest}-${substep}`);
@@ -82662,7 +82785,7 @@ async function archiveDirectSemanticGateDecision(dependencies, input) {
           ...input.option_rationale === void 0 ? {} : { rationale: input.option_rationale }
         });
       } catch {
-        return fail12(createProjectError("GATE_DECISION_INVALID", {
+        return fail11(createProjectError("GATE_DECISION_INVALID", {
           gate_id: open8.gate_id,
           gate_kind: open8.gate_kind,
           issue_code: "decision-choice-invalid"
@@ -82690,7 +82813,7 @@ async function archiveDirectSemanticGateDecision(dependencies, input) {
       try {
         candidate = canonicalDocument(parseInterface({ ...selectedRecord, human_provenance: provenance2 }, request.value));
       } catch {
-        return fail12(createProjectError("GATE_DECISION_INVALID", {
+        return fail11(createProjectError("GATE_DECISION_INVALID", {
           gate_id: open8.gate_id,
           gate_kind: open8.gate_kind,
           issue_code: "decision-binding-invalid"
@@ -82705,16 +82828,16 @@ async function archiveDirectSemanticGateDecision(dependencies, input) {
         if (!validateDurableSemantics({ gate_request: request, gate_decision: existing }).ok || !equivalentDirectDecision(existing.value, candidate.value, input.operation_digest)) {
           return issue2("STATE_INVALID", current.value, "direct-decision-archive-conflict");
         }
-        return ok8({ state: current, request, record: existing, replayed: true });
+        return ok6({ state: current, request, record: existing, replayed: true });
       }
       if (await dependencies.atomic.createExclusive(archivePath.value, candidate.bytes) !== "created") {
         const raced = await readCanonical(archivePath.value, "gate decision record", parseGateDecisionRecord);
         if (raced === "missing" || raced === "invalid" || !equivalentDirectDecision(raced.value, candidate.value, input.operation_digest)) {
           return issue2("STATE_INVALID", current.value, "direct-decision-archive-conflict");
         }
-        return ok8({ state: current, request, record: raced, replayed: true });
+        return ok6({ state: current, request, record: raced, replayed: true });
       }
-      return ok8({ state: current, request, record: candidate, replayed: false });
+      return ok6({ state: current, request, record: candidate, replayed: false });
     });
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(input.authority, `direct-decision-lock-${error51.stage}`) : io(input.authority, "direct-decision-archive");
@@ -82780,7 +82903,7 @@ async function settleDirectReentryCheckpoint(dependencies, input) {
       }
       await dependencies.atomic.replace(input.authority.state, checkpoint.bytes);
       await cleanupCommittedGateWorkspace(dependencies, input.authority, checkpoint.value);
-      return ok8({ state: checkpoint, record: record3, effect: "retry", replayed: false });
+      return ok6({ state: checkpoint, record: record3, effect: "retry", replayed: false });
     });
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(input.authority, `direct-decision-settle-lock-${error51.stage}`) : io(input.authority, "direct-decision-settle");
@@ -82814,7 +82937,7 @@ async function settleDirectSemanticGateDecision(dependencies, input) {
     if (request === "missing" || request === "invalid" || record4 === "missing" || record4 === "invalid" || !enactsReentry(record4.value) || !validateDurableSemantics({ gate_request: request, gate_decision: record4 }).ok || transition.request_digest !== directSemanticDecisionRequestDigest(input.operation_digest, request, record4) || transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) {
       return issue2("STATE_INVALID", currentResult.value.value, "direct-decision-checkpoint-invalid");
     }
-    return ok8({ state: currentResult.value, record: record4, effect: "retry", replayed: true });
+    return ok6({ state: currentResult.value, record: record4, effect: "retry", replayed: true });
   }
   const archivePath = await resolvePath6(dependencies, input.authority, gateDecisionClaim(open8.gate_id), "authority-decision");
   if (!archivePath.ok) return archivePath;
@@ -82871,7 +82994,7 @@ async function enterDirectSemanticRevisionCheckpoint(dependencies, input) {
         )) {
           return issue2("STATE_INVALID", current.value, "direct-revision-entry-replay-invalid");
         }
-        return ok8(current);
+        return ok6(current);
       }
       if (current.value.open_gate !== void 0 || transition === void 0 || transition.tool !== "archflow_gate" || transition.operation !== "semantic-revision-requested" || transition.resulting_revision !== current.value.revision || transition.input_fingerprint !== current.value.input_fingerprint || transition.outcome_digest !== intentOutcomeDigest(transition.outcome)) {
         return issue2("STATE_INVALID", current.value, "direct-revision-checkpoint-invalid");
@@ -82968,7 +83091,7 @@ async function enterDirectSemanticRevisionCheckpoint(dependencies, input) {
       });
       if (!validateDurableSemantics({ state: entered }).ok) return issue2("STATE_INVALID", current.value, "direct-revision-entry-invalid");
       await dependencies.atomic.replace(input.authority.state, entered.bytes);
-      return ok8(entered);
+      return ok6(entered);
     });
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(input.authority, `direct-revision-lock-${error51.stage}`) : io(input.authority, "direct-revision-entry");
@@ -83007,7 +83130,7 @@ async function resolveDurableGate(dependencies, authority, gateId, inputFingerpr
             if (!replay.ok) return replay;
           }
           if (archived.value.outcome === "decided" && archived.value.kind === "material-drift" && archived.value.envelope.payload.decision === "amend-upstream" && !completedMaterialDriftRestartMatches(current.value, request.value, archived.value)) return issue2("STATE_INVALID", current.value, "material-drift-restart-replay-mismatch");
-          return ok8({ state: current, record: archived, effect: effect2, replayed: true });
+          return ok6({ state: current, record: archived, effect: effect2, replayed: true });
         }
         const closure2 = await closedStateForRecord(
           dependencies,
@@ -83050,19 +83173,19 @@ async function resolveDurableGate(dependencies, authority, gateId, inputFingerpr
           }
         }
         await cleanupCommittedGateWorkspace(dependencies, authority, final2.value);
-        if (archived.value.outcome === "cancelled") return fail12(createProjectError("GATE_CANCELLED", { gate_id: gateId, gate_kind: archived.value.kind }));
-        return ok8({ state: final2, record: archived, effect: effect2, replayed: true });
+        if (archived.value.outcome === "cancelled") return fail11(createProjectError("GATE_CANCELLED", { gate_id: gateId, gate_kind: archived.value.kind }));
+        return ok6({ state: final2, record: archived, effect: effect2, replayed: true });
       }
-      if (current.value.open_gate?.gate_id !== gateId) return fail12(createProjectError("GATE_ACTIVE", { gate_id: current.value.open_gate?.gate_id ?? gateId, gate_kind: current.value.open_gate?.gate_kind ?? request.value.kind }));
+      if (current.value.open_gate?.gate_id !== gateId) return fail11(createProjectError("GATE_ACTIVE", { gate_id: current.value.open_gate?.gate_id ?? gateId, gate_kind: current.value.open_gate?.gate_kind ?? request.value.kind }));
       const interfacePath = await resolvePath6(dependencies, authority, "gate.decision", "workspace-gate-interface");
       if (!interfacePath.ok) return interfacePath;
       const raw = await readCanonical(interfacePath.value, "gate decision interface", (value) => value);
-      if (raw === "missing" || raw === "invalid") return fail12(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: raw === "missing" ? "decision-missing" : "decision-noncanonical" }));
+      if (raw === "missing" || raw === "invalid") return fail11(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: raw === "missing" ? "decision-missing" : "decision-noncanonical" }));
       let record3;
       try {
         record3 = parseInterface(raw.value, request.value);
       } catch {
-        return fail12(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-binding-invalid" }));
+        return fail11(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-binding-invalid" }));
       }
       const document2 = canonicalDocument(record3);
       if (!validateDurableSemantics({ gate_request: request, gate_decision: document2 }).ok) return issue2("STATE_INVALID", current.value, "gate-archive-binding-invalid");
@@ -83100,8 +83223,8 @@ async function resolveDurableGate(dependencies, authority, gateId, inputFingerpr
       if (gateJson.ok) await dependencies.atomic.removeGateInterface(gateJson.value);
       await dependencies.atomic.removeGateInterface(interfacePath.value);
       await cleanupCommittedGateWorkspace(dependencies, authority, final.value);
-      if (record3.outcome === "cancelled") return fail12(createProjectError("GATE_CANCELLED", { gate_id: gateId, gate_kind: record3.kind }));
-      return ok8({ state: final, record: document2, effect, replayed: false });
+      if (record3.outcome === "cancelled") return fail11(createProjectError("GATE_CANCELLED", { gate_id: gateId, gate_kind: record3.kind }));
+      return ok6({ state: final, record: document2, effect, replayed: false });
     });
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(authority, `gate-lock-${error51.stage}`) : io(authority, "gate-resolve");
@@ -83198,7 +83321,7 @@ async function baselineRestoreOwners(dependencies, authority, current, context2,
       else group.drifted.push(drifted);
     }
   }
-  return ok8(Object.freeze([...owners.values()].flatMap((repositories) => [...repositories.values()]).map((owner) => Object.freeze({ reference: owner.reference, repository: owner.repository, drifted: Object.freeze(owner.drifted) }))));
+  return ok6(Object.freeze([...owners.values()].flatMap((repositories) => [...repositories.values()]).map((owner) => Object.freeze({ reference: owner.reference, repository: owner.repository, drifted: Object.freeze(owner.drifted) }))));
 }
 async function baselineRestoreOffered(dependencies, authority, state, context2, repositorySet) {
   const newest = await discoverNewestProjections(dependencies, authority, state, repositorySet);
@@ -83228,12 +83351,12 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
       if (archived !== "missing" && !validateDurableSemantics({ gate_request: request, gate_decision: archived }).ok) return issue2("STATE_INVALID", current.value, "gate-archive-binding-invalid");
       if (archived === "missing") {
         const raw = await readCanonical(interfacePath.value, "gate decision interface", (value) => value);
-        if (raw === "missing" || raw === "invalid") return fail12(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-invalid" }));
+        if (raw === "missing" || raw === "invalid") return fail11(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-invalid" }));
         let record3;
         try {
           record3 = parseInterface(raw.value, request.value);
         } catch {
-          return fail12(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-binding-invalid" }));
+          return fail11(createProjectError("GATE_DECISION_INVALID", { gate_id: gateId, gate_kind: request.value.kind, issue_code: "decision-binding-invalid" }));
         }
         const document2 = canonicalDocument(record3);
         if (!earnsReceipt(record3)) return issue2("STATE_INVALID", current.value, "gate-resolution-routing-invalid");
@@ -83253,7 +83376,7 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
       }
       if (current.value.open_gate?.gate_id !== gateId) {
         const effect = archived.value.outcome === "decided" ? gateDecisionEffect(archived.value.envelope.payload) : "advance";
-        return ok8({ state: current, record: archived, effect, replayed: true });
+        return ok6({ state: current, record: archived, effect, replayed: true });
       }
       if (archived.value.outcome === "decided" && archived.value.kind === "restore-collision" && archived.value.envelope.payload.decision === "discard-and-restore") {
         const reference = [...current.value.authoritative_results].reverse().find((item) => item.phase_instance === request.value.phase_instance && item.step === "produce");
@@ -83383,7 +83506,7 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
         archived.value,
         archived.digest,
         live.value.repository_set
-      ) : ok8(preparedClosure);
+      ) : ok6(preparedClosure);
       if (!closure.ok) return closure;
       const prepared = canonicalDocument(withLastSeenConfig(
         closure.value.value,
@@ -83397,7 +83520,7 @@ async function resolveAdvancingGate(dependencies, authority, gateId, inputFinger
       if (gateJson.ok) await dependencies.atomic.removeGateInterface(gateJson.value);
       await dependencies.atomic.removeGateInterface(interfacePath.value);
       await cleanupCommittedGateWorkspace(dependencies, authority, installed.value.final.value);
-      return ok8({ state: installed.value.final, record: archived, effect: "advance", replayed: false });
+      return ok6({ state: installed.value.final, record: archived, effect: "advance", replayed: false });
     });
   } catch (error51) {
     return error51 instanceof TaskLockError ? io(authority, `gate-lock-${error51.stage}`) : io(authority, "gate-resolve-advance");
@@ -85055,8 +85178,15 @@ async function composeGate(services, state, intentId, snapshot) {
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
-  const pendingValidation = state.pending_validation_override;
-  if (pendingValidation !== void 0) {
+  const current = await computeTaskStatusDetailed(services.dependencies, services.authority);
+  if (!current.ok) return current;
+  const selected = current.value.status.next_action;
+  if (current.value.state?.revision !== state.revision || selected.code !== "open-gate" || selected.gate_kind === void 0) {
+    return transitionInvalid(state, "gate-not-offered");
+  }
+  if (selected.gate_kind === "validation-override") {
+    const pendingValidation = state.pending_validation_override;
+    if (pendingValidation === void 0) return transitionInvalid(state, "validation-request-unavailable");
     const transition = state.last_transition;
     const phase3 = decodePhaseInstance(state.phase_instance);
     if (phase3.kind !== "phase-impl" || state.step !== "produce" || state.status !== "failed" || state.open_gate !== void 0 || pendingValidation.phase_instance !== state.phase_instance || pendingValidation.input_fingerprint !== state.input_fingerprint || pendingValidation.request_revision !== state.revision || transition?.tool !== "archflow_state" || transition.operation !== "request-validation-override" || transition.request_digest !== pendingValidation.request_digest || transition.input_fingerprint !== pendingValidation.input_fingerprint || transition.resulting_revision !== pendingValidation.request_revision) return transitionInvalid(state, "validation-override-gate");
@@ -85096,153 +85226,40 @@ async function composeGate(services, state, intentId, snapshot) {
       }
     });
   }
-  if (state.step !== "produce" || state.status === "succeeded") {
-    const discovered = await discoverReconciliationInput(services.dependencies, services.authority, canonicalDocument(state), services.repository_set);
-    if (!discovered.ok) return discovered;
-    const drift = reconcileCurrentAuthority(discovered.value);
-    if (drift.classification === "reconciliation-required") {
-      const target4 = await currentBaselineTargetFacts(services.dependencies, drift.findings, services.repository_set);
-      const adoption = baselineAdoptionInputFromFindings(
-        services.authority.task_id,
-        state,
-        drift.findings,
-        target4
-      );
-      if (adoption !== void 0) {
-        return computeCallEnvelope(services, {
-          tool: "archflow_gate",
-          input: {
-            ...mechanicalInput(services, state, intentId),
-            phase_instance: state.phase_instance,
-            summary,
-            subject_digest: adoption.subject_digest,
-            current_evidence: adoption.current_evidence,
-            kind: "baseline-adoption",
-            context: adoption.context
-          }
-        });
-      }
-    }
+  if (selected.gate_kind === "baseline-adoption") {
+    const adoption = current.value.status.baseline_adoption_gate;
+    if (adoption === void 0) return transitionInvalid(state, "baseline-subject-unavailable");
+    return computeCallEnvelope(services, { tool: "archflow_gate", input: {
+      ...mechanicalInput(services, state, intentId),
+      phase_instance: state.phase_instance,
+      summary,
+      subject_digest: adoption.subject_digest,
+      current_evidence: adoption.current_evidence,
+      kind: "baseline-adoption",
+      context: adoption.context
+    } });
   }
   const phaseKind2 = decodePhaseInstance(state.phase_instance).kind;
-  const gateKind2 = phaseKind2 === "phase-impl" ? "commit-authorization" : phaseKind2 === "design" || phaseKind2 === "phase-design" ? "design-approval" : "artifact-approval";
-  if (state.terminal !== void 0 || state.open_gate !== void 0) {
-    return transitionInvalid(state, `${gateKind2}-gate`);
-  }
-  const subject = await loadCurrentProduceSubject(services.dependencies, state);
-  if (!subject.ok) return subject;
-  const editorialPredecessorDigest = subject.value.artifact.editorial_predecessor?.subject_digest;
-  let settledRule = latestEligibleRuleSettlement(
-    state,
-    subject.value.artifact_digest,
-    state.phase_instance
-  ) ?? (editorialPredecessorDigest === void 0 ? void 0 : latestEligibleRuleSettlement(state, editorialPredecessorDigest, state.phase_instance));
-  if (settledRule === void 0) {
-    const configRead = await services.dependencies.read_config(services.authority.config);
-    if (configRead.kind === "valid") {
-      const changedDocs = await changedCoProducedDocumentPaths(services.dependencies, state, subject.value);
-      const changedPaths = changedDocs.ok ? changedDocs.value : [];
-      const ruleContext = approvalRuleContext(state, subject.value, configRead.snapshot.parsed, changedPaths);
-      const conclusion = evaluateApprovalRules(
-        ruleContext.config,
-        ruleContext.subject,
-        ruleContext.changedPaths,
-        ruleContext.secondaryChangedPaths
-      );
-      settledRule = Object.freeze({
-        schema_version: "1",
-        task_id: state.task_id,
-        phase_instance: state.phase_instance,
-        step: subject.value.artifact.step,
-        subject_digest: subject.value.artifact_digest,
-        config_digest: configRead.snapshot.digest,
-        settled_at_revision: state.revision,
-        conclusion
-      });
-    }
-  }
+  const gateKind2 = selected.gate_kind;
+  const facts = current.value.gate_facts;
+  if (facts === void 0) return transitionInvalid(state, "gate-subject-unavailable");
+  const subject = facts.subject;
+  const settledRule = facts.settlement;
   const approvalSummary = settledRule?.conclusion.wait === true ? approvalRuleGateSummary(summary, settledRule.conclusion.match) : summary;
-  const loadRetainedManifest = services.dependencies.load_retained_manifest;
-  if (loadRetainedManifest === void 0) throw new TypeError("retained evidence loading is unavailable");
-  const loaded = await loadRetainedEvidence(
-    { load_retained_manifest: loadRetainedManifest },
-    state,
-    state.phase_instance
-  );
-  if (!loaded.ok) return loaded;
-  const derived = deriveCurrentEvidenceSet(loaded.value);
-  const constitution = await resolvePinnedConstitution(
-    services.runner,
-    state.policy_base_commit,
-    services.authority.context
-  );
-  let pendingGate;
-  let exhaustion;
-  const authenticated = [];
-  for (const approval of state.approvals) {
-    const loadedApproval = await loadAuthenticatedGateApproval(
-      services.dependencies,
-      services.authority,
-      approval
-    );
-    if (!loadedApproval.ok) return loadedApproval;
-    if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loadedApproval.value)) continue;
-    authenticated.push(loadedApproval.value);
-  }
-  const authenticatedPushThroughs = [];
-  for (const record3 of state.review_push_throughs ?? []) {
-    const loadedPushThrough = await loadAuthenticatedReviewPushThrough(
-      services.dependencies,
-      services.authority,
-      record3
-    );
-    if (loadedPushThrough.ok) authenticatedPushThroughs.push(loadedPushThrough.value);
-  }
-  let assessment;
-  let reviewPushThroughContext;
-  if (constitution.ok) {
-    pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
-    try {
-      const configRead = await services.dependencies.read_config(services.authority.config);
-      const configured = configRead.kind === "valid" ? parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes), "task config").max_attempts : void 0;
-      const approvedUpstreams = await currentApprovedUpstreams(
-        services.dependencies,
-        services.authority,
-        state,
-        authenticated,
-        subject.value
-      );
-      const predecessor = currentReviewPredecessor(state, subject.value);
-      const evidenceSubject = {
-        subject_digest: subject.value.artifact_digest,
-        input_fingerprint: state.input_fingerprint,
-        constitution: constitution.value,
-        approved_upstream_digests: approvedUpstreams,
-        authenticated_gate_approvals: authenticated,
-        ...authenticatedPushThroughs.length === 0 ? {} : {
-          review_push_through_authority: reviewPushThroughAuthoritySource(authenticatedPushThroughs)
-        },
-        ...predecessor === void 0 ? {} : { review_predecessor: predecessor },
-        ...configured === void 0 ? {} : { max_attempts: configured }
-      };
-      assessment = assessCurrentEvidence(state, loaded.value, evidenceSubject);
-      if (assessment.next === "attempts-exhausted") {
-        exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS, completed_review_rounds: assessment.completed_review_rounds ?? state.attempt });
-        reviewPushThroughContext = deriveReviewPushThroughCandidate(
-          state,
-          loaded.value,
-          evidenceSubject
-        )?.context;
-      }
-    } catch {
-      return transitionInvalid(state, "gate-fixed-point-disagreement");
-    }
-  }
-  const legacyInitialization = await loadLegacyImportInitialization(services.dependencies, services.authority, state);
-  const migrationAuditRequired = legacyInitialization.ok && legacyInitialization.value !== void 0 && state.phase_instance === "design" && !authenticated.some((approval) => approval.request.kind === "migration-audit" && approval.decision.envelope.payload.decision === "accept-import-audit");
+  const retained = current.value.retained;
+  const derived = deriveCurrentEvidenceSet(retained);
+  const pendingGate = facts.pending_gate;
+  const assessment = facts.assessment;
+  const exhaustion = gateKind2 !== "attempts-exhausted" ? void 0 : {
+    attempts: state.attempt,
+    maximum_attempts: assessment?.maximum_review_rounds ?? current.value.status.review_round_limit ?? DEFAULT_MAX_ATTEMPTS,
+    completed_review_rounds: assessment?.completed_review_rounds ?? state.attempt
+  };
+  const reviewPushThroughContext = facts.review_push_through?.context;
+  const migrationAuditRequired = gateKind2 === "migration-audit";
   let migrationAuditContext;
   if (migrationAuditRequired) {
-    const initialization = legacyInitialization.value;
+    const initialization = facts.legacy_initialization;
     migrationAuditContext = initialization !== void 0 && initialization.resume_phase !== void 0 && initialization.planned_final_phase !== void 0 && initialization.target_ref !== void 0 && initialization.commit_message !== void 0 ? Object.freeze({
       source_identity_digest: initialization.source_identity_digest,
       destination_identity_digest: services.authority.task_identity_digest,
@@ -85261,9 +85278,9 @@ async function composeGate(services, state, intentId, snapshot) {
     }) : void 0;
     if (migrationAuditContext === void 0) return transitionInvalid(state, "migration-audit-gate");
   }
-  const settlementPolicy = constitution.ok ? authenticateRuleAcceptancePolicy(state, constitution.value) : void 0;
-  const policyFacts = ordinaryPolicyFacts(loaded.value);
-  const simpleTrigger = await simpleRevisionApprovalTrigger(services, state, subject.value);
+  const settlementPolicy = facts.constitution === void 0 ? void 0 : authenticateRuleAcceptancePolicy(state, facts.constitution);
+  const policyFacts = ordinaryPolicyFacts(retained);
+  const simpleTrigger = await simpleRevisionApprovalTrigger(services, state, subject);
   const approvalTrigger2 = simpleTrigger ?? (settledRule === void 0 ? void 0 : Object.freeze({
     kind: "rule-settlement",
     settlement: Object.freeze({
@@ -85274,25 +85291,13 @@ async function composeGate(services, state, intentId, snapshot) {
     conclusion: settledRule.conclusion,
     rule_authority: settlementPolicy === void 0 ? "unavailable" : "authenticated"
   }));
-  const ordinaryApproved = matchingOrdinaryApproval(
-    state,
-    authenticated,
-    subject.value.artifact_digest,
-    state.phase_instance
-  ) !== void 0;
-  const acceptedSettlement = settlementPolicy === void 0 ? void 0 : acceptedNoWaitSettlement(
-    settlementPolicy,
-    state,
-    subject.value.artifact_digest,
-    subject.value.artifact.phase_instance
-  );
   let input;
   if (exhaustion !== void 0) {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
       summary,
-      subject_digest: subject.value.artifact_digest,
+      subject_digest: subject.artifact_digest,
       current_evidence: derived.current_evidence_set,
       kind: "attempts-exhausted",
       context: {
@@ -85303,7 +85308,7 @@ async function composeGate(services, state, intentId, snapshot) {
         }
       }
     };
-  } else if (pendingGate !== void 0 && pendingGate.kind !== "constitution-review") {
+  } else if (pendingGate !== void 0 && pendingGate.kind === gateKind2) {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -85318,41 +85323,28 @@ async function composeGate(services, state, intentId, snapshot) {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
       summary,
-      subject_digest: subject.value.artifact_digest,
+      subject_digest: subject.artifact_digest,
       current_evidence: derived.current_evidence_set,
       kind: "migration-audit",
       context: migrationAuditContext
     };
-  } else if (acceptedSettlement !== void 0 && !ordinaryApproved && simpleTrigger === void 0 && editorialPredecessorDigest === void 0 && pendingGate === void 0 && assessment?.escalated_human_findings !== true) {
-    return transitionInvalid(state, `${gateKind2}-gate-not-required`);
   } else if (gateKind2 === "design-approval") {
     if (approvalTrigger2 === void 0) return transitionInvalid(state, "approval-trigger-authority-missing");
     const target4 = await currentTargetRef(services.dependencies);
-    const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target4);
+    const approval = await buildDesignApprovalInput(services.dependencies, state, retained, target4);
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
       summary: approvalSummary,
-      subject_digest: subject.value.artifact_digest,
+      subject_digest: subject.artifact_digest,
       current_evidence: derived.current_evidence_set,
       kind: "design-approval",
       context: { ...approval.context, ...policyFacts, approval_trigger: approvalTrigger2 }
     };
   } else if (gateKind2 === "commit-authorization") {
     if (approvalTrigger2 === void 0) return transitionInvalid(state, "approval-trigger-authority-missing");
-    const target4 = await currentTargetRef(services.dependencies);
-    const secondarySections = subject.value.artifact.artifact_kind === "implementation-output" ? subject.value.artifact.secondary_repositories ?? [] : [];
-    if (secondarySections.some((section) => section.outputs.length > 0) && services.repository_set === void 0) {
-      throw new TypeError("commit authorization requires the authenticated repository set");
-    }
-    const secondaryCommits = services.repository_set === void 0 || subject.value.artifact.artifact_kind !== "implementation-output" ? Object.freeze([]) : await buildSecondaryCommitAuthorizationFacts(subject.value.artifact, services.repository_set);
-    const authorization = buildCommitAuthorizationInput(
-      subject.value,
-      derived.current_evidence_set,
-      target4,
-      await resolveCommit(services.runner, "HEAD"),
-      secondaryCommits
-    );
+    const authorization = current.value.status.gate_input;
+    if (authorization === void 0) return transitionInvalid(state, "commit-authorization-unavailable");
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -85368,7 +85360,7 @@ async function composeGate(services, state, intentId, snapshot) {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
       summary: approvalSummary,
-      subject_digest: subject.value.artifact_digest,
+      subject_digest: subject.artifact_digest,
       current_evidence: derived.current_evidence_set,
       kind: "artifact-approval",
       context: {
@@ -85383,6 +85375,7 @@ async function composeGate(services, state, intentId, snapshot) {
       }
     };
   }
+  if (input.kind !== selected.gate_kind) return transitionInvalid(state, "gate-selection-mismatch");
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
 }
 async function composeAdvance(services, state, intentId) {
@@ -85585,7 +85578,7 @@ async function composeRequest(services, value) {
   }
 }
 
-// src/state/semantic-view.ts
+// src/state/workflow-decision.ts
 function statusFromSnapshot(snapshot) {
   return snapshot.status;
 }
@@ -85634,73 +85627,6 @@ function markerStatus(value) {
   const descriptor = Object.getOwnPropertyDescriptor(value, "status");
   return descriptor?.enumerable === true && "value" in descriptor && typeof descriptor.value === "string" ? descriptor.value : void 0;
 }
-function publicResources(status) {
-  return Object.freeze((status.resources ?? []).map(({ role: role2, path: path3, access: access2 }) => Object.freeze({ role: role2, path: path3, access: access2 })));
-}
-function reviewContext(status) {
-  if (status.review_policy === void 0) return void 0;
-  const recordedAssignments = status.evidence?.available === true ? status.evidence.counter_review_provenance.reviewer_runs?.map((run) => Object.freeze({
-    reviewer_id: run.reviewer_id,
-    focus: run.focus,
-    criterion_ids: Object.freeze([...run.criterion_ids]),
-    ...!("expected_upstream_digests" in run) || run.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: Object.freeze([...run.expected_upstream_digests]) },
-    ...!("legacy_confirmations" in run) || run.legacy_confirmations === void 0 ? {} : { legacy_confirmation_finding_ids: Object.freeze(run.legacy_confirmations.map((item) => item.finding_id)) }
-  })) : void 0;
-  return Object.freeze({
-    rubric: Object.freeze({
-      schema_version: "1",
-      kind: status.review_policy.rubric.kind,
-      mode: status.review_policy.rubric.mode,
-      criteria: Object.freeze(status.review_policy.rubric.criteria.map((criterion) => Object.freeze({
-        id: criterion.id,
-        text: criterion.text,
-        blocking: criterion.blocking
-      })))
-    }),
-    ...recordedAssignments === void 0 ? {} : { assignments: Object.freeze(recordedAssignments) },
-    active_rules: Object.freeze((status.constitution?.active_rules ?? []).map((rule4) => Object.freeze({
-      id: rule4.id,
-      version: rule4.version,
-      text: rule4.text,
-      ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
-      ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
-    })))
-  });
-}
-function reviewStrength(status, snapshot) {
-  const evidence = status.evidence;
-  if (evidence?.available !== true || status.attempt === void 0) return void 0;
-  const provenance2 = evidence.counter_review_provenance;
-  const recordedReviewers = provenance2.reviewer_runs?.map((reviewer) => Object.freeze({
-    reviewer_id: reviewer.reviewer_id,
-    focus: reviewer.focus,
-    model: reviewer.model,
-    effort: reviewer.effort,
-    reviewer_family: reviewer.model_family,
-    same_family: reviewer.model_family === provenance2.producer_family,
-    finding_count: reviewer.finding_ids.length
-  }));
-  const reviewers = recordedReviewers ?? [Object.freeze({
-    reviewer_id: "general",
-    focus: "general",
-    model: provenance2.model,
-    effort: provenance2.effort,
-    reviewer_family: provenance2.model_family,
-    same_family: provenance2.model_family === provenance2.producer_family,
-    finding_count: evidence.findings.length
-  })];
-  return Object.freeze({
-    reviewer_model: provenance2.model,
-    reviewer_effort: provenance2.effort,
-    reviewer_family: provenance2.model_family,
-    producer_family: provenance2.producer_family,
-    same_family: provenance2.model_family === provenance2.producer_family,
-    attempt: status.attempt,
-    remediation_round: status.attempt > 1,
-    rounds: Object.freeze((snapshot.review_rounds ?? []).map((round) => Object.freeze({ ...round }))),
-    reviewers: Object.freeze(reviewers)
-  });
-}
 function publicPresentation(status) {
   const presentation = status.open_gate?.presentation;
   if (presentation === void 0) return void 0;
@@ -85714,13 +85640,13 @@ function publicPresentation(status) {
     options: Object.freeze(presentation.options.map((option) => Object.freeze({ ...option })))
   });
 }
-function inspect2(detail) {
+function inspect2(detail, instruction = "Request archflow_status with detail: diagnostic for this task and report the failed authority check for operator repair. Do not edit state or approval archives.") {
   return Object.freeze({
     condition: "blocked",
     headline: "Workflow needs inspection",
     detail,
     action_kind: "inspect",
-    instruction: detail
+    instruction
   });
 }
 function mapRunStep(status, action2, snapshot) {
@@ -85822,7 +85748,7 @@ function mapNextAction(status, snapshot) {
   const action2 = status.next_action;
   switch (action2.code) {
     case "initialize-repository":
-      return inspect2("Initialize or repair the ArchFlow repository before starting this task.");
+      return inspect2("ArchFlow repository initialization is unavailable.", "Run the archflow-init skill in this repository, then request fresh status.");
     case "create-task":
       return Object.freeze({
         condition: "ready",
@@ -85836,7 +85762,7 @@ function mapNextAction(status, snapshot) {
     case "inspect-retained-receipt":
     case "create-fresh-intent":
     case "resolve-current-authority":
-      return inspect2(action2.detail);
+      return inspect2(action2.detail, action2.detail);
     case "open-gate":
       return Object.freeze({
         condition: "awaiting-client",
@@ -85865,9 +85791,9 @@ function mapNextAction(status, snapshot) {
       return Object.freeze({
         condition: "awaiting-human",
         headline: presentation.title,
-        detail: presentation.summary,
+        detail: "The returned presentation requires an explicit human decision.",
         action_kind: "decide",
-        instruction: presentation.question,
+        instruction: "Present the returned question and choices, then submit the explicit human decision.",
         expected_submission: "decision",
         presentation
       });
@@ -85984,7 +85910,7 @@ function mapNextAction(status, snapshot) {
         instruction: "No further task-lifecycle action is required."
       });
     case "inspect-state":
-      return inspect2(action2.detail);
+      return inspect2(action2.detail, action2.detail);
     default:
       return assertNeverNextAction(action2.code);
   }
@@ -86024,7 +85950,45 @@ function semanticOfferToken(offer) {
 function canOffer(shape) {
   return shape.action_kind !== "inspect" && shape.action_kind !== "none" && shape.action_kind !== "commit";
 }
-function projectSemanticStatus(snapshot, invocation) {
+function decisionState(shape, status) {
+  if (status.state === "abandoned") return "abandoned";
+  if (shape.condition === "awaiting-human") return "awaiting-human";
+  switch (shape.action_kind) {
+    case "initialize-task":
+      return "initialization";
+    case "begin-work":
+      return "work-ready";
+    case "submit-work":
+      return "working";
+    case "review":
+      return status.step === "counter_review" && status.status === "running" ? "review-running" : "review-ready";
+    case "triage":
+      return "triage";
+    case "revise":
+      return "revision-ready";
+    case "reopen":
+      return "reopening";
+    case "open-waiver":
+      return "gate-preparation";
+    case "decide":
+      return shape.expected_submission === "gate-summary" ? "gate-preparation" : "decision-settlement";
+    case "refresh-milestone-baseline":
+    case "recover-milestone-authority":
+    case "refresh-stale-baseline":
+      return "recovery";
+    case "commit":
+      return "commit";
+    case "start-next-skill":
+      return "handoff";
+    case "finish-task":
+      return "completion-ready";
+    case "inspect":
+      return "blocked";
+    case "none":
+      return "complete";
+  }
+}
+function resolveWorkflowDecision(snapshot, invocation) {
   const status = statusFromSnapshot(snapshot);
   let shape;
   let reopen;
@@ -86044,31 +86008,30 @@ function projectSemanticStatus(snapshot, invocation) {
     shape = mapNextAction(status, snapshot);
   }
   const owns = invocation !== void 0 && (shape.action_kind === "reopen" ? reopen !== void 0 && semanticInvocationEnabled(invocation) : invocationOwnsCurrentPosition(invocation, status, shape.action_kind));
+  if (!owns && shape.skill === void 0 && shape.action_kind !== "none" && status.next_action.skill !== void 0) {
+    const position2 = positionFromPhase(status.phase_instance);
+    shape = Object.freeze({
+      ...shape,
+      skill: status.next_action.skill,
+      skill_args: Object.freeze(position2 !== void 0 && "phase" in position2 ? [String(position2.phase)] : [])
+    });
+  }
   const offer = owns && canOffer(shape) ? offerFor(snapshot, status, invocation, shape, reopen) : void 0;
-  const mismatch2 = invocation !== void 0 && !owns ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.` : "";
-  const configChange = status.config_change;
-  const configChangeNotice = configChange === void 0 ? "" : configChange.length === 1 ? " Task config changed since the last state transaction (1 field); see config_change." : ` Task config changed since the last state transaction (${configChange.length} fields); see config_change.`;
-  const repositoryNotice = status.repositories === void 0 ? "" : " The live repository set is listed in repositories; it is informational and grants no review or write authority.";
-  const failure6 = status.dispatch_failure;
-  const dispatchFailureNotice = failure6 === void 0 ? "" : [failure6, ...failure6.additional_failures ?? []].map((item) => {
-    const route3 = item.route === void 0 ? "" : ` (${item.route.model}${item.route.provider === void 0 ? "" : ` via ${item.route.provider}`})`;
-    const repository = item.repository_name === void 0 ? "" : ` because repository "${item.repository_name}" could not be provided as a read-only view`;
-    const attempts = item.recovery === void 0 ? "" : ` Dispatch attempts: ${String(item.recovery.dispatches)}/${String(item.recovery.maximum_dispatches)} (${item.recovery.status}).`;
-    return ` The last ${item.role}${route3} dispatch failed${repository}: ${item.message}${attempts}`;
-  }).join("");
-  const nextAction = Object.freeze({
-    kind: shape.action_kind,
-    instruction: shape.instruction,
-    ...offer === void 0 ? {} : { offer: semanticOfferToken(offer) },
-    ...offer === void 0 || shape.expected_submission === void 0 ? {} : { expected_submission: shape.expected_submission },
-    ...shape.skill === void 0 ? {} : { skill: shape.skill },
-    ...shape.skill_args === void 0 ? {} : { skill_args: Object.freeze([...shape.skill_args]) },
-    ...shape.commit === void 0 ? {} : { commit: shape.commit },
-    ...reopen === void 0 || shape.action_kind !== "reopen" ? {} : { reopen }
-  });
-  const position2 = positionFromPhase(status.phase_instance);
-  const context2 = reviewContext(status);
-  const strength = reviewStrength(status, snapshot);
+  const facts = {
+    shape,
+    state: decisionState(shape, status),
+    owns,
+    ...reopen === void 0 ? {} : { reopen },
+    ...offer === void 0 ? {} : { internal_offer: offer }
+  };
+  if (shape.condition === "complete") return Object.freeze({ ...facts, kind: "terminal", actor: "none" });
+  if (shape.condition === "blocked") return Object.freeze({ ...facts, kind: "blocked", actor: "operator" });
+  if (shape.condition === "awaiting-human" || shape.action_kind === "start-next-skill" && !owns) return Object.freeze({ ...facts, kind: "human", actor: "human" });
+  return Object.freeze({ ...facts, kind: "operation", actor: "caller" });
+}
+function workflowProgress(snapshot, decision3 = resolveWorkflowDecision(snapshot)) {
+  const status = statusFromSnapshot(snapshot);
+  const { shape } = decision3;
   const recovery = status.dispatch_failure?.recovery;
   const boundary = status.state === "abandoned" ? "abandoned" : status.state === "complete" ? "complete" : shape.presentation !== void 0 ? shape.presentation.class : status.dispatch_failure !== void 0 && recovery?.status !== "retrying" ? "exception" : shape.action_kind === "start-next-skill" ? "step-transition" : shape.action_kind === "inspect" ? "exception" : "none";
   const progress = status.step === void 0 || status.status === void 0 ? void 0 : {
@@ -86080,38 +86043,149 @@ function projectSemanticStatus(snapshot, invocation) {
     reason: shape.presentation !== void 0 ? shape.instruction : recovery?.status === "retrying" ? "A transient reviewer failure is being retried automatically on the same route." : status.dispatch_failure !== void 0 ? status.dispatch_failure.message : shape.action_kind === "start-next-skill" ? "This skill is complete. Waiting for the user to launch the named successor." : shape.instruction,
     ...recovery === void 0 ? {} : { dispatch_recovery: recovery }
   };
+  return progress;
+}
+
+// src/state/semantic-view.ts
+function positionFromPhase2(phase3) {
+  if (phase3 === void 0) return void 0;
+  const decoded = decodePhaseInstance(phase3);
+  return decoded.kind === "prd" || decoded.kind === "design" ? Object.freeze({ kind: decoded.kind }) : Object.freeze({ kind: decoded.kind, phase: Number(decoded.phase) });
+}
+function publicResources(status) {
+  return Object.freeze((status.resources ?? []).map(({ role: role2, path: path3, access: access2 }) => Object.freeze({ role: role2, path: path3, access: access2 })));
+}
+function reviewContext(status) {
+  if (status.review_policy === void 0) return void 0;
+  const recordedAssignments = status.evidence?.available === true ? status.evidence.counter_review_provenance.reviewer_runs?.map((run) => Object.freeze({
+    reviewer_id: run.reviewer_id,
+    focus: run.focus,
+    criterion_ids: Object.freeze([...run.criterion_ids]),
+    ...!("expected_upstream_digests" in run) || run.expected_upstream_digests === void 0 ? {} : { expected_upstream_digests: Object.freeze([...run.expected_upstream_digests]) },
+    ...!("legacy_confirmations" in run) || run.legacy_confirmations === void 0 ? {} : { legacy_confirmation_finding_ids: Object.freeze(run.legacy_confirmations.map((item) => item.finding_id)) }
+  })) : void 0;
+  return Object.freeze({
+    rubric: Object.freeze({
+      schema_version: "1",
+      kind: status.review_policy.rubric.kind,
+      mode: status.review_policy.rubric.mode,
+      criteria: Object.freeze(status.review_policy.rubric.criteria.map((criterion) => Object.freeze({
+        id: criterion.id,
+        text: criterion.text,
+        blocking: criterion.blocking
+      })))
+    }),
+    ...recordedAssignments === void 0 ? {} : { assignments: Object.freeze(recordedAssignments) },
+    active_rules: Object.freeze((status.constitution?.active_rules ?? []).map((rule4) => Object.freeze({
+      id: rule4.id,
+      version: rule4.version,
+      text: rule4.text,
+      ...rule4.review_trigger === void 0 ? {} : { review_trigger: rule4.review_trigger },
+      ...rule4.enforced_by === void 0 ? {} : { enforced_by: Object.freeze([...rule4.enforced_by]) }
+    })))
+  });
+}
+function reviewStrength(status, snapshot) {
+  const evidence = status.evidence;
+  if (evidence?.available !== true || status.attempt === void 0) return void 0;
+  const provenance2 = evidence.counter_review_provenance;
+  const recordedReviewers = provenance2.reviewer_runs?.map((reviewer) => Object.freeze({
+    reviewer_id: reviewer.reviewer_id,
+    focus: reviewer.focus,
+    model: reviewer.model,
+    effort: reviewer.effort,
+    reviewer_family: reviewer.model_family,
+    same_family: reviewer.model_family === provenance2.producer_family,
+    finding_count: reviewer.finding_ids.length
+  }));
+  const reviewers = recordedReviewers ?? [Object.freeze({
+    reviewer_id: "general",
+    focus: "general",
+    model: provenance2.model,
+    effort: provenance2.effort,
+    reviewer_family: provenance2.model_family,
+    same_family: provenance2.model_family === provenance2.producer_family,
+    finding_count: evidence.findings.length
+  })];
+  return Object.freeze({
+    reviewer_model: provenance2.model,
+    reviewer_effort: provenance2.effort,
+    reviewer_family: provenance2.model_family,
+    producer_family: provenance2.producer_family,
+    same_family: provenance2.model_family === provenance2.producer_family,
+    attempt: status.attempt,
+    remediation_round: status.attempt > 1,
+    rounds: Object.freeze((snapshot.review_rounds ?? []).map((round) => Object.freeze({ ...round }))),
+    reviewers: Object.freeze(reviewers)
+  });
+}
+function projectSemanticStatus(snapshot, invocation, detail = "standard") {
+  const status = snapshot.status;
+  const decision3 = resolveWorkflowDecision(snapshot, invocation);
+  const { shape, owns, reopen, internal_offer: offer } = decision3;
+  const mismatch2 = invocation !== void 0 && !owns ? ` The invoked skill does not own this current action; continue with the action shown or invoke its owning skill.` : "";
+  const configChange = status.config_change;
+  const configChangeNotice = configChange === void 0 ? "" : configChange.length === 1 ? " Task config changed since the last state transaction (1 field); see config_change." : ` Task config changed since the last state transaction (${configChange.length} fields); see config_change.`;
+  const nextAction = Object.freeze({
+    kind: shape.action_kind,
+    instruction: status.restore_targets?.length && shape.action_kind === "inspect" ? "For each restore target, run command with args and pass input as JSON on stdin. The helper returns base64 bytes and file type/mode; it does not write files. Verify the decoded content digest, confirm the destination is still missing, then restore exactly that file (100644 means 0644; 100755 means 0755) or create the symlink whose target is the decoded bytes. Stop if any destination now exists. Call archflow_status afterwards." : shape.instruction,
+    actor: decision3.actor,
+    ...shape.action_kind !== "inspect" || !status.restore_targets?.length ? {} : { restore_targets: status.restore_targets },
+    ...offer === void 0 ? {} : { offer: semanticOfferToken(offer) },
+    ...offer === void 0 || shape.expected_submission === void 0 ? {} : { expected_submission: shape.expected_submission },
+    ...shape.skill === void 0 ? {} : { skill: shape.skill },
+    ...shape.skill_args === void 0 ? {} : { skill_args: Object.freeze([...shape.skill_args]) },
+    ...shape.commit === void 0 ? {} : { commit: shape.commit },
+    ...reopen === void 0 || shape.action_kind !== "reopen" ? {} : { reopen }
+  });
+  const diagnostic = detail === "diagnostic";
+  const authoring = shape.action_kind === "begin-work" || shape.action_kind === "submit-work" || shape.action_kind === "revise";
+  const baseline = status.next_action.gate_kind === "baseline-adoption" || status.open_gate?.kind === "baseline-adoption";
+  const feedback = diagnostic || authoring || shape.action_kind === "triage" || !baseline && (shape.expected_submission === "gate-summary" || shape.presentation !== void 0);
+  const recommendation2 = diagnostic || positionFromPhase2(status.phase_instance)?.kind === "phase-impl" && authoring || positionFromPhase2(status.phase_instance)?.kind === "phase-design" && (shape.action_kind === "triage" || shape.action_kind === "start-next-skill");
+  const previousReports = diagnostic ? snapshot.previous_review_reports : authoring && !snapshot.review_reports?.length ? [...new Map((snapshot.previous_review_reports ?? []).map((report2) => [report2.reviewer_id, report2])).values()] : void 0;
+  const advice = snapshot.implementation_recommendation;
+  const conciseAdvice = !diagnostic && positionFromPhase2(status.phase_instance)?.kind === "phase-impl" && advice.status === "ready" ? { status: advice.status, model: advice.model, ...advice.effort === void 0 ? {} : { effort: advice.effort } } : advice;
+  const position2 = positionFromPhase2(status.phase_instance);
+  const context2 = reviewContext(status);
+  const strength = reviewStrength(status, snapshot);
+  const progress = detail === "diagnostic" ? workflowProgress(snapshot, decision3) : void 0;
+  const validationOverrides = snapshot.validation_overrides?.filter((item) => diagnostic || item.status !== "granted" || item.current);
+  const pushThroughs = snapshot.review_push_throughs?.filter((item) => diagnostic || item.status !== "historical");
   const view = Object.freeze({
-    ...progress === void 0 ? {} : { progress },
+    ...!diagnostic || progress === void 0 ? {} : { progress },
     schema_version: "1",
+    state: decision3.state,
     task_id: status.task_id,
     condition: shape.condition,
     headline: shape.headline,
-    detail: `${shape.detail}${mismatch2}${configChangeNotice}${repositoryNotice}${dispatchFailureNotice}${status.editorial_revision !== void 0 ? " The minor revision reuses the prior review; the final correction has not received another AI review." : ""}`,
+    detail: `${shape.detail}${mismatch2}${diagnostic ? configChangeNotice : ""}${status.editorial_revision !== void 0 ? " The minor revision reuses the prior review; the final correction has not received another AI review." : ""}`,
     ...position2 === void 0 ? {} : { position: position2 },
     // A settled re-entry decision is close-only authority. Document write slots become visible
     // only after the separately offered revision-entry transition commits.
-    resources: snapshot.revision_checkpoint === void 0 ? publicResources(status) : Object.freeze([]),
+    resources: snapshot.revision_checkpoint !== void 0 ? Object.freeze([]) : diagnostic || authoring ? publicResources(status) : shape.action_kind === "review" ? publicResources(status).filter((resource) => resource.role === "verification-transcript") : Object.freeze([]),
     next_action: nextAction,
-    ...shape.findings !== true ? {} : { findings: snapshot.full_findings },
-    ...(snapshot.finding_history?.length ?? 0) === 0 ? {} : { finding_history: snapshot.finding_history },
-    ...context2 === void 0 ? {} : { review_context: context2 },
-    ...strength === void 0 || snapshot.review_reports !== void 0 ? {} : { review_strength: strength },
-    ...snapshot.review_reports === void 0 ? { taxonomy_denial_rates: snapshot.taxonomy_denial_rates } : { review_reports: snapshot.review_reports },
-    ...snapshot.previous_review_reports === void 0 ? {} : { previous_review_reports: snapshot.previous_review_reports },
-    ...snapshot.partial_review_reports === void 0 ? {} : { partial_review_reports: snapshot.partial_review_reports },
-    ...snapshot.review_response === void 0 ? {} : { review_response: snapshot.review_response },
+    ...!feedback || snapshot.full_findings.length === 0 ? {} : { findings: snapshot.full_findings },
+    ...!diagnostic || (snapshot.finding_history?.length ?? 0) === 0 ? {} : { finding_history: snapshot.finding_history },
+    ...!(diagnostic || authoring) || context2 === void 0 ? {} : { review_context: context2 },
+    ...!feedback || strength === void 0 || snapshot.review_reports !== void 0 ? {} : { review_strength: strength },
+    ...diagnostic && snapshot.review_reports === void 0 ? { taxonomy_denial_rates: snapshot.taxonomy_denial_rates } : {},
+    ...!feedback || !snapshot.review_reports?.length ? {} : { review_reports: snapshot.review_reports },
+    ...!previousReports?.length ? {} : { previous_review_reports: previousReports },
+    ...!(diagnostic || status.dispatch_failure !== void 0) || !snapshot.partial_review_reports?.length ? {} : { partial_review_reports: snapshot.partial_review_reports },
+    ...!feedback || snapshot.review_response === void 0 ? {} : { review_response: snapshot.review_response },
     ...snapshot.review_revision === void 0 ? {} : { review_revision: snapshot.review_revision },
-    implementation_recommendation: snapshot.implementation_recommendation,
-    ...snapshot.validation_overrides === void 0 ? {} : {
-      validation_overrides: snapshot.validation_overrides
+    ...!recommendation2 ? {} : { implementation_recommendation: conciseAdvice },
+    ...!validationOverrides?.length ? {} : {
+      validation_overrides: validationOverrides
     },
-    ...snapshot.review_push_throughs === void 0 ? {} : {
-      review_push_throughs: snapshot.review_push_throughs
+    ...!pushThroughs?.length ? {} : {
+      review_push_throughs: pushThroughs
     },
     ...shape.presentation === void 0 ? {} : { presentation: shape.presentation },
     ...status.dispatch_failure === void 0 ? {} : { dispatch_failure: status.dispatch_failure },
-    ...status.repositories === void 0 ? {} : { repositories: status.repositories },
-    ...configChange === void 0 ? {} : { config_change: configChange }
+    ...!(diagnostic || authoring || shape.action_kind === "commit") || status.repositories === void 0 ? {} : { repositories: status.repositories },
+    ...!diagnostic || configChange === void 0 ? {} : { config_change: configChange }
   });
   return Object.freeze({ view, ...offer === void 0 ? {} : { internal_offer: offer } });
 }
@@ -86452,7 +86526,7 @@ function requestFacts(action2, substep, intentId, submission, nextActionCode, in
 }
 function planSemanticAction(snapshot, value) {
   const input = parseArchFlowApplyInputV1(value);
-  const projection = projectSemanticStatus(snapshot, input.invocation);
+  const projection = resolveWorkflowDecision(snapshot, input.invocation);
   const offer = projection.internal_offer;
   if (offer === void 0) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
@@ -86493,7 +86567,7 @@ function planSemanticAction(snapshot, value) {
   let operationOffer = offer;
   if (isArchivedDecisionRetry) {
     const { archived_decision: _archive, ...beforeArchive } = snapshot;
-    const originalProjection = projectSemanticStatus(beforeArchive, input.invocation);
+    const originalProjection = resolveWorkflowDecision(beforeArchive, input.invocation);
     const originalOffer = originalProjection.internal_offer;
     if (originalOffer === void 0 || input.action.offer !== semanticOfferToken(originalOffer)) {
       throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "decision retry does not carry the original authenticated offer");
@@ -86530,7 +86604,7 @@ function planSemanticAction(snapshot, value) {
       recoveredOperationDigest = recovered;
     }
   }
-  const currentOfferMatches = input.action.offer === expectedToken && projection.view.next_action.offer === expectedToken;
+  const currentOfferMatches = input.action.offer === expectedToken;
   const authenticatedOldReviewRetry = offer.action_kind === "review" && recoveredOperationDigest !== void 0 && candidateOperationDigest === recoveredOperationDigest;
   const authenticatedOldTriageRetry = offer.action_kind === "triage" && recoveredOperationDigest !== void 0 && candidateOperationDigest === recoveredOperationDigest;
   if (!currentOfferMatches && !authenticatedOldReviewRetry && !authenticatedOldTriageRetry && !isArchivedDecisionRetry) {
@@ -86677,7 +86751,7 @@ function failedProjectResult(value) {
 }
 var SemanticActionExecutionError = class extends Error {
   constructor(result) {
-    super(`${result.error.code}: ${JSON.stringify(result.error.diagnostic.parameters)}`);
+    super(workflowFailure(result.error).message);
     this.result = result;
     this.name = "SemanticActionExecutionError";
   }
@@ -86713,7 +86787,7 @@ async function executeReviewAction(services, initial, capabilities2) {
     assertSubstepSucceeded(executed);
     ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities2));
     assertCompletedReviewSubstep(snapshot, initial.operation_digest, "review-enter");
-    if (projectSemanticStatus(snapshot, initial.invocation).view.next_action.kind !== "review") {
+    if (resolveWorkflowDecision(snapshot, initial.invocation).shape.action_kind !== "review") {
       throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "review-enter did not land at the review-run continuation");
     }
     current = substepPlan(initial, "review-run");
@@ -86778,8 +86852,8 @@ async function executeDecisionAction(services, initial, capabilities2) {
     const archived = await executeSemanticActionSubstep(currentServices, current, capabilities2);
     assertSubstepSucceeded(archived);
     ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities2));
-    const continuation = projectSemanticStatus(snapshot, initial.invocation);
-    if (continuation.view.next_action.kind !== "decide" || continuation.internal_offer?.expected_submission !== "none") {
+    const continuation = resolveWorkflowDecision(snapshot, initial.invocation);
+    if (continuation.shape.action_kind !== "decide" || continuation.internal_offer?.expected_submission !== "none") {
       throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "decision archive did not land at authenticated settlement");
     }
     current = substepPlan(initial, "decision-settle");
@@ -92157,14 +92231,11 @@ var success2 = (view) => parseSemanticResultV1({
   ok: true,
   value: view
 });
-function retryable(error51) {
-  return error51.code === "IO_ERROR" || error51.code === "CANCELLED";
-}
-function failure5(code2, message, view, canRetry = false) {
+function failure5(error51, view) {
   return parseSemanticResultV1({
     schema_version: "1",
     ok: false,
-    error: { code: code2, message, retryable: canRetry },
+    error: workflowFailure(error51, view),
     ...view === void 0 ? {} : { view }
   });
 }
@@ -92193,8 +92264,8 @@ async function openSemanticSession(taskId, context2, operation) {
   const snapshot = await computeAuthoritativeSemanticStatus(services.dependencies, services.authority);
   return snapshot.ok ? Object.freeze({ schema_version: "1", ok: true, value: Object.freeze({ services, snapshot: snapshot.value }) }) : snapshot;
 }
-function safeView(session, invocation) {
-  return projectSemanticStatus(session.snapshot, invocation).view;
+function safeView(session, invocation, detail) {
+  return projectSemanticStatus(session.snapshot, invocation, detail).view;
 }
 async function freshSafeView(taskId, context2, invocation) {
   const refreshed = await openSemanticSession(taskId, context2, "semantic-failure-refresh");
@@ -92202,7 +92273,7 @@ async function freshSafeView(taskId, context2, invocation) {
 }
 function requireProducingHost(invocation, context2) {
   if (invocation !== void 0 && context2.connection.initialization_candidates.host === "unknown") {
-    return failure5("UNSUPPORTED_HOST", "A producing semantic invocation requires an authenticated Claude, Codex, or Antigravity host.");
+    return failure5({ code: "UNSUPPORTED_HOST", message: "A producing semantic invocation requires an authenticated Claude, Codex, or Antigravity host." });
   }
   return void 0;
 }
@@ -92210,8 +92281,8 @@ async function handleSemanticStatus(input, context2) {
   const unsupported = requireProducingHost(input.invocation, context2);
   if (unsupported !== void 0) return unsupported;
   const session = await openSemanticSession(input.task_id, context2, "archflow-status");
-  if (!session.ok) return failure5(session.error.code, session.error.code, void 0, retryable(session.error));
-  return success2(safeView(session.value, input.invocation));
+  if (!session.ok) return failure5(session.error);
+  return success2(safeView(session.value, input.invocation, input.detail));
 }
 async function openComposedGate(call, services) {
   const identified = identifyTransactionRequest(call, services.authority, call.input.input_fingerprint);
@@ -92326,7 +92397,7 @@ async function handleSemanticApply(input, context2) {
   const unsupported = requireProducingHost(input.invocation, context2);
   if (unsupported !== void 0) return unsupported;
   const session = await openSemanticSession(input.task_id, context2, "archflow-apply");
-  if (!session.ok) return failure5(session.error.code, session.error.code, void 0, retryable(session.error));
+  if (!session.ok) return failure5(session.error);
   try {
     return success2(await executeSemanticAction(
       session.value.services,
@@ -92335,11 +92406,11 @@ async function handleSemanticApply(input, context2) {
       capabilities(session.value, input, context2)
     ));
   } catch (error51) {
-    const view = await freshSafeView(input.task_id, context2, input.invocation);
+    const view = await freshSafeView(input.task_id, context2, input.invocation).catch(() => void 0);
     if (error51 instanceof SemanticActionExecutionError) {
-      return failure5(error51.result.error.code, error51.message, view, retryable(error51.result.error));
+      return failure5(error51.result.error, view);
     }
-    if (error51 instanceof SemanticActionPlanError) return failure5(error51.code, error51.message, view);
+    if (error51 instanceof SemanticActionPlanError) return failure5(error51, view);
     throw error51;
   }
 }

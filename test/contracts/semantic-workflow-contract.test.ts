@@ -78,7 +78,7 @@ describe("semantic workflow contracts", () => {
 
   it("strictly materializes the compact semantic result union", () => {
     const view = {
-      schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
+      schema_version: "1", state: "work-ready", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
       next_action: { kind: "inspect", instruction: "Inspect status." },
       implementation_recommendation: unavailable,
     } as const;
@@ -93,6 +93,7 @@ describe("semantic workflow contracts", () => {
     const value = {
       schema_version: "1",
       task_id: "task-1",
+      state: "awaiting-human",
       condition: "awaiting-human",
       headline: "Approval required",
       detail: "Review the exact result.",

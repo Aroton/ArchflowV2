@@ -169,13 +169,21 @@ function assertCallTranscript(bytes, initialize, calls) {
     code: "CONTRACT_INVALID",
     message: "unsupported undefined value at archflow status input",
     retryable: false,
+    recovery: {
+      kind: "correct-input",
+      instruction: "Correct the named submission fields and resubmit through the current offer. Omit submission when expected_submission is none.",
+    },
   });
   assert.equal(missing.result?.content?.[0]?.text, JSON.stringify(missing.result.structuredContent));
   // The semantic boundary projects repository discovery failures as its own error
   // shape; the durable project-error envelope with the candidate digest retired
   // with the legacy request validation.
   const projectError = {
-    code: "REPOSITORY_NOT_FOUND", message: "REPOSITORY_NOT_FOUND", retryable: false,
+    code: "REPOSITORY_NOT_FOUND", message: "repository not found.", retryable: false,
+    recovery: {
+      kind: "repair",
+      instruction: "Reconnect the server in the task's original repository/worktree, then request status for the same task.",
+    },
   };
   const structuredContent = { schema_version: "1", ok: false, error: projectError };
   assert.deepEqual(lines[6], {

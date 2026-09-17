@@ -75,7 +75,7 @@ describe("semantic apply/status parity", { timeout: TIMEOUT }, () => {
     const result = await h.applyAndAssertFreshStatus(invocation, produced);
 
     const reviewed = await expectSuccess(result);
-    expect(reviewed.findings).toEqual([]);
+    expect(reviewed.findings).toBeUndefined();
     expect(reviewed.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
   });
 

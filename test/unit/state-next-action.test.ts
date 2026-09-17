@@ -496,7 +496,7 @@ describe("deriveNextAction", () => {
     const next = deriveNextAction(input({ config_verified: false }));
     expect(next).toMatchObject({ code: "inspect-state", human_required: true });
     expect(next.detail).toContain("config.yaml is invalid");
-    expect(next.detail).toContain("fix the YAML");
+    expect(next.detail).toContain("Correct the named configuration fields");
   });
 
   it("names the actual read issue behind a failed config verification", () => {

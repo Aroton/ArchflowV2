@@ -1,6 +1,6 @@
 # workflow/LIFECYCLE
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
+**Explored:** 2026-09-16 · **Commit:** `90aa526` · **Covers:** `assets/workflow.yaml`, `src/contracts/workflow.ts`, `src/contracts/gates.ts`, `src/contracts/config.ts`, `src/state/approval-rules.ts`, `src/state/semantic-*.ts`, `src/state/workflow-*.ts`, `src/mcp/handlers/semantic.ts`, `skills/`
 
 How a task moves from idea to committed code, and where a human must decide.
 
@@ -212,3 +212,18 @@ Uncertain approval triggers are first returned to the producer with the rule and
 ## Standalone work outside this graph
 
 `archflow-simple` does not create a task or enter this lifecycle. It uses plan → one MCP review and fixes → implementation and verification → one MCP review and fixes. Test and constitution reviewers remain present; effort assessment and reviewer iteration are absent. Explicit policy-triggered human decisions happen in conversation. It never converts or bypasses an initialized task's durable authority.
+
+## Reading the current actor boundary
+
+Pipeline progress records what ran; the semantic `state` records what needs to happen now. After production succeeds, a baseline discrepancy can require gate preparation before any review action. Preparing a summary is caller work, the open presentation waits for the human, and a recorded choice that survived an interruption needs settlement without another approval.
+
+```mermaid
+flowchart LR
+    Facts[Authenticate current facts] --> Decision[Select workflow decision]
+    Decision --> Response[Render relevant guidance]
+    Decision --> Operation[Plan the offered operation]
+    Operation --> Commit[Revalidate and durably record]
+    Commit --> Facts
+```
+
+Status and apply share the decision functions. Gate composition consumes freshly assembled status facts, including the selected gate and review/recovery evidence. The existing transaction checks remain the write boundary. No separate state-machine snapshot is persisted. Routine responses omit background policy and history; diagnostic status reveals them without changing authority. Recovery guidance distinguishes re-reading a stale offer from replaying an identical interrupted operation.

@@ -10,7 +10,7 @@ describe("advertised MCP tool catalogue", () => {
   it("advertises every current recommendation profile with optional explanation", () => {
     for (const descriptor of ADVERTISED_TOOL_CATALOGUE.filter(({ name }) => name !== "archflow_review")) {
       const output = descriptor.outputSchema as { $defs: Record<string, object> };
-      const { validate } = createJsonSchemaValidator(output.$defs.implementationRecommendation!);
+      const { validate } = createJsonSchemaValidator({ ...output.$defs.implementationRecommendation!, $defs: output.$defs });
       for (const { model, effort } of Object.values(SELECTOR_PROFILES)) {
         for (const explanation of [{}, { rationale: "The tested predecessor settles ownership; this phase wires its consumers." }]) {
           expect(validate({ status: "ready", model, effort, ...explanation }), JSON.stringify(validate.errors)).toBe(true);

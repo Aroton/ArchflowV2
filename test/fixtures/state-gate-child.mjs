@@ -22,7 +22,7 @@ if (cut !== "none" && !CUT_POINTS.includes(cut)) {
   throw new Error(`unknown gate cut ${cut}`);
 }
 
-const vite = await createServer({ appType: "custom", clearScreen: false, logLevel: "silent", server: { middlewareMode: true } });
+const vite = await createServer({ configFile: fileURLToPath(new URL("../../vitest.config.ts", import.meta.url)), appType: "custom", clearScreen: false, logLevel: "silent", server: { middlewareMode: true } });
 
 try {
   const [canonical, evidence, fingerprints, phase, git, identity, authorityModule, atomicModule, lockModule, read, gates] = await Promise.all([

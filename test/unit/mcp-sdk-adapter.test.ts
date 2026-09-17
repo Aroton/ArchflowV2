@@ -21,7 +21,7 @@ const semanticSuccess = {
   schema_version: "1",
   ok: true,
   value: {
-    schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
+    schema_version: "1", state: "work-ready", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
     next_action: { kind: "inspect", instruction: "Inspect status." },
     implementation_recommendation: unavailableImplementationRecommendation(
       "not-applicable",
@@ -143,7 +143,7 @@ describe("MCP SDK adapter", () => {
 
   it("serves an injected semantic handler through the compact result envelope", async () => {
     const view = {
-      schema_version: "1", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
+      schema_version: "1", state: "work-ready", task_id: "task-1", condition: "ready", headline: "Ready", detail: "Continue.", resources: [],
       next_action: { kind: "inspect", instruction: "Inspect status." },
       implementation_recommendation: unavailableImplementationRecommendation(
         "not-applicable",

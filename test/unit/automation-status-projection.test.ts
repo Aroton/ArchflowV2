@@ -38,7 +38,7 @@ function snapshot(action: NextAction, extra: Partial<SemanticStatusSnapshotV1> =
     revision: 9,
     phase_instance: "phase-impl-3",
     step: "produce",
-    status: "pending",
+    status: "running",
     attempt: 1,
     input_fingerprint: digestA,
     config: { verified: true },
@@ -66,7 +66,7 @@ function view(
   extra: Partial<WorkflowViewV1> = {},
 ): WorkflowViewV1 {
   return {
-    schema_version: "1", task_id: task, condition, headline: "Current workflow status",
+    schema_version: "1", state: "work-ready", task_id: task, condition, headline: "Current workflow status",
     detail: "Authenticated semantic detail.", position: { kind: "phase-impl", phase: 3 }, resources: [],
     implementation_recommendation: recommendation,
     next_action: { kind, instruction: `Continue ${kind}.` },
@@ -275,6 +275,6 @@ it("reports durable dispatch intervention consistently in semantic and controlle
     recovery: { status: "exhausted", dispatches: 3, maximum_dispatches: 3 },
   } } as unknown as PlainJsonValue };
   const projected = projectSemanticStatus(withFailure).view;
-  expect(projected).toMatchObject({ condition: "awaiting-human", progress: { boundary: "exception" }, next_action: { kind: "review" } });
+  expect(projected).toMatchObject({ condition: "awaiting-human", state: "awaiting-human", next_action: { kind: "review" } });
   expect(projectAutomationStatusV3(withFailure, projected)).toMatchObject({ condition: "awaiting-human", next_action: { actor: "human" } });
 });

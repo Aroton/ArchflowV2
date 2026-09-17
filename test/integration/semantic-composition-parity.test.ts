@@ -101,8 +101,8 @@ describe("transport-neutral request composition", () => {
       [{ kind: "running", step: "counter_review", intent_id: "running-refused" }, "TRANSITION_INVALID"],
       [{ kind: "triage", dispositions: [], intent_id: "triage-refused" }, "TRANSITION_INVALID"],
       [{ kind: "counter-review", intent_id: "review-refused" }, "TRANSITION_INVALID"],
-      // No produce result exists yet, so the gate composer fails on the missing subject.
-      [{ kind: "gate", summary: "Review the composed request.", intent_id: "gate-refused" }, "STATE_INVALID"],
+      // No gate is offered yet; composition refuses before attempting to build a gate subject.
+      [{ kind: "gate", summary: "Review the composed request.", intent_id: "gate-refused" }, "TRANSITION_INVALID"],
       [{ kind: "advance", intent_id: "advance-refused" }, "TRANSITION_INVALID"],
     ] satisfies Readonly<[PlainJsonValue, string]>[]) {
       const composed = await composeRequest(fixture.services, input);

@@ -11,6 +11,7 @@ import {
   type AutomationStatusWithoutIdV1,
   type AutomationStatusWithoutIdV2,
 } from "../contracts/automation-status.js";
+import { workflowProgress } from "../state/workflow-decision.js";
 import { canonicalJsonDigest } from "../contracts/canonical.js";
 import { parseTaskSlug } from "../contracts/evidence.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
@@ -20,7 +21,7 @@ import type {
   WorkflowPositionV1,
   WorkflowViewV1,
 } from "../contracts/semantic-workflow.js";
-import type { NextAction, NextActionCode } from "../state/next-action.js";
+import type { NextAction } from "../state/next-action.js";
 import type { TaskStatusV1 } from "../state/status.js";
 
 type SkillDescriptor = Readonly<{
@@ -331,12 +332,12 @@ export function projectAutomationStatusV2(
   let document = {
     ...v1Document,
     schema_version: "2" as const,
-    implementation_recommendation: view.implementation_recommendation,
-    ...(view.validation_overrides === undefined ? {} : {
-      validation_overrides: view.validation_overrides,
+    implementation_recommendation: snapshot.implementation_recommendation,
+    ...(snapshot.validation_overrides === undefined ? {} : {
+      validation_overrides: snapshot.validation_overrides,
     }),
-    ...(view.review_push_throughs === undefined ? {} : {
-      review_push_throughs: view.review_push_throughs,
+    ...(snapshot.review_push_throughs === undefined ? {} : {
+      review_push_throughs: snapshot.review_push_throughs,
     }),
   } as AutomationStatusWithoutIdV2;
 
@@ -363,7 +364,6 @@ function assertNeverCondition(condition: never): never {
   throw new TypeError(`unmapped semantic workflow condition: ${String(condition)}`);
 }
 
-
 export function projectAutomationStatusV3(snapshot: SemanticStatusSnapshotV1, view: WorkflowViewV1): AutomationStatusV3 {
   // Legacy projections retain their published shape. Only V3 distinguishes automatic retries.
   const retrying = view.dispatch_failure?.recovery?.status === "retrying";
@@ -371,7 +371,7 @@ export function projectAutomationStatusV3(snapshot: SemanticStatusSnapshotV1, vi
   const legacy = projectAutomationStatusV2(snapshot, retrying || view.condition === "blocked" || view.presentation !== undefined ? withoutFailure : view);
   const { observation_id: _id, schema_version: _version, ...rest } = legacy;
   const document = {
-    ...rest, schema_version: "3", progress: view.progress ?? null,
+    ...rest, schema_version: "3", progress: workflowProgress(snapshot) ?? null,
     ...(legacy.condition !== "ready" ? {} : {
       condition: "awaiting-transition", next_action: { ...legacy.next_action, actor: "human",
         instruction: "Launch the named successor skill when ready. This completed invocation must stop here." },

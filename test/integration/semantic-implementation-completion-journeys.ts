@@ -448,7 +448,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     expect(view.next_action.kind).toBe("commit");
     // These rules still reach automated review despite having no human-review trigger.
     for (const id of ["human-approval-for-access-control", "human-approval-for-public-contracts", "human-approval-for-crypto-and-secrets", "human-approval-for-workflow-control-plane"]) {
-      expect(view.review_context?.active_rules).toEqual(expect.arrayContaining([expect.objectContaining({ id, version: 2 })]));
+      expect((await h.status(invocation, "diagnostic")).review_context?.active_rules).toEqual(expect.arrayContaining([expect.objectContaining({ id, version: 2 })]));
     }
     clientCommit(workspace, view.next_action.commit!);
     view = await h.status(invocation);
@@ -675,7 +675,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     // The clean fixed point settled under the SQL rule. A later edit would match the TypeScript
     // output instead if the gate re-evaluated mutable config, but it may only report that change.
     writeApprovalRulesConfig(workspace, ["**/*.ts"]);
-    const changedConfigView = await h.status(invocation);
+    const changedConfigView = await h.status(invocation, "diagnostic");
     expect(changedConfigView.config_change).toBeDefined();
     expect(changedConfigView.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     view = await applied(h, invocation, changedConfigView, {
@@ -1061,7 +1061,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
     }
     expect(view.next_action.kind).toBe("commit");
     expect(view.presentation).toBeUndefined();
-    expect(view.progress).toMatchObject({ review_rounds_completed: 5, review_round_limit: 5 });
+    expect((await h.status(invocation, "diagnostic")).progress).toMatchObject({ review_rounds_completed: 5, review_round_limit: 5 });
     clientCommit(workspace, view.next_action.commit!);
     view = await h.status(invocation);
     expect(view.next_action.kind).toBe("finish-task");
@@ -1089,7 +1089,7 @@ export function registerSemanticImplementationCompletionJourney(selected: string
         : { decision: "revise", rationale: "Improve the verification.", reviewers: [{ reviewer_id: "general", request: "Verify the updated checks." }] } });
       if (round < 5) view = await applied(h, invocation, view);
     }
-    expect(view.progress).toMatchObject({ review_rounds_completed: 5 });
+    expect((await h.status(invocation, "diagnostic")).progress).toMatchObject({ review_rounds_completed: 5 });
     expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     const count = reviewCountAt(workspace);
     view = await applied(h, invocation, view, { kind: "gate-summary", summary: "Reviewed and verified; one disproportionate recommendation remains." });

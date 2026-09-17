@@ -71,10 +71,21 @@ const adapterAttemptParams = object(adapterAttempt);
  */
 export function describeValidationIssues(error: unknown): string[] | undefined {
   if (error instanceof z.ZodError) {
-    const issues = error.issues.slice(0, 5).map((issue) => {
+    // Union errors otherwise hide the field behind "Invalid input". Prefer the branch
+    // whose discriminators match; never mix corrections from incompatible submissions.
+    const flatten = (items: readonly z.core.$ZodIssue[], prefix: readonly PropertyKey[] = []): readonly z.core.$ZodIssue[] => items.flatMap(issue => {
+      const path = [...prefix, ...issue.path];
+      if (issue.code !== "invalid_union" || issue.errors.length === 0) return [{ ...issue, path }];
+      const branches = issue.errors.map(branch => flatten(branch, path));
+      const score = (branch: readonly z.core.$ZodIssue[]) => branch.reduce((sum, item) =>
+        sum + (item.code === "invalid_value" && ["kind", "outcome", "decision", "skill"].includes(String(item.path.at(-1))) ? 1000 : 1), 0);
+      const best = branches.reduce((left, right) => score(left) <= score(right) ? left : right);
+      return [...best];
+    });
+    const issues = [...new Set(flatten(error.issues).map((issue) => {
       const path = issue.path.length === 0 ? "input" : issue.path.map(String).join(".");
       return `${path}: ${issue.message}`.slice(0, 256);
-    });
+    }))].slice(0, 5);
     if (issues.length > 0) return issues;
   }
   return error instanceof Error && error.message !== "" ? [error.message.slice(0, 256)] : undefined;
@@ -92,7 +103,7 @@ const PROJECT_PARAMETER_SCHEMAS = {
   TASK_INVALID: object({ task_id: taskSlug, issue_code: code }), PATH_INVALID: taskPathParams, PATH_ESCAPE: taskPathParams, TASK_SCOPE_VIOLATION: taskPathParams,
   GIT_CONFLICT: object({ operation: code }), GIT_DIVERGED: digestsParams, HANDOFF_REQUIRED: object({ phase_instance: phaseInstance }),
   POLICY_BASE_INVALID: object({ expected_digest: digest, observed_digest: digest.optional() }), WORKFLOW_MISMATCH: digestsParams, STALE_SKILLS: digestsParams,
-  STATE_MISSING: object({ phase_instance: phaseInstance }), STATE_INVALID: object({ phase_instance: phaseInstance, issue_code: code }), TRANSITION_INVALID: object({ phase_instance: phaseInstance, from: code, to: code }),
+  STATE_MISSING: object({ phase_instance: phaseInstance }), STATE_INVALID: object({ phase_instance: phaseInstance, issue_code: code }), TRANSITION_INVALID: object({ phase_instance: phaseInstance, from: code, to: code, issue_code: code.optional(), issues: validationIssues.optional() }),
   INPUT_FINGERPRINT_MISMATCH: digestsParams, STATE_CONFLICT: object({ expected_revision: integer, observed_revision: integer }), INTENT_MISMATCH: digestsParams, INTENT_NOT_CURRENT: object({ intent_id: pathSafeId, receipt_revision: integer, current_revision: integer }),
   SNAPSHOT_LIMIT: object({ limit_scope: z.enum(["result", "task"]), offending_paths: sortedPaths, current_bytes: integer, byte_cap: integer }), SNAPSHOT_INVALID: object({ snapshot_digest: digest, issue_code: code, repository_name: repositoryName.optional() }), RESTORE_COLLISION: object({ gate_id: pathSafeId, path_class: pathClass }), RECONCILIATION_REQUIRED: object({ recorded_digest: digest, observed_digest: digest }), SECRET_DETECTED: object({ path_class: pathClass, detector_id: id }),
   GATE_ACTIVE: gateParams, GATE_DECISION_INVALID: object({ gate_id: pathSafeId, gate_kind: gateKind, issue_code: code }), GATE_CANCELLED: gateParams,

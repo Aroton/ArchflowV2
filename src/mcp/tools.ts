@@ -30,25 +30,6 @@ type JsonObject = Record<string, unknown>;
 const JSON_SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema";
 const MCP_SCHEMA_ID = "https://archflow.dev/schemas/v1/mcp-tools";
 
-// The server validates the complete recommendation union before it reaches the adapter. MCP hosts
-// only need its public discriminator and field map in the advertised output schema; embedding the
-// full nested assessment vocabulary twice (once per semantic tool) consumes the catalogue budget
-// without admitting any client input or strengthening server-output validation.
-const ADVERTISED_IMPLEMENTATION_RECOMMENDATION = deepFreeze({
-  type: "object",
-  description: "Authenticated advisory implementation agent with optional explanation; never workflow authority.",
-  properties: {
-    status: { enum: ["ready", "unavailable"] },
-    model: { enum: ["gemini-3.7-flash-high", "gpt-6-astra", "gemini-3.7-flash", "glm-5.3-flash", "gpt-5.6-sol"] },
-    effort: { enum: ["low", "medium", "high", "xhigh", "max"] },
-    phase: { type: "integer", minimum: 1 },
-    reason: { enum: ["not-applicable", "not-produced", "subject-stale", "legacy-evidence"] },
-    explanation: { type: "string" },
-    rationale: { type: "string", description: "Advisory explanation of the implementation difficulty; never workflow authority." },
-  },
-  required: ["status"],
-} as const);
-
 const schemaDocuments = Object.freeze([
   Object.freeze({ key: "mcp-tools", id: MCP_SCHEMA_ID, schema: mcpToolsSchema }),
   Object.freeze({ key: "primitives", id: "urn:archflow:schema:v1:primitives", schema: primitivesSchema }),
@@ -140,9 +121,7 @@ function embedSchema(entry: JsonObject, sourceKey: string): { fragment: JsonObje
     // Registered before embedding so a self-referencing definition reuses its own reference.
     placements.set(placementKey, localReference);
     takenNames.add(name);
-    definitions[name] = key === "semantic-workflow" && tokens.join("/") === "$defs/implementationRecommendation"
-      ? ADVERTISED_IMPLEMENTATION_RECOMMENDATION
-      : embed(target, key);
+    definitions[name] = embed(target, key);
     return localReference;
   };
 

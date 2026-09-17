@@ -1,4 +1,3 @@
-import { benchmarkRecommendationSchema, type BenchmarkRecommendation } from "./implementation-selection.js";
 import { reviewResponseSchema, type ReviewResponse } from "./triage.js";
 import { reviewRevisionDeclarationSchema, type ReviewRevisionDeclaration } from "./durable-document.js";
 import { reviewReportSchema, type ReviewReport } from "./review.js";
@@ -34,11 +33,7 @@ import {
   type ConfidenceLevel,
   type FindingPartitionCounts,
 } from "./review.js";
-import {
-  DEFAULT_IMPLEMENTATION_PROFILE,
-  type SelectorProfile,
-  type ImplementationProfileV1,
-} from "../review/effort-policy.js";
+import { DEFAULT_IMPLEMENTATION_PROFILE } from "../review/effort-policy.js";
 
 const nonBlank = z.string().min(1).regex(/\S/u);
 const boundedText = nonBlank.max(4096);
@@ -199,35 +194,13 @@ export const IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS = [
   "not-applicable", "not-produced", "subject-stale", "legacy-evidence", "selection-unavailable",
 ] as const;
 export type ImplementationRecommendationV1 =
-  | BenchmarkRecommendation
-  | {
-      readonly status: "ready";
-      readonly model: ImplementationProfileV1["model"] | SelectorProfile["model"];
-      readonly effort: ImplementationProfileV1["effort"] | SelectorProfile["effort"];
-      readonly rationale?: string;
-    }
-  | {
-      readonly status: "unavailable";
-      readonly phase?: number;
-      readonly reason: (typeof IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS)[number];
-      readonly explanation: string;
-    };
-const readyImplementationRecommendationSchema = z.discriminatedUnion("model", [
-  z.object({ status: z.literal("ready"), model: z.literal("gemini-3.7-flash-high"), effort: z.literal("high"), rationale: z.string().optional() }).strict(),
-  z.object({ status: z.literal("ready"), model: z.literal("gpt-6-astra"), effort: z.enum(["low", "high"]), rationale: z.string().optional() }).strict(),
-  z.object({ status: z.literal("ready"), model: z.literal("gemini-3.7-flash"), effort: z.literal("max") }).strict(),
-  z.object({ status: z.literal("ready"), model: z.literal("glm-5.3-flash"), effort: z.literal("max") }).strict(),
-  z.object({ status: z.literal("ready"), model: z.literal("gpt-5.6-sol"), effort: z.enum(["medium", "xhigh"]), rationale: z.string().optional() }).strict(),
-]);
-export const implementationRecommendationV1Schema = z.union([
-  readyImplementationRecommendationSchema,
-  benchmarkRecommendationSchema,
-  z.object({
-    status: z.literal("unavailable"),
-    phase: positiveSafePhaseNumberV1Schema.optional(),
-    reason: z.enum(IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS),
-    explanation: nonBlank,
-  }).strict(),
+  | { readonly status: "ready"; readonly model: string; readonly effort?: string; readonly rationale?: string }
+  | { readonly status: "unavailable"; readonly phase?: number; readonly reason: (typeof IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS)[number]; readonly explanation: string };
+/** Advice describes configured catalog entries, not a closed list of hard-coded model profiles. */
+export const implementationRecommendationV1Schema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ready"), model: nonBlank, effort: nonBlank.optional(), rationale: nonBlank.optional() }).strict(),
+  z.object({ status: z.literal("unavailable"), phase: positiveSafePhaseNumberV1Schema.optional(),
+    reason: z.enum(IMPLEMENTATION_RECOMMENDATION_UNAVAILABLE_REASONS), explanation: nonBlank }).strict(),
 ]) as unknown as z.ZodType<ImplementationRecommendationV1>;
 
 export function unavailableImplementationRecommendation(
@@ -328,9 +301,20 @@ export type SemanticActionKindV1 = (typeof SEMANTIC_ACTION_KINDS)[number];
 export const APPLY_SUBMISSION_KINDS = ["none", "task-ask", "work-result", "triage", "gate-summary", "reopening-request", "decision", "review-dispatch"] as const;
 export type ApplySubmissionKindV1 = (typeof APPLY_SUBMISSION_KINDS)[number];
 
+/** Read-only retrieval recipe for an authenticated missing projection; it grants no overwrite authority. */
+export type WorkflowRestoreTargetV1 = {
+  readonly destination: string;
+  readonly content_digest: Sha256Digest;
+  readonly command: "archflow-local";
+  readonly args: readonly string[];
+  readonly input: { readonly result_digest: Sha256Digest; readonly output_path: string };
+};
+
 export type SemanticNextActionV1 = {
+  readonly restore_targets?: readonly WorkflowRestoreTargetV1[];
   readonly kind: SemanticActionKindV1;
   readonly instruction: string;
+  readonly actor?: "caller" | "human" | "operator" | "none";
   readonly offer?: string;
   readonly expected_submission?: ApplySubmissionKindV1;
   readonly skill?: string;
@@ -355,7 +339,15 @@ export type RepositoryStatusV1 = {
   readonly last_reviewed_commit?: GitOid;
 };
 
+export const WORKFLOW_STATES = [
+  "initialization", "work-ready", "working", "review-ready", "review-running", "triage", "revision-ready",
+  "reopening", "gate-preparation", "awaiting-human", "decision-settlement", "recovery", "blocked",
+  "commit", "handoff", "completion-ready", "complete", "abandoned",
+] as const;
+export type WorkflowStateV1 = (typeof WORKFLOW_STATES)[number];
+
 export type WorkflowViewV1 = {
+  readonly state: WorkflowStateV1;
   readonly progress?: WorkflowProgressV1;
   readonly schema_version: "1";
   readonly task_id: string;
@@ -379,7 +371,7 @@ export type WorkflowViewV1 = {
   /** Present whenever current counter-review evidence exists; see {@link PublicReviewStrengthV1}. */
   readonly review_strength?: PublicReviewStrengthV1;
   /** Authenticated effort advice only; never participates in action or authority selection. */
-  readonly implementation_recommendation: ImplementationRecommendationV1;
+  readonly implementation_recommendation?: ImplementationRecommendationV1;
   readonly presentation?: HumanPresentationV1;
   readonly dispatch_failure?: PublicDispatchFailureV1;
   /**
@@ -476,6 +468,7 @@ export type ApplySubmissionV1 =
   | { readonly kind: "review-dispatch"; readonly route_override: RouteOverrideDeclaration };
 
 export type ArchFlowStatusInputV1 = {
+  readonly detail?: "standard" | "diagnostic";
   readonly schema_version: "1";
   readonly task_id: string;
   readonly invocation?: WorkflowInvocationV1;
@@ -562,7 +555,17 @@ export type SemanticOperationKeyV1 = {
 };
 
 export type SemanticSuccessV1 = { readonly schema_version: "1"; readonly ok: true; readonly value: WorkflowViewV1 };
-export type SemanticErrorSummaryV1 = { readonly code: string; readonly message: string; readonly retryable: boolean };
+export type WorkflowRecoveryV1 = {
+  readonly kind: "correct-input" | "refresh-status" | "retry" | "wait" | "repair" | "human" | "operator";
+  readonly instruction: string;
+};
+export type SemanticErrorSummaryV1 = {
+  readonly code: string;
+  readonly message: string;
+  /** True only when repeating the unchanged request is supported. */
+  readonly retryable: boolean;
+  readonly recovery?: WorkflowRecoveryV1;
+};
 export type SemanticFailureV1 = { readonly schema_version: "1"; readonly ok: false; readonly error: SemanticErrorSummaryV1; readonly view?: WorkflowViewV1 };
 export type SemanticResultV1 = SemanticSuccessV1 | SemanticFailureV1;
 export type SemanticToolContractMap = {
@@ -752,7 +755,11 @@ const commitInstructionV1Schema = z.object({ paths: z.array(nonBlank).min(1), me
     context.addIssue({ code: "custom", path: ["paths"], message: "commit paths must be sorted ascending" });
   }
 });
-export const semanticNextActionV1Schema = z.object({ kind: z.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank, offer: z.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: z.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank.optional(), skill_args: z.array(z.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
+const workflowRestoreTargetV1Schema = z.object({
+  destination: nonBlank, content_digest: digest, command: z.literal("archflow-local"),
+  args: z.array(nonBlank).min(1), input: z.object({ result_digest: digest, output_path: nonBlank }).strict(),
+}).strict();
+export const semanticNextActionV1Schema = z.object({ restore_targets: z.array(workflowRestoreTargetV1Schema).min(1).optional(), kind: z.enum(SEMANTIC_ACTION_KINDS), instruction: nonBlank, actor: z.enum(["caller", "human", "operator", "none"]).optional(), offer: z.string().regex(/^af1_[0-9a-f]{64}$/u).optional(), expected_submission: z.enum(APPLY_SUBMISSION_KINDS).optional(), skill: nonBlank.optional(), skill_args: z.array(z.string()).optional(), commit: commitInstructionV1Schema.optional(), reopen: reopenImpactV1Schema.optional() }).strict();
 /**
  * This document's own plain-json value instance, shared by both sides of a config-change entry —
  * the same self-containment rule as `task-state`'s and `intent-receipt`'s `plainJson` defs: one
@@ -813,6 +820,7 @@ export const publicReviewPushThroughAuditV1Schema = z.discriminatedUnion("status
 ]) as unknown as z.ZodType<PublicReviewPushThroughAuditV1>;
 
 export const workflowViewV1Schema = z.object({
+  state: z.enum(WORKFLOW_STATES),
   progress: workflowProgressV1Schema.optional(),
   schema_version: z.literal("1"),
   task_id: taskSlugV1Schema,
@@ -832,7 +840,7 @@ export const workflowViewV1Schema = z.object({
   partial_review_reports: z.array(reviewReportSchema).optional(),
   review_response: reviewResponseSchema.optional(),
   review_revision: reviewRevisionDeclarationSchema.optional(),
-  implementation_recommendation: implementationRecommendationV1Schema,
+  implementation_recommendation: implementationRecommendationV1Schema.optional(),
   presentation: humanPresentationV1Schema.optional(),
   dispatch_failure: publicDispatchFailureV1Schema.optional(),
   repositories: z.array(repositoryStatusV1Schema).optional(),
@@ -845,13 +853,15 @@ export const semanticErrorSummaryV1Schema = z.object({
   code: nonBlank.max(128),
   message: nonBlank.max(4096),
   retryable: z.boolean(),
+  recovery: z.object({
+    kind: z.enum(["correct-input", "refresh-status", "retry", "wait", "repair", "human", "operator"]),
+    instruction: boundedText,
+  }).strict().optional(),
 }).strict() as unknown as z.ZodType<SemanticErrorSummaryV1>;
 
 export const semanticSuccessV1Schema = z.object({ schema_version: z.literal("1"), ok: z.literal(true), value: workflowViewV1Schema }).strict() as unknown as z.ZodType<SemanticSuccessV1>;
 export const semanticFailureV1Schema = z.object({ schema_version: z.literal("1"), ok: z.literal(false), error: semanticErrorSummaryV1Schema, view: workflowViewV1Schema.optional() }).strict() as unknown as z.ZodType<SemanticFailureV1>;
 export const semanticResultV1Schema = z.union([semanticSuccessV1Schema, semanticFailureV1Schema]) as unknown as z.ZodType<SemanticResultV1>;
-
-
 
 const humanRevisionDeclarationV1Schema = z.object({ classification: z.enum(["simple", "significant"]), rationale: boundedText, user_override: z.object({ agent_classification: z.enum(["simple", "significant"]), rationale: boundedText }).strict().optional() }).strict().superRefine((revision, context) => {
   if (revision.user_override?.agent_classification === revision.classification) context.addIssue({ code: "custom", path: ["user_override", "agent_classification"], message: "an override must change the classification" });
@@ -919,7 +929,7 @@ export const archFlowApplyInputV1Schema = z.object({ schema_version: z.literal("
     });
   }
 }) as unknown as z.ZodType<ArchFlowApplyInputV1>;
-export const archFlowStatusInputV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional() }).strict() as unknown as z.ZodType<ArchFlowStatusInputV1>;
+export const archFlowStatusInputV1Schema = z.object({ schema_version: z.literal("1"), task_id: taskSlugV1Schema, invocation: workflowInvocationV1Schema.optional(), detail: z.enum(["standard", "diagnostic"]).optional() }).strict() as unknown as z.ZodType<ArchFlowStatusInputV1>;
 
 const parseMaterialized = <T>(schema: z.ZodType<T>, value: unknown, label: string): T => {
   assertPlainJson(value, label);

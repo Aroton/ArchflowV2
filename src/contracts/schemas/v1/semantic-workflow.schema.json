@@ -1402,6 +1402,62 @@
     "semanticNextAction": {
       "type": "object",
       "properties": {
+        "restore_targets": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "destination": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "content_digest": {
+                "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+              },
+              "command": {
+                "type": "string",
+                "const": "archflow-local"
+              },
+              "args": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                }
+              },
+              "input": {
+                "type": "object",
+                "properties": {
+                  "result_digest": {
+                    "$ref": "urn:archflow:schema:v1:primitives#/$defs/sha256Digest"
+                  },
+                  "output_path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  }
+                },
+                "required": [
+                  "result_digest",
+                  "output_path"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "destination",
+              "content_digest",
+              "command",
+              "args",
+              "input"
+            ],
+            "additionalProperties": false
+          }
+        },
         "kind": {
           "type": "string",
           "enum": [
@@ -1428,6 +1484,15 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
+        },
+        "actor": {
+          "type": "string",
+          "enum": [
+            "caller",
+            "human",
+            "operator",
+            "none"
+          ]
         },
         "offer": {
           "type": "string",
@@ -1575,6 +1640,29 @@
     "workflowView": {
       "type": "object",
       "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "initialization",
+            "work-ready",
+            "working",
+            "review-ready",
+            "review-running",
+            "triage",
+            "revision-ready",
+            "reopening",
+            "gate-preparation",
+            "awaiting-human",
+            "decision-settlement",
+            "recovery",
+            "blocked",
+            "commit",
+            "handoff",
+            "completion-ready",
+            "complete",
+            "abandoned"
+          ]
+        },
         "progress": {
           "type": "object",
           "properties": {
@@ -2677,208 +2765,47 @@
         }
       },
       "required": [
+        "state",
         "schema_version",
         "task_id",
         "condition",
         "headline",
         "detail",
         "resources",
-        "next_action",
-        "implementation_recommendation"
+        "next_action"
       ],
       "additionalProperties": false
     },
     "implementationRecommendation": {
-      "anyOf": [
+      "oneOf": [
         {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "const": "ready"
-                },
-                "model": {
-                  "type": "string",
-                  "const": "gemini-3.7-flash-high"
-                },
-                "effort": {
-                  "type": "string",
-                  "const": "high"
-                },
-                "rationale": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status",
-                "model",
-                "effort"
-              ],
-              "additionalProperties": false
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "ready"
             },
-            {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "const": "ready"
-                },
-                "model": {
-                  "type": "string",
-                  "const": "gpt-6-astra"
-                },
-                "effort": {
-                  "type": "string",
-                  "enum": [
-                    "low",
-                    "high"
-                  ]
-                },
-                "rationale": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status",
-                "model",
-                "effort"
-              ],
-              "additionalProperties": false
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
             },
-            {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "const": "ready"
-                },
-                "model": {
-                  "type": "string",
-                  "const": "gemini-3.7-flash"
-                },
-                "effort": {
-                  "type": "string",
-                  "const": "max"
-                }
-              },
-              "required": [
-                "status",
-                "model",
-                "effort"
-              ],
-              "additionalProperties": false
+            "effort": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
             },
-            {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "const": "ready"
-                },
-                "model": {
-                  "type": "string",
-                  "const": "glm-5.3-flash"
-                },
-                "effort": {
-                  "type": "string",
-                  "const": "max"
-                }
-              },
-              "required": [
-                "status",
-                "model",
-                "effort"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "const": "ready"
-                },
-                "model": {
-                  "type": "string",
-                  "const": "gpt-5.6-sol"
-                },
-                "effort": {
-                  "type": "string",
-                  "enum": [
-                    "medium",
-                    "xhigh"
-                  ]
-                },
-                "rationale": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status",
-                "model",
-                "effort"
-              ],
-              "additionalProperties": false
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
             }
-          ]
-        },
-        {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "const": "ready"
-                },
-                "model": {
-                  "type": "string",
-                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
-                },
-                "effort": {
-                  "type": "string",
-                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
-                },
-                "rationale": {
-                  "type": "string",
-                  "minLength": 1,
-                  "pattern": "\\S"
-                }
-              },
-              "required": [
-                "status",
-                "model",
-                "rationale"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "const": "unavailable"
-                },
-                "reason": {
-                  "type": "string",
-                  "const": "selection-unavailable"
-                },
-                "explanation": {
-                  "type": "string",
-                  "minLength": 1,
-                  "pattern": "\\S"
-                }
-              },
-              "required": [
-                "status",
-                "reason",
-                "explanation"
-              ],
-              "additionalProperties": false
-            }
-          ]
+          },
+          "required": [
+            "status",
+            "model"
+          ],
+          "additionalProperties": false
         },
         {
           "type": "object",
@@ -3935,6 +3862,13 @@
         },
         "invocation": {
           "$ref": "#/$defs/workflowInvocation"
+        },
+        "detail": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "diagnostic"
+          ]
         }
       },
       "required": [
@@ -3998,6 +3932,34 @@
         },
         "retryable": {
           "type": "boolean"
+        },
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "correct-input",
+                "refresh-status",
+                "retry",
+                "wait",
+                "repair",
+                "human",
+                "operator"
+              ]
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "kind",
+            "instruction"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -4067,6 +4029,29 @@
   },
   "type": "object",
   "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "initialization",
+        "work-ready",
+        "working",
+        "review-ready",
+        "review-running",
+        "triage",
+        "revision-ready",
+        "reopening",
+        "gate-preparation",
+        "awaiting-human",
+        "decision-settlement",
+        "recovery",
+        "blocked",
+        "commit",
+        "handoff",
+        "completion-ready",
+        "complete",
+        "abandoned"
+      ]
+    },
     "progress": {
       "type": "object",
       "properties": {
@@ -5169,14 +5154,14 @@
     }
   },
   "required": [
+    "state",
     "schema_version",
     "task_id",
     "condition",
     "headline",
     "detail",
     "resources",
-    "next_action",
-    "implementation_recommendation"
+    "next_action"
   ],
   "additionalProperties": false
 }

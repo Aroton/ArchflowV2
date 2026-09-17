@@ -10,6 +10,25 @@ import type { GateKind } from "../contracts/gates.js";
 import { decodePhaseInstance } from "../contracts/phase-instance.js";
 import type { GitOid } from "../contracts/canonical.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
+import { latestEligibleRuleSettlement } from "./restart-authority.js";
+
+/** Resolve the current subject's trigger once, including a retained editorial predecessor. */
+export function currentRuleSettlement(
+  state: TaskStateV1,
+  subject: CurrentProduceSubject,
+  live?: { readonly config: ApprovalRulesConfig; readonly digest: Sha256Digest; readonly changed_documents: readonly string[] },
+): RuleSettlementV1 | undefined {
+  const predecessor = subject.artifact.editorial_predecessor?.subject_digest;
+  const recorded = latestEligibleRuleSettlement(state, subject.artifact_digest, subject.artifact.phase_instance) ??
+    (predecessor === undefined ? undefined : latestEligibleRuleSettlement(state, predecessor, subject.artifact.phase_instance));
+  if (recorded !== undefined || live === undefined) return recorded;
+  const context = approvalRuleContext(state, subject, live.config, live.changed_documents);
+  return Object.freeze({
+    task_id: state.task_id, phase_instance: state.phase_instance, step: subject.artifact.step,
+    subject_digest: subject.artifact_digest, config_digest: live.digest, settled_at_revision: state.revision,
+    conclusion: evaluateApprovalRules(context.config, context.subject, context.changedPaths, context.secondaryChangedPaths),
+  });
+}
 
 /**
  * The pure approval-rule evaluator (P3-1). A completed step must wait for a human only when a

@@ -1,11 +1,11 @@
+import type { WorkflowRestoreTargetV1 } from "../contracts/semantic-workflow.js";
 import type { ReviewResponse } from "../contracts/triage.js";
 import { reviewFindings } from "../contracts/review.js";
 import { readDispatchRecovery } from "../dispatch/recovery.js";
 import { ignoredMilestonePaths, INCOMPLETE_DOCUMENT_MILESTONE_GUIDANCE } from "./milestone-repair.js";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
-import { canonicalJsonDigest, parseCanonicalDocument, type CanonicalDocument, type GitOid } from "../contracts/canonical.js";
+import { parseCanonicalDocument, type CanonicalDocument, type GitOid } from "../contracts/canonical.js";
 import type { ProjectionDigestRef } from "../contracts/durable-primitives.js";
 import type { ConfigV1, RepositoryName, TaskConfigSnapshot } from "../contracts/config.js";
 import type { ImplementationOutputV1 } from "../contracts/durable-implementation-output.js";
@@ -86,7 +86,7 @@ import { activeProjection, type GateLifecycleDependencies } from "./gate-core.js
 import { deriveNextAction, type NextAction, type PolicyReentryFindings } from "./next-action.js";
 import { adoptedProduceProjectionDrift, changedCoProducedDocumentPaths, expectedProduceUpstreamBindings, loadCurrentProduceSubject, loadProduceUpstreamSubject, produceOwnedTaskDocumentPaths, produceProjectionPins, produceUpstreamBindingsForSubject, readProduceProjection, readProduceProjectionSet } from "./produce-subject.js";
 import type { CurrentProduceSubject } from "./produce-subject.js";
-import { approvalRuleContext, evaluateApprovalRules } from "./approval-rules.js";
+import { currentRuleSettlement } from "./approval-rules.js";
 import {
   resolveAutonomousDesignMilestoneProof,
   resolveAutonomousImplementationMilestoneProof,
@@ -100,7 +100,7 @@ import {
 } from "./implementation-manifest.js";
 import { phaseStatusResources, type StatusResource } from "./phase-documents.js";
 import { inspectWorkspaceCleanup, type WorkspaceCleanupReport } from "./workspace-cleanup.js";
-import { discoverReconciliationInput } from "./reconciliation-discovery.js";
+import { discoverNewestProjections, orderedNewestProjections, discoverReconciliationInput } from "./reconciliation-discovery.js";
 import {
   activeGateHead,
   assessBaselineSubjectFreshness,
@@ -502,6 +502,7 @@ async function implementationRecoveryHasNoDelta(
 }
 
 export type TaskStatusV1 = Readonly<{
+  restore_targets?: readonly WorkflowRestoreTargetV1[];
   task_id: TaskSlug;
   state: "missing" | "active" | "complete" | "abandoned";
   revision?: number;
@@ -602,6 +603,16 @@ export type DetailedTaskStatusV1 = Readonly<{
   live_config_digest?: Sha256Digest;
   legacy_import_initialization?: true;
   retained: RetainedEvidenceSet;
+  /** Fresh gate composition consumes these exact joins instead of reselecting policy. */
+  gate_facts?: Readonly<{
+    subject: CurrentProduceSubject;
+    constitution?: ResolvedConstitution;
+    settlement?: RuleSettlementV1;
+    assessment?: EvidenceAssessment;
+    pending_gate?: NonNullable<ReturnType<typeof pendingAdjudicationGate>>;
+    review_push_through?: ReviewPushThroughCandidate;
+    legacy_initialization?: NonNullable<Extract<Awaited<ReturnType<typeof loadLegacyImportInitialization>>, { ok: true }>["value"]>;
+  }>;
 }>;
 
 /**
@@ -2323,36 +2334,12 @@ async function computeTaskStatusDetailedInternal(
     pendingGates = pendingAdjudicationGates(state, constitution, retained, authenticatedApprovals);
   }
   const adjudicationGateKind = pendingGates[0]?.kind;
-  let eligibleTriggerSettlement = produceSubject === undefined
-    ? undefined
-    : (latestEligibleRuleSettlement(
-        state, produceSubject.artifact_digest, produceSubject.artifact.phase_instance,
-      ) ?? (produceSubject.artifact.editorial_predecessor !== undefined
-        ? latestEligibleRuleSettlement(
-            state,
-            produceSubject.artifact.editorial_predecessor.subject_digest,
-            produceSubject.artifact.phase_instance,
-          )
-        : undefined));
-  if (
-    eligibleTriggerSettlement === undefined && produceSubject !== undefined &&
-    config.verified === true && parsedConfig !== undefined && liveConfigDigest !== undefined
-  ) {
+  let eligibleTriggerSettlement = produceSubject === undefined ? undefined : currentRuleSettlement(state, produceSubject);
+  if (eligibleTriggerSettlement === undefined && produceSubject !== undefined &&
+      config.verified === true && parsedConfig !== undefined && liveConfigDigest !== undefined) {
     const changedDocs = await changedCoProducedDocumentPaths(dependencies, state, produceSubject);
-    const changedPaths = changedDocs.ok ? changedDocs.value : [];
-    const ruleContext = approvalRuleContext(state, produceSubject, parsedConfig, changedPaths);
-    const conclusion = evaluateApprovalRules(
-      ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
-    );
-    eligibleTriggerSettlement = Object.freeze({
-      schema_version: "1",
-      task_id: state.task_id,
-      phase_instance: state.phase_instance,
-      step: produceSubject.artifact.step,
-      subject_digest: produceSubject.artifact_digest,
-      config_digest: liveConfigDigest,
-      settled_at_revision: state.revision,
-      conclusion,
+    eligibleTriggerSettlement = currentRuleSettlement(state, produceSubject, {
+      config: parsedConfig, digest: liveConfigDigest, changed_documents: changedDocs.ok ? changedDocs.value : [],
     });
   }
   const currentSimpleRevision = produceSubject === undefined
@@ -2392,7 +2379,7 @@ async function computeTaskStatusDetailedInternal(
     state,
     ...(state.pending_validation_override === undefined ? {} : { pending_validation_override: true as const }),
     config_verified: config.verified,
-    ...(config.verified !== true && config.issue !== undefined ? { config_issue: config.issue } : {}),
+    ...(config.verified !== true && config.issue !== undefined ? { config_issue: config.issue, ...(config.issues === undefined ? {} : { config_issues: config.issues }) } : {}),
     ...(statusReconciliation === undefined ? {} : { reconciliation_findings: statusReconciliation.findings }),
     reconciliation_blocking_reasons: Object.freeze([
       ...reconciliationBlockers,
@@ -2478,6 +2465,28 @@ async function computeTaskStatusDetailedInternal(
       // Read-only status must report, not throw, when a drifted secondary left the writable set.
       if (!(error instanceof BaselineRepositoryUnavailableError)) throw error;
       blockers.push(`baseline-repository-${error.repository}-unavailable`);
+    }
+  }
+
+  const restoreTargets: WorkflowRestoreTargetV1[] = [];
+  const missingProjections = statusReconciliation?.findings.filter(finding =>
+    finding.kind === "projection-mismatch" && finding.observed_digest === undefined && finding.restore_unavailable !== true) ?? [];
+  if (nextAction.code === "inspect-state" && missingProjections.length > 0) {
+    const newest = await discoverNewestProjections(dependencies, authority, stateDocument, repositorySet);
+    if (newest.ok) for (const entry of orderedNewestProjections(newest.value)) {
+      if (entry.retired || entry.reference === undefined || !missingProjections.some(finding =>
+        finding.kind === "projection-mismatch" && finding.repository === entry.repository &&
+        finding.path === entry.path && finding.recorded_digest === entry.projection.content_digest)) continue;
+      restoreTargets.push(Object.freeze({
+        destination: entry.target.absolute, content_digest: entry.projection.content_digest,
+        command: "archflow-local", args: Object.freeze(["restore", "--task", state.task_id,
+          ...(entry.repository === undefined ? [] : ["--repository", entry.repository])]),
+        input: { result_digest: entry.reference.result_digest, output_path: entry.path },
+      }));
+    }
+    if (restoreTargets.length !== missingProjections.length) {
+      nextAction = Object.freeze({ ...nextAction, detail: "Recorded files are missing, but their retained restore sources could not all be authenticated. Request diagnostic status for operator repair; do not guess a result digest or restore from an older version." });
+      restoreTargets.length = 0;
     }
   }
 
@@ -2581,6 +2590,7 @@ async function computeTaskStatusDetailedInternal(
   );
   if (!reviewPolicy.ok) return reviewPolicy;
   const status: TaskStatusV1 = Object.freeze({
+    ...(restoreTargets.length === 0 ? {} : { restore_targets: Object.freeze(restoreTargets) }),
     task_id: authority.task_id,
     review_round_limit: parsedConfig?.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
     state: state.terminal ?? "active",
@@ -2625,6 +2635,15 @@ async function computeTaskStatusDetailedInternal(
       ? { legacy_import_initialization: true as const }
       : {}),
     retained,
+    ...(produceSubject === undefined ? {} : { gate_facts: Object.freeze({
+      subject: produceSubject,
+      ...(constitution === undefined ? {} : { constitution }),
+      ...(eligibleTriggerSettlement === undefined ? {} : { settlement: eligibleTriggerSettlement }),
+      ...(assessment === undefined ? {} : { assessment }),
+      ...(pendingGates[0] === undefined ? {} : { pending_gate: pendingGates[0] }),
+      ...(reviewPushThroughCandidate === undefined ? {} : { review_push_through: reviewPushThroughCandidate }),
+      ...(!legacyInitialization.ok || legacyInitialization.value === undefined ? {} : { legacy_initialization: legacyInitialization.value }),
+    }) }),
   }));
 }
 

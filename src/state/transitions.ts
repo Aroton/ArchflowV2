@@ -115,7 +115,6 @@ export type ApprovalTriggerAuthorityRecoveryPlanInput = Readonly<{
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 
 function restartInvalid(input: PlanningRestartPlanInput, issue: string): ProjectResult<never> {
-  void issue;
   return Object.freeze({
     schema_version: "1",
     ok: false,
@@ -123,6 +122,7 @@ function restartInvalid(input: PlanningRestartPlanInput, issue: string): Project
       phase_instance: input.target_phase_instance,
       from: `${input.current.step}-${input.current.status}`,
       to: "planning-restart",
+      issue_code: issue,
     }),
   });
 }
@@ -299,7 +299,7 @@ export function planApprovalTriggerAuthorityRecovery(
   }));
 }
 
-function invalid(input: TransitionPlanInput, from: string, to: string): ProjectResult<never> {
+function invalid(input: TransitionPlanInput, from: string, to: string, issue = "transition-not-allowed", explanation?: string): ProjectResult<never> {
   return Object.freeze({
     schema_version: "1",
     ok: false,
@@ -307,6 +307,8 @@ function invalid(input: TransitionPlanInput, from: string, to: string): ProjectR
       phase_instance: input.target.phase_instance,
       from,
       to,
+      issue_code: issue,
+      ...(explanation === undefined ? {} : { issues: [explanation] }),
     }),
   });
 }
@@ -333,9 +335,6 @@ function pipeline(instance: TaskStateV1["phase_instance"]): readonly PipelineSte
   return configured.pipeline;
 }
 
-function sameSubject(current: TaskStateV1, target: TransitionTarget): boolean {
-  return current.phase_instance === target.phase_instance && current.step === target.step;
-}
 
 function artifactApprovalKind(
   instance: TaskStateV1["phase_instance"],
@@ -447,44 +446,23 @@ function hasAuthenticatedMigrationAudit(input: TransitionPlanInput): boolean {
 function legalMovement(input: TransitionPlanInput): boolean {
   const { current, target } = input;
   if (current.terminal !== undefined || current.open_gate !== undefined) return false;
-  if (sameSubject(current, target)) {
-    if (current.status === "running") {
+  if (current.phase_instance === target.phase_instance) {
+    // Request composition and the transaction planner use the same structural edge check.
+    const allowed = legalRunStepStatus(current, target.step);
+    if (allowed === undefined) return false;
+    if (allowed === "succeeded") {
       return target.attempt === current.attempt && (target.status === "succeeded" || target.status === "failed");
     }
-    if (current.status === "failed") {
-      return target.status === "running" && target.attempt === current.attempt + 1;
+    if (target.status !== "running") return false;
+    if (current.step === target.step && current.status === "failed") return target.attempt === current.attempt + 1;
+    if (target.step === "produce") {
+      return target.attempt === current.attempt + (input.human_revision_reentry === true ? 0 : 1);
     }
-    // A succeeded step re-entering itself is legal only through the backward-to-produce rule
-    // below (produce-succeeded -> produce-running, withdraw-and-redo); fall through to it.
-  }
-  if (
-    target.phase_instance === current.phase_instance &&
-    target.step === "produce" && target.status === "running"
-  ) {
-    // Author-initiated produce re-entry from anywhere else in the phase (attempt + 1): the triage
-    // case is the accepted-finding re-entry, the counter_review case is the sanctioned
-    // new-information door — downstream evidence simply goes stale.
-    //
-    // A step still running or already failed re-enters here too, and that arm is load-bearing: a
-    // step whose terminal result cannot be recorded — a review that cannot be dispatched over
-    // documents that changed under it, say — has no forward edge, and the same-step retry rule
-    // only repeats the impossible work. The produce window is the phase's root and the only door
-    // that is never a dead end. Abandoning the entry costs the attempt a retry would have cost,
-    // and re-entry above still cannot skip the produce/running case: that is `sameSubject` work
-    // in flight, settled by the running branch before control ever reaches here.
-    return input.human_revision_reentry === true
-      ? target.attempt === current.attempt
-      : target.attempt === current.attempt + 1;
+    return target.attempt === current.attempt;
   }
   if (current.status !== "succeeded" || target.status !== "running") return false;
   const steps = pipeline(current.phase_instance);
-  const index = steps.indexOf(current.step);
-  if (index < 0) return false;
-  if (index + 1 < steps.length) {
-    return target.phase_instance === current.phase_instance &&
-      target.step === steps[index + 1] &&
-      target.attempt === current.attempt;
-  }
+  if (steps.at(-1) !== current.step) return false;
   if (
     current.phase_instance === "design" &&
     target.step === "produce" &&
@@ -662,6 +640,19 @@ function hasAuthenticatedRuleAcceptance(input: TransitionPlanInput): boolean {
   return settlement !== undefined && isDeepStrictEqual(settlement, accepted.settlement);
 }
 
+/** Named boundary failures preserve the precise reason a proposed transition is refused. */
+function transitionBoundaryFailure(input: TransitionPlanInput, crossesPhase: boolean): { issue: string; explanation: string } | undefined {
+  if (!(legalMovement(input) || (crossesPhase && legalSettledProduceExitMovement(input)))) {
+    return { issue: "movement-not-allowed", explanation: "This step cannot follow the recorded state. Read fresh status and use its offered action." };
+  }
+  if (!artifactMatches(input)) return { issue: "artifact-binding-mismatch", explanation: "The work artifact does not match this task, phase, or current input. Submit the result through the current work offer." };
+  if (!resultReferenceMatches(input)) return { issue: "result-binding-mismatch", explanation: "The retained result does not match the producing step. The server must repair the result binding before this transition can proceed." };
+  if (!constitutionReferenceMatches(input)) return { issue: "constitution-binding-mismatch", explanation: "Review and constitution evidence do not belong to the same completed review. Resume the offered review or recovery action." };
+  if (!pendingHumanRevisionMatches(input)) return { issue: "human-revision-mismatch", explanation: "The work does not satisfy the pending human revision. Include the requested human_revision classification and rationale on its succeeded work-result." };
+  if (!pendingValidationOverrideMatches(input)) return { issue: "validation-override-mismatch", explanation: "The validation exception is not bound to this failed production. Read fresh status and resolve its pending decision before resubmitting." };
+  return undefined;
+}
+
 /** Plans one fixed-workflow move. It is pure and performs no receipt or state write. */
 export function planStateTransition(value: TransitionPlanInput): ProjectResult<NextStateDraft> {
   const {
@@ -687,7 +678,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     // A settlement may only be appended by the transaction that settles its subject: the entry must
     // name this task, this producing phase instance, and exactly the revision this plan produces,
     // so no caller can back-date or re-home durable rule evidence through the planner.
-    return invalid(input, from, to);
+    return invalid(input, from, to, "settlement-binding-mismatch", "The approval-rule settlement does not belong to this transition. Refresh status; server repair is required if the binding still fails.");
   }
   const committedOutput = hasAuthenticatedCommittedOutput(input);
   const ruleAccepted = hasAuthenticatedRuleAcceptance(input);
@@ -710,7 +701,7 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     decodedCurrent.kind === "phase-impl" &&
     crossesPhase &&
     !committedOutput
-  ) return invalid(input, from, to);
+  ) return invalid(input, from, to, "implementation-commit-unproved", "The implementation commit has not been authenticated. Follow the returned commit facts and refresh status before advancing.");
   if (
     decodedCurrent.kind !== "phase-impl" &&
     crossesPhase &&
@@ -719,30 +710,19 @@ export function planStateTransition(value: TransitionPlanInput): ProjectResult<N
     // An accepted migration audit is the design phase's exit authority for a legacy import: the
     // same authenticated approval legalMovement's design-jump rule settles on.
     !(decodedCurrent.kind === "design" && hasAuthenticatedMigrationAudit(input))
-  ) return invalid(input, from, to);
+  ) return invalid(input, from, to, "approval-required", "This phase has neither authenticated approval nor rule-based advancement authority. Resolve the action returned by status before advancing.");
   if (
     (decodedCurrent.kind === "prd" || decodedCurrent.kind === "design" || decodedCurrent.kind === "phase-design") &&
     crossesPhase &&
     (hasAuthenticatedPlanningCommitApproval(input) || ruleAccepted) &&
     input.commit_observed !== true
-  ) return invalid(input, from, to);
+  ) return invalid(input, from, to, "planning-commit-unproved", "The planning milestone commit has not been authenticated. Follow the returned commit facts and refresh status before advancing.");
   if (
     decodedCurrent.kind === "design" && crossesPhase && ruleAccepted &&
     input.derived_planned_final_phase === undefined
-  ) return invalid(input, from, to);
-  const legalMovementFromCurrentCursor = legalMovement(input) || (
-    crossesPhase && legalSettledProduceExitMovement(input)
-  );
-  if (
-    !legalMovementFromCurrentCursor ||
-    !artifactMatches(input) ||
-    !resultReferenceMatches(input) ||
-    !constitutionReferenceMatches(input) ||
-    !pendingHumanRevisionMatches(input) ||
-    !pendingValidationOverrideMatches(input)
-  ) {
-    return invalid(input, from, to);
-  }
+  ) return invalid(input, from, to, "phase-bound-unavailable", "The reviewed task design does not supply an authenticated final phase bound. Request diagnostic status for operator repair.");
+  const rejection = transitionBoundaryFailure(input, crossesPhase);
+  if (rejection !== undefined) return invalid(input, from, to, rejection.issue, rejection.explanation);
 
   const {
     revision: _revision,

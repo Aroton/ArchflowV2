@@ -81,7 +81,11 @@ export function start(input: Fixture, action: string, cut = "none", intent = "ga
 export function event(child: ChildProcess, type: "cut" | "result" | "failed", timeoutMs = 10_000): Promise<Record<string, any>> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => finish(new Error(`timed out waiting for ${type}`)), timeoutMs);
-    const onMessage = (message: unknown) => { if ((message as { type?: unknown }).type === type) finish(undefined, message as Record<string, any>); };
+    const onMessage = (message: unknown) => {
+      const reported = message as Record<string, any>;
+      if (reported.type === type) finish(undefined, reported);
+      else if (reported.type === "failed") finish(new Error(`gate child failed: ${reported.message}`));
+    };
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => finish(new Error(`child exited before ${type}: ${String(code)}/${String(signal)}`));
     const finish = (error?: Error, value?: Record<string, any>) => {
       clearTimeout(timeout); child.off("message", onMessage); child.off("exit", onExit);

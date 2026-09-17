@@ -1,6 +1,6 @@
 # ArchFlow integration guide for orchestration applications
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `src/review/simple-*.ts`, `src/contracts/simple-review.ts`, `src/local/`, `src/contracts/automation-status.ts`, `src/contracts/schemas/v1/automation-status-v3.schema.json`, `src/contracts/semantic-workflow.ts`, `src/contracts/evidence.ts`, `src/contracts/workflow-progress.ts`, `src/contracts/dispatch-failure.ts`, `src/contracts/effort-review.ts`, `src/dispatch/recovery.ts`, `src/state/semantic-*.ts`, `src/mcp/`, `src/repository/git.ts`, `src/init/`, `skills/`, `test/integration/automation-status-*.test.ts`, `package.json`
+**Explored:** 2026-09-16 · **Commit:** `90aa526` · **Covers:** `src/review/simple-*.ts`, `src/contracts/simple-review.ts`, `src/local/`, `src/contracts/automation-status.ts`, `src/contracts/schemas/v1/automation-status-v3.schema.json`, `src/contracts/semantic-workflow.ts`, `src/contracts/evidence.ts`, `src/contracts/workflow-progress.ts`, `src/contracts/dispatch-failure.ts`, `src/contracts/effort-review.ts`, `src/dispatch/recovery.ts`, `src/state/semantic-*.ts`, `src/state/workflow-*.ts`, `src/mcp/`, `src/repository/git.ts`, `src/init/`, `skills/`, `test/integration/automation-status-*.test.ts`, `package.json`
 
 This is a self-contained integration brief for an application that orchestrates ArchFlow tasks. It describes the implemented interface, the controller behavior to build around it, and the boundaries that preserve human decisions. You can pass this file to an agent building that application. Source paths at the end are optional verification references; the architecture and operating rules are explained here.
 
@@ -350,7 +350,7 @@ This file describes the source at the stamped commit, not a promise that an arbi
 | `src/local/main.ts`, `src/local/commands.ts`, `src/local/automation-status.ts`, `src/local/automation-status-edges.ts` | Process behavior, read-only projection, and absent/damaged-state handling. |
 | `src/contracts/workflow-progress.ts`, `src/contracts/dispatch-failure.ts`, `src/dispatch/recovery.ts` | Progress shape, retry classification, and durable retry budget. |
 | `src/contracts/effort-review.ts` | Current selector profiles and retained recommendation compatibility. |
-| `src/contracts/semantic-workflow.ts`, `src/state/semantic-*.ts`, `src/mcp/tools.ts` | Producer inputs, server-owned actions, and advertised tools. |
+| `src/contracts/semantic-workflow.ts`, `src/state/semantic-*.ts`, `src/state/workflow-*.ts`, `src/mcp/tools.ts` | Producer inputs, server-owned actions, and advertised tools. |
 | `skills/archflow-*/SKILL.md` | Exact host skill responsibilities and route flag support. |
 | `test/integration/automation-status-*.test.ts` | Executable examples of polling and workflow outcomes. |
 | `docs/contracts/AUTOMATION.md`, `docs/mcp/SERVER.md`, `docs/cli/COMMANDS.md` | Deeper subsystem explanations for maintainers. |
@@ -383,3 +383,7 @@ The call returns reports and policy judgments directly. Honor `human_review_reas
 Launch the client from the repository root. The project `.codex/config.toml` and `.mcp.json` entries use `scripts/dev-mcp-launcher.sh` with `ARCHFLOW_DEV=1`, serving this checkout's tracked `dist/archflow-mcp.mjs` and sibling `assets/`. Repository-local `.agents/skills` and `.claude/skills` links point to the canonical `skills/` directory, so a test session can select the branch's instructions without copying them into a shared installation. When a global skill with the same name also appears, select the repository-local path.
 
 MCP is stdio: the client owns the server process, so there is no HTTP dev port or separately hosted daemon. Reconnect/restart the client's MCP connection after changing the launch configuration or rebuilding the bundle. Existing connected servers continue running their loaded code. Rebuild through the release staging/writing loop after source changes; the launcher does not compile automatically. For a branch-local helper invocation, use `node dist/archflow-local.mjs <command>` from the repository root. Shared machine installations remain unchanged, and this setup creates no task or workflow authority.
+
+## Concise producer responses
+
+Producer calls to `archflow_status` and `archflow_apply` return action-specific context. Use `state` and `next_action.actor` to distinguish preparing a human decision, waiting for that decision, and settling a choice already recorded. Policy, history, implementation advice, and repository lists may be omitted when unrelated to the next action. Request `detail:"diagnostic"` on status when deeper inspection is needed; it does not alter offers. Follow `error.recovery` rather than treating every error as a retry of the same call. The automation-status v3 observation remains unchanged and continues to include its required progress and advisory fields.

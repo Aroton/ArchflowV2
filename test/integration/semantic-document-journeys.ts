@@ -80,9 +80,7 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     const initialHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: workspace.root, encoding: "utf8" });
 
     let view = await h.status(invocation);
-    expect(view.implementation_recommendation).toMatchObject({
-      status: "unavailable", reason: "not-applicable",
-    });
+    expect(view.implementation_recommendation).toBeUndefined();
     expect(view.next_action).toMatchObject({ kind: "submit-work", expected_submission: "work-result" });
     const produced = await h.apply(invocation, view, { kind: "work-result", outcome: "succeeded" });
     expect(produced.ok).toBe(true);
@@ -94,7 +92,7 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     expect(reviewed.ok, JSON.stringify(reviewed)).toBe(true);
     if (!reviewed.ok) return;
     view = reviewed.value;
-    expect(view.findings).toEqual([]);
+    expect(view.findings).toBeUndefined();
     expect(view.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
 
     const opened = await h.apply(invocation, view, { kind: "gate-summary", summary: "The PRD is ready for approval." });
@@ -184,9 +182,8 @@ describe("semantic document journeys", { timeout: TIMEOUT }, () => {
     if (!startedPhaseDesign.ok) return;
     expect(startedPhaseDesign.value.position).toEqual({ kind: "phase-design", phase: 1 });
     expect(startedPhaseDesign.value.next_action.kind).toBe("submit-work");
-    expect(startedPhaseDesign.value.implementation_recommendation).toMatchObject({
-      status: "unavailable", phase: 1, reason: "not-produced",
-    });
+    expect(startedPhaseDesign.value.implementation_recommendation).toBeUndefined();
+    expect((await h.status(phaseDesignInvocation, "diagnostic")).implementation_recommendation).toMatchObject({ status: "unavailable", phase: 1, reason: "not-produced" });
 
     const phaseDesignResource = startedPhaseDesign.value.resources.find((resource) => resource.role === "current-artifact");
     const phasePrdResource = startedPhaseDesign.value.resources.find((resource) => resource.role === "prd");
@@ -257,7 +254,7 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
 
     phaseResult = await h.apply(phaseDesignInvocation, phaseResult.value);
     if (!phaseResult.ok) throw new Error(JSON.stringify(phaseResult));
-    expect(phaseResult.value.findings).toEqual([]);
+    expect(phaseResult.value.findings).toBeUndefined();
     expect(phaseResult.value.next_action).toMatchObject({ kind: "decide", expected_submission: "gate-summary" });
     expect(readFileSync(phaseDesignPath, "utf8")).toBe(phaseDesignBytes);
     expect(readFileSync(phasePrdPath, "utf8")).toBe(phasePrdBytes);
@@ -447,7 +444,8 @@ The predecessor reports \`archflow-phase-impl\` as its successor without offerin
     expect(startedImplementation.ok, JSON.stringify(startedImplementation)).toBe(true);
     if (!startedImplementation.ok) return;
     expect(startedImplementation.value.position).toEqual({ kind: "phase-impl", phase: 1 });
-    expect(startedImplementation.value.implementation_recommendation)
+    expect(startedImplementation.value.implementation_recommendation).toMatchObject({ status: "ready" });
+    expect((await h.status(phaseImplInvocation, "diagnostic")).implementation_recommendation)
       .toEqual(observedPhaseDesign.implementation_recommendation);
     expect(startedImplementation.value.next_action.kind).toBe("submit-work");
     expect(readFileSync(join(workspace.root, "semantic-review-count"), "utf8")).toBe("3");

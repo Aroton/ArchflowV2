@@ -1,6 +1,6 @@
 # contracts/AUTOMATION
 
-**Explored:** 2026-09-12 · **Commit:** `1f89243` · **Covers:** `src/contracts/automation-status.ts`, `src/contracts/workflow-progress.ts`, `src/local/automation-status*.ts`, `src/local/commands.ts`, `src/state/semantic-*.ts`, `src/dispatch/recovery.ts`, `test/integration/automation-status-*.test.ts`
+**Explored:** 2026-09-16 · **Commit:** `90aa526` · **Covers:** `src/contracts/automation-status.ts`, `src/contracts/workflow-progress.ts`, `src/local/automation-status*.ts`, `src/local/commands.ts`, `src/state/semantic-*.ts`, `src/dispatch/recovery.ts`, `test/integration/automation-status-*.test.ts`
 
 For Review V5 and archived V4, `awaiting-client` at triage means the working AI must interpret reports and submit finish, revise, or escalate. It is not itself a human boundary. Partial feedback remains visible during retry, and successful siblings are reused. Completed-round progress remains independent of dispatch retries. An explicit `no_issues_found` reviewer outcome is feedback for the working AI; it does not select a controller action or authorize advancement.
 
@@ -85,3 +85,5 @@ Raw `.archflow` files, offers, gate archives, and decision tokens are not contro
 Update controllers to understand v3 before consuming the new CLI. Existing task-local configurations and pinned constitutions are not silently rewritten. To adopt the defaults, explicitly review the repository seed policy and the task's approval rules: keep intentional custom content rules, remove the old blanket parent-document path rule only when adopting the independently reviewed material-plan-change rule, and preserve the SQL rule. Selectively remove the superseded blanket triggers and add the database rule on the repository policy/base branch, preserving custom policy and incrementing changed rule versions. Existing pinned tasks retain their old governing policy; this default update includes no in-flight migration. Adoption never retroactively clears an open gate or changes archived human decisions. Rebuilding the tracked distribution does not authorize a machine-global install.
 
 Uncertain approval triggers are first returned to the producer with the rule and missing evidence named. They use the completed-review-round budget; only a positively matched trigger opens its configured approval immediately. Unresolved uncertainty at the budget limit remains an explicit exception.
+
+The controller projection obtains progress, implementation advice, and audit history from the authenticated internal snapshot and shared decision functions. It does not depend on those fields appearing in the standard MCP response. Action-specific MCP output therefore leaves the versioned controller contract unchanged.

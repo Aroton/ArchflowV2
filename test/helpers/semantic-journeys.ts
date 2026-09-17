@@ -33,7 +33,7 @@ function generateEffortOutput(envelope) {
 `;
 
 export type SemanticJourneyHarness = Readonly<{
-  status: (invocation?: WorkflowInvocationV1) => Promise<WorkflowViewV1>;
+  status: (invocation?: WorkflowInvocationV1, detail?: "standard" | "diagnostic") => Promise<WorkflowViewV1>;
   apply: (
     invocation: WorkflowInvocationV1,
     view: WorkflowViewV1,
@@ -62,9 +62,9 @@ export function semanticJourneyHarness(workspace: TaskWorkspace, finishEmptyRepo
     transport_metadata: { request_id: `semantic-request-${sequence}`, operation: "tools/call" },
   }, new AbortController().signal);
 
-  async function status(invocation?: WorkflowInvocationV1): Promise<WorkflowViewV1> {
+  async function status(invocation?: WorkflowInvocationV1, detail?: "standard" | "diagnostic"): Promise<WorkflowViewV1> {
     const result = await handleSemanticStatus({
-      schema_version: "1", task_id: workspace.taskId, ...(invocation === undefined ? {} : { invocation }),
+      schema_version: "1", task_id: workspace.taskId, ...(invocation === undefined ? {} : { invocation }), ...(detail === undefined ? {} : { detail }),
     }, context());
     expectOk(result);
     if (!result.ok) throw new Error(result.error.code);
@@ -116,13 +116,13 @@ function expectOk(result: SemanticResultV1): void {
 /** Reconnect at every boundary and prove read-only status cannot consume approval or restart work. */
 export function stableTransitionJourneyHarness(workspace: TaskWorkspace): SemanticJourneyHarness {
   const h = semanticJourneyHarness(workspace);
-  const verify = async (invocation: WorkflowInvocationV1 | undefined, expected: WorkflowViewV1) => {
+  const verify = async (invocation: WorkflowInvocationV1 | undefined, expected: WorkflowViewV1, detail?: "standard" | "diagnostic") => {
     const statePath = join(workspace.services.authority.task_root, "state.json");
     const countPath = join(workspace.root, "semantic-review-count");
     const state = readFileSync(statePath, "utf8");
     const count = existsSync(countPath) ? readFileSync(countPath, "utf8") : undefined;
     for (let repeat = 0; repeat < 2; repeat++) {
-      expect(await semanticJourneyHarness(workspace).status(invocation)).toEqual(expected);
+      expect(await semanticJourneyHarness(workspace).status(invocation, detail)).toEqual(expected);
     }
     expect(readFileSync(statePath, "utf8")).toBe(state);
     expect(existsSync(countPath) ? readFileSync(countPath, "utf8") : undefined).toBe(count);
@@ -136,9 +136,9 @@ export function stableTransitionJourneyHarness(workspace: TaskWorkspace): Semant
     ...h,
     apply,
     applyAndAssertFreshStatus: apply,
-    status: async (invocation) => {
-      const view = await h.status(invocation);
-      await verify(invocation, view);
+    status: async (invocation, detail) => {
+      const view = await h.status(invocation, detail);
+      await verify(invocation, view, detail);
       return view;
     },
   };

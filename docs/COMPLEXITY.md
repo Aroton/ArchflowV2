@@ -1,6 +1,6 @@
 # COMPLEXITY
 
-**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** the whole repository
+**Explored:** 2026-09-16 · **Commit:** `90aa526` · **Covers:** the whole repository
 
 The fresh review loop uses reports and a working-AI response instead of finding taxonomy, exact alignment census, and disposition-ledger enforcement. Legacy readers remain only for archived evidence; no interpretation-model pass is added.
 
@@ -107,3 +107,11 @@ Simple tasks add a separate request/result contract and a small orchestration pa
 ## Review input assembly
 
 Fresh reviewers use one file renderer shared by dispatch and preview. Build-owned YAML names the primary subject, governing documents, rubric split, round-specific inputs, and per-file usage guidance. This replaces child-visible JSON prompt construction, inline diff duplication, and size-based context dropping. Canonical server-only bindings remain because authenticated evidence and retry identity still require them. The two configuration files describe policy and document meaning; they are neither a user extension system nor a second workflow authority.
+
+## Shared workflow decisions and bounded responses
+
+The response renderer no longer selects archived-decision settlement or reviewer-recovery branches. A direct typed decision layer supplies the current semantic state, actor, operation, and required submission to both rendering and apply planning. Detailed status retains its authenticated gate facts for request composition, removing the second subject/approval/review-assessment join and independent baseline-gate selection. Current approval-trigger derivation also has one named function, including editorial predecessor handling.
+
+A statechart library was evaluated through normal review, interrupted decision settlement, stale offers, baseline drift, and retry exhaustion. It would retain the domain evidence and transaction machinery while adding state reconstruction and action translation. Direct TypeScript functions remove the observed duplication with less machinery. Reauthentication at execution remains intentional; duplicated policy selection is what was removed.
+
+Default responses carry context for the current action. Diagnostic status exposes history and policy on demand. This bounds routine output without truncating actionable findings or weakening human decisions. The transaction kernel, archive formats, and exact replay identities are unchanged.

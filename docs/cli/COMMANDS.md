@@ -1,6 +1,6 @@
 # cli/COMMANDS
 
-**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-09-16 · **Commit:** `90aa526` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
 
 Fresh report triage accepts `response` with `decision` and `rationale`; revise also supplies reviewer IDs and verification requests. Archived per-finding `dispositions` remain accepted only for archived structured review evidence. Fresh review feedback carries an explicit issues/no-issues outcome; historical prose keeps its original shape. Requests continue to derive bindings from current authority.
 
@@ -134,3 +134,5 @@ no longer in the current catalog; discovery is not launch authorization.
 Older flat rules require explicit forced migration. Known shipped filenames are replaced with the current defaults; additional numbered rules move to `custom/`. A conflicting custom destination, duplicate ID within a layer, or invalid effective policy stops preflight before scaffold writes. Identical already-copied destinations are accepted on retry. The full scaffold is not a transactional filesystem update: an interrupted write may need the forced command repeated; flat sources are removed only after all destinations exist.
 
 Commit refreshed repository policy before starting affected tasks. Existing tasks retain their pinned constitution, task-local configuration, and pending decisions. Reinitialization never changes that authority.
+
+For a restorable missing projection, semantic status supplies the exact `archflow-local restore` arguments and JSON input. `restore` returns base64 content, file type, and Git mode; it does not write the file. The producer checks the returned content digest and confirms the destination remains absent before recreating it, then refreshes status. This avoids finding retained-result identifiers by reading authority archives. Unavailable or ambiguous sources remain explicit operator recovery.

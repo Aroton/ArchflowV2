@@ -7,7 +7,7 @@ import {
   createHazardRegistryInput,
 } from "../../src/contracts/hazard-registry.js";
 import type { PhaseDesignComponentManifestV1 } from "../../src/contracts/component-manifest.js";
-import { parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
+import { parsePathSafeId, parseSafeInteger, parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
 import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import type {
@@ -28,7 +28,8 @@ import {
   governingRecommendationPhase,
   publicFindingHistoryFromLedger,
 } from "../../src/state/semantic-status.js";
-import { projectSemanticStatus, semanticOfferToken } from "../../src/state/semantic-view.js";
+import { projectSemanticStatus } from "../../src/state/semantic-view.js";
+import { semanticOfferToken } from "../../src/state/workflow-decision.js";
 import type { TaskStatusV1 } from "../../src/state/status.js";
 
 const taskId = parseTaskSlug("semantic-test");
@@ -137,7 +138,7 @@ describe("semantic status projection", () => {
       "gap:likely": 0.75,
       "preference:suspicion": 1,
     };
-    const view = projectSemanticStatus(snapshot(status, { taxonomy_denial_rates: rates }), invocation).view;
+    const view = projectSemanticStatus(snapshot(status, { taxonomy_denial_rates: rates }), invocation, "diagnostic").view;
     expect(view.taxonomy_denial_rates).toEqual(rates);
     expect(Object.keys(view.taxonomy_denial_rates ?? {})).toHaveLength(12);
   });
@@ -183,7 +184,7 @@ describe("semantic status projection", () => {
       proposed_verification_change: finding.proposed_verification_change,
     }]);
     expect(reconstructed).toEqual([finding]);
-    const view = projectSemanticStatus(snapshot(status, { finding_history: [finding] }), invocation).view;
+    const view = projectSemanticStatus(snapshot(status, { finding_history: [finding] }), invocation, "diagnostic").view;
     expect(view.finding_history).toEqual([finding]);
   });
 
@@ -203,7 +204,8 @@ describe("semantic status projection", () => {
       rationale: "Consider isolating the cancellation protocol before implementing the remaining routine wiring." };
     const baseline = projectSemanticStatus(snapshot(status), invocation).view;
     const view = projectSemanticStatus(snapshot(status, { implementation_recommendation: ready }), invocation).view;
-    expect(view.implementation_recommendation).toEqual(ready);
+    expect(view.implementation_recommendation).toEqual({ status: ready.status, model: ready.model, effort: ready.effort });
+    expect(projectSemanticStatus(snapshot(status, { implementation_recommendation: ready }), invocation, "diagnostic").view.implementation_recommendation).toEqual(ready);
     expect(view.next_action).toEqual(baseline.next_action);
     expect(view.presentation).toEqual(baseline.presentation);
   });
@@ -329,7 +331,7 @@ describe("semantic status projection", () => {
     const status = fullStatus(action("run-step", { step: "produce" }), {
       config_change: entries,
     } as Partial<TaskStatusV1>);
-    const projected = projectSemanticStatus(snapshot(status), invocation);
+    const projected = projectSemanticStatus(snapshot(status), invocation, "diagnostic");
     // Informational only: the entries ride along verbatim and the prose gains one line, but
     // the condition and the action are exactly what an unedited config would produce.
     expect(projected.view.next_action.kind).toBe("begin-work");
@@ -346,8 +348,7 @@ describe("semantic status projection", () => {
     const projected = projectSemanticStatus(snapshot(status), invocation).view;
     expect(projected.next_action.kind).toBe("begin-work");
     expect(projected.repositories).toEqual(repositories);
-    expect(projected.detail).toContain("live repository set is listed in repositories");
-    expect(projected.detail).toContain("grants no review or write authority");
+    expect(projected.detail).not.toContain("live repository set");
   });
 
   it("projects work, review, empty triage, triage, and honest implementation commit states", () => {
@@ -401,11 +402,11 @@ describe("semantic status projection", () => {
     });
     const multipleView = projectSemanticStatus(snapshot(multipleFailures), invocation).view;
     expect(multipleView.dispatch_failure).toEqual(multipleFailures.dispatch_failure);
-    expect(multipleView.detail).toContain("opus via zai");
+    expect(multipleView.dispatch_failure?.route).toMatchObject({ model: "opus", provider: "zai" });
     expect(multipleView.detail).toContain("session limit");
-    expect(multipleView.detail).toContain("gemini-3.8-flash-high");
-    expect(multipleView.detail).toContain("300 seconds");
-    expect(multipleView.detail).toContain("3/3 (exhausted)");
+    expect(multipleView.dispatch_failure?.additional_failures?.[0]?.route?.model).toBe("gemini-3.8-flash-high");
+    expect(multipleView.dispatch_failure?.additional_failures?.[0]?.message).toContain("300 seconds");
+    expect(multipleView.dispatch_failure?.recovery).toMatchObject({ dispatches: 3, maximum_dispatches: 3, status: "exhausted" });
     expect(multipleView.next_action.kind).toBe("review");
 
     const emptyTriage = fullStatus(action("run-step", { step: "triage" }), { step: "counter_review", status: "succeeded" });
@@ -452,7 +453,7 @@ describe("semantic status projection", () => {
     const missingAuthority = projectSemanticStatus(snapshot(fullStatus(action("commit-phase"))), invocation).view.next_action;
     expect(missingAuthority.kind).toBe("inspect");
     expect(missingAuthority.commit).toBeUndefined();
-    expect(missingAuthority.instruction).toContain("implementation commit authority");
+    expect(missingAuthority.instruction).toContain("detail: diagnostic");
 
     const milestone = projectSemanticStatus(snapshot(fullStatus(action("commit-artifacts", {
       commit_path: ".archflow/tasks/semantic-test/design.md",
@@ -488,7 +489,7 @@ describe("semantic status projection", () => {
       { attempt: 1, findings: 4, blocking: 1, accepted: 3 },
       { attempt: 2, findings: 0, blocking: 0, accepted: 0 },
     ];
-    const view = projectSemanticStatus(snapshot(reviewed, { review_rounds: rounds }), invocation).view;
+    const view = projectSemanticStatus(snapshot(reviewed, { review_rounds: rounds }), invocation, "diagnostic").view;
     expect(view.review_strength).toEqual({
       reviewer_model: "claude-opus-5",
       reviewer_effort: "medium",
@@ -520,7 +521,7 @@ describe("semantic status projection", () => {
         assessment: "current",
       } as never,
     });
-    expect(projectSemanticStatus(snapshot(opposite), invocation).view.review_strength).toMatchObject({
+    expect(projectSemanticStatus(snapshot(opposite), invocation, "diagnostic").view.review_strength).toMatchObject({
       same_family: false, remediation_round: false, attempt: 1, rounds: [],
     });
 
@@ -580,7 +581,7 @@ describe("semantic status projection", () => {
         },
       } as never,
     });
-    const view = projectSemanticStatus(snapshot(reviewed), invocation).view;
+    const view = projectSemanticStatus(snapshot(reviewed), invocation, "diagnostic").view;
     expect(view.review_context?.assignments).toEqual([
       { reviewer_id: "general-1", focus: "general", criterion_ids: ["correctness"] },
       { reviewer_id: "general-2", focus: "general", criterion_ids: ["correctness"] },
@@ -754,5 +755,47 @@ describe("semantic status projection", () => {
       taxonomy_denial_rates: computeTaxonomyDenialRates([]),
       implementation_recommendation: unavailableImplementationRecommendation("not-applicable", "Fixture has no effort evidence."),
     })).toThrow(/repository identity/u);
+  });
+});
+
+
+describe("action-specific workflow responses", () => {
+  it("supplies the latest prior feedback per reviewer for revision and keeps full history diagnostic", () => {
+    const report = { subject_digest: digestA, model: "gpt-5.6-sol", effort: "high", reviewer_id: "general", focus: "general", report: "Earlier issue." } as const;
+    const latest = { ...report, subject_digest: digestB, report: "Remaining issue." };
+    const source = snapshot(fullStatus(action("run-step", { step: "produce" }), { status: "running" }), {
+      previous_review_reports: [report, latest],
+    });
+    expect(projectSemanticStatus(source, invocation).view.previous_review_reports).toEqual([latest]);
+    expect(projectSemanticStatus(source, invocation, "diagnostic").view.previous_review_reports).toEqual([report, latest]);
+  });
+
+  it("keeps baseline preparation concise without changing its authenticated offer", () => {
+    const source = snapshot(fullStatus(action("open-gate", { gate_kind: "baseline-adoption" }), { status: "succeeded" }));
+    const standard = projectSemanticStatus(source, invocation).view;
+    const diagnostic = projectSemanticStatus(source, invocation, "diagnostic").view;
+    expect(standard).toMatchObject({ state: "gate-preparation", condition: "awaiting-client",
+      next_action: { actor: "caller", kind: "decide", expected_submission: "gate-summary" }, resources: [] });
+    for (const key of ["progress", "review_context", "findings", "taxonomy_denial_rates", "implementation_recommendation", "repositories"]) {
+      expect(standard).not.toHaveProperty(key);
+    }
+    expect(diagnostic.review_context?.rubric.criteria).toHaveLength(1);
+    expect(diagnostic.next_action).toEqual(standard.next_action);
+    expect(JSON.stringify(standard).length).toBeLessThan(JSON.stringify(diagnostic).length);
+  });
+
+  it("distinguishes a human decision from settling the choice already recorded", () => {
+    const status = fullStatus(action("resolve-open-gate"), {
+      open_gate: { gate_id: parsePathSafeId("baseline-gate"), kind: "baseline-adoption", decision_path: "decision", archive_decision_path: "archive", request_path: "request", decision_templates: [],
+        presentation: { class: "exception", title: "Baseline", summary: "Files changed.",
+        question: "Keep the current bytes?", reasons: [{ class: "exception", text: "Baseline drift." }],
+        options: [{ token: "keep", label: "Keep", consequence: "Record this baseline." }],
+      } },
+    });
+    const awaiting = projectSemanticStatus(snapshot(status), invocation).view;
+    const recorded = projectSemanticStatus(snapshot(status, { archived_decision: { status: "exact" } }), invocation).view;
+    expect(awaiting).toMatchObject({ state: "awaiting-human", next_action: { actor: "human", expected_submission: "decision" } });
+    expect(recorded).toMatchObject({ state: "decision-settlement", next_action: { actor: "caller", expected_submission: "none" } });
+    expect(recorded.presentation).toBeUndefined();
   });
 });

@@ -22,8 +22,10 @@ import type { ToolName } from "../contracts/tool-names.js";
 import type { ProjectResult } from "../contracts/errors.js";
 import type { ProductionServices } from "./production.js";
 import { composeRequest, type ComposedRequest } from "./request-composition.js";
-import { projectSemanticStatus, semanticOfferToken } from "./semantic-view.js";
+import { projectSemanticStatus } from "./semantic-view.js";
+import { resolveWorkflowDecision, semanticOfferToken } from "./workflow-decision.js";
 import { stageTaskAsk, type StageTaskAskInput } from "../init/task-initialization.js";
+import { workflowFailure } from "./workflow-recovery.js";
 import { serializeDispatch } from "../dispatch/cli.js";
 
 const OFFER = /^af1_([0-9a-f]{64})$/u;
@@ -156,7 +158,7 @@ function assertWorkResultFactsMatchPosition(
 
 function operationKey(
   offerToken: string,
-  offer: NonNullable<ReturnType<typeof projectSemanticStatus>["internal_offer"]>,
+  offer: NonNullable<ReturnType<typeof resolveWorkflowDecision>["internal_offer"]>,
   submission: ApplySubmissionV1 | undefined,
 ): SemanticOperationKeyV1 {
   const match = OFFER.exec(offerToken);
@@ -457,7 +459,7 @@ export function planSemanticAction(
   value: unknown,
 ): SemanticActionPlanV1 {
   const input = parseArchFlowApplyInputV1(value) as ArchFlowApplyInputV1;
-  const projection = projectSemanticStatus(snapshot, input.invocation);
+  const projection = resolveWorkflowDecision(snapshot, input.invocation);
   const offer = projection.internal_offer;
   if (offer === undefined) {
     throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "authenticated current action has no mutation offer for this invocation");
@@ -492,7 +494,7 @@ export function planSemanticAction(
   let operationOffer = offer;
   if (isArchivedDecisionRetry) {
     const { archived_decision: _archive, ...beforeArchive } = snapshot;
-    const originalProjection = projectSemanticStatus(beforeArchive, input.invocation);
+    const originalProjection = resolveWorkflowDecision(beforeArchive, input.invocation);
     const originalOffer = originalProjection.internal_offer;
     if (originalOffer === undefined || input.action.offer !== semanticOfferToken(originalOffer)) {
       throw new SemanticActionPlanError("SEMANTIC_OFFER_STALE", "decision retry does not carry the original authenticated offer");
@@ -533,7 +535,7 @@ export function planSemanticAction(
       recoveredOperationDigest = recovered;
     }
   }
-  const currentOfferMatches = input.action.offer === expectedToken && projection.view.next_action.offer === expectedToken;
+  const currentOfferMatches = input.action.offer === expectedToken;
   const authenticatedOldReviewRetry = offer.action_kind === "review" &&
     recoveredOperationDigest !== undefined && candidateOperationDigest === recoveredOperationDigest;
   const authenticatedOldTriageRetry = offer.action_kind === "triage" &&
@@ -742,7 +744,7 @@ function failedProjectResult(value: unknown): value is ProjectResult<never> & { 
 
 export class SemanticActionExecutionError extends Error {
   public constructor(public readonly result: ProjectResult<never> & { readonly ok: false }) {
-    super(`${result.error.code}: ${JSON.stringify(result.error.diagnostic.parameters)}`);
+    super(workflowFailure(result.error).message);
     this.name = "SemanticActionExecutionError";
   }
 }
@@ -787,7 +789,7 @@ async function executeReviewAction(
     assertSubstepSucceeded(executed);
     ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
     assertCompletedReviewSubstep(snapshot, initial.operation_digest, "review-enter");
-    if (projectSemanticStatus(snapshot, initial.invocation).view.next_action.kind !== "review") {
+    if (resolveWorkflowDecision(snapshot, initial.invocation).shape.action_kind !== "review") {
       throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "review-enter did not land at the review-run continuation");
     }
     current = substepPlan(initial, "review-run");
@@ -860,8 +862,8 @@ async function executeDecisionAction(
     const archived = await executeSemanticActionSubstep(currentServices, current, capabilities);
     assertSubstepSucceeded(archived);
     ({ services: currentServices, snapshot } = await refreshExecution(currentServices, capabilities));
-    const continuation = projectSemanticStatus(snapshot, initial.invocation);
-    if (continuation.view.next_action.kind !== "decide" || continuation.internal_offer?.expected_submission !== "none") {
+    const continuation = resolveWorkflowDecision(snapshot, initial.invocation);
+    if (continuation.shape.action_kind !== "decide" || continuation.internal_offer?.expected_submission !== "none") {
       throw new SemanticActionPlanError("SEMANTIC_REPLAY_MISMATCH", "decision archive did not land at authenticated settlement");
     }
     current = substepPlan(initial, "decision-settle");

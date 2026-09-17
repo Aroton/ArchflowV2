@@ -46,20 +46,12 @@ import {
   planningRestartAskBaseDigest,
   type PhaseImplParentDocument,
 } from "./phase-documents.js";
-import { changedCoProducedDocumentPaths, loadCurrentProduceSubject, type CurrentProduceSubject } from "./produce-subject.js";
-import { reconcileCurrentAuthority } from "./reconciliation.js";
-import { discoverReconciliationInput } from "./reconciliation-discovery.js";
-import { canonicalDocument } from "../contracts/canonical.js";
+import type { CurrentProduceSubject } from "./produce-subject.js";
+
 import type { ProductionServices } from "./production.js";
-import { authenticateRuleAcceptancePolicy, resolvePinnedConstitution } from "./constitution.js";
-import {
-  assertAuthenticatedGateDecisionArchive,
-  loadAuthenticatedGateApproval,
-  loadAuthenticatedGateDecisionArchive,
-  type AuthenticatedGateApproval,
-  type AuthenticatedGateDecisionArchive,
-} from "./gate-approvals.js";
-import { loadLegacyImportInitialization } from "./legacy-import-resume.js";
+import { authenticateRuleAcceptancePolicy } from "./constitution.js";
+import { assertAuthenticatedGateDecisionArchive, loadAuthenticatedGateApproval, loadAuthenticatedGateDecisionArchive, type AuthenticatedGateDecisionArchive } from "./gate-approvals.js";
+
 /** The artifact-kind each planning phase's artifact-approval gate approves. */
 export const APPROVAL_ARTIFACT_KINDS = {
   "prd": "prd",
@@ -67,33 +59,18 @@ export const APPROVAL_ARTIFACT_KINDS = {
   "phase-design": "phase-design",
   "phase-impl": "phase-implementation",
 } as const;
-import { baselineAdoptionInputFromFindings, buildCommitAuthorizationInput, buildDesignApprovalInput, buildSecondaryCommitAuthorizationFacts, computeTaskStatus, currentApprovedUpstreams, currentBaselineTargetFacts, currentReviewPredecessor, currentTargetRef, pendingAdjudicationGate } from "./status.js";
+import { buildDesignApprovalInput, computeTaskStatus, computeTaskStatusDetailed, currentTargetRef } from "./status.js";
 import type { TaskStateV1 } from "../contracts/durable-state.js";
 import { legalRunStepStatus } from "./transitions.js";
-import {
-  acceptedNoWaitSettlement,
-  authenticatedApprovalIsEligibleAfterLatestRestart,
-  latestEligibleRuleSettlement,
-  matchingOrdinaryApproval,
-} from "./restart-authority.js";
-import {
-  assessCurrentEvidence,
-  DEFAULT_MAX_ATTEMPTS,
-  deriveReviewPushThroughCandidate,
-  type EvidenceAssessment,
-  type EvidenceSubject,
-} from "../review/fixed-point.js";
+import { authenticatedApprovalIsEligibleAfterLatestRestart } from "./restart-authority.js";
+import { DEFAULT_MAX_ATTEMPTS } from "../review/fixed-point.js";
 import { designApprovalPolicyContext } from "../review/adjudication.js";
 import { computeCallEnvelope, type CallEnvelope } from "../local/call-envelope.js";
 import { planningRestartTarget, semanticPlanningRestartId } from "./planning-restart.js";
 import { resolveTaskPath } from "../repository/paths.js";
 import { derivePendingWaiverRequest } from "./pending-waiver.js";
-import { approvalRuleContext, approvalRuleGateSummary, evaluateApprovalRules } from "./approval-rules.js";
+import { approvalRuleGateSummary } from "./approval-rules.js";
 import type { ConfigV1, RepositoryName } from "../contracts/config.js";
-import {
-  loadAuthenticatedReviewPushThrough,
-  reviewPushThroughAuthoritySource,
-} from "./review-push-throughs.js";
 
 const ok = <T>(value: T): ProjectResult<T> => Object.freeze({ schema_version: "1", ok: true, value });
 const fail = <T = never>(error: ProjectError): ProjectResult<T> =>
@@ -812,8 +789,15 @@ async function composeGate(
   if (summary.trim() === "") {
     throw new TypeError('build-request gate facts require a non-empty "summary" written for the human reviewer');
   }
-  const pendingValidation = state.pending_validation_override;
-  if (pendingValidation !== undefined) {
+  const current = await computeTaskStatusDetailed(services.dependencies, services.authority);
+  if (!current.ok) return current;
+  const selected = current.value.status.next_action;
+  if (current.value.state?.revision !== state.revision || selected.code !== "open-gate" || selected.gate_kind === undefined) {
+    return transitionInvalid(state, "gate-not-offered");
+  }
+  if (selected.gate_kind === "validation-override") {
+    const pendingValidation = state.pending_validation_override;
+    if (pendingValidation === undefined) return transitionInvalid(state, "validation-request-unavailable");
     const transition = state.last_transition;
     const phase = decodePhaseInstance(state.phase_instance);
     if (
@@ -862,174 +846,37 @@ async function composeGate(
       },
     });
   }
-  // Baseline adoption composes ahead of the phase's own approval gates: reconciliation blocking is
-  // ahead of them in status routing too, so an approval composed past unresolved drift could never
-  // resolve honestly. Mid-produce drift is expected producer work and never composes this gate.
-  if (state.step !== "produce" || state.status === "succeeded") {
-    const discovered = await discoverReconciliationInput(services.dependencies, services.authority, canonicalDocument(state), services.repository_set);
-    if (!discovered.ok) return discovered;
-    const drift = reconcileCurrentAuthority(discovered.value);
-    if (drift.classification === "reconciliation-required") {
-      const target = await currentBaselineTargetFacts(services.dependencies, drift.findings, services.repository_set);
-      const adoption = baselineAdoptionInputFromFindings(
-        services.authority.task_id, state, drift.findings, target,
-      );
-      if (adoption !== undefined) {
-        // A restore that can never apply is refused later, before the human decision is archived:
-        // the decided interface is immutable, so recording it would wedge the gate behind an
-        // unapplicable decision. Adoption-sourced drift has no retained manifest to restore from.
-        return computeCallEnvelope(services, {
-          tool: "archflow_gate",
-          input: {
-            ...mechanicalInput(services, state, intentId),
-            phase_instance: state.phase_instance,
-            summary,
-            subject_digest: adoption.subject_digest,
-            current_evidence: adoption.current_evidence as unknown as PlainJsonValue,
-            kind: "baseline-adoption",
-            context: adoption.context as unknown as PlainJsonValue,
-          },
-        });
-      }
-    }
+  if (selected.gate_kind === "baseline-adoption") {
+    const adoption = current.value.status.baseline_adoption_gate;
+    if (adoption === undefined) return transitionInvalid(state, "baseline-subject-unavailable");
+    return computeCallEnvelope(services, { tool: "archflow_gate", input: {
+      ...mechanicalInput(services, state, intentId), phase_instance: state.phase_instance, summary,
+      subject_digest: adoption.subject_digest, current_evidence: adoption.current_evidence as unknown as PlainJsonValue,
+      kind: "baseline-adoption", context: adoption.context as unknown as PlainJsonValue,
+    } });
   }
   const phaseKind = decodePhaseInstance(state.phase_instance).kind;
-  const gateKind = phaseKind === "phase-impl"
-    ? "commit-authorization"
-    : phaseKind === "design" || phaseKind === "phase-design"
-      ? "design-approval"
-      : "artifact-approval";
-  if (state.terminal !== undefined || state.open_gate !== undefined) {
-    return transitionInvalid(state, `${gateKind}-gate`);
-  }
-  const subject = await loadCurrentProduceSubject(services.dependencies, state);
-  if (!subject.ok) return subject;
-  const editorialPredecessorDigest = subject.value.artifact.editorial_predecessor?.subject_digest;
-  let settledRule = latestEligibleRuleSettlement(
-    state, subject.value.artifact_digest, state.phase_instance,
-  ) ?? (editorialPredecessorDigest === undefined
-    ? undefined
-    : latestEligibleRuleSettlement(state, editorialPredecessorDigest, state.phase_instance));
-  if (settledRule === undefined) {
-    const configRead = await services.dependencies.read_config(services.authority.config);
-    if (configRead.kind === "valid") {
-      const changedDocs = await changedCoProducedDocumentPaths(services.dependencies, state, subject.value);
-      const changedPaths = changedDocs.ok ? changedDocs.value : [];
-      const ruleContext = approvalRuleContext(state, subject.value, configRead.snapshot.parsed, changedPaths);
-      const conclusion = evaluateApprovalRules(
-        ruleContext.config, ruleContext.subject, ruleContext.changedPaths, ruleContext.secondaryChangedPaths,
-      );
-      settledRule = Object.freeze({
-        schema_version: "1" as const,
-        task_id: state.task_id,
-        phase_instance: state.phase_instance,
-        step: subject.value.artifact.step,
-        subject_digest: subject.value.artifact_digest,
-        config_digest: configRead.snapshot.digest,
-        settled_at_revision: state.revision,
-        conclusion,
-      });
-    }
-  }
+  const gateKind = selected.gate_kind;
+  const facts = current.value.gate_facts;
+  if (facts === undefined) return transitionInvalid(state, "gate-subject-unavailable");
+  const subject = facts.subject;
+  const settledRule = facts.settlement;
   const approvalSummary = settledRule?.conclusion.wait === true
-    ? approvalRuleGateSummary(summary, settledRule.conclusion.match)
-    : summary;
-  const loadRetainedManifest = services.dependencies.load_retained_manifest;
-  if (loadRetainedManifest === undefined) throw new TypeError("retained evidence loading is unavailable");
-  const loaded = await loadRetainedEvidence(
-    { load_retained_manifest: loadRetainedManifest },
-    state,
-    state.phase_instance,
-  );
-  if (!loaded.ok) return loaded;
-  const derived = deriveCurrentEvidenceSet(loaded.value);
-
-  // An unresolved constitution-review gate composes first: the fixed point refuses to advance
-  // while one is pending, so an approval gate composed past it could never resolve honestly.
-  // Kind, subject, and context are all derived from retained adjudication evidence; only the
-  // summary is authored.
-  const constitution = await resolvePinnedConstitution(
-    services.runner, state.policy_base_commit, services.authority.context,
-  );
-  let pendingGate: ReturnType<typeof pendingAdjudicationGate>;
-  let exhaustion: Readonly<{ attempts: number; maximum_attempts: number; completed_review_rounds?: number }> | undefined;
-  // The same eligibility filter status applies: an approval superseded by a later planning
-  // restart must not make the composer disagree with the advertised action.
-  const authenticated: AuthenticatedGateApproval[] = [];
-  for (const approval of state.approvals) {
-    const loadedApproval = await loadAuthenticatedGateApproval(
-      services.dependencies, services.authority, approval,
-    );
-    if (!loadedApproval.ok) return loadedApproval;
-    if (!authenticatedApprovalIsEligibleAfterLatestRestart(state, loadedApproval.value)) continue;
-    authenticated.push(loadedApproval.value);
-  }
-  const authenticatedPushThroughs = [];
-  for (const record of state.review_push_throughs ?? []) {
-    const loadedPushThrough = await loadAuthenticatedReviewPushThrough(
-      services.dependencies,
-      services.authority,
-      record,
-    );
-    if (loadedPushThrough.ok) authenticatedPushThroughs.push(loadedPushThrough.value);
-  }
-  let assessment: EvidenceAssessment | undefined;
-  let reviewPushThroughContext: GateContext<"attempts-exhausted">["review_push_through"];
-  if (constitution.ok) {
-    pendingGate = pendingAdjudicationGate(state, constitution.value, loaded.value, authenticated);
-    // The attempts-exhausted gate composes exactly when the fixed point says the budget is spent;
-    // deriving the kind from the phase alone would open the phase-default gate instead. The
-    // assessor sees the same subject facts status derives — including the shared review
-    // predecessor, without which one-hop simple-revision states would assess differently here —
-    // so the composed request and the advertised action cannot disagree about exhaustion.
-    try {
-      const configRead = await services.dependencies.read_config(services.authority.config);
-      const configured = configRead.kind === "valid"
-        ? parseConfigYaml(new TextDecoder("utf-8", { fatal: true }).decode(configRead.snapshot.bytes), "task config").max_attempts
-        : undefined;
-      const approvedUpstreams = await currentApprovedUpstreams(
-        services.dependencies, services.authority, state, authenticated, subject.value,
-      );
-      const predecessor = currentReviewPredecessor(state, subject.value);
-      const evidenceSubject: EvidenceSubject = {
-        subject_digest: subject.value.artifact_digest,
-        input_fingerprint: state.input_fingerprint,
-        constitution: constitution.value,
-        approved_upstream_digests: approvedUpstreams,
-        authenticated_gate_approvals: authenticated,
-        ...(authenticatedPushThroughs.length === 0 ? {} : {
-          review_push_through_authority: reviewPushThroughAuthoritySource(authenticatedPushThroughs),
-        }),
-        ...(predecessor === undefined ? {} : { review_predecessor: predecessor }),
-        ...(configured === undefined ? {} : { max_attempts: configured }),
-      };
-      assessment = assessCurrentEvidence(state, loaded.value, evidenceSubject);
-      if (assessment.next === "attempts-exhausted") {
-        exhaustion = Object.freeze({ attempts: state.attempt, maximum_attempts: configured ?? DEFAULT_MAX_ATTEMPTS, completed_review_rounds: assessment.completed_review_rounds ?? state.attempt });
-        reviewPushThroughContext = deriveReviewPushThroughCandidate(
-          state,
-          loaded.value,
-          evidenceSubject,
-        )?.context;
-      }
-    } catch {
-      return transitionInvalid(state, "gate-fixed-point-disagreement");
-    }
-  }
-
-  // The migration-audit gate composes from the same legacy import authority status derives the
-  // advertised `migration_audit_required` fact from: the design phase of a legacy import with no
-  // accepted audit yet, ahead of the phase-default design-approval gate. Every context field is
-  // mechanical — only the summary is authored.
-  const legacyInitialization = await loadLegacyImportInitialization(services.dependencies, services.authority, state);
-  const migrationAuditRequired = legacyInitialization.ok &&
-    legacyInitialization.value !== undefined && state.phase_instance === "design" &&
-    !authenticated.some((approval) =>
-      approval.request.kind === "migration-audit" &&
-      approval.decision.envelope.payload.decision === "accept-import-audit");
+    ? approvalRuleGateSummary(summary, settledRule.conclusion.match) : summary;
+  const retained = current.value.retained;
+  const derived = deriveCurrentEvidenceSet(retained);
+  const pendingGate = facts.pending_gate;
+  const assessment = facts.assessment;
+  const exhaustion = gateKind !== "attempts-exhausted" ? undefined : {
+    attempts: state.attempt,
+    maximum_attempts: assessment?.maximum_review_rounds ?? current.value.status.review_round_limit ?? DEFAULT_MAX_ATTEMPTS,
+    completed_review_rounds: assessment?.completed_review_rounds ?? state.attempt,
+  };
+  const reviewPushThroughContext = facts.review_push_through?.context;
+  const migrationAuditRequired = gateKind === "migration-audit";
   let migrationAuditContext: GateContext<"migration-audit"> | undefined;
   if (migrationAuditRequired) {
-    const initialization = legacyInitialization.value;
+    const initialization = facts.legacy_initialization;
     migrationAuditContext = initialization !== undefined &&
       initialization.resume_phase !== undefined &&
       initialization.planned_final_phase !== undefined &&
@@ -1054,11 +901,10 @@ async function composeGate(
       : undefined;
     if (migrationAuditContext === undefined) return transitionInvalid(state, "migration-audit-gate");
   }
-  const settlementPolicy = constitution.ok
-    ? authenticateRuleAcceptancePolicy(state, constitution.value)
-    : undefined;
-  const policyFacts = ordinaryPolicyFacts(loaded.value);
-  const simpleTrigger = await simpleRevisionApprovalTrigger(services, state, subject.value);
+  const settlementPolicy = facts.constitution === undefined
+    ? undefined : authenticateRuleAcceptancePolicy(state, facts.constitution);
+  const policyFacts = ordinaryPolicyFacts(retained);
+  const simpleTrigger = await simpleRevisionApprovalTrigger(services, state, subject);
   const approvalTrigger: ApprovalTrigger | undefined = simpleTrigger ?? (settledRule === undefined
     ? undefined
     : Object.freeze({
@@ -1071,25 +917,13 @@ async function composeGate(
         conclusion: settledRule.conclusion,
         rule_authority: settlementPolicy === undefined ? "unavailable" as const : "authenticated" as const,
       }));
-  const ordinaryApproved = matchingOrdinaryApproval(
-    state, authenticated, subject.value.artifact_digest, state.phase_instance,
-  ) !== undefined;
-  const acceptedSettlement = settlementPolicy === undefined
-    ? undefined
-    : acceptedNoWaitSettlement(
-      settlementPolicy,
-      state,
-      subject.value.artifact_digest,
-      subject.value.artifact.phase_instance,
-    );
-
   let input: Record<string, PlainJsonValue>;
   if (exhaustion !== undefined) {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
       summary,
-      subject_digest: subject.value.artifact_digest,
+      subject_digest: subject.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "attempts-exhausted",
       context: {
@@ -1100,7 +934,7 @@ async function composeGate(
         }),
       },
     };
-  } else if (pendingGate !== undefined && pendingGate.kind !== "constitution-review") {
+  } else if (pendingGate !== undefined && pendingGate.kind === gateKind) {
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -1115,51 +949,28 @@ async function composeGate(
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
       summary,
-      subject_digest: subject.value.artifact_digest,
+      subject_digest: subject.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "migration-audit",
       context: migrationAuditContext as unknown as PlainJsonValue,
     };
-  } else if (
-    acceptedSettlement !== undefined && !ordinaryApproved &&
-    simpleTrigger === undefined && editorialPredecessorDigest === undefined && pendingGate === undefined &&
-    assessment?.escalated_human_findings !== true
-  ) {
-    // Every exception gate above remains human-only. Only the now-unnecessary ordinary phase gate
-    // is refused when the exact reviewed no-wait settlement already supplies advancement authority.
-    return transitionInvalid(state, `${gateKind}-gate-not-required`);
   } else if (gateKind === "design-approval") {
     if (approvalTrigger === undefined) return transitionInvalid(state, "approval-trigger-authority-missing");
     const target = await currentTargetRef(services.dependencies);
-    const approval = await buildDesignApprovalInput(services.dependencies, state, loaded.value, target);
+    const approval = await buildDesignApprovalInput(services.dependencies, state, retained, target);
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
       summary: approvalSummary,
-      subject_digest: subject.value.artifact_digest,
+      subject_digest: subject.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "design-approval",
       context: { ...approval.context, ...policyFacts, approval_trigger: approvalTrigger } as unknown as PlainJsonValue,
     };
   } else if (gateKind === "commit-authorization") {
     if (approvalTrigger === undefined) return transitionInvalid(state, "approval-trigger-authority-missing");
-    const target = await currentTargetRef(services.dependencies);
-    const secondarySections = subject.value.artifact.artifact_kind === "implementation-output"
-      ? subject.value.artifact.secondary_repositories ?? []
-      : [];
-    if (secondarySections.some((section) => section.outputs.length > 0) && services.repository_set === undefined) {
-      throw new TypeError("commit authorization requires the authenticated repository set");
-    }
-    const secondaryCommits = services.repository_set === undefined || subject.value.artifact.artifact_kind !== "implementation-output"
-      ? Object.freeze([])
-      : await buildSecondaryCommitAuthorizationFacts(subject.value.artifact, services.repository_set);
-    const authorization = buildCommitAuthorizationInput(
-      subject.value,
-      derived.current_evidence_set,
-      target,
-      await resolveCommit(services.runner, "HEAD"),
-      secondaryCommits,
-    );
+    const authorization = current.value.status.gate_input;
+    if (authorization === undefined) return transitionInvalid(state, "commit-authorization-unavailable");
     input = {
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
@@ -1175,7 +986,7 @@ async function composeGate(
       ...mechanicalInput(services, state, intentId),
       phase_instance: state.phase_instance,
       summary: approvalSummary,
-      subject_digest: subject.value.artifact_digest,
+      subject_digest: subject.artifact_digest,
       current_evidence: derived.current_evidence_set as unknown as PlainJsonValue,
       kind: "artifact-approval",
       context: {
@@ -1190,6 +1001,7 @@ async function composeGate(
       },
     };
   }
+  if (input.kind !== selected.gate_kind) return transitionInvalid(state, "gate-selection-mismatch");
   return computeCallEnvelope(services, { tool: "archflow_gate", input });
 }
 

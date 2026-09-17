@@ -1,6 +1,6 @@
 # workflow/SKILLS
 
-**Explored:** 2026-09-15 · **Commit:** `9b035d0` · **Covers:** `skills/`, `src/init/`, `src/contracts/config.ts`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/mcp/handlers/semantic.ts`, `src/state/semantic-*.ts`, `assets/`
+**Explored:** 2026-09-16 · **Commit:** `90aa526` · **Covers:** `skills/`, `src/init/`, `src/contracts/config.ts`, `src/contracts/semantic-workflow.ts`, `src/repository/`, `src/mcp/handlers/semantic.ts`, `src/state/semantic-*.ts`, `assets/`
 
 Producing skills interpret `review_reports` directly and submit a `triage.response`. They check concerns against existing code and tests, use plans as context, and finish when no supported material issue remains. They select relevant previous reviewers for verification, explain residual concerns when finishing, and follow separate constitution and human approval actions. No extra AI parsing call or per-finding census is required.
 
@@ -156,3 +156,9 @@ The original ask, evolving plan, review feedback, and explicit human decisions r
 The skill needs a connected MCP server and Git repository, not `archflow-init`. Repository configuration and rules take precedence over shipped defaults; malformed existing policy does not fall back. An explicitly empty constitution has no applicable constitution child. Work already owned by an initialized task continues through the durable workflow.
 
 Review output is actionable feedback or explicit `no_issues_found` signoff. The skills call for reading and reasoning proportional to the concern, with no hard read quota. They do not request separate review documents, whole-file quotations, positive checklists, or repeated recaps of resolved findings. The caller resolves feedback through the existing finish/revise/escalate path.
+
+## Action-specific context and recovery
+
+Producing skills consume the current semantic state and actor, use only the offered action, and treat optional context as conditional. Author checks use the policy supplied during authoring; recovery and human-decision boundaries do not repeat the complete rubric. Implementation advice is rendered when supplied. Diagnostic status is available for a specific policy, history, or repair question without changing authority.
+
+Failure recovery distinguishes correcting a submission, refreshing status, replaying an identical interrupted operation, waiting, repairing an external condition, and obtaining human or operator intervention. The read-only status skill reports recovery work; it does not execute it. Producers may use authenticated missing-file retrieval recipes, verifying content and avoiding overwriting an existing destination.

@@ -12,6 +12,7 @@ import {
   type SemanticToolContractMap,
 } from "../contracts/semantic-workflow.js";
 import { isAdvertisedToolName, type SemanticToolName, type AdvertisedToolName } from "../contracts/tool-names.js";
+import { workflowFailure } from "../state/workflow-recovery.js";
 import { reportInternalError } from "./diagnostics.js";
 
 export type SemanticToolHandler<K extends SemanticToolName> = (
@@ -96,13 +97,12 @@ function semanticOutcome<K extends SemanticToolName>(tool: K, result: SemanticRe
 function semanticFailure(
   tool: SemanticToolName,
   code: string,
-  message: string,
-  retryable = false
+  message: string
 ): ToolBoundaryOutcome {
   return semanticOutcome(tool, parseSemanticResultV1({
     schema_version: "1",
     ok: false,
-    error: { code, message, retryable },
+    error: workflowFailure({ code, message }),
   }));
 }
 

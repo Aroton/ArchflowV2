@@ -95,6 +95,7 @@ export type NextActionInput = Readonly<{
   config_verified?: boolean;
   /** Why the config failed to read (`config-invalid`/`config-missing`/`config-unreadable`/`config-unresolvable`). */
   config_issue?: string;
+  config_issues?: readonly string[];
   reconciliation_findings?: readonly ReconciliationFinding[];
   reconciliation_blocking_reasons?: readonly string[];
   /**
@@ -439,7 +440,7 @@ export function deriveNextAction(input: NextActionInput): NextAction {
         : "invalid";
     return action(
       "inspect-state",
-      `The task's config.yaml is ${readIssue}: fix the YAML so the configuration parses, then retry.`,
+      `The task's config.yaml is ${readIssue}${input.config_issues?.length ? `: ${input.config_issues.join("; ")}` : "."} ${readIssue === "missing" ? "Restore the task configuration from its recorded version" : readIssue === "unreadable" ? "Repair file access to the task configuration" : "Correct the named configuration fields"}, then call archflow_status with the same invocation.`,
       true,
       state,
     );
@@ -528,7 +529,7 @@ export function deriveNextAction(input: NextActionInput): NextAction {
         }
         return action(
           "inspect-state",
-          "A file ArchFlow recorded from reviewed work is missing from the worktree; inspect the projection and restore its recorded bytes per output before continuing.",
+          `Recorded files are missing: ${missing.map(item => `${item.repository ?? "primary"}/${item.path}`).join(", ")}. Use the returned restore targets to retrieve their recorded bytes, restore only still-missing paths, then call archflow_status.`,
           true,
           state,
         );
@@ -542,13 +543,19 @@ export function deriveNextAction(input: NextActionInput): NextAction {
         { gate_kind: "baseline-adoption" },
       );
     }
-    return action(finding.next_action, `Resolve reconciliation finding ${finding.kind}.`, true, state);
+    const guidance = {
+      "receipt-only": "An interrupted operation has a retained receipt. Retry the identical original apply call if available; otherwise request diagnostic status and operator recovery of that receipt. Do not invent a new decision or edit the receipt.",
+      "receipt-invalid": "A retained operation receipt failed authentication. Request diagnostic status and operator repair; repeating apply or editing the receipt cannot establish authority.",
+      "intent-mismatch": "The recorded operation differs from the submitted one. Read fresh status and use its current offer. An already-recorded human decision must settle unchanged.",
+      "active-gate-mismatch": "The active gate does not match recorded authority. Request diagnostic status for operator repair of the gate projection; do not author a replacement approval archive.",
+    }[finding.kind];
+    return action(finding.next_action, guidance, true, state);
   }
   const discoveryBlocker = input.reconciliation_blocking_reasons?.[0];
   if (discoveryBlocker !== undefined) {
     return discoveryBlocker === "retained-receipt-ambiguity"
-      ? action("inspect-retained-receipt", "Inspect the ambiguous retained successor receipts.", true, state)
-      : action("inspect-state", `Inspect reconciliation discovery blocker ${discoveryBlocker}.`, true, state);
+      ? action("inspect-retained-receipt", "Multiple retained successor receipts prevent selecting a unique recovery. Request diagnostic status and operator inspection of the reported receipt ambiguity; do not delete receipts or guess which operation committed.", true, state)
+      : action("inspect-state", `Reconciliation cannot authenticate current authority (${discoveryBlocker}). Request archflow_status with detail: diagnostic and report this blocker for operator repair. Do not edit durable state or repeatedly apply an old offer.`, true, state);
   }
   if (input.milestone_repair_guidance !== undefined) {
     return action("inspect-state", input.milestone_repair_guidance, true, state);
