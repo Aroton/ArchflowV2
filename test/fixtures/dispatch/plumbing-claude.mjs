@@ -10,7 +10,8 @@ if (argv.length === 1 && argv[0] === "--version") {
   process.exit(0);
 }
 if (argv[0] === "auth" && argv[1] === "status") {
-  process.stdout.write('{"loggedIn":true}\n');
+  const loggedIn = scenario !== "user-auth" || process.env.USER === "plumbing-user";
+  process.stdout.write(`${JSON.stringify({ loggedIn })}\n`);
   process.exit(0);
 }
 

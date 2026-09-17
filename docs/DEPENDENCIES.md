@@ -86,7 +86,7 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 - Claude also receives `CLAUDE_CONFIG_DIR` when the caller configured it.
 - Codex receives the caller's `CODEX_HOME`, or the canonical `$HOME/.codex` default.
 - `TMPDIR`, repository views, schemas, and outputs remain under the disposable workspace.
-- Forwarded only when present: `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS`.
+- Forwarded only when present: `USER`, `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS`.
 - Provider keys such as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, plus all other caller environment variables, are intentionally dropped.
 
 Canonical authentication is a correctness requirement, not a containment gap to repair with links or copies. Both CLIs may atomically replace their credential file when rotating OAuth tokens; redirecting that path through a disposable symlink can replace the link, preserve a consumed token in the real store, and then delete the only fresh token during cleanup. Claude safe mode and Codex's user-config/rule suppressions keep review instructions isolated without relocating mutable authentication.
@@ -122,7 +122,7 @@ Environment inputs are narrow and purpose-specific:
 | Variable | Consumer | Meaning |
 | --- | --- | --- |
 | `HOME` | `src/dispatch/workspace.ts`, `install.sh` | Locates first-party credentials and default install destinations. Dispatch preserves its canonical location for child authentication. |
-| `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS` | `src/dispatch/workspace.ts` | Explicit dispatch-child allowlist. |
+| `USER`, `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS` | `src/dispatch/workspace.ts` | Explicit dispatch-child allowlist. `USER` is required for the Claude CLI keychain credential lookup on macOS. |
 | `ARCHFLOW_HOME` | `install.sh` | Overrides the installed bundle root; default is `$HOME/.archflow`. |
 | `ARCHFLOW_BIN` | `install.sh` | Overrides launcher destination; default is `$HOME/.local/bin`. |
 | `ARCHFLOW_RELEASE_FAULT_AFTER` | `scripts/release-support.mjs` | Test-only crash injection for tracked-release replacement. |
@@ -165,7 +165,7 @@ No formatter or source linter is configured. Formatting/import style is conventi
 - `src/main.ts` -> `dist/archflow-mcp.mjs` (`mcp-stdio`).
 - `src/local/main.ts` -> `dist/archflow-local.mjs` (`local-cli`).
 
-The release is not published by automation. `dist/` is tracked and validated against `dist/manifest.json`, `dist/metafile.json`, dependency provenance, the repository `THIRD_PARTY_NOTICES.md`, and retained upstream license texts. The release copies notices and licenses directly, hashes every payload artifact, and verifies source-to-payload byte equality. Reproduction materializes a clean source set, performs isolated `npm ci`, rebuilds, and byte-compares the candidate.
+The release is not published by automation. `dist/` is tracked and validated against `dist/manifest.json`, `dist/metafile.json`, dependency provenance, the repository `THIRD_PARTY_NOTICES.md`, and retained upstream license texts. The release copies notices and licenses directly, hashes every payload artifact, and verifies source-to-payload byte equality. Dependency provenance uses exact directory-entry casing so macOS builds do not record duplicate license paths that fail on Linux. Reproduction materializes a clean source set, performs isolated `npm ci`, rebuilds, and byte-compares the candidate.
 
 `install.sh` verifies the tracked payload, installs it beneath `${ARCHFLOW_HOME:-$HOME/.archflow}/bundle`, writes `archflow-mcp` and `archflow-local` launchers beneath `${ARCHFLOW_BIN:-$HOME/.local/bin}`, and copies skills to `~/.claude/skills/`, `~/.agents/skills/`, and/or `~/.gemini/config/skills/`. It requires Node in `^24.15.0` and requires the launcher directory to be on `PATH`.
 
