@@ -86,7 +86,7 @@ The repository itself contains current examples in `.mcp.json` and `.codex/confi
 - Claude also receives `CLAUDE_CONFIG_DIR` when the caller configured it.
 - Codex receives the caller's `CODEX_HOME`, or the canonical `$HOME/.codex` default.
 - `TMPDIR`, repository views, schemas, and outputs remain under the disposable workspace.
-- Forwarded only when present: `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS`.
+- Forwarded only when present: `USER`, `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS`.
 - Provider keys such as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, plus all other caller environment variables, are intentionally dropped.
 
 Canonical authentication is a correctness requirement, not a containment gap to repair with links or copies. Both CLIs may atomically replace their credential file when rotating OAuth tokens; redirecting that path through a disposable symlink can replace the link, preserve a consumed token in the real store, and then delete the only fresh token during cleanup. Claude safe mode and Codex's user-config/rule suppressions keep review instructions isolated without relocating mutable authentication.
@@ -122,7 +122,7 @@ Environment inputs are narrow and purpose-specific:
 | Variable | Consumer | Meaning |
 | --- | --- | --- |
 | `HOME` | `src/dispatch/workspace.ts`, `install.sh` | Locates first-party credentials and default install destinations. Dispatch preserves its canonical location for child authentication. |
-| `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS` | `src/dispatch/workspace.ts` | Explicit dispatch-child allowlist. |
+| `USER`, `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS` | `src/dispatch/workspace.ts` | Explicit dispatch-child allowlist. `USER` is required for the Claude CLI keychain credential lookup on macOS. |
 | `ARCHFLOW_HOME` | `install.sh` | Overrides the installed bundle root; default is `$HOME/.archflow`. |
 | `ARCHFLOW_BIN` | `install.sh` | Overrides launcher destination; default is `$HOME/.local/bin`. |
 | `ARCHFLOW_RELEASE_FAULT_AFTER` | `scripts/release-support.mjs` | Test-only crash injection for tracked-release replacement. |

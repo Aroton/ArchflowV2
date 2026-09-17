@@ -82,7 +82,7 @@ async function fixtureWorkspace(
   await chmod(fixture, 0o755);
   await symlink(fixture, join(bin, family));
 
-  const names = ["HOME", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "PATH", "LANG", "LC_ALL", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "NODE_EXTRA_CA_CERTS", ...plantedNames] as const;
+  const names = ["HOME", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "USER", "PATH", "LANG", "LC_ALL", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "NODE_EXTRA_CA_CERTS", ...plantedNames] as const;
   const saved = new Map(names.map((name) => [name, process.env[name]]));
   try {
     process.env.HOME = sourceHome;
@@ -93,6 +93,7 @@ async function fixtureWorkspace(
       process.env.CODEX_HOME = credentialDirectory;
       delete process.env.CLAUDE_CONFIG_DIR;
     }
+    process.env.USER = "plumbing-user";
     process.env.PATH = `${bin}${delimiter}${dirname(process.execPath)}`;
     process.env.LANG = "C.UTF-8";
     process.env.LC_ALL = "C.UTF-8";
@@ -175,7 +176,7 @@ describe("dispatch plumbing proof", () => {
 
       const expectedKeys = [
         ...(adapter.id === "claude-cli" ? ["CLAUDE_CONFIG_DIR"] : ["CODEX_HOME"]),
-        "HOME", "HTTPS_PROXY", "HTTP_PROXY", "LANG", "LC_ALL", "NODE_EXTRA_CA_CERTS", "NO_PROXY", "PATH", "TMPDIR",
+        "HOME", "HTTPS_PROXY", "HTTP_PROXY", "LANG", "LC_ALL", "NODE_EXTRA_CA_CERTS", "NO_PROXY", "PATH", "TMPDIR", "USER",
       ].sort();
       expect(Object.keys(seen.env).sort()).toEqual(expectedKeys);
       expect(seen.env.HOME).toBe(workspace.env.HOME);
