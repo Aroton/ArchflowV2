@@ -1,0 +1,33 @@
+dist/archflow-local.mjs
+  s_ea96492ee4c985::t_452e0632b39343 43163-43165
+dist/archflow-mcp.mjs
+  s_ea96492ee4c985::t_dc5cd41283c3ab 61543-61545
+dist/manifest.json
+  s_ea96492ee4c985::t_e245eafcae0d0b 89,92,95,98,213,235,3274-3275,3281,4736,4890-4897,5340,5691
+dist/metafile.json
+  s_ea96492ee4c985::t_5616eec233f413 5617,11136,12494,12751,14188
+docs/DEPENDENCIES.md
+  s_ea96492ee4c985::t_1e5886c3990ffe 89,125
+src/dispatch/workspace.ts
+  s_ea96492ee4c985::t_b6f7109b4e209b 31-33
+test/integration/dispatch-plumbing.test.ts
+  s_ea96492ee4c985::t_a7d12d8644104c 85,96,179
+test/unit/dispatch-workspace.test.ts
+  s_ea96492ee4c985::t_e66ca71a84e488 64,78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "726a7ca6df2812158748124bdf5ea37702e12e26",
+  "prompts": {},
+  "sessions": {
+    "s_ea96492ee4c985": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db30593e-48cb-4b5a-8829-41c831caccce",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan <ryan@itsavail.com>"
+    }
+  }
+}
