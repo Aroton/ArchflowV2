@@ -39,14 +39,14 @@ producers:
     counter-reviewers:
       - model: gpt-6-astra
         effort: low
-      - model: claude-fable-5-1
+      - model: claude-opus-5-5
         effort: medium
     adjudicator:
       model: gemini-3.8-flash-high
       effort: high
   codex:
     counter-reviewer:
-      model: claude-fable-5-1
+      model: claude-opus-5-5
       effort: medium
     adjudicator:
       model: gemini-3.8-flash-high
@@ -105,8 +105,8 @@ producers:
 #       effort: high
 #   phase-impl:
 #     adjudicator:
-#       model: claude-opus-5
-#       effort: high
+#       model: claude-opus-5-5
+#       effort: medium
 
 # Optional. Approval triggers declare which completed steps wait for explicit human
 # judgment. `subjects` may contain prd, design, phase-design, or phase-impl. `content`

@@ -103,7 +103,7 @@ Every Gemini dispatch through `agy`—including counter-review and constitution 
 
 ## Model defaults and limits
 
-Shipped counter-review defaults use Astra low (`gpt-6-astra`) for Claude producers and Fable 5.1 medium (`claude-fable-5-1`) for Codex producers; Antigravity producers receive both. The fallback counter-review route is also Astra low. Test reviewers use Sol medium, effort reviewers use Luna/xhigh, and adjudicators use `gemini-3.8-flash-high` at high effort. Existing explicit task/repository routes are not rewritten by a template update.
+Shipped counter-review defaults use Astra low (`gpt-6-astra`) for Claude producers and Opus 5.5 medium (`claude-opus-5-5`) for Codex producers; Antigravity producers receive both. The fallback counter-review route is also Astra low. Test reviewers use Sol medium, effort reviewers use Luna/xhigh, and adjudicators use `gemini-3.8-flash-high` at high effort. Existing explicit task/repository routes are not rewritten by a template update.
 
 Route validation rejects `gpt-6-astra` at `max` effort before dispatch, including configured, invocation-declared, and substitution routes. The error explains that Astra max is disabled; no silent downgrade occurs. An invalid effort-selector route still takes its bounded-reasoning advice fallback. Astra low/high are valid Codex routes. Implementation recommendations remain separate from these dispatch routes.
 

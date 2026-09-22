@@ -73,7 +73,7 @@ describe("standalone simple review", () => {
     const plan = await runSimpleReview(input, context, dependencies);
     expect(plan.ok, JSON.stringify(plan)).toBe(true);
     expect(calls.map((call) => call.role)).toEqual(["counter-reviewer", "test-reviewer", "adjudicator"]);
-    expect(calls[0]!.route.model).toBe("claude-fable-5-1");
+    expect(calls[0]!.route.model).toBe("claude-opus-5-5");
     const planRubric = await loadCanonicalRubricForSimpleStage("plan");
     if (!planRubric.ok) throw planRubric.error;
     expect(planRubric.value.rubric_id).toBe("simple-plan-v1");

@@ -28,7 +28,7 @@ describe("config template", () => {
     // Antigravity host (multi-reviewer)
     expect(resolveDispatchRoutes(config, "phase-impl", "counter-reviewer", "antigravity")).toEqual([
       { model: "gpt-6-astra", effort: "low", family: "codex", adapter: "codex-cli" },
-      { model: "claude-fable-5-1", effort: "medium", family: "claude", adapter: "claude-cli" },
+      { model: "claude-opus-5-5", effort: "medium", family: "claude", adapter: "claude-cli" },
     ]);
     expect(resolveDispatchRoute(config, "phase-impl", "adjudicator", "antigravity")).toMatchObject({
       model: "gemini-3.8-flash-high",
@@ -39,7 +39,7 @@ describe("config template", () => {
 
     // Codex host
     expect(resolveDispatchRoute(config, "phase-impl", "counter-reviewer", "codex")).toMatchObject({
-      model: "claude-fable-5-1",
+      model: "claude-opus-5-5",
       effort: "medium",
       family: "claude",
       adapter: "claude-cli",
