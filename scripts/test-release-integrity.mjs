@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { cp, mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -61,6 +61,12 @@ async function main() {
   assert.equal(typeof support.checkReleasePayload, "function", "release support must export checkReleasePayload");
   assert.equal(typeof support.buildReleasePayload, "function", "release support must export buildReleasePayload");
   await support.checkReleasePayload({ repositoryRoot, payloadRoot: trackedPayload });
+  const manifest = JSON.parse(await readFile(resolve(trackedPayload, "manifest.json"), "utf8"));
+  for (const record of manifest.dependency_provenance_inputs) {
+    const path = resolve(repositoryRoot, "node_modules", record.package_name, record.package_relative_path);
+    assert.ok((await readdir(dirname(path))).includes(basename(path)),
+      `dependency provenance must use exact filename casing: ${record.package_name}/${record.package_relative_path}`);
+  }
 
   const temporaryRoot = await mkdtemp(resolve(tmpdir(), "archflow-release-mutations-"));
   try {

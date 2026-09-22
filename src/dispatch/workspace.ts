@@ -28,6 +28,9 @@ export type DispatchWorkspace = Readonly<{
 }>;
 
 const FORWARDED_ENVIRONMENT = Object.freeze([
+  // Claude CLI keys its macOS keychain credential lookup on USER; without it
+  // `claude auth status` reports logged out and preflight fails AUTH_UNAVAILABLE.
+  "USER",
   "PATH",
   "LANG",
   "LC_ALL",

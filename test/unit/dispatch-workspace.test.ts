@@ -61,6 +61,7 @@ describe("dispatch workspace", () => {
     vi.stubEnv("HOME", sourceHome);
     vi.stubEnv("CODEX_HOME", codexHome);
     vi.stubEnv("CLAUDE_CONFIG_DIR", join(sourceHome, "must-not-reach-codex"));
+    vi.stubEnv("USER", "fixture-user");
     vi.stubEnv("PATH", "/fixture/bin");
     vi.stubEnv("LANG", "en_US.UTF-8");
     vi.stubEnv("LC_ALL", "C.UTF-8");
@@ -74,6 +75,7 @@ describe("dispatch workspace", () => {
 
     const workspace = await createDispatchWorkspace("codex-cli", repository);
     expect(workspace.env).toEqual({
+      USER: "fixture-user",
       PATH: "/fixture/bin",
       HOME: sourceHome,
       LANG: "en_US.UTF-8",
