@@ -4419,7 +4419,7 @@
       "imports": []
     },
     "src/contracts/implementation-selection.ts": {
-      "bytes": 7950,
+      "bytes": 8229,
       "format": "esm",
       "imports": [
         {
@@ -4859,7 +4859,7 @@
       ]
     },
     "src/contracts/semantic-workflow.ts": {
-      "bytes": 50798,
+      "bytes": 50790,
       "format": "esm",
       "imports": [
         {
@@ -5551,7 +5551,7 @@
       ]
     },
     "src/dispatch/routing.ts": {
-      "bytes": 11402,
+      "bytes": 11398,
       "format": "esm",
       "imports": [
         {
@@ -7894,7 +7894,7 @@
       ]
     },
     "src/review/effort-policy.ts": {
-      "bytes": 7528,
+      "bytes": 7827,
       "format": "esm",
       "imports": []
     },
@@ -11133,7 +11133,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 2659814,
+      "bytes": 2660293,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -12395,7 +12395,7 @@
           "bytesInOutput": 636
         },
         "src/contracts/implementation-selection.ts": {
-          "bytesInOutput": 7071
+          "bytesInOutput": 7438
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 2018
@@ -12428,7 +12428,7 @@
           "bytesInOutput": 1323
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 28768
+          "bytesInOutput": 28762
         },
         "src/contracts/tool-names.ts": {
           "bytesInOutput": 396
@@ -12482,7 +12482,7 @@
           "bytesInOutput": 2088
         },
         "src/dispatch/routing.ts": {
-          "bytesInOutput": 7354
+          "bytesInOutput": 7350
         },
         "src/dispatch/usage-log.ts": {
           "bytesInOutput": 1627
@@ -12584,7 +12584,7 @@
           "bytesInOutput": 2164
         },
         "src/review/effort-policy.ts": {
-          "bytesInOutput": 1897
+          "bytesInOutput": 2019
         },
         "src/review/envelopes.ts": {
           "bytesInOutput": 24337
@@ -12748,7 +12748,7 @@
       }
     },
     "archflow-mcp.mjs": {
-      "bytes": 3827718,
+      "bytes": 3828119,
       "entryPoint": "src/main.ts",
       "exports": [],
       "imports": [
@@ -14035,7 +14035,7 @@
           "bytesInOutput": 1033
         },
         "src/contracts/implementation-selection.ts": {
-          "bytesInOutput": 5915
+          "bytesInOutput": 6234
         },
         "src/contracts/internal/trust-brands.ts": {
           "bytesInOutput": 1894
@@ -14119,7 +14119,7 @@
           "bytesInOutput": 1255
         },
         "src/contracts/semantic-workflow.ts": {
-          "bytesInOutput": 29583
+          "bytesInOutput": 29577
         },
         "src/contracts/simple-review.ts": {
           "bytesInOutput": 4083
@@ -14176,7 +14176,7 @@
           "bytesInOutput": 2006
         },
         "src/dispatch/routing.ts": {
-          "bytesInOutput": 7338
+          "bytesInOutput": 7334
         },
         "src/dispatch/usage-log.ts": {
           "bytesInOutput": 1563
@@ -14275,7 +14275,7 @@
           "bytesInOutput": 2096
         },
         "src/review/effort-policy.ts": {
-          "bytesInOutput": 1558
+          "bytesInOutput": 1650
         },
         "src/review/envelopes.ts": {
           "bytesInOutput": 24147
