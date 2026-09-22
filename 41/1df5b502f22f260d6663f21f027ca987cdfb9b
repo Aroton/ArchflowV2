@@ -1,0 +1,25 @@
+dist/archflow-local.mjs
+  s_646f2a0a88f71a::t_8083929564afd9 15401-15404,15408-15416,23271,23298,41249,41254,52264-52265,52274
+dist/archflow-mcp.mjs
+  s_646f2a0a88f71a::t_6da684147f9721 36051-36054,36058-36066,37172,39726-39727,39736,63235,63240
+dist/manifest.json
+  s_646f2a0a88f71a::t_a452b04162fed4 89,92,95,98,213,235,2774-2775,2781,3054-3055,3061,3244-3245,3251,3694-3695,3701,5332,5683,5787,5789,5862,5864,6229,6231,6304,6306
+dist/metafile.json
+  s_646f2a0a88f71a::t_eeca9e8ad0ffb5 4422,4862,5554,7897,11136,12398,12431,12485,12587,12751,14038,14122,14179,14278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "411df5b502f22f260d6663f21f027ca987cdfb9b",
+  "prompts": {},
+  "sessions": {
+    "s_646f2a0a88f71a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "027a3d50-e245-4e45-a8fa-180cb60436ad",
+        "model": "unknown"
+      },
+      "human_author": "Ryan <ryan@itsavail.com>"
+    }
+  }
+}
