@@ -19,10 +19,10 @@ describe("config template", () => {
       adapter: "codex-cli",
     });
     expect(resolveDispatchRoute(config, "phase-impl", "adjudicator", "claude")).toMatchObject({
-      model: "gemini-3.8-flash-high",
+      model: "claude-opus-5-5",
       effort: "high",
-      family: "gemini",
-      adapter: "antigravity-cli",
+      family: "claude",
+      adapter: "claude-cli",
     });
 
     // Antigravity host (multi-reviewer)
@@ -31,10 +31,10 @@ describe("config template", () => {
       { model: "claude-opus-5-5", effort: "medium", family: "claude", adapter: "claude-cli" },
     ]);
     expect(resolveDispatchRoute(config, "phase-impl", "adjudicator", "antigravity")).toMatchObject({
-      model: "gemini-3.8-flash-high",
+      model: "claude-opus-5-5",
       effort: "high",
-      family: "gemini",
-      adapter: "antigravity-cli",
+      family: "claude",
+      adapter: "claude-cli",
     });
 
     // Codex host
@@ -45,10 +45,10 @@ describe("config template", () => {
       adapter: "claude-cli",
     });
     expect(resolveDispatchRoute(config, "phase-impl", "adjudicator", "codex")).toMatchObject({
-      model: "gemini-3.8-flash-high",
+      model: "claude-opus-5-5",
       effort: "high",
-      family: "gemini",
-      adapter: "antigravity-cli",
+      family: "claude",
+      adapter: "claude-cli",
     });
 
     // Fallback roles
@@ -57,13 +57,13 @@ describe("config template", () => {
       effort: "low",
     });
     expect(resolveDispatchRoute(config, "phase-impl", "test-reviewer")).toMatchObject({
-      model: "gpt-5.6-sol",
+      model: "gpt-6-sol",
       effort: "medium",
       family: "codex",
       adapter: "codex-cli",
     });
     expect(resolveDispatchRoute(config, "phase-design", "effort-reviewer")).toMatchObject({
-      model: "gpt-5.6-luna",
+      model: "gpt-6-luna",
       effort: "xhigh",
       family: "codex",
       adapter: "codex-cli",

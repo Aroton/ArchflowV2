@@ -86,7 +86,7 @@ Fresh review requests an explicit outcome and feedback through one strict object
 
 For implementation review, a changed writable secondary now receives its authenticated retained proposed tree rather than HEAD context. The repository-view plan remains the single source for filesystem materialization, child bindings, and evidence pins. Unchanged writable and context-only members stay commit-pinned at HEAD. All views still remove secondary `.archflow/`, and the child remains a first-party process under best-effort context hygiene rather than OS-enforced confinement.
 
-Phase-design review also dispatches an effort selector using the configured `effort-reviewer` route (shipped default `gpt-5.6-luna` at `xhigh`). The server captures the phase plan and hazard registry once, while ordinary reviewer routes retain their existing prevalidation. Rubric, dedicated test, selector, and constitution children share the byte-identical repository workspace.
+Phase-design review also dispatches an effort selector using the configured `effort-reviewer` route (shipped default `gpt-6-luna` at `xhigh`). The server captures the phase plan and hazard registry once, while ordinary reviewer routes retain their existing prevalidation. Rubric, dedicated test, selector, and constitution children share the byte-identical repository workspace.
 
 The V5 assessment schema accepts exact subject bindings, one difficulty category, and a required nonempty rationale about remaining implementation reasoning. It rejects model choices and workload scores. The server captures effective implementation settings and benchmark data alongside the plan and deterministically selects the model. Route, process, output-schema, or binding failures use the bounded-reasoning threshold and captured preferences. Missing/invalid catalog references or no model above the minimum produces unavailable advice. These outcomes are excluded from the round's failure list, create no retry or substitution boundary, and cannot discard ordinary review evidence.
 
@@ -103,7 +103,7 @@ Every Gemini dispatch through `agy`—including counter-review and constitution 
 
 ## Model defaults and limits
 
-Shipped counter-review defaults use Astra low (`gpt-6-astra`) for Claude producers and Opus 5.5 medium (`claude-opus-5-5`) for Codex producers; Antigravity producers receive both. The fallback counter-review route is also Astra low. Test reviewers use Sol medium, effort reviewers use Luna/xhigh, and adjudicators use `gemini-3.8-flash-high` at high effort. Existing explicit task/repository routes are not rewritten by a template update.
+Shipped counter-review defaults use Astra low (`gpt-6-astra`) for Claude producers and Opus 5.5 medium (`claude-opus-5-5`) for Codex producers; Antigravity producers receive both. The fallback counter-review route is also Astra low. Test reviewers use GPT-6 Sol medium, effort reviewers use GPT-6 Luna/xhigh, and adjudicators use `claude-opus-5-5` at high effort. Existing explicit task/repository routes are not rewritten by a template update.
 
 Route validation rejects `gpt-6-astra` at `max` effort before dispatch, including configured, invocation-declared, and substitution routes. The error explains that Astra max is disabled; no silent downgrade occurs. An invalid effort-selector route still takes its bounded-reasoning advice fallback. Astra low/high are valid Codex routes. Implementation recommendations remain separate from these dispatch routes.
 

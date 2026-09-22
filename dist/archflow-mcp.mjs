@@ -36048,10 +36048,22 @@ var DEFAULT_IMPLEMENTATION_SETTINGS = Object.freeze({
     "glm-5-3-flash",
     "glm-5-3-max",
     "gemini-3-8-flash-high",
+    "gpt-6-luna-high",
+    "gpt-6-luna-xhigh",
+    "gpt-6-sol-high",
+    "gpt-6-sol-xhigh",
     "gpt-5-6-sol-high",
     "gpt-5-6-sol-xhigh",
     "gpt-6-astra-low",
-    "gpt-6-astra-high"
+    "gpt-6-astra-high",
+    "claude-fable-5-1-medium",
+    "claude-fable-5-1-high",
+    "claude-opus-5-high",
+    "claude-opus-5-xhigh",
+    "claude-opus-5-5-medium",
+    "claude-opus-5-5-high",
+    "claude-opus-5-5-xhigh",
+    "claude-opus-5-5-max"
   ]),
   cost_priority: Object.freeze(["zai", "google", "gpt", "claude", "muse"]),
   minimum_score: 19,
@@ -37157,6 +37169,7 @@ var SELECTOR_PROFILES = Object.freeze({
   "gpt-6-astra-high": Object.freeze({ profile_id: "gpt-6-astra-high", model: "gpt-6-astra", effort: "high" })
 });
 var DEFAULT_IMPLEMENTATION_PROFILE = SELECTOR_PROFILES["gpt-5-6-sol-medium"];
+var DEFAULT_IMPLEMENTATION_ROUTE = Object.freeze({ model: "gpt-6-sol", effort: "medium" });
 var PROFILE_RANK = Object.freeze({
   "gemini-3-7-flash-max": 0,
   "glm-5-3-flash-max": 1,
@@ -39710,8 +39723,8 @@ function unavailableImplementationRecommendation(reason2, explanation, phase3) {
 function defaultImplementationRecommendation() {
   return Object.freeze(implementationRecommendationV1Schema.parse({
     status: "ready",
-    model: DEFAULT_IMPLEMENTATION_PROFILE.model,
-    effort: DEFAULT_IMPLEMENTATION_PROFILE.effort
+    model: DEFAULT_IMPLEMENTATION_ROUTE.model,
+    effort: DEFAULT_IMPLEMENTATION_ROUTE.effort
   }));
 }
 function implementationRecommendationFromAssessment(value, phase3) {
@@ -39720,7 +39733,7 @@ function implementationRecommendationFromAssessment(value, phase3) {
     throw new TypeError("effort evidence does not match the governing phase design");
   }
   if (assessment.schema_version === "3") return Object.freeze(implementationRecommendationV1Schema.parse(assessment.recommendation));
-  const profile = assessment.schema_version === "2" ? assessment.profile : assessment.recommendation.status === "ready" ? assessment.recommendation.phase_profile : DEFAULT_IMPLEMENTATION_PROFILE;
+  const profile = assessment.schema_version === "2" ? assessment.profile : assessment.recommendation.status === "ready" ? assessment.recommendation.phase_profile : DEFAULT_IMPLEMENTATION_ROUTE;
   return Object.freeze(implementationRecommendationV1Schema.parse({
     status: "ready",
     model: profile.model,
@@ -63219,12 +63232,12 @@ function configuredRoutes(config2, phaseKind2, role2, host) {
     return [baseRoles["test-reviewer"]];
   } else if (role2 === "effort-reviewer") {
     if (baseRoles["effort-reviewer"] !== void 0) return [baseRoles["effort-reviewer"]];
-    return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" })];
+    return [Object.freeze({ model: "gpt-6-luna", effort: "xhigh" })];
   } else if (role2 === "adjudicator" && baseRoles.adjudicator !== void 0) {
     return [baseRoles.adjudicator];
   }
   if (role2 === "test-reviewer" && (phaseKind2 === "phase-design" || phaseKind2 === "phase-impl")) {
-    return [Object.freeze({ model: "gpt-5.6-sol", effort: "medium" })];
+    return [Object.freeze({ model: "gpt-6-sol", effort: "medium" })];
   }
   return [];
 }

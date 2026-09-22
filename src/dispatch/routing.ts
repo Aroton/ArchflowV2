@@ -151,7 +151,7 @@ export function configuredRoutes(
     return [baseRoles["test-reviewer"]];
   } else if (role === "effort-reviewer") {
     if (baseRoles["effort-reviewer"] !== undefined) return [baseRoles["effort-reviewer"]];
-    return [Object.freeze({ model: "gpt-5.6-luna", effort: "xhigh" as const })];
+    return [Object.freeze({ model: "gpt-6-luna", effort: "xhigh" as const })];
   } else if (role === "adjudicator" && baseRoles.adjudicator !== undefined) {
     return [baseRoles.adjudicator];
   }
@@ -160,7 +160,7 @@ export function configuredRoutes(
   // invocation routing retain their existing precedence; this built-in is only the final fallback
   // when the optional configured role was omitted.
   if (role === "test-reviewer" && (phaseKind === "phase-design" || phaseKind === "phase-impl")) {
-    return [Object.freeze({ model: "gpt-5.6-sol", effort: "medium" as const })];
+    return [Object.freeze({ model: "gpt-6-sol", effort: "medium" as const })];
   }
 
   return [];

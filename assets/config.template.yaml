@@ -16,14 +16,14 @@ roles:
   # role receive this shipped Sol/medium route as the final fallback; general
   # reviewers never inherit the test-owned criteria.
   test-reviewer:
-    model: gpt-5.6-sol
+    model: gpt-6-sol
     effort: medium
   # Used only for phase-design. Assesses reasoning remaining after the reviewed design.
   effort-reviewer:
-    model: gpt-5.6-luna
+    model: gpt-6-luna
     effort: xhigh
   adjudicator:
-    model: gemini-3.8-flash-high
+    model: claude-opus-5-5
     effort: high
 
 # Client-specific counter-review and constitution review routing
@@ -33,7 +33,7 @@ producers:
       model: gpt-6-astra
       effort: low
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: claude-opus-5-5
       effort: high
   antigravity:
     counter-reviewers:
@@ -42,14 +42,14 @@ producers:
       - model: claude-opus-5-5
         effort: medium
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: claude-opus-5-5
       effort: high
   codex:
     counter-reviewer:
       model: claude-opus-5-5
       effort: medium
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: claude-opus-5-5
       effort: high
 
 # Routes accept an optional `provider`: a cc-switch provider id (claude routes
@@ -132,7 +132,11 @@ approval_rules:
 # Cost priority is cheapest first. Within a cost group, enabled_profiles order wins.
 # An empty enabled_profiles list disables advice. Omitted fields use shipped defaults.
 # Every available profile (uncomment/add an ID below to enable it):
+#   - claude-opus-5-5-max # 59.6%, with fallback
+#   - claude-opus-5-5-xhigh # 59.6%, with fallback
+#   - claude-opus-5-5-high # 56.6%, with fallback
 #   - gpt-6-astra-high # 54.0%
+#   - claude-opus-5-5-medium # 52.5%, with fallback
 #   - claude-fable-5-1-high # 52.0%, with fallback
 #   - claude-opus-5-xhigh # 46.5%
 #   - claude-opus-5-high # 46.0%
@@ -141,23 +145,35 @@ approval_rules:
 #   - glm-5-3-max # 41.9%
 #   - muse-spark-1-3-max # 33.3%
 #   - glm-5-3-flash # 32.8%
+#   - gpt-6-sol-xhigh # 30.3%
+#   - gpt-6-sol-high # 26.3%
 #   - gpt-5-6-sol-xhigh # 24.7%
 #   - gpt-5-6-sol-high # 20.7%
 #   - gemini-3-8-flash-high # 19.7%
+#   - gpt-6-luna-xhigh # 8.1%
+#   - gpt-6-luna-high # 4.5%
 implementation:
   enabled_profiles:
     - glm-5-3-flash
     - glm-5-3-max
     - gemini-3-8-flash-high
+    - gpt-6-luna-high
+    - gpt-6-luna-xhigh
+    - gpt-6-sol-high
+    - gpt-6-sol-xhigh
     - gpt-5-6-sol-high
     - gpt-5-6-sol-xhigh
     - gpt-6-astra-low
     - gpt-6-astra-high
+    - claude-fable-5-1-medium
+    - claude-fable-5-1-high
+    - claude-opus-5-high
+    - claude-opus-5-xhigh
+    - claude-opus-5-5-medium
+    - claude-opus-5-5-high
+    - claude-opus-5-5-xhigh
+    - claude-opus-5-5-max
     # - muse-spark-1-3-max
-    # - claude-fable-5-1-medium
-    # - claude-fable-5-1-high
-    # - claude-opus-5-high
-    # - claude-opus-5-xhigh
   cost_priority: [zai, google, gpt, claude, muse]
   minimum_score: 19
   # Calibration choices for remaining reasoning, not workload or file counts.

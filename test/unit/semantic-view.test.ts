@@ -220,7 +220,7 @@ describe("semantic status projection", () => {
       unavailableImplementationRecommendation("subject-stale", "The review describes earlier design bytes.", 1),
     ];
     expect(recommendations.map((item) => item.status)).toEqual(["ready", "unavailable", "unavailable", "unavailable"]);
-    expect(recommendations[0]).toEqual({ status: "ready", model: "gpt-5.6-sol", effort: "medium" });
+    expect(recommendations[0]).toEqual({ status: "ready", model: "gpt-6-sol", effort: "medium" });
     for (const recommendation of recommendations) {
       const view = projectSemanticStatus(snapshot(status, { implementation_recommendation: recommendation }), invocation).view;
       expect(view.implementation_recommendation).toEqual(recommendation);
