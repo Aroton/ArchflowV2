@@ -51,19 +51,36 @@ const assessment = (difficulty = "routine") => ({
 describe("benchmark implementation selection", () => {
   it("records all screenshot scores and exact benchmark qualifications", () => {
     expect(Object.fromEntries(baseline.catalog.profiles.map(p => [p.profile_id, p.score]))).toEqual({
-      "gpt-6-astra-high": 54, "claude-fable-5-1-high": 52, "claude-opus-5-xhigh": 46.5,
+      "claude-opus-5-5-max": 59.6, "claude-opus-5-5-xhigh": 59.6, "claude-opus-5-5-high": 56.6, "gpt-6-astra-high": 54,
+      "claude-opus-5-5-medium": 52.5, "claude-fable-5-1-high": 52, "claude-opus-5-xhigh": 46.5,
       "claude-opus-5-high": 46, "claude-fable-5-1-medium": 44.9, "gpt-6-astra-low": 41.9,
-      "glm-5-3-max": 41.9, "muse-spark-1-3-max": 33.3, "glm-5-3-flash": 32.8,
-      "gpt-5-6-sol-xhigh": 24.7, "gpt-5-6-sol-high": 20.7, "gemini-3-8-flash-high": 19.7,
+      "glm-5-3-max": 41.9, "muse-spark-1-3-max": 33.3, "glm-5-3-flash": 32.8, "gpt-6-sol-xhigh": 30.3, "gpt-6-sol-high": 26.3,
+      "gpt-5-6-sol-xhigh": 24.7, "gpt-5-6-sol-high": 20.7, "gemini-3-8-flash-high": 19.7, "gpt-6-luna-xhigh": 8.1, "gpt-6-luna-high": 4.5,
     });
     expect(baseline.catalog.profiles.find(p => p.profile_id === "glm-5-3-flash")).not.toHaveProperty("effort");
-    expect(baseline.catalog.profiles.filter(p => p.qualifier).map(p => p.qualifier)).toEqual(["with fallback", "with fallback"]);
+    expect(baseline.catalog.profiles.filter(p => p.qualifier).map(p => p.profile_id)).toEqual([
+      "claude-opus-5-5-max", "claude-opus-5-5-xhigh", "claude-opus-5-5-high", "claude-opus-5-5-medium", "claude-fable-5-1-high", "claude-fable-5-1-medium",
+    ]);
+    expect(new Set(baseline.catalog.profiles.filter(p => p.qualifier).map(p => p.qualifier))).toEqual(new Set(["with fallback"]));
   });
 
   it("keeps the template defaults and complete comment catalog aligned", async () => {
     const template = await readFile(new URL("../../assets/config.template.yaml", import.meta.url), "utf8");
     expect(parseConfigYaml(template).implementation).toEqual(DEFAULT_IMPLEMENTATION_SETTINGS);
     for (const profile of baseline.catalog.profiles) expect(template).toContain(`#   - ${profile.profile_id} #`);
+  });
+
+  it("resolves every template profile and keeps pre-GPT-6 profile IDs valid", async () => {
+    const template = await readFile(new URL("../../assets/config.template.yaml", import.meta.url), "utf8");
+    const catalogIds = new Set(baseline.catalog.profiles.map(p => p.profile_id));
+    for (const id of parseConfigYaml(template).implementation!.enabled_profiles!) expect(catalogIds.has(id)).toBe(true);
+    const legacy = ["gpt-5-6-sol-high", "gpt-5-6-sol-xhigh", "claude-opus-5-high", "claude-opus-5-xhigh"];
+    expect(implementationSelectionInputSchema.parse(configured({ enabled_profiles: legacy })).status).toBe("ready");
+    for (const id of ["gpt-6-sol-high", "gpt-6-sol-xhigh", "gpt-6-luna-high", "gpt-6-luna-xhigh", "claude-opus-5-5-medium"]) {
+      expect(catalogIds.has(id)).toBe(true);
+    }
+    expect(() => implementationSelectionInputSchema.parse(configured({ enabled_profiles: ["gpt-6-nova-high"] })))
+      .toThrow(/Unknown implementation profile: gpt-6-nova-high/);
   });
 
   it("chooses GLM Flash, GLM Flash, GLM max, and Astra high with default subscriptions", () => {

@@ -31,8 +31,10 @@ export type ImplementationSettings = {
 };
 export const DEFAULT_IMPLEMENTATION_SETTINGS: ImplementationSettings = Object.freeze({
   enabled_profiles: Object.freeze([
-    "glm-5-3-flash", "glm-5-3-max", "gemini-3-8-flash-high", "gpt-5-6-sol-high",
-    "gpt-5-6-sol-xhigh", "gpt-6-astra-low", "gpt-6-astra-high",
+    "glm-5-3-flash", "glm-5-3-max", "gemini-3-8-flash-high", "gpt-6-luna-high", "gpt-6-luna-xhigh",
+    "gpt-6-sol-high", "gpt-6-sol-xhigh", "gpt-5-6-sol-high", "gpt-5-6-sol-xhigh", "gpt-6-astra-low", "gpt-6-astra-high",
+    "claude-fable-5-1-medium", "claude-fable-5-1-high", "claude-opus-5-high", "claude-opus-5-xhigh",
+    "claude-opus-5-5-medium", "claude-opus-5-5-high", "claude-opus-5-5-xhigh", "claude-opus-5-5-max",
   ]),
   cost_priority: Object.freeze(["zai", "google", "gpt", "claude", "muse"]),
   minimum_score: 19,

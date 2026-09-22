@@ -2,14 +2,38 @@
 # Keep profiles separate for each measured effort; do not infer missing effort settings.
 schema_version: "1"
 benchmark: Terminal-Bench v4.0
-source: User-supplied Artificial Analysis chart (12 of 159 models)
-captured_on: "2026-09-15"
+source: User-supplied Artificial Analysis chart (12 of 159 models, 2026-09-15); Claude Opus 5.5, GPT-6 Sol, and GPT-6 Luna from the Artificial Analysis Terminal-Bench 4.0 leaderboard (2026-09-22)
+captured_on: "2026-09-22"
 profiles:
+  - profile_id: claude-opus-5-5-max
+    model: claude-opus-5-5
+    effort: max
+    cost_group: claude
+    score: 59.6
+    qualifier: with fallback
+  - profile_id: claude-opus-5-5-xhigh
+    model: claude-opus-5-5
+    effort: xhigh
+    cost_group: claude
+    score: 59.6
+    qualifier: with fallback
+  - profile_id: claude-opus-5-5-high
+    model: claude-opus-5-5
+    effort: high
+    cost_group: claude
+    score: 56.6
+    qualifier: with fallback
   - profile_id: gpt-6-astra-high
     model: gpt-6-astra
     effort: high
     cost_group: gpt
     score: 54.0
+  - profile_id: claude-opus-5-5-medium
+    model: claude-opus-5-5
+    effort: medium
+    cost_group: claude
+    score: 52.5
+    qualifier: with fallback
   - profile_id: claude-fable-5-1-high
     model: claude-fable-5-1
     effort: high
@@ -51,6 +75,16 @@ profiles:
     model: glm-5.3-flash
     cost_group: zai
     score: 32.8
+  - profile_id: gpt-6-sol-xhigh
+    model: gpt-6-sol
+    effort: xhigh
+    cost_group: gpt
+    score: 30.3
+  - profile_id: gpt-6-sol-high
+    model: gpt-6-sol
+    effort: high
+    cost_group: gpt
+    score: 26.3
   - profile_id: gpt-5-6-sol-xhigh
     model: gpt-5.6-sol
     effort: xhigh
@@ -66,3 +100,13 @@ profiles:
     effort: high
     cost_group: google
     score: 19.7
+  - profile_id: gpt-6-luna-xhigh
+    model: gpt-6-luna
+    effort: xhigh
+    cost_group: gpt
+    score: 8.1
+  - profile_id: gpt-6-luna-high
+    model: gpt-6-luna
+    effort: high
+    cost_group: gpt
+    score: 4.5
