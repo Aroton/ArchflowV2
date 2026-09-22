@@ -33,7 +33,7 @@ import {
   type ConfidenceLevel,
   type FindingPartitionCounts,
 } from "./review.js";
-import { DEFAULT_IMPLEMENTATION_PROFILE } from "../review/effort-policy.js";
+import { DEFAULT_IMPLEMENTATION_ROUTE } from "../review/effort-policy.js";
 
 const nonBlank = z.string().min(1).regex(/\S/u);
 const boundedText = nonBlank.max(4096);
@@ -219,8 +219,8 @@ export function unavailableImplementationRecommendation(
 export function defaultImplementationRecommendation(): ImplementationRecommendationV1 {
   return Object.freeze(implementationRecommendationV1Schema.parse({
     status: "ready",
-    model: DEFAULT_IMPLEMENTATION_PROFILE.model,
-    effort: DEFAULT_IMPLEMENTATION_PROFILE.effort,
+    model: DEFAULT_IMPLEMENTATION_ROUTE.model,
+    effort: DEFAULT_IMPLEMENTATION_ROUTE.effort,
   }));
 }
 
@@ -238,7 +238,7 @@ export function implementationRecommendationFromAssessment(
     ? assessment.profile
     : assessment.recommendation.status === "ready"
       ? assessment.recommendation.phase_profile
-      : DEFAULT_IMPLEMENTATION_PROFILE;
+      : DEFAULT_IMPLEMENTATION_ROUTE;
   return Object.freeze(implementationRecommendationV1Schema.parse({
     status: "ready",
     model: profile.model,

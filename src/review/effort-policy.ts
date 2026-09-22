@@ -87,6 +87,10 @@ export type SelectorProfile = (typeof SELECTOR_PROFILES)[(typeof SELECTOR_PROFIL
 
 export const DEFAULT_IMPLEMENTATION_PROFILE = SELECTOR_PROFILES["gpt-5-6-sol-medium"];
 
+// Shipped recommendation when no attested assessment exists. Kept apart from the archived
+// V2 default above because the archived selector schemas only accept their historical literals.
+export const DEFAULT_IMPLEMENTATION_ROUTE = Object.freeze({ model: "gpt-6-sol", effort: "medium" } as const);
+
 const PROFILE_RANK: Readonly<Record<ImplementationProfileIdV1, number>> = Object.freeze({
   "gemini-3-7-flash-max": 0,
   "glm-5-3-flash-max": 1,

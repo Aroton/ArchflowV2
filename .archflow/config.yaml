@@ -15,14 +15,14 @@ roles:
   # role receive the shipped Sol/medium fallback; general reviewers never
   # inherit the test-owned criteria.
   test-reviewer:
-    model: gpt-5.6-sol
+    model: gpt-6-sol
     effort: medium
   # Used only for phase-design. Assigns implementation model + effort per component.
   effort-reviewer:
-    model: gpt-5.6-luna
+    model: gpt-6-luna
     effort: xhigh
   adjudicator:
-    model: gemini-3.8-flash-high
+    model: claude-opus-5-5
     effort: high
 
 # Client-specific counter-review and constitution review routing
@@ -32,7 +32,7 @@ producers:
       model: gpt-6-astra
       effort: low
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: claude-opus-5-5
       effort: high
   antigravity:
     counter-reviewers:
@@ -41,14 +41,14 @@ producers:
       - model: claude-opus-5-5
         effort: medium
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: claude-opus-5-5
       effort: high
   codex:
     counter-reviewer:
       model: gemini-3.8-flash-high
       effort: high
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: claude-opus-5-5
       effort: high
 
 # Routes accept an optional `provider`: a cc-switch provider id (claude routes

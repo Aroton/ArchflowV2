@@ -82,14 +82,19 @@ describe("dispatch routing", () => {
   it("uses the built-in test reviewer only after configured precedence for applicable phases", () => {
     const value = config({});
     expect(resolveDispatchRoute(value, "phase-design", "test-reviewer"))
-      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "medium" });
+      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6-sol", effort: "medium" });
     expect(resolveDispatchRoute(value, "phase-impl", "test-reviewer"))
-      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "medium" });
+      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6-sol", effort: "medium" });
     expectRoutingError(
       () => resolveDispatchRoute(value, "design", "test-reviewer"),
       "CONFIG_INVALID",
       { issue_code: "route-missing" },
     );
+  });
+
+  it("uses the built-in GPT-6 Luna effort reviewer when no route is configured", () => {
+    expect(resolveDispatchRoute(config({}), "phase-design", "effort-reviewer"))
+      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6-luna", effort: "xhigh" });
   });
 
   it("classifies an absent dispatched role without returning a route", () => {
