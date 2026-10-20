@@ -36054,8 +36054,7 @@ var DEFAULT_IMPLEMENTATION_SETTINGS = Object.freeze({
     "gpt-6-sol-xhigh",
     "gpt-5-6-sol-high",
     "gpt-5-6-sol-xhigh",
-    "gpt-6-astra-low",
-    "gpt-6-astra-high",
+    "gpt-6-1-sol-high",
     "claude-fable-5-1-medium",
     "claude-fable-5-1-high",
     "claude-opus-5-high",
@@ -63237,7 +63236,7 @@ function configuredRoutes(config2, phaseKind2, role2, host) {
     return [baseRoles.adjudicator];
   }
   if (role2 === "test-reviewer" && (phaseKind2 === "phase-design" || phaseKind2 === "phase-impl")) {
-    return [Object.freeze({ model: "gpt-6-sol", effort: "medium" })];
+    return [Object.freeze({ model: "gpt-6.1-sol", effort: "low" })];
   }
   return [];
 }
@@ -73241,7 +73240,7 @@ async function captureSimpleContext(workingDirectory, input, signal) {
   }
   const collect = async () => {
     const dirty = (await simpleGit(root, ["diff", "--name-only", "-z", "HEAD", "--"], signal)).split("\0");
-    const untracked = (await simpleGit(root, ["ls-files", "--others", "--exclude-standard", "-z"], signal)).split("\0");
+    const untracked = (await simpleGit(root, ["ls-files", "--others", "--exclude-standard", "-z"], signal)).split("\0").filter((path3) => !path3.endsWith("/"));
     const paths = [...new Set([...dirty, ...untracked, ...input.paths].filter(Boolean))].sort();
     const entries = [];
     let size = 0;
@@ -73322,7 +73321,13 @@ var envelope = sealDispatchInput;
 async function runSimpleReview(raw, context2, dependencies = {}) {
   let dispose;
   try {
-    const input = parseSimpleReviewInput(raw);
+    let input;
+    try {
+      input = parseSimpleReviewInput(raw);
+    } catch (error51) {
+      if (!(error51 instanceof ZodError)) throw error51;
+      throw new SimpleReviewError("INPUT_INVALID", `Review input is invalid: ${error51.issues.map((issue4) => `${issue4.path.join(".") || "(root)"}: ${issue4.message}`).join("; ")}`);
+    }
     context2.signal.throwIfAborted();
     const captured = await captureSimpleContext(context2.connection.startup_repository_candidate.working_directory, input, context2.signal);
     const { policy } = captured;

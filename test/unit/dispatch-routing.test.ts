@@ -82,9 +82,9 @@ describe("dispatch routing", () => {
   it("uses the built-in test reviewer only after configured precedence for applicable phases", () => {
     const value = config({});
     expect(resolveDispatchRoute(value, "phase-design", "test-reviewer"))
-      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6-sol", effort: "medium" });
+      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6.1-sol", effort: "low" });
     expect(resolveDispatchRoute(value, "phase-impl", "test-reviewer"))
-      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6-sol", effort: "medium" });
+      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6.1-sol", effort: "low" });
     expectRoutingError(
       () => resolveDispatchRoute(value, "design", "test-reviewer"),
       "CONFIG_INVALID",

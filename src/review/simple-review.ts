@@ -18,6 +18,7 @@ import { approvalRuleMatchSummary, evaluateApprovalRules } from "../state/approv
 import { sealDispatchInput, type DispatchEnvelope } from "./envelopes.js";
 import { loadCanonicalRubricForSimpleStage, reviewAssignment } from "./rubrics.js";
 import { captureSimpleContext, SimpleReviewError } from "./simple-context.js";
+import { ZodError } from "zod";
 
 export type SimpleReviewDependencies = {
   dispatch?: (route: DispatchRoute, envelope: DispatchEnvelope, schema: PlainJsonValue) => Promise<DispatchCoordinatorResult>;
@@ -31,7 +32,13 @@ const envelope = sealDispatchInput;
 export async function runSimpleReview(raw: SimpleReviewInput, context: InvocationContext, dependencies: SimpleReviewDependencies = {}): Promise<SimpleReviewResult> {
   let dispose: (() => Promise<void>) | undefined;
   try {
-    const input = parseSimpleReviewInput(raw);
+    let input;
+    // Callers build this payload by hand, so a rejection names each offending field.
+    try { input = parseSimpleReviewInput(raw); }
+    catch (error) {
+      if (!(error instanceof ZodError)) throw error;
+      throw new SimpleReviewError("INPUT_INVALID", `Review input is invalid: ${error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ")}`);
+    }
     context.signal.throwIfAborted();
     const captured = await captureSimpleContext(context.connection.startup_repository_candidate.working_directory, input, context.signal);
     const { policy } = captured;

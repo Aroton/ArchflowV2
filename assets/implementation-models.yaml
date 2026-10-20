@@ -2,7 +2,7 @@
 # Keep profiles separate for each measured effort; do not infer missing effort settings.
 schema_version: "1"
 benchmark: Terminal-Bench v4.0
-source: User-supplied Artificial Analysis chart (12 of 159 models, 2026-09-15); Claude Opus 5.5, GPT-6 Sol, and GPT-6 Luna from the Artificial Analysis Terminal-Bench 4.0 leaderboard (2026-09-22)
+source: User-supplied Artificial Analysis chart (12 of 159 models, 2026-09-15); Claude Opus 5.5, GPT-6 Sol, and GPT-6 Luna from the Artificial Analysis Terminal-Bench 4.0 leaderboard (2026-09-22); GPT-6.1 Sol from an Artificial Analysis figure reported by orcarouter.ai (2026-09-28), effort unstated
 captured_on: "2026-09-22"
 profiles:
   - profile_id: claude-opus-5-5-max
@@ -23,6 +23,12 @@ profiles:
     cost_group: claude
     score: 56.6
     qualifier: with fallback
+  - profile_id: gpt-6-1-sol-high
+    model: gpt-6.1-sol
+    effort: high
+    cost_group: gpt
+    score: 56.1
+    qualifier: secondary-source score, effort unstated
   - profile_id: gpt-6-astra-high
     model: gpt-6-astra
     effort: high

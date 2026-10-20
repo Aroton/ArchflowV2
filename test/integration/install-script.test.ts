@@ -158,6 +158,12 @@ describe("installer", () => {
     }
     expect(installed.stdout).toContain("$archflow-simple");
     expect(installed.stdout).toContain("/archflow-simple");
+    const runSkill = await readFile(join(root, "skills", "archflow-run", "SKILL.md"), "utf8");
+    for (const skillRoot of [claudeSkillRoot, codexSkillRoot, antigravitySkillRoot]) {
+      expect(await readFile(join(skillRoot, "archflow-run", "SKILL.md"), "utf8")).toBe(runSkill);
+      expect(await readFile(join(skillRoot, "archflow-run", "scripts", "counter-review.sh"), "utf8")).toContain("archflow-local} review");
+    }
+    expect(installed.stdout).toContain("/archflow-run");
   });
 
   it("installs a verified offline bundle and prunes only previously owned skill files", async () => {

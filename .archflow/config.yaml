@@ -9,14 +9,14 @@ schema_version: "1"
 # Fallback roles used only when a connected client is not listed under `producers` below:
 roles:
   counter-reviewer:
-    model: gpt-6-astra
-    effort: low
+    model: gpt-6.1-sol
+    effort: high
   # Used only for phase-design and phase-impl. Older task configs without this
   # role receive the shipped Sol/medium fallback; general reviewers never
   # inherit the test-owned criteria.
   test-reviewer:
-    model: gpt-6-sol
-    effort: medium
+    model: gpt-6.1-sol
+    effort: low
   # Used only for phase-design. Assigns implementation model + effort per component.
   effort-reviewer:
     model: gpt-6-luna
@@ -29,15 +29,15 @@ roles:
 producers:
   claude:
     counter-reviewer:
-      model: gpt-6-astra
-      effort: low
+      model: gpt-6.1-sol
+      effort: high
     adjudicator:
       model: claude-opus-5-5
       effort: high
   antigravity:
     counter-reviewers:
-      - model: gpt-6-astra
-        effort: low
+      - model: gpt-6.1-sol
+        effort: high
       - model: claude-opus-5-5
         effort: medium
     adjudicator:

@@ -51,7 +51,7 @@ const assessment = (difficulty = "routine") => ({
 describe("benchmark implementation selection", () => {
   it("records all screenshot scores and exact benchmark qualifications", () => {
     expect(Object.fromEntries(baseline.catalog.profiles.map(p => [p.profile_id, p.score]))).toEqual({
-      "claude-opus-5-5-max": 59.6, "claude-opus-5-5-xhigh": 59.6, "claude-opus-5-5-high": 56.6, "gpt-6-astra-high": 54,
+      "claude-opus-5-5-max": 59.6, "claude-opus-5-5-xhigh": 59.6, "claude-opus-5-5-high": 56.6, "gpt-6-1-sol-high": 56.1, "gpt-6-astra-high": 54,
       "claude-opus-5-5-medium": 52.5, "claude-fable-5-1-high": 52, "claude-opus-5-xhigh": 46.5,
       "claude-opus-5-high": 46, "claude-fable-5-1-medium": 44.9, "gpt-6-astra-low": 41.9,
       "glm-5-3-max": 41.9, "muse-spark-1-3-max": 33.3, "glm-5-3-flash": 32.8, "gpt-6-sol-xhigh": 30.3, "gpt-6-sol-high": 26.3,
@@ -59,9 +59,9 @@ describe("benchmark implementation selection", () => {
     });
     expect(baseline.catalog.profiles.find(p => p.profile_id === "glm-5-3-flash")).not.toHaveProperty("effort");
     expect(baseline.catalog.profiles.filter(p => p.qualifier).map(p => p.profile_id)).toEqual([
-      "claude-opus-5-5-max", "claude-opus-5-5-xhigh", "claude-opus-5-5-high", "claude-opus-5-5-medium", "claude-fable-5-1-high", "claude-fable-5-1-medium",
+      "claude-opus-5-5-max", "claude-opus-5-5-xhigh", "claude-opus-5-5-high", "gpt-6-1-sol-high", "claude-opus-5-5-medium", "claude-fable-5-1-high", "claude-fable-5-1-medium",
     ]);
-    expect(new Set(baseline.catalog.profiles.filter(p => p.qualifier).map(p => p.qualifier))).toEqual(new Set(["with fallback"]));
+    expect(new Set(baseline.catalog.profiles.filter(p => p.qualifier).map(p => p.qualifier))).toEqual(new Set(["with fallback", "secondary-source score, effort unstated"]));
   });
 
   it("keeps the template defaults and complete comment catalog aligned", async () => {
@@ -83,10 +83,10 @@ describe("benchmark implementation selection", () => {
       .toThrow(/Unknown implementation profile: gpt-6-nova-high/);
   });
 
-  it("chooses GLM Flash, GLM Flash, GLM max, and Astra high with default subscriptions", () => {
+  it("chooses GLM Flash, GLM Flash, GLM max, and Sol 6.1 high with default subscriptions", () => {
     expect(IMPLEMENTATION_DIFFICULTIES.map(difficulty => decide({}, difficulty))).toMatchObject([
       { model: "glm-5.3-flash" }, { model: "glm-5.3-flash" },
-      { model: "glm-5.3", effort: "max" }, { model: "gpt-6-astra", effort: "high" },
+      { model: "glm-5.3", effort: "max" }, { model: "gpt-6.1-sol", effort: "high" },
     ]);
   });
 

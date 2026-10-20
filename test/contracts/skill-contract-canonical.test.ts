@@ -23,6 +23,7 @@ const skillNames = [
   "archflow-phase-impl",
   "archflow-status",
   "archflow-constitution",
+  "archflow-run",
 ] as const;
 const normalPhaseSkills = [
   "archflow-prd",

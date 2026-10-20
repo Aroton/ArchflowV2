@@ -169,7 +169,7 @@ echo "ArchFlow bundle installed to $BUNDLE_DIR/"
 echo "ArchFlow launchers installed to $ARCHFLOW_BIN_DIR/"
 echo ""
 if [ "$install_claude" = true ]; then
-  echo "Claude Code: /archflow-init, /archflow-constitution, /archflow-upgrade, /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase-design, /archflow-phase-impl, /archflow-status, /archflow-simple"
+  echo "Claude Code: /archflow-init, /archflow-constitution, /archflow-upgrade, /archflow-explore, /archflow-prd, /archflow-design, /archflow-phase-design, /archflow-phase-impl, /archflow-status, /archflow-simple, /archflow-run"
 fi
 if [ "$install_codex" = true ]; then
   echo 'Codex: $archflow-init, $archflow-constitution, $archflow-upgrade, $archflow-explore, $archflow-prd, $archflow-design, $archflow-phase-design, $archflow-phase-impl, $archflow-status, $archflow-simple'

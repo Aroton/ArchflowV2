@@ -126,6 +126,17 @@ describe("payload input modes and error taxonomy", () => {
     expect(result.stderr).toContain("invalid JSON payload from stdin");
   });
 
+  it("rejects a schema-invalid review payload with a JSON failure envelope", () => {
+    const result = spawnSync(process.execPath, [localBundle, "review", "--producer", "claude"], {
+      cwd: repositoryRoot, env: gitEnvironment, input: JSON.stringify({ schema_version: "1", stage: "plan" }), encoding: "utf8", timeout: TIMEOUT,
+    });
+    expect(result.status).toBe(1);
+    const failure = JSON.parse(result.stdout);
+    expect(failure).toMatchObject({ schema_version: "1", ok: false, error: { code: "INPUT_INVALID" } });
+    expect(failure.error.message).toContain("base_commit");
+    expect(result.stderr).toContain("review failed: INPUT_INVALID");
+  });
+
   it("reports invalid JSON with its source for --input payloads", () => {
     const result = cliFile(repositoryRoot, "hash", "{");
     expect(result.status).toBe(1);

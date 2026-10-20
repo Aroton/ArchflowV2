@@ -91,7 +91,8 @@ export async function captureSimpleContext(workingDirectory: string, input: Simp
   }
   const collect = async (): Promise<ReviewProjectionPlan> => {
     const dirty = (await simpleGit(root, ["diff", "--name-only", "-z", "HEAD", "--"], signal)).split("\0");
-    const untracked = (await simpleGit(root, ["ls-files", "--others", "--exclude-standard", "-z"], signal)).split("\0");
+    // A trailing slash marks a nested repository, such as an agent worktree inside this checkout: never this repository's bytes.
+    const untracked = (await simpleGit(root, ["ls-files", "--others", "--exclude-standard", "-z"], signal)).split("\0").filter((path) => !path.endsWith("/"));
     const paths = [...new Set([...dirty, ...untracked, ...input.paths].filter(Boolean))].sort();
     const entries: ReviewProjectionPlan["entries"][number][] = [];
     let size = 0;

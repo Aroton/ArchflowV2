@@ -10,14 +10,14 @@ schema_version: "1"
 # Fallback roles used only when a connected client is not listed under `producers` below:
 roles:
   counter-reviewer:
-    model: gpt-6-astra
-    effort: low
+    model: gpt-6.1-sol
+    effort: high
   # Used only for phase-design and phase-impl. Older task configs without this
-  # role receive this shipped Sol/medium route as the final fallback; general
+  # role receive this shipped Sol 6.1/low route as the final fallback; general
   # reviewers never inherit the test-owned criteria.
   test-reviewer:
-    model: gpt-6-sol
-    effort: medium
+    model: gpt-6.1-sol
+    effort: low
   # Used only for phase-design. Assesses reasoning remaining after the reviewed design.
   effort-reviewer:
     model: gpt-6-luna
@@ -30,15 +30,15 @@ roles:
 producers:
   claude:
     counter-reviewer:
-      model: gpt-6-astra
-      effort: low
+      model: gpt-6.1-sol
+      effort: high
     adjudicator:
       model: claude-opus-5-5
       effort: high
   antigravity:
     counter-reviewers:
-      - model: gpt-6-astra
-        effort: low
+      - model: gpt-6.1-sol
+        effort: high
       - model: claude-opus-5-5
         effort: medium
     adjudicator:
@@ -135,6 +135,7 @@ approval_rules:
 #   - claude-opus-5-5-max # 59.6%, with fallback
 #   - claude-opus-5-5-xhigh # 59.6%, with fallback
 #   - claude-opus-5-5-high # 56.6%, with fallback
+#   - gpt-6-1-sol-high # 56.1%, secondary-source score, effort unstated
 #   - gpt-6-astra-high # 54.0%
 #   - claude-opus-5-5-medium # 52.5%, with fallback
 #   - claude-fable-5-1-high # 52.0%, with fallback
@@ -163,8 +164,7 @@ implementation:
     - gpt-6-sol-xhigh
     - gpt-5-6-sol-high
     - gpt-5-6-sol-xhigh
-    - gpt-6-astra-low
-    - gpt-6-astra-high
+    - gpt-6-1-sol-high
     - claude-fable-5-1-medium
     - claude-fable-5-1-high
     - claude-opus-5-high

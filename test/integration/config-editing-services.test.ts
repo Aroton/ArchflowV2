@@ -342,7 +342,7 @@ describe("config as an editable input", () => {
     expect(status).toMatchObject({ ok: true, value: { config: { verified: true } } });
     if (!status.ok) return;
     expect(status.value.config_change).toEqual([
-      { path: "roles.counter-reviewer.model", before: "gpt-6-astra", after: "glm-5.4" },
+      { path: "roles.counter-reviewer.model", before: "gpt-6.1-sol", after: "glm-5.4" },
     ]);
     expect(status.value.next_action.code).toBe("run-step");
   });

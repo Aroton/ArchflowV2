@@ -228,3 +228,22 @@ flowchart LR
 Each review pass includes the configured counter-reviewer, a test reviewer, and constitution review when active rules exist. There are no reviewer re-checks, workflow records, implementation-agent recommendations, or automatic commits. Explicit policy triggers still require a human answer in conversation. The final summary distinguishes reviewed work from later fixes.
 
 Connect the ArchFlow MCP server; repository initialization is unnecessary. With no repository configuration, reviewer routing comes from `assets/config.template.yaml` and the connected client identity. Codex defaults to Claude counter-review; test and constitution routes use their shipped settings. Reviewer CLIs still need installation and authentication. Optional `--counter-reviewer`, `--test-reviewer`, and `--adjudicator` flags select routes for that invocation. A missing required reviewer blocks completion rather than silently falling back.
+
+## Orchestrated runs
+
+Use `/archflow-run <name> <ask>` in Claude Code, which it currently needs as the orchestrator, for a large job you want to approve once and then let run:
+
+```mermaid
+flowchart LR
+  A[Plan + run agents] --> B[Cross-model plan review]
+  B --> C{You approve}
+  C --> D[Batches of tasks: implement in worktree → review + cross-model review → fix → merge → commit]
+  D -->|handoff| D
+  D --> E{Declared STOPs}
+```
+
+- **The orchestrator never writes the code itself.** It hands each task to a sub-agent in its own worktree. The orchestrator runs the opposite-family counter-review (`archflow-local review`) on that worktree, then a fresh reviewer checks the work against the task's acceptance criteria and merges in the counter-review's findings. A fresh fixer handles critical findings, then the work is squash-merged and committed. No sub-agent waits on a review or is resumed later: an idle agent's prompt cache is gone after about five minutes.
+- **Everything is tracked in markdown.** Progress, decisions and reviews live in `.archflow/runs/<name>/`. Every few tasks the orchestrator writes a handoff, and you restart it in a fresh session with the same command.
+- **You are involved only when it matters.** That means plan approval, the STOPs you declare, and halts for unresolved critical findings, scope or decision changes, and irreversible actions.
+
+It needs the `archflow-local` launcher and authenticated reviewer CLIs, but no MCP server or task initialization.

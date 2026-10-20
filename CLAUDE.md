@@ -8,7 +8,7 @@ This repo contains one portable Agent Skills source of truth in `skills/`. The i
 
 ## Skills
 
-The canonical set contains ten portable skills:
+The canonical set contains eleven portable skills:
 
 | Skill | Purpose |
 |---------|---------|
@@ -22,12 +22,15 @@ The canonical set contains ten portable skills:
 | `/archflow-phase-impl <task> N` | Implement, verify, review, and commit phase N (fresh session) |
 | `/archflow-simple <ask>` | Plan, MCP-review, execute, and MCP-review standalone work in one session |
 | `/archflow-status [task]` | Check status and next action |
+| `/archflow-run <name> [ask]` | Plan a large job once, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, and cross-model review; markdown state, no MCP workflow state (Claude Code orchestrator) |
 
-In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, `$archflow-status`, and `$archflow-simple`.
+In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-upgrade`, `$archflow-explore`, `$archflow-prd`, `$archflow-design`, `$archflow-phase-design`, `$archflow-phase-impl`, `$archflow-status`, and `$archflow-simple`. `/archflow-run` is installed for every client but currently needs Claude Code as its orchestrator.
 
 ## When ArchFlow applies
 
 ArchFlow orchestration is required only when the current work belongs to an initialized task in `.archflow/tasks/`. Ordinary conversation, planning mode, code review, and direct implementation requests outside an initialized task proceed normally; the presence of `.archflow/`, installed skills, or this repository does not require starting a task. Initialize a task when the user requests the ArchFlow workflow, not merely because they ask for a plan or code changes.
+
+`/archflow-run` is a separate, markdown-driven workflow: its state lives in `.archflow/runs/<name>/` and git, it never uses `archflow_status`/`archflow_apply`, and its own STOP and halt rules (plan approval before code, declared STOPs, cross-model review on every task) govern it instead of the server gates below.
 
 The workflow trust boundaries below apply within an initialized task. Repository engineering, documentation, and installation-safety rules apply to all work.
 
@@ -82,7 +85,7 @@ docs/
   TESTING.md               # test layout and validation matrix
   LIMITATIONS.md           # honest reliability/security boundaries
   workflow/LIFECYCLE.md    # phase graph, pipeline, gates, trust boundaries
-  workflow/SKILLS.md       # the ten skills
+  workflow/SKILLS.md       # the eleven skills
   mcp/SERVER.md            # MCP server, two semantic tools, protocol plumbing
   mcp/DISPATCH.md          # child reviewer dispatch, sandbox, repo views
   cli/COMMANDS.md          # archflow-local adapters, upgrade adoption, degraded mode

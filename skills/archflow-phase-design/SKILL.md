@@ -5,7 +5,7 @@ description: Design and durably review one ArchFlow implementation phase before 
 
 # Phase Design
 
-Recommended producing model: GPT-6 Astra at high effort. This is advisory; it does not switch the current session or alter server authority. Never use Astra max.
+Recommended producing model: GPT-6.1 Sol at high effort. This is advisory; it does not switch the current session or alter server authority.
 
 Treat the arguments as `<task> <phase-number> [--counter-reviewer <model>:<effort>[@<provider>]] [--test-reviewer <model>:<effort>[@<provider>]] [--effort-reviewer <model>:<effort>[@<provider>]] [--adjudicator <model>:<effort>[@<provider>]]`. The four optional trailing flags are order-independent and each may appear at most once. Parse both required positionals first; reject a route flag before them, an unknown trailing flag, a duplicate, a missing flag value, or an empty model, effort, or explicitly present provider. Each route value is one shell argument: split once at the first `:`, then split the remainder once at the first `@`, preserving shell-quoted provider whitespace. Normalize supplied roles once into `invocation.review_routes` under `counter-reviewer`, `test-reviewer`, `effort-reviewer`, and/or `adjudicator`; omit `review_routes` when no flag was supplied. An omitted role independently uses its live phase/base configured route; for phase design, an omitted and unconfigured test reviewer uses the shipped `gpt-5.6-luna` / `xhigh` default.
 

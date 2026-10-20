@@ -4,7 +4,7 @@
 
 Fresh report triage accepts `response` with `decision` and `rationale`; revise also supplies reviewer IDs and verification requests. Archived per-finding `dispositions` remain accepted only for archived structured review evidence. Fresh review feedback carries an explicit issues/no-issues outcome; historical prose keeps its original shape. Requests continue to derive bindings from current authority.
 
-`archflow-local` is the local adapter surface: repository bootstrap, the legacy-upgrade adapter, bounded diagnostics, a degraded human classifier, and the versioned read-only automation observation used by external controllers. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
+`archflow-local` is the local adapter surface: repository bootstrap, the legacy-upgrade adapter, the standalone counter-review (`review`) for `archflow-run` worktrees, bounded diagnostics, a degraded human classifier, and the versioned read-only automation observation used by external controllers. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
 
 Every workflow action itself is composed server-side. PRD, design, phase design, phase implementation, status reporting, and the post-adoption half of a legacy upgrade run through `archflow_status` and `archflow_apply`; the semantic action planner calls the same transport-neutral request composer (`src/state/request-composition.ts`) that once backed a local request-building command, so the CLI and the live MCP surface never maintained parallel request builders. Hand-assembling request fields was measured as the dominant failure mode — in a full PRD loop, 8 of 10 requests were mechanical transcription — and the inversion removes that door entirely: the caller supplies only judgment, the server derives everything mechanical from durable authority. Git stays client-owned; the semantic view returns the exact authorized commit facts and the client stages and commits them itself.
 
@@ -33,6 +33,12 @@ archflow-local <command> [--task <task>] [--input <json-file>]
 | `init` | Set up the repository: `.archflow/` assets + MCP registrations for every host. Refuses a diverged scaffold file; `init --force` refreshes shipped defaults and other scaffold files, including config, while preserving custom constitution rules |
 
 Initialization diagnostics also list generated ArchFlow assets hidden by an ancestor `.gitignore`. Init does not rewrite repository ignore policy; it names the affected paths so the human can review the rule and explicitly add the intended files.
+
+**Model-invoking, no task state:**
+
+| Command | Purpose |
+|---|---|
+| `review` | Dispatch the standalone counter-review, test review and constitution review (the `archflow_review` path) on the current working directory, with no MCP and no task state. Requires `--producer claude\|codex\|antigravity` because the producer decides cross-family routing. The payload is the `archflow_review` input. Because the repository is `process.cwd()`, a sub-agent can review its own git worktree, which the MCP tool cannot: it always reviews the server's startup directory. An invalid payload fails with `INPUT_INVALID` naming each offending field. Untracked nested repositories, such as agent worktrees inside the checkout, are not part of the subject. Exits nonzero on `ok:false`, including `REVIEW_INCOMPLETE`, where the partial reports are still printed. SIGINT/SIGTERM cancel the reviewer children. `/archflow-run` reviewers use it |
 
 **Task-scoped, read-only:**
 

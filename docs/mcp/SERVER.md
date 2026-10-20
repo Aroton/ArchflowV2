@@ -134,7 +134,7 @@ A successful work submission completing a pending human-requested revision requi
 
 ## Stateless review tool
 
-`archflow_review` is advertised alongside `archflow_status` and `archflow_apply`. Its plain-object input selects `plan` or `implementation` and supplies the ask, plan, starting commit, declared file paths, optional reviewer routes, and implementation verification evidence. An optional expected policy digest detects configuration or constitution drift between stages.
+`archflow_review` is advertised alongside `archflow_status` and `archflow_apply`. Its plain-object input selects `plan` or `implementation` and supplies the ask, plan, starting commit, declared file paths, optional reviewer routes, and implementation verification evidence. An optional expected policy digest detects configuration or constitution drift between stages. The tool always reviews the server's startup repository. `archflow-local review` takes the same input and reviews the caller's working directory instead, for example a sub-agent's worktree.
 
 The server resolves the connected Git repository without a task, captures current changes and an immutable baseline view, and dispatches the configured general, test, and constitution reviewers once. It returns readable reports, actual routes, subject/configuration/constitution digests, constitution judgments, human-review reasons, and explicit failures. `ok` means required review coverage completed, not that the reviewed work is correct or approved. Failed siblings leave successful reports available but cannot produce a successful overall result.
 

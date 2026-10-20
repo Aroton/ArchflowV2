@@ -211,7 +211,7 @@ Uncertain approval triggers are first returned to the producer with the rule and
 
 ## Standalone work outside this graph
 
-`archflow-simple` does not create a task or enter this lifecycle. It uses plan → one MCP review and fixes → implementation and verification → one MCP review and fixes. Test and constitution reviewers remain present; effort assessment and reviewer iteration are absent. Explicit policy-triggered human decisions happen in conversation. It never converts or bypasses an initialized task's durable authority.
+`archflow-simple` does not create a task or enter this lifecycle. It uses plan → one MCP review and fixes → implementation and verification → one MCP review and fixes. Test and constitution reviewers remain present; effort assessment and reviewer iteration are absent. Explicit policy-triggered human decisions happen in conversation. It never converts or bypasses an initialized task's durable authority. `archflow-run` likewise stays outside this lifecycle. It keeps its own markdown ledger in `.archflow/runs/`, with skill-level STOP rules, and never creates or advances a task.
 
 ## Reading the current actor boundary
 

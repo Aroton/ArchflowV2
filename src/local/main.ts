@@ -15,6 +15,7 @@ function usageText(): string {
     "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
     "       input-free commands never read stdin",
     "       review-preview --task <task> --producer <claude|codex|antigravity> [--reviewer <id>] [--format text|json]",
+    "       review --producer <claude|codex|antigravity> [--input <json-file>] runs the standalone counter-review of the current working directory (worktrees included)",
     "commands (payload; --task):",
     ...LOCAL_COMMANDS.map((command) => {
       const contract = LOCAL_COMMAND_CONTRACTS[command];
@@ -75,10 +76,15 @@ async function main(): Promise<void> {
   if (parsed.values.force === true && command !== "init") {
     throw new TypeError(`--force is supported only by init`);
   }
-  if (command !== "review-preview" && [parsed.values.producer, parsed.values.reviewer, parsed.values.format].some(value => value !== undefined)) throw new TypeError("--producer, --reviewer and --format are supported only by review-preview");
+  if (command !== "review-preview" && command !== "review" && parsed.values.producer !== undefined) throw new TypeError("--producer is supported only by review and review-preview");
+  if (command !== "review-preview" && [parsed.values.reviewer, parsed.values.format].some(value => value !== undefined)) throw new TypeError("--reviewer and --format are supported only by review-preview");
+  if (command === "review" && !["claude", "codex", "antigravity"].includes(parsed.values.producer ?? "")) throw new TypeError("review requires --producer claude|codex|antigravity to resolve the cross-family review routes");
   if (parsed.values.format !== undefined && !["text", "json"].includes(parsed.values.format)) throw new TypeError("--format must be text or json");
   const value = INPUT_FREE_COMMANDS.has(command) ? undefined : await readInput(command, parsed.values.input);
-  const result = await runLocalCommand({ command, working_directory: process.cwd(), ...(parsed.values.producer === undefined ? {} : { producer: parsed.values.producer }), ...(parsed.values.reviewer === undefined ? {} : { reviewer: parsed.values.reviewer }), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(parsed.values.repository === undefined ? {} : { repository_name: parsed.values.repository }), ...(value === undefined ? {} : { value }), ...(parsed.values.force === true ? { force: true } : {}) });
+  // Cancel reviewer children and dispose the review workspace on interrupt instead of dying mid-dispatch.
+  const controller = new AbortController();
+  if (command === "review") for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
+  const result = await runLocalCommand({ command, working_directory: process.cwd(), signal: controller.signal, ...(parsed.values.producer === undefined ? {} : { producer: parsed.values.producer }), ...(parsed.values.reviewer === undefined ? {} : { reviewer: parsed.values.reviewer }), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(parsed.values.repository === undefined ? {} : { repository_name: parsed.values.repository }), ...(value === undefined ? {} : { value }), ...(parsed.values.force === true ? { force: true } : {}) });
   assertPlainJson(result, "local command result");
   if (result !== null && typeof result === "object" && !Array.isArray(result) && (result as Record<string, unknown>).ok === false) {
     process.exitCode = 1;

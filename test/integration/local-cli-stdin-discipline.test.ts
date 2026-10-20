@@ -94,4 +94,34 @@ describe("archflow-local process", () => {
     expect(stderr).toContain("clean requires current task state");
     child.stdin.destroy();
   }, TEST_TIMEOUT_MS);
+
+  it("rejects a review without a producer before reading its stdin payload", async () => {
+    const child = spawn(process.execPath, [localBundle, "review"], {
+      cwd: repositoryRoot,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stderr = "";
+    let stdout = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
+
+    const result = await new Promise<Readonly<{ code: number | null; signal: NodeJS.Signals | null }>>((resolveResult, reject) => {
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        reject(new Error("archflow-local review waited for stdin before checking --producer"));
+      }, PROCESS_TIMEOUT_MS);
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        clearTimeout(timer);
+        resolveResult({ code, signal });
+      });
+    });
+
+    expect(result).toEqual({ code: 1, signal: null });
+    expect(JSON.parse(stdout)).toMatchObject({ schema_version: "1", ok: false, error: { code: "CONTRACT_INVALID" } });
+    expect(stderr).toContain("review requires --producer claude|codex|antigravity");
+    child.stdin.destroy();
+  }, TEST_TIMEOUT_MS);
 });
