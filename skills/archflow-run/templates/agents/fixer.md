@@ -26,8 +26,9 @@ directory between commands, so begin every command with `cd <worktree> &&`.
    deviate from an accepted decision returns `needs-decision`.
 
 ## Context budget
-Prefer `grep -n` and bounded windows; don't re-read what you just edited. Run `{{agent check command}}` rather than
-the full suite, which the orchestrator runs once per batch.
+Prefer `grep -n` and bounded windows; don't re-read what you just edited. Run only `{{agent check command}}`, scoped to
+the files you changed. The full suite and slow test groups belong to the orchestrator, and a long command outlasts
+your prompt cache; if you think broader verification is needed, say so in NOTES.
 
 ## Done means
 `{{agent check command}}` passes. Don't commit.

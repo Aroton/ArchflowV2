@@ -74,23 +74,26 @@ QUESTIONS: <only if blocked/needs-decision>
 
 - every spawn is a fresh agent that finishes its job in one go and returns;
 - fixes go to a fresh fixer, re-reviews to a fresh reviewer, and decisions to a fresh agent with the decision in its prompt;
-- no sub-agent step waits on long work. The orchestrator runs the counter-review itself and spawns the reviewer once the result exists. The orchestrator is the one session that waits, and its own cache outlives a typical review.
+- no sub-agent step waits on long work. The orchestrator runs the counter-review itself, alongside the reviewer rather than before it, and hands the finished result to a fresh reviewer that merges it. The orchestrator is the one session that waits, and its own cache outlives a typical review;
+- sub-agents run only the plan's agent check, scoped to the files they touched. The full suite and any slow test group belong to the orchestrator; an agent that thinks broader verification is needed says so in NOTES.
 
 ## Per-task loop
 
 1. **Implement.**
    - Spawn the routed implementer with worktree isolation. Its setup brings the fresh worktree to the base commit you name (`git reset --hard <sha>` is safe in a fresh worktree) and installs dependencies.
-   - It writes code and tests, runs the plan's agent check command until it passes, writes `reviews/<id>-impl.md` in its worktree when a fixer or reviewer needs more than its short return, and never commits.
+   - It writes code and tests, runs the plan's targeted agent check command on its changed files until it passes, writes `reviews/<id>-impl.md` in its worktree when a fixer or reviewer needs more than its short return, and never commits.
    - Run tasks in parallel only when their file sets do not overlap: typically a handful at once, limited by machine load more than by the model.
-2. **Counter-review.** When the implementer returns, run the cross-model counter-review on its worktree yourself, in the background (see below). Other tasks keep moving while it runs.
-3. **Review.**
-   - When the counter-review finishes, spawn a fresh routed reviewer. Give it the worktree path, the base commit, the packet, the counter-review's `summary.json`, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout.
-   - It runs the check command, reviews the diff against the acceptance criteria, and writes one findings table that merges its own findings with the counter-review's, then returns its verdict. Read only the verdict line and the table: `grep '^|' <review>`.
+2. **Review, in parallel.** When the implementer returns, start both reviews at once. Other tasks keep moving while they run.
+   - Run the cross-model counter-review on its worktree yourself, in the background (see below).
+   - Spawn a fresh routed reviewer. Give it the worktree path, the base commit, the packet, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It runs the targeted check command, reviews the diff against the acceptance criteria, writes its findings table, and returns its verdict without waiting for the counter-review.
+3. **Merge the counter-review.** When both have finished and the counter-review produced any reports, spawn a fresh reviewer in merge mode, with the review file, the worktree path, the packet, and the counter-review's `summary.json`. It adds every material counter-review point to the table and updates the verdict. Then:
+   - read only the verdict line and the table: `grep '^|' <review>`;
+   - a failed counter-review still blocks the task until it runs or the human waives it, and a `human_review_reasons` entry is a halt for the human (see below). Either way the human sees the merged table.
 4. **Verify (optional).** When you doubt a critical or major finding, send it to a fresh reviewer whose job is to disprove it, ideally with a minimal test. It marks each finding CONFIRMED or REJECTED. Batch doubted findings into one verifier.
 5. **Fix.**
    - Confirmed criticals go to a **fresh** fixer, given the review file, the finding ids, the packet and the worktree path. Never resume the implementer for fixes.
    - Before spawning the fixer, record the worktree's current tree so the re-review can isolate the fixer's changes: `cd <worktree> && git add -A && git write-tree > <run dir>/packets/<id>-pre-r<k+1>.tree && git reset -q`.
-   - When the fixer returns, run the counter-review again, then spawn a fresh reviewer in fix-review mode with that tree and the new summary. It appends to the review file as round `r<k+1>`. Default limit: three rounds. After that, accept, rescope, or halt for the human.
+   - When the fixer returns, record the fixed tree the same way into `<id>-post-r<k+1>.tree`. Then, as in step 2, start the counter-review and a fresh reviewer in fix-review mode together, giving the reviewer both tree IDs (the contents of the two `.tree` files). It appends round `r<k+1>` to the review file; merge the new counter-review into that round as in step 3. Default limit: three rounds. After that, accept, rescope, or halt for the human.
    - Without criticals there is no fix round. Majors and minors go under "Deferred" in `PROGRESS.md`, each routed to the task that picks it up, and into that task's packet.
    - You may make trivial fixups yourself, typically 10 lines or fewer, in the worktree before its last counter-review, so it covers them. A fixup after the last review is listed in the task's review file as unreviewed, and anything beyond formatting gets another round.
 6. **Merge.**
@@ -102,7 +105,7 @@ QUESTIONS: <only if blocked/needs-decision>
    - One commit per task, subject `<name> <id>: <imperative summary>`. The squash merge has staged the task's changes; add the task's own review files by path (`git add <run dir>/reviews/<id>-*`) and the `PROGRESS.md` tick, and commit the index. `git add -A` in this checkout would sweep in other in-flight tasks' review files.
    - Tick the task log in `PROGRESS.md` with the short SHA and the review summary. The tick can ride along with the next commit.
    - Remove the worktree and its branch.
-8. **Full suite.** Run it once per batch, serialized, not once per merge. Agents running it in parallel overload the machine. Bisect a failure by task and send it to a fresh fixer.
+8. **Full suite.** Only the orchestrator runs it, once per batch, serialized, not once per merge. The same goes for any slow test group the agent check leaves out. A sub-agent blocked on a long command outlives its prompt cache, and several running one in parallel overload the machine. Bisect a failure by task and send it to a fresh fixer.
 
 ## Cross-model counter-review
 
@@ -124,7 +127,7 @@ bash <skill dir>/scripts/counter-review.sh <worktree> "$out" claude implementati
 
 Run the last command in the background; reviews often take several minutes. It prints one status line and writes `result.json`, `summary.json` and `exit` into `$out`. `--producer` is the client running the run (`claude` in Claude Code). The subject is every changed and untracked file in the worktree. The review requires the worktree HEAD to still be the base, which holds because implementers and fixers never commit.
 
-A nonzero exit is not a pass. An `INPUT_INVALID` error names the input to correct. A failed reviewer route may be retried once; if it still fails:
+A nonzero exit is not a pass. An `INPUT_INVALID` error names the input to correct. `SUBJECT_CHANGED` from a review that ran beside a reviewer means something wrote into the worktree meanwhile, usually the agent check: fix the check command in `PLAN.md` and rerun the counter-review on its own. A failed reviewer route may be retried once; if it still fails:
 
 - the task is blocked until the review runs;
 - the human may waive it for that task;

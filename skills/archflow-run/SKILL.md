@@ -47,7 +47,7 @@ Write `PLAN.md` from `templates/PLAN.md`. It holds:
 - requirements;
 - the architecture decisions tasks depend on;
 - invariants every agent follows;
-- the check command agents run on their own changes, and the full suite;
+- the agent check command: targeted tests for the changed files plus fast checks such as typecheck and lint, quick enough that no sub-agent waits on it, and leaving the worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored) because a reviewer runs it while the counter-review reads the same worktree; and the full suite, which only the orchestrator runs;
 - model routing per kind of task;
 - milestones;
 - the task table;
@@ -79,7 +79,7 @@ Follow `PROTOCOL.md`:
    - Read only the run's control files: `PLAN.md` by section, `PROGRESS.md` and `DECISIONS.md`.
    - Reconcile the task log with `git log`; git wins.
    - Hand any uncommitted leftovers from a dead session to a reviewer before anything else.
-2. **Run tasks through the per-task loop:** packet, implementer in an isolated worktree, your own run of the counter-review on that worktree, a fresh reviewer that merges it with its own review, a fresh fixer for critical findings, squash-merge, one commit per task. Run independent tasks in parallel when their files do not overlap. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, re-review, or answered question goes to a fresh agent.
+2. **Run tasks through the per-task loop:** packet, implementer in an isolated worktree, a fresh reviewer and your own counter-review of that worktree in parallel, a fresh merge-mode reviewer that folds the finished counter-review into the findings, a fresh fixer for critical findings, squash-merge, one commit per task. Run independent tasks in parallel when their files do not overlap. Sub-agents run only targeted tests; full suites and slow test groups are yours. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, re-review, or answered question goes to a fresh agent.
 3. **At a milestone end:**
    - Run the milestone's declared gate lenses.
    - If the next milestone is "detailed at start", write its task rows and counter-review them with `stage:"plan"` before spawning any of them. That review needs no human gate unless the milestone changes requirements scope or an accepted decision.

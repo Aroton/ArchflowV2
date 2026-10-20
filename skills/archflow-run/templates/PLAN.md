@@ -21,9 +21,14 @@ goes to every cross-model counter-review.>
 ## 5. Commands
 | Purpose | Command |
 |---|---|
-| Agent check (changed files only: related tests, typecheck, lint) | `<command>` |
-| Full suite (orchestrator, once per batch) | `<command>` |
+| Agent check (targeted: tests for the changed files, typecheck, lint; never a whole suite) | `<command taking the changed files>` |
+| Full suite and slow test groups (orchestrator only, once per batch) | `<command>` |
 | Install dependencies in a fresh worktree | `<command>` |
+
+Sub-agents run only the agent check. A sub-agent blocked on a long test command outlives its prompt cache, so
+anything slow belongs to the orchestrator's full-suite run. The agent check must leave the worktree unchanged (no
+auto-fix, no snapshot writes, outputs gitignored): a reviewer runs it while the counter-review reads the same worktree,
+and a changed file fails that review with `SUBJECT_CHANGED`.
 
 ## 6. Routing
 | Kind of work | Agent (`subagent_type`) | Model / effort |

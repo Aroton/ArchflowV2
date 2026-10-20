@@ -242,7 +242,7 @@ flowchart LR
   D --> E{Declared STOPs}
 ```
 
-- **The orchestrator never writes the code itself.** It hands each task to a sub-agent in its own worktree. The orchestrator runs the opposite-family counter-review (`archflow-local review`) on that worktree, then a fresh reviewer checks the work against the task's acceptance criteria and merges in the counter-review's findings. A fresh fixer handles critical findings, then the work is squash-merged and committed. No sub-agent waits on a review or is resumed later: an idle agent's prompt cache is gone after about five minutes.
+- **The orchestrator never writes the code itself.** It hands each task to a sub-agent in its own worktree. The orchestrator runs the opposite-family counter-review (`archflow-local review`) on that worktree while a fresh reviewer checks the work against the task's acceptance criteria in parallel; when both finish, another fresh reviewer merges the counter-review's findings into the same table. A fresh fixer handles critical findings, then the work is squash-merged and committed. No sub-agent waits on a review or is resumed later: an idle agent's prompt cache is gone after about five minutes. For the same reason sub-agents run only targeted tests on the files they touched; the orchestrator runs the full suite once per batch.
 - **Everything is tracked in markdown.** Progress, decisions and reviews live in `.archflow/runs/<name>/`. Every few tasks the orchestrator writes a handoff, and you restart it in a fresh session with the same command.
 - **You are involved only when it matters.** That means plan approval, the STOPs you declare, and halts for unresolved critical findings, scope or decision changes, and irreversible actions.
 

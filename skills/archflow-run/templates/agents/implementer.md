@@ -32,7 +32,9 @@ Every tool result stays in your context and is re-read on every later turn.
 - `grep -n` first, then read bounded windows. Don't print whole large files, and don't re-read a file you just edited.
 - Query JSON with `jq`. Pipe long output through `| tail -40`.
 - Use the packet's verbatim reference copies; fetch only what it lacks, and say so if you could not get one.
-- Run `{{agent check command}}` rather than the full suite, which the orchestrator runs once per batch.
+- Run only `{{agent check command}}`, scoped to the files you changed. The full suite and slow test groups belong to
+  the orchestrator, and a long command outlasts your prompt cache; if you think broader verification is needed, say so
+  in NOTES.
 
 ## Done means
 `{{agent check command}}` passes. Do **not** commit: the orchestrator merges after review. When you return you are
