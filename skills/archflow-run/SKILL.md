@@ -79,9 +79,10 @@ Follow `PROTOCOL.md`:
    - Read only the run's control files: `PLAN.md` by section, `PROGRESS.md` and `DECISIONS.md`.
    - Reconcile the task log with `git log`; git wins.
    - Hand any uncommitted leftovers from a dead session to a reviewer before anything else.
-2. **Run tasks through the per-task loop:** packet, implementer in an isolated worktree, a fresh reviewer and your own counter-review of that worktree in parallel, a fresh merge-mode reviewer that folds the finished counter-review into the findings, a fresh fixer for critical findings, squash-merge, one commit per task. Run independent tasks in parallel when their files do not overlap. Sub-agents run only targeted tests; full suites and slow test groups are yours. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, re-review, or answered question goes to a fresh agent.
+2. **Run tasks through the per-task loop:** packet, implementer in an isolated worktree, a fresh reviewer and your own counter-review of that worktree in parallel, a fresh merge-mode reviewer that folds the finished counter-review into the findings, your decision on each finding (fix now, defer, or dismiss: criticals always get fixed, and anything else gets fixed when leaving it would cost more later), a fresh fixer for what gets fixed now, squash-merge, one commit per task. Run independent tasks in parallel when their files do not overlap. Sub-agents run only targeted tests; full suites and slow test groups are yours. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, re-review, or answered question goes to a fresh agent.
 3. **At a milestone end:**
    - Run the milestone's declared gate lenses.
+   - Run the deferral pass: re-decide every open deferred finding as fix, carry, or close.
    - If the next milestone is "detailed at start", write its task rows and counter-review them with `stage:"plan"` before spawning any of them. That review needs no human gate unless the milestone changes requirements scope or an accepted decision.
 4. **Hand off.**
    - When to stop: after the batch (typically 8–10 merged tasks), or earlier when this session's context grows heavy.
@@ -97,7 +98,7 @@ At a declared STOP:
 - Set the status to `AWAITING USER (STOP <n>)`, commit, and present the report conversationally.
 - Resume only on the human's explicit answer, and record it in `PROGRESS.md`.
 
-When the last milestone passes, write a final STOP report and set the status to `COMPLETE` after the human accepts it. Then:
+When the last milestone passes, run the final deferral pass: every open deferred finding is fixed or closed with a reason. Write a final STOP report that lists each won't-fix with its reason, and set the status to `COMPLETE` after the human accepts it. Then:
 
 - Propose durable, task-independent conventions the run discovered for the repository's `CLAUDE.md` or `AGENTS.md`.
 - Remind the human that `.archflow/runs/<name>/` and the run's generated agents are working files to delete before opening a PR.

@@ -89,12 +89,22 @@ QUESTIONS: <only if blocked/needs-decision>
 3. **Merge the counter-review.** When both have finished and the counter-review produced any reports, spawn a fresh reviewer in merge mode, with the review file, the worktree path, the packet, and the counter-review's `summary.json`. It adds every material counter-review point to the table and updates the verdict. Then:
    - read only the verdict line and the table: `grep '^|' <review>`;
    - a failed counter-review still blocks the task until it runs or the human waives it, and a `human_review_reasons` entry is a halt for the human (see below). Either way the human sees the merged table.
-4. **Verify (optional).** When you doubt a critical or major finding, send it to a fresh reviewer whose job is to disprove it, ideally with a minimal test. It marks each finding CONFIRMED or REJECTED. Batch doubted findings into one verifier.
-5. **Fix.**
-   - Confirmed criticals go to a **fresh** fixer, given the review file, the finding ids, the packet and the worktree path. Never resume the implementer for fixes.
+4. **Verify (optional).** When you doubt a finding you would act on, send it to a fresh reviewer whose job is to disprove it, ideally with a minimal test. It marks each finding CONFIRMED or REJECTED. Batch doubted findings into one verifier.
+5. **Decide and fix.** Decide every finding in the merged table, not by severity alone. Severity tells you how bad it is; whether to fix it now depends on what leaving it costs.
+   - **Fix now** every confirmed critical, and any major or minor where leaving it costs more later:
+     - it has knock-on effects: dependent tasks build on the code, it shapes an interface or pattern others will copy, or it would make a later fix touch more files;
+     - it is a real bug, not a style point: wrong output in an edge case, lost data, a security or resource leak;
+     - the fix is cheap now while the context is fresh, and expensive to rebuild later;
+     - no later task touches that code, so deferring means nobody owns it.
+   - **Defer** when it does not matter yet: it is cosmetic, a task that will rework that code anyway is the better place for it, or fixing it now would widen this task's scope. Record why in `PROGRESS.md` (see below).
+   - **Dismiss** a finding that is wrong or not worth doing at all, with the reason in the review file.
+   - Write each decision as a line under the round's table in the review file: `<finding id>: fix | defer → <owner> | dismiss — <reason>`.
+   - Fix-now findings go to a **fresh** fixer, given the review file, the finding ids, the packet and the worktree path. Never resume the implementer for fixes.
    - Before spawning the fixer, record the worktree's current tree so the re-review can isolate the fixer's changes: `cd <worktree> && git add -A && git write-tree > <run dir>/packets/<id>-pre-r<k+1>.tree && git reset -q`.
-   - When the fixer returns, record the fixed tree the same way into `<id>-post-r<k+1>.tree`. Then, as in step 2, start the counter-review and a fresh reviewer in fix-review mode together, giving the reviewer both tree IDs (the contents of the two `.tree` files). It appends round `r<k+1>` to the review file; merge the new counter-review into that round as in step 3. Default limit: three rounds. After that, accept, rescope, or halt for the human.
-   - Without criticals there is no fix round. Majors and minors go under "Deferred" in `PROGRESS.md`, each routed to the task that picks it up, and into that task's packet.
+   - When the fixer returns, record the fixed tree the same way into `<id>-post-r<k+1>.tree`. Then, as in step 2, start the counter-review and a fresh reviewer in fix-review mode together, giving the reviewer both tree IDs (the contents of the two `.tree` files). It appends round `r<k+1>` to the review file; merge the new counter-review into that round and decide it as above.
+   - When nothing needs fixing now, there is no fix round. Later rounds raise the bar: a re-review can always find another minor, so fix only what still matters.
+   - Default limit: three fix rounds. After that, defer or dismiss what is left that is not critical, or rescope the task. A critical still unresolved is a halt for the human.
+   - Deferred findings go under "Deferred findings" in `PROGRESS.md`, each with a reason and the task that owns it, and into that task's packet.
    - You may make trivial fixups yourself, typically 10 lines or fewer, in the worktree before its last counter-review, so it covers them. A fixup after the last review is listed in the task's review file as unreviewed, and anything beyond formatting gets another round.
 6. **Merge.**
    - In the worktree, run `git add -A` and make a scratch commit.
@@ -103,7 +113,7 @@ QUESTIONS: <only if blocked/needs-decision>
    - Never use a bare `git stash`: the stash stack is shared with every other worktree and session.
 7. **Commit.**
    - One commit per task, subject `<name> <id>: <imperative summary>`. The squash merge has staged the task's changes; add the task's own review files by path (`git add <run dir>/reviews/<id>-*`) and the `PROGRESS.md` tick, and commit the index. `git add -A` in this checkout would sweep in other in-flight tasks' review files.
-   - Tick the task log in `PROGRESS.md` with the short SHA and the review summary. The tick can ride along with the next commit.
+   - Tick the task log in `PROGRESS.md` with the short SHA and the review summary. Close each deferred finding this task carried, using the reviewer's `carried` rows: fixed, with the SHA, or still open and routed to a new owner. The tick can ride along with the next commit.
    - Remove the worktree and its branch.
 8. **Full suite.** Only the orchestrator runs it, once per batch, serialized, not once per merge. The same goes for any slow test group the agent check leaves out. A sub-agent blocked on a long command outlives its prompt cache, and several running one in parallel overload the machine. Bisect a failure by task and send it to a fresh fixer.
 
@@ -162,9 +172,21 @@ A milestone ends with the gate lenses `PLAN.md` declares. A useful default set, 
 
 Add the whole-milestone counter-review when the milestone is large or risky.
 
-Verdict: PASS, PASS-WITH-DEFERRALS, or FAIL. Any confirmed critical is a FAIL. A FAIL produces fix tasks, and then only the failed lens re-runs.
+Verdict: PASS, PASS-WITH-DEFERRALS, or FAIL. Any confirmed critical is a FAIL. A FAIL produces fix tasks, and then only the failed lens re-runs. Decide a gate's lesser findings the way the per-task loop does: one with knock-on effects for the next milestone becomes a fix task now.
 
 Record a gate row in `PROGRESS.md` and give the human a short summary in chat. A gate is not a STOP unless the plan declares one there.
+
+## Deferral pass
+
+Deferring is a decision to revisit, not to forget. At each milestone end, after the gate, go over every open entry under "Deferred findings":
+
+- **Fix:** it matters now. The milestone's work may have raised its cost, or its owner never picked it up. Make it a fix task, or add it to an upcoming task's goal.
+- **Carry:** it still does not matter yet and a later task owns it. Confirm the owner exists in the plan.
+- **Close:** it no longer applies, or it is not worth fixing. Mark it closed with a reason: already fixed, obsolete, or won't fix because of what it would cost.
+
+When the list is long, or you are not sure an entry still applies, send it to a fresh reviewer in deferral mode, which checks each entry against the current code and recommends one of the three. You decide.
+
+At the last milestone nothing can carry. Every open entry is fixed or closed before the final STOP. The final STOP report lists each won't-fix with its reason, so the human can overturn any of them.
 
 When the next milestone is "detailed at start":
 
@@ -181,8 +203,9 @@ Reviewers write one table per round:
 | id | severity | source | file:line | claim | failure scenario | suggested fix |
 ```
 
-- `source` is `self`, `counter`, `tests`, or `constitution`.
+- `source` is `self`, `counter`, `tests`, `constitution`, or `carried` (a deferred finding this task was meant to pick up; the claim says whether it is fixed).
 - The suggested fix must be concrete enough for a fixer with no other context.
+- When a finding has knock-on effects, such as later tasks building on it or a pattern others will copy, the failure scenario says so. That is what decides fix now or defer.
 - Every material counter-review point gets a row. A reviewer that disagrees with one keeps the row and gives its evidence; you decide.
 
 Severity:

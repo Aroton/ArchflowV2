@@ -16,7 +16,9 @@ Resume: run `/archflow-run <name>` in a fresh session.
 <!-- one line per merged task: - <id> — <short sha> — reviews/<id>-r<k>.md (critical/major/minor) <notes; carried ids → owner> -->
 
 ## Deferred findings
-<!-- - <review id>-<finding id>: <claim> → <owning task> -->
+<!-- open:   - [ ] <review id>-<finding id> (<severity>): <claim> → <owning task> — deferred because <reason>
+     closed: - [x] ... — fixed <short sha> | closed: <already fixed | obsolete | won't fix: reason> -->
+<!-- A deferral pass after each milestone gate re-decides every open entry; none stay open past the final STOP. -->
 
 ## Gate log
 | Gate | Date | Lenses (c/M/m per lens) | Verdict |

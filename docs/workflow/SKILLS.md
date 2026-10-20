@@ -165,10 +165,10 @@ Review output is actionable feedback or explicit `no_issues_found` signoff. The 
 flowchart LR
   P[Plan + run agents] --> R0[Cross-model plan review]
   R0 --> S0{STOP 0: human approves}
-  S0 --> B[Batch: packet → implementer worktree → reviewer + cross-model review → fixer if critical → squash-merge → commit]
+  S0 --> B[Batch: packet → implementer worktree → reviewer + cross-model review → decide each finding → fixer for fix-now → squash-merge → commit]
   B -->|~8–10 tasks| H[Handoff in PROGRESS.md → fresh session]
   H --> B
-  B --> G[Milestone gate lenses]
+  B --> G[Milestone gate lenses → deferral pass]
   G -->|declared STOP| S1{Human STOP}
   G --> B
 ```
@@ -181,6 +181,8 @@ flowchart LR
 - commits stay local.
 
 **Why review is the part that stays tooled.** ArchFlow's counter-review is what this workflow lacked when it was run by hand. Routing, snapshot views and structured reports are worth reusing rather than re-prompting. When an implementer returns, the orchestrator runs `archflow-local review` on its worktree through the skill's `scripts/counter-review.sh`. That dispatches the opposite-family counter-reviewer, the test reviewer and the constitution reviewer. At the same moment the orchestrator spawns a fresh reviewer sub-agent, which does its own acceptance check without waiting for the counter-review. When both finish, another fresh reviewer, in merge mode, folds the counter-review into the same findings table. A counter-review that cannot run blocks the merge; it is never replaced by self-review.
+
+**Why findings are decided, not sorted.** Severity says how bad a finding is, not whether to fix it now. The orchestrator always fixes criticals. It also fixes a major or minor when leaving it would cost more later: the finding has knock-on effects on tasks that build on it, it is a real bug rather than a style point, or no later task would own it. It defers what does not matter yet, with a reason and an owning task. A deferral is a decision to revisit, so after each milestone gate a deferral pass re-decides every open entry: fix it, carry it, or close it. Nothing stays open past the final STOP, whose report lists each won't-fix so the human can overturn it. Fix rounds stop at a default of three, and later rounds fix only what still matters, so the loop does not chase minors.
 
 **Why no sub-agent waits or is resumed.** A sub-agent's prompt cache lasts about five minutes. An agent that idles while a review runs, or is resumed for a fix, re-reads its whole context uncached. So the orchestrator, whose own cache lasts longer, does all the waiting, and every fix, re-review or answered question goes to a fresh agent that reads one packet and one review file. For the same reason sub-agents run only targeted tests for the files they touched; the full suite and any slow test groups are the orchestrator's, once per batch.
 
