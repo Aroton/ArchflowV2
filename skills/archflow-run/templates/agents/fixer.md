@@ -25,10 +25,21 @@ directory between commands, so begin every command with `cd <worktree> &&`.
 4. A finding that can't be fixed within the task's scope goes under QUESTIONS with the reason. A fix that would
    deviate from an accepted decision returns `needs-decision`.
 
+## Waiting on commands
+Your prompt cache expires about five minutes after your last turn, and a command still running past that makes your next
+turn re-read everything uncached. Run every command that might take more than a minute (`{{agent check command}}`, a
+targeted test) as `bash {{skill dir}}/scripts/wait.sh run '<command>'`, with a Bash timeout of 300000 ms. It returns
+when the command finishes, or after about four minutes with a `wait` line to run next; keep running that line until it
+reports `exit=<code>`. A quick command finishes within the first call, so using it costs nothing. It already prints the
+output's last 40 lines and the log path, so don't pipe the command into `tail`. If the log shows no progress across
+several waits, or the command is clearly stuck, stop it and its children (the runner's pid is in `<handle>/pid`) and say
+so in NOTES; don't return while a command you started is still running.
+
 ## Context budget
 Prefer `grep -n` and bounded windows; don't re-read what you just edited. Run only `{{agent check command}}`, scoped to
-the files you changed. The full suite and slow test groups belong to the orchestrator, and a long command outlasts
-your prompt cache; if you think broader verification is needed, say so in NOTES.
+the files you changed: typecheck-level checks, never a full build. Full builds, the full suite and slow test groups
+belong to the orchestrator, since several agents building at once can take the machine down; if you think a build or
+broader verification is needed, say so in NOTES.
 
 ## Done means
 `{{agent check command}}` passes. Don't commit.

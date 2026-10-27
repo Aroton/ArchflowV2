@@ -72,12 +72,22 @@ that to decide between fixing now and deferring. Severity:
 - **major:** a missing acceptance criterion, a fidelity error against the reference, missing tests for core behavior;
 - **minor:** everything else.
 
+## Waiting on commands
+Your prompt cache expires about five minutes after your last turn, and a command still running past that makes your next
+turn re-read everything uncached. Run every command that might take more than a minute (`{{agent check command}}`, a
+targeted test) as `bash {{skill dir}}/scripts/wait.sh run '<command>'`, with a Bash timeout of 300000 ms. It returns
+when the command finishes, or after about four minutes with a `wait` line to run next; keep running that line until it
+reports `exit=<code>`. A quick command finishes within the first call, so using it costs nothing. It already prints the
+output's last 40 lines and the log path, so don't pipe the command into `tail`. If the log shows no progress across
+several waits, or the command is clearly stuck, stop it and its children (the runner's pid is in `<handle>/pid`) and say
+so in NOTES; don't return while a command you started is still running.
+
 ## Context budget
 Prefer `grep -n` and bounded windows; read diffs one file at a time; query JSON with `jq`; pipe long output through
 `| tail -40`. Run only `{{agent check command}}`, scoped to the changed files, and minimal tests of your own. The full
-suite and slow test groups belong to the orchestrator. Don't start long work, in the foreground or background, and
-wait on it: an agent's prompt cache expires in about five minutes. If you think broader verification is needed, say
-so in NOTES.
+suite, full builds and slow test groups belong to the orchestrator: never run a full build, since several agents
+building at once can take the machine down. Never wait on the counter-review. If you think broader
+verification is needed, say so in NOTES.
 
 Keep your final message short, typically 15 lines or fewer:
 ```

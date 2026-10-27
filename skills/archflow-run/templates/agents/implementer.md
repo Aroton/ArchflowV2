@@ -15,7 +15,7 @@ Your message gives the base commit, setup, extra pointers, and output paths.
 
 ## Setup
 Bring this fresh worktree to the base commit your message names (`git reset --hard <sha>` is safe here, since nothing
-in it is yours yet), then run `{{install command}}`. Never use `git stash`.
+in it is yours yet), then run `{{install command}}` the way "Waiting on commands" describes. Never use `git stash`.
 
 ## Rules
 1. **Reference and validation.** {{The standing guidance for this kind of work: what to compare against, how to
@@ -27,14 +27,24 @@ in it is yours yet), then run `{{install command}}`. Never use `git stash`.
 4. **Tests next to the code.** Every acceptance criterion gets a test.
 5. {{Repository conventions agents keep getting wrong.}}
 
+## Waiting on commands
+Your prompt cache expires about five minutes after your last turn, and a command still running past that makes your next
+turn re-read everything uncached. Run every command that might take more than a minute (`{{install command}}`,
+`{{agent check command}}`, a targeted test) as `bash {{skill dir}}/scripts/wait.sh run '<command>'`, with a Bash timeout
+of 300000 ms. It returns when the command finishes, or after about four minutes with a `wait` line to run next; keep
+running that line until it reports `exit=<code>`. A quick command finishes within the first call, so using it costs
+nothing. It already prints the output's last 40 lines and the log path, so don't pipe the command into `tail`. If the
+log shows no progress across several waits, or the command is clearly stuck, stop it and its children (the runner's pid
+is in `<handle>/pid`) and say so in NOTES; don't return while a command you started is still running.
+
 ## Context budget
 Every tool result stays in your context and is re-read on every later turn.
 - `grep -n` first, then read bounded windows. Don't print whole large files, and don't re-read a file you just edited.
 - Query JSON with `jq`. Pipe long output through `| tail -40`.
 - Use the packet's verbatim reference copies; fetch only what it lacks, and say so if you could not get one.
-- Run only `{{agent check command}}`, scoped to the files you changed. The full suite and slow test groups belong to
-  the orchestrator, and a long command outlasts your prompt cache; if you think broader verification is needed, say so
-  in NOTES.
+- Run only `{{agent check command}}`, scoped to the files you changed: typecheck-level checks, never a full build. Full
+  builds, the full suite and slow test groups belong to the orchestrator, since several agents building at once can
+  take the machine down; if you think a build or broader verification is needed, say so in NOTES.
 
 ## Done means
 `{{agent check command}}` passes. Do **not** commit: the orchestrator merges after review. When you return you are

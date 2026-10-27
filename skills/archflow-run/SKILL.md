@@ -47,7 +47,7 @@ Write `PLAN.md` from `templates/PLAN.md`. It holds:
 - requirements;
 - the architecture decisions tasks depend on;
 - invariants every agent follows;
-- the agent check command: targeted tests for the changed files plus fast checks such as typecheck and lint, quick enough that no sub-agent waits on it, and leaving the worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored) because a reviewer runs it while the counter-review reads the same worktree; and the full suite, which only the orchestrator runs;
+- the agent check command: targeted tests for the changed files plus fast checks such as typecheck and lint, never a full build, as quick as the targeted scope allows (agents wait on it through `scripts/wait.sh`), and leaving the worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored) because a reviewer runs it while the counter-review reads the same worktree; and the full build and full suite command, which only the orchestrator runs;
 - model routing per kind of task;
 - milestones;
 - the task table;
@@ -55,7 +55,7 @@ Write `PLAN.md` from `templates/PLAN.md`. It holds:
 
 Detail the first milestone's tasks now. Later milestones may be marked "detailed at start" when earlier work should shape them. Size tasks so one agent finishes each in a single focused spawn, and split anything larger before it is spawned. Create `DECISIONS.md`, `PROGRESS.md` from `templates/PROGRESS.md`, `reviews/`, and a `.gitignore` containing `packets/`.
 
-Generate run-specific agents when the run has standing guidance that applies across many tasks of one kind. Examples: the reference to compare against and how to validate against it, porting rules, domain invariants, review lenses. Build them from `templates/agents/` into `.claude/agents/<name>-<role>.md`, one per distinct kind of work, and list them in the plan's routing table. Standing guidance belongs in the agent; anything specific to one task belongs in its packet. When no such guidance exists, generate the agents from the scaffolds with only the run's paths and commands filled in. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance as a short `BRIEF.md` in the run directory; every counter-review receives it.
+Generate run-specific agents when the run has standing guidance that applies across many tasks of one kind. Examples: the reference to compare against and how to validate against it, porting rules, domain invariants, review lenses. Build them from `templates/agents/` into `.claude/agents/<name>-<role>.md`, one per distinct kind of work, and list them in the plan's routing table. Standing guidance belongs in the agent; anything specific to one task belongs in its packet. When no such guidance exists, generate the agents from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance as a short `BRIEF.md` in the run directory; every counter-review receives it.
 
 Counter-review the plan before the human sees it. Write the human's ask to the run's `packets/plan-cr<k>/ask.txt` and the plan plus each generated agent's standing guidance to `plan.txt` beside it. Then run `bash <this skill directory>/scripts/counter-review.sh <repository root> <that directory> claude plan`, in the background. The review's subject is every uncommitted run and agent file. Read every report in `summary.json`. Fix supported defects and dismiss the rest with reasons.
 
@@ -79,14 +79,14 @@ Follow `PROTOCOL.md`:
    - Read only the run's control files: `PLAN.md` by section, `PROGRESS.md` and `DECISIONS.md`.
    - Reconcile the task log with `git log`; git wins.
    - Hand any uncommitted leftovers from a dead session to a reviewer before anything else.
-2. **Run tasks through the per-task loop:** packet, implementer in an isolated worktree, a fresh reviewer and your own counter-review of that worktree in parallel, a fresh merge-mode reviewer that folds the finished counter-review into the findings, your decision on each finding (fix now, defer, or dismiss: criticals always get fixed, and anything else gets fixed when leaving it would cost more later), a fresh fixer for what gets fixed now, squash-merge, one commit per task. Run independent tasks in parallel when their files do not overlap. Sub-agents run only targeted tests; full suites and slow test groups are yours. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, re-review, or answered question goes to a fresh agent.
+2. **Run tasks through the per-task loop:** packet, implementer in an isolated worktree, a fresh reviewer and your own counter-review of that worktree in parallel, a fresh merge-mode reviewer that folds the finished counter-review into the findings, your decision on each finding (fix now, defer, or dismiss: criticals always get fixed, and anything else gets fixed when leaving it would cost more later), a fresh fixer for what gets fixed now, squash-merge, one commit per task. Run independent tasks in parallel when their files do not overlap. Sub-agents run only targeted tests and typecheck-level checks; full builds, full suites and slow test groups are yours. A sub-agent that waits on a command does so through `scripts/wait.sh`, which returns about every four minutes so its cache stays warm. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, re-review, or answered question goes to a fresh agent.
 3. **At a milestone end:**
    - Run the milestone's declared gate lenses.
    - Run the deferral pass: re-decide every open deferred finding as fix, carry, or close.
    - If the next milestone is "detailed at start", write its task rows and counter-review them with `stage:"plan"` before spawning any of them. That review needs no human gate unless the milestone changes requirements scope or an accepted decision.
 4. **Hand off.**
    - When to stop: after the batch (typically 8–10 merged tasks), or earlier when this session's context grows heavy.
-   - What to do: run the full suite, write the session handoff into `PROGRESS.md`, commit, and tell the human to start a fresh session with this skill and the run name.
+   - What to do: run the full build and suite, write the session handoff into `PROGRESS.md`, commit, and tell the human to start a fresh session with this skill and the run name.
 
 Keep the orchestrator's context small: it is re-read on every turn. Prefer reviewer verdict lines and findings tables to whole reviews or diffs, and bounded windows or delegation to reading large design or source files whole. Let completion notifications wake you instead of polling.
 

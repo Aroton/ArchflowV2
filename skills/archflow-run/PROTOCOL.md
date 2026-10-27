@@ -74,8 +74,9 @@ QUESTIONS: <only if blocked/needs-decision>
 
 - every spawn is a fresh agent that finishes its job in one go and returns;
 - fixes go to a fresh fixer, re-reviews to a fresh reviewer, and decisions to a fresh agent with the decision in its prompt;
-- no sub-agent step waits on long work. The orchestrator runs the counter-review itself, alongside the reviewer rather than before it, and hands the finished result to a fresh reviewer that merges it. The orchestrator is the one session that waits, and its own cache outlives a typical review;
-- sub-agents run only the plan's agent check, scoped to the files they touched. The full suite and any slow test group belong to the orchestrator; an agent that thinks broader verification is needed says so in NOTES.
+- no sub-agent step waits on a review. The orchestrator runs the counter-review itself, alongside the reviewer rather than before it, and hands the finished result to a fresh reviewer that merges it. The orchestrator is the one session that waits, and its own cache outlives a typical review;
+- sub-agents run only the plan's agent check, scoped to the files they touched: targeted tests plus typecheck-level checks such as `tsc --noEmit` or `cargo check`. Full builds (a whole-workspace or release compile, a bundle), the full suite and any slow test group belong to the orchestrator. A full build in each of several parallel agents can take the machine down. An agent that thinks a build or broader verification is needed says so in NOTES;
+- a sub-agent that waits on a command keeps its cache warm. A slow host or a command whose result the agent genuinely needs can still outlast five minutes, so agents run installs, targeted tests and the agent check through this skill's `scripts/wait.sh`. It runs the command in the background and returns after about four minutes when the command is still running; each return is a small turn that refreshes the cache, and the agent waits again until the command finishes. A quick command finishes within the first wait, so agents use it for any command that might take more than a minute. Generated agents carry the script's absolute path.
 
 ## Per-task loop
 
@@ -115,7 +116,7 @@ QUESTIONS: <only if blocked/needs-decision>
    - One commit per task, subject `<name> <id>: <imperative summary>`. The squash merge has staged the task's changes; add the task's own review files by path (`git add <run dir>/reviews/<id>-*`) and the `PROGRESS.md` tick, and commit the index. `git add -A` in this checkout would sweep in other in-flight tasks' review files.
    - Tick the task log in `PROGRESS.md` with the short SHA and the review summary. Close each deferred finding this task carried, using the reviewer's `carried` rows: fixed, with the SHA, or still open and routed to a new owner. The tick can ride along with the next commit.
    - Remove the worktree and its branch.
-8. **Full suite.** Only the orchestrator runs it, once per batch, serialized, not once per merge. The same goes for any slow test group the agent check leaves out. A sub-agent blocked on a long command outlives its prompt cache, and several running one in parallel overload the machine. Bisect a failure by task and send it to a fresh fixer.
+8. **Full suite and build.** Only the orchestrator runs them, once per batch, serialized, not once per merge. The same goes for any slow test group the agent check leaves out. Several sub-agents running it in parallel overload the machine, and each one spends the wait in keep-alive turns. Bisect a failure by task and send it to a fresh fixer.
 
 ## Cross-model counter-review
 
@@ -159,7 +160,7 @@ git worktree add -q --detach "$wt" "$start"
 git diff --binary "$start" HEAD -- . ':!.archflow/runs' | git -C "$wt" apply --index
 ```
 
-Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds the milestone's goal and its task rows, `plan.txt` the plan's architecture and invariants plus `BRIEF.md`, and `verification.txt` the full-suite result. Remove the worktree afterwards with `git worktree remove --force "$wt"`. A milestone over the review's 25 MiB snapshot limit is reviewed per lane instead.
+Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds the milestone's goal and its task rows, `plan.txt` the plan's architecture and invariants plus `BRIEF.md`, and `verification.txt` the full build and suite result. Remove the worktree afterwards with `git worktree remove --force "$wt"`. A milestone over the review's 25 MiB snapshot limit is reviewed per lane instead.
 
 ## Milestones and gates
 
