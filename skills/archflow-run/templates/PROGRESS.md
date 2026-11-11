@@ -2,7 +2,7 @@
 
 **STATUS: PLANNING**
 
-Resume: run `/archflow-run <name>` in a fresh session.
+Resume: run `/archflow-run <name>` in a fresh session on the orchestrator's model (`opus` at `high` effort unless the plan's routing says otherwise).
 
 ## Waiting on the human
 <!-- Empty unless the status is AWAITING USER. Written so a fresh session can ask again in full:

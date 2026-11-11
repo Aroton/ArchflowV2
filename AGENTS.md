@@ -113,6 +113,7 @@ ArchFlow is written for models that keep improving. Skills must encode *intent a
 Within a `/archflow-run`, these human trust boundaries are hard rules:
 
 - No implementation starts until the human explicitly approves the plan, and every declared STOP is approved explicitly; silence is not approval.
+- The plan is written by a planner sub-agent on the strongest model available, never by the orchestrating session and never on a cheaper model, unless the human names another model for it. The orchestrating session is meant to run on a cheaper model (`opus` at `high` effort today).
 - Every task gets the cross-model counter-review. If it cannot run, report the blocker and do not merge the task; never substitute self-review. The human may explicitly waive it for a named task; record the waiver in the run's `DECISIONS.md`.
 - Never push, deploy, install into machine-global locations, or delete user data without the human asking.
 - Correspondence with the human is conversational and human-readable: what needs attention, why it matters, and the choices in plain language. Keep digests, JSON, internal paths, and protocol codes out of it unless asked for diagnostics.

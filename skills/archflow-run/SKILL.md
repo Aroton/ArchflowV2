@@ -5,11 +5,13 @@ description: Plan a large piece of work once, get human approval, then orchestra
 
 # Orchestrated Run
 
-Treat the first argument as the run name (a short kebab-case slug) and anything after it as the ask. The run lives in `.archflow/runs/<name>/`. This session is the orchestrator: it plans, writes task packets, spawns sub-agents, decides on findings, merges, commits, keeps the ledger, and talks to the human. Sub-agents write the code and the reviews.
+Treat the first argument as the run name (a short kebab-case slug) and anything after it as the ask. The run lives in `.archflow/runs/<name>/`. This session is the orchestrator: it settles the requirements with the human, runs the planning, writes task packets, spawns sub-agents, decides on findings, merges, commits, keeps the ledger, and talks to the human. Sub-agents explore the repository, write the plan, the code and the reviews.
 
 This is a markdown-driven workflow. State lives in the run's files and in git. Read `PROTOCOL.md` in this skill directory before planning or executing: it holds the per-task loop, the sub-agent contract, the findings format, and the handoff rules. Scaffolds live under `templates/`.
 
 The orchestration relies on Claude Code: generated agents in `.claude/agents/`, sub-agents in isolated worktrees, and per-spawn model routing. The counter-review itself is host-neutral. In another client, tell the human that `/archflow-run` currently needs Claude Code as the orchestrator, and stop.
+
+The run is designed for an orchestrator on `opus` at `high` effort. The orchestrator's context is re-read on every turn of a long session, so its model sets most of the run's cost, and the calls it makes do well on `opus`, though noticeably less well below `high`. The strongest model is spent where it pays: a planner sub-agent on `fable` writes the plan in one bounded spawn (see "Model routing" in `PROTOCOL.md`). When this session runs on a different model or a lower effort, say so in your first message, with `opus` at `high` as the setting to switch to (`/model opus`), and carry on: it is a note about cost, not a reason to stop.
 
 Start every session by reading `.archflow/runs/<name>/PROGRESS.md` when it exists, and act on its status line:
 
@@ -24,6 +26,7 @@ Start every session by reading `.archflow/runs/<name>/PROGRESS.md` when it exist
 These are hard rules for the whole run:
 
 - No implementation starts until the human explicitly approves the plan at STOP 0. Approval of a declared STOP is explicit too; silence is not approval.
+- The plan is written by a planner sub-agent on the strongest model available, never by this session and never on a cheaper model, unless the human names another model for it. The same holds when a later milestone is detailed and when a revision changes scope, architecture, tasks or agents.
 - Honor every STOP the plan declares. At a STOP, write the report, set the status, commit, and end the session.
 - Between STOPs, halt and ask the human only for a decision that is theirs:
   - a change to what the human gets: a requirement is dropped or weakened, or the product would behave differently from what they approved;
@@ -83,38 +86,33 @@ Check that `archflow-local --help` lists the `review` command; if it does not, t
 
 Read the review policy the run will inherit, because it decides what the counter-review sends to the human. Every counter-review judges the work against the repository's `.archflow/constitution/` rules, or ArchFlow's shipped defaults when the repository has none. A rule that carries a `review_trigger` asks for a human whenever it matches, and so does a path under `approval_rules` in `.archflow/config.yaml`. List the active triggers and what each would stop the run for, and include that list at STOP 0. Rule files that sit directly in `.archflow/constitution/`, rather than under `default/` or `custom/`, predate the current defaults: their triggers were written for the gated task workflow and match on almost every orchestrated task. When you find that layout, or a trigger that would fire on ordinary work in this run, say so and recommend refreshing the rules with `/archflow-init` before the run starts. Changing repository policy is the human's decision; when they refresh it, the new rules are committed before any task spawns.
 
-Understand the ask, the repository, and its instructions. Delegate research to sub-agents when the size of the work calls for it, and persist what later sessions need under `.archflow/runs/<name>/research/`. Requirements are sized to the work. A paragraph is enough when the target is well understood, such as a port of known software. When the product intent is new or ambiguous, interview the human until the requirements are settled.
+Planning has three parts, each on the model it needs: you settle what is wanted, cheap explorers map the repository, and a planner on the strongest model writes the plan. "Planning agents" in `PROTOCOL.md` holds what each sub-agent is given and returns.
 
-Write `PLAN.md` from `templates/PLAN.md`. It holds:
+**Settle the requirements.** Understand the ask and the repository's instructions. Requirements are sized to the work. A paragraph is enough when the target is well understood, such as a port of known software. When the product intent is new or ambiguous, interview the human until the requirements are settled.
 
-- requirements;
-- the architecture decisions tasks depend on;
-- invariants every agent follows;
-- the agent check command: targeted tests for the changed files plus fast checks such as typecheck and lint, never a full build, as quick as the targeted scope allows (agents wait on it through `scripts/wait.sh`), and leaving the worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored) because a reviewer runs it while the counter-review reads the same worktree; and the full build and full suite command, which only the orchestrator runs;
-- model and effort routing per kind of task, starting from the defaults under "Model routing" in `PROTOCOL.md`;
-- milestones;
-- the task table, with a review depth on every row: `full` for work that changes behavior, `light` for work whose mistakes are cheap and easy to see, such as documentation (see "Review depth" in `PROTOCOL.md`);
-- declared STOPs.
+**Explore with cheap sub-agents.** Finding things does not need a strong model, and neither your context nor the planner's should be spent on it. Spawn explorers on the exploration route (`haiku` / `xhigh` by default), sized to the work: typically one per area or question, in parallel, and a single one for a small job. Each maps what is there, writes it to `.archflow/runs/<name>/research/<topic>.md` with file and line pointers, and returns a short summary. Explorers locate and describe; they do not design. Read the summaries, and send another round when part of the work is still unmapped. A question that needs judgment, such as comparing approaches or reading a specification, goes to the research route instead.
 
-Detail the first milestone's tasks now. Later milestones may be marked "detailed at start" when earlier work should shape them. Size tasks so one agent finishes each in a single focused spawn, and split anything larger before it is spawned. Create `DECISIONS.md`, `PROGRESS.md` from `templates/PROGRESS.md`, `reviews/`, and a `.gitignore` containing `packets/`.
+**Write the planning brief**, `research/planning.md`: the ask in the human's words, the settled requirements and every decision the human made, the run branch, the active review triggers, and an index of the research files with a line on what each covers.
 
-Generate run-specific agents when the run has standing guidance that applies across many tasks of one kind. Examples: the reference to compare against and how to validate against it, porting rules, domain invariants, review lenses. Build them from `templates/agents/` into `.claude/agents/<name>-<role>.md`, one per distinct kind of work, and list them in the plan's routing table. Standing guidance belongs in the agent; anything specific to one task belongs in its packet. When no such guidance exists, generate the agents from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance as a short `BRIEF.md` in the run directory; every counter-review receives it.
+**Have the planner write the plan.** The plan is always written by a planner sub-agent on the plan-writing route, the strongest model available (`fable` / `high` today), never by you and never on a cheaper model: an error in the plan is repeated in every task built on it. Spawn one fresh planner with the brief's path, the run directory, and this skill directory's absolute path. It reads the research, looks up whatever else it needs in the code, and writes `PLAN.md`, `DECISIONS.md`, the run's generated agents in `.claude/agents/`, and `BRIEF.md`. When it returns a question that is the human's, ask it, add the answer to the brief, and spawn a fresh planner.
 
-Counter-review the plan before the human sees it. Write the human's ask to the run's `packets/plan-cr<k>/ask.txt` and the plan plus each generated agent's standing guidance to `plan.txt` beside it. Then run `bash <this skill directory>/scripts/counter-review.sh <repository root> <that directory> claude plan`, in the background. The review's subject is every uncommitted run and agent file. Read every report in `summary.json`. Fix supported defects and dismiss the rest with reasons.
+Then create `PROGRESS.md` from `templates/PROGRESS.md`, `reviews/`, and a `.gitignore` containing `packets/`. Read the plan by section: enough to check that it answers the brief and to present it.
+
+**Counter-review the plan before the human sees it.** Write the human's ask to the run's `packets/plan-cr<k>/ask.txt`, and `cat` the plan plus each generated agent's standing guidance into `plan.txt` beside it. Then run `bash <this skill directory>/scripts/counter-review.sh <repository root> <that directory> claude plan`, in the background. The review's subject is every uncommitted run and agent file. Read every report in `summary.json` and decide each point; dismiss the unsupported ones with reasons. Supported defects that change scope, architecture, tasks, routing or agents go to a fresh planner, with the points and your decisions in its prompt. A wording or formatting fix you make yourself.
 
 Then STOP 0. Commit the run files and agents with the status `AWAITING USER (STOP 0)`. Present the plan conversationally, in one message that stands on its own:
 
 - scope and requirements;
 - milestones and declared STOPs;
-- the generated agents and which model and effort each kind of work is routed to;
+- the generated agents and which model and effort each kind of work is routed to, the orchestrator included;
 - how the work will be reviewed: which tasks get the cross-model counter-review, which get the in-model review alone and why, and that a fix is checked on its own instead of sending the whole task back for review;
 - what the counter-review changed;
 - what will stop the run for them: the declared STOPs, the decisions that stay theirs, and the repository's active human-review triggers;
 - any decision the human should make.
 
-When the human revises the plan at STOP 0, apply the revision. A significant change to scope, architecture, tasks, or agents runs the plan counter-review again before approval, naming only the roles the revision concerns (usually `counter-reviewer`); a wording or formatting change does not.
+When the human revises the plan at STOP 0, a significant change to scope, architecture, tasks, or agents goes to a fresh planner, with the revision in its prompt, and runs the plan counter-review again before approval, naming only the roles the revision concerns (usually `counter-reviewer`). A wording or formatting change you apply yourself, and it needs no review.
 
-On explicit approval of the final plan, record it in `PROGRESS.md`, set the status to `RUNNING`, commit, and recommend a fresh session for execution. A fresh session loads the new agent definitions and starts with a clean context.
+On explicit approval of the final plan, record it in `PROGRESS.md`, set the status to `RUNNING`, commit, and recommend a fresh session on the orchestrator's model and effort for execution. A fresh session loads the new agent definitions and starts with a clean context.
 
 ## Execute a batch
 
@@ -135,10 +133,10 @@ Follow `PROTOCOL.md`:
 3. **At a milestone end:**
    - Run the milestone's declared gate lenses and, by default, the whole-milestone counter-review, which is the cross-model coverage for `light` tasks and verified fixes.
    - Run the deferral pass: re-decide every open deferred finding as fix, carry, or close.
-   - If the next milestone is "detailed at start", write its task rows and have them reviewed once before spawning any of them: by the plan-stage counter-review when they add architecture or choices the approved plan does not hold, by a fresh in-model plan review when they only continue it. That review needs no human gate unless the milestone changes the requirements or a decision the human made.
+   - If the next milestone is "detailed at start", have a fresh planner write its task rows from what the run has learned, and have them reviewed once before spawning any of them: by the plan-stage counter-review when they add architecture or choices the approved plan does not hold, by a fresh in-model plan review when they only continue it. That review needs no human gate unless the milestone changes the requirements or a decision the human made.
 4. **Hand off.**
    - When to stop: after the batch (typically 8–10 merged tasks), or earlier when this session's context grows heavy.
-   - What to do: run the full build and suite, write the session handoff into `PROGRESS.md`, commit, and end with a summary for the human: what this session merged, the build and suite result, each decision you made with how to undo it, anything deferred that they should know, what comes next, and the exact command that starts the next session.
+   - What to do: run the full build and suite, write the session handoff into `PROGRESS.md`, commit, and end with a summary for the human: what this session merged, the build and suite result, each decision you made with how to undo it, anything deferred that they should know, what comes next, and the exact command that starts the next session, on the orchestrator's model and effort.
 
 Keep the orchestrator's context small: it is re-read on every turn. Prefer reviewer verdict lines and findings tables to whole reviews or diffs, and bounded windows or delegation to reading large design or source files whole. Let completion notifications wake you instead of polling.
 

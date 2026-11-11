@@ -37,13 +37,16 @@ reads the same worktree, and a changed file fails that review with `SUBJECT_CHAN
 ## 6. Routing
 | Kind of work | Agent (`subagent_type`) | Model / effort |
 |---|---|---|
+| Orchestrate | this session | `opus` / `high` |
+| Explore during planning | general-purpose + override | `haiku` / `xhigh` |
+| Write the plan; detail a later milestone; a significant plan revision | general-purpose + override | `fable` / `high` (always the strongest model) |
 | <plumbing, mechanical, tightly specified> | `<name>-implementer` + `model`/`effort` override | `sonnet` / `medium` |
 | <core, correctness-critical, interface-defining> | `<name>-implementer` | `opus` / `high` |
 | <subtle and hard to review: name the tasks> | `<name>-implementer` + override | `fable` / `high` |
 | Task review of a `full` task; fix verify | `<name>-reviewer` | `opus` / `high` (`fable` for `fable`-routed work) |
 | Task review of a `light` task | `<name>-reviewer` + override | `sonnet` / `medium` |
 | Counter-review merge | `<name>-reviewer` + override | `sonnet` / `medium` |
-| Verify; deferral pass | `<name>-reviewer` + override | `opus` / `high`; `opus` / `medium` |
+| Verify; deferral pass | `<name>-reviewer` + override | `opus` / `high` |
 | Plan review; fidelity and architecture lenses | `<name>-reviewer` + override | `fable` / `high` |
 | Fixer | `<name>-fixer` + override | as the task's implementer; `sonnet` / `medium` for small mechanical findings |
 

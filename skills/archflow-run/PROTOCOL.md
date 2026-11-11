@@ -12,7 +12,7 @@ A run's state lives in its files and in git, not in any session's context. Any f
   PROGRESS.md      status line, pending question, milestone board, task log, decisions to report, deferred findings, gate log, handoffs
   DECISIONS.md     ADR log: ## ADR-NNN <title> (decided by human | orchestrator, status, context, decision, consequences, how to undo)
   BRIEF.md         the reference-and-validation brief every counter-review receives
-  research/        persisted research later sessions need (optional)
+  research/        planning.md (the planner's brief) and the explorers' notes, one file per area
   packets/         per-task context packets (gitignored, regenerated on demand)
   reviews/         <id>-impl.md, <id>-r<k>.md, gate-<milestone>-<lens>.md, STOP-<n>-report.md
 .claude/agents/<name>-<role>.md   generated run agents (Claude Code)
@@ -38,10 +38,20 @@ Follow it with one sentence on where to resume.
 
 `PLAN.md` holds the routing table: which generated agent, model and effort handle each kind of task. Spend capability where an error is expensive and hard to detect, and save it where the work is well specified and a review will catch a slip.
 
-The orchestrator is the strongest model available (`fable` today). It keeps the judgment: the plan, the packets, the decision on each finding, merges, and the conversation with the human. Sub-agents do the reading and writing, most of them on a cheaper model. Defaults for the current Claude models, to adapt per run:
+Three roles split the run's cost:
+
+- **The orchestrator runs on `opus` at `high` effort.** Its context is re-read on every turn of a long session, so its model sets most of what a run costs. It keeps the judgment that needs the whole run in view: the requirements, the packets, the decision on each finding, merges, and the conversation with the human.
+- **The plan is written on the strongest model available (`fable` today), always.** An error in the plan is repeated in every task built on it, and writing it is one bounded spawn, not a session. So the planner is where the strongest model is the default, not the exception.
+- **Exploration runs on the cheapest model (`haiku`), at `xhigh` effort.** Locating code and describing what is there needs no strong model, but the planner builds on the notes, and Haiku is the one model that keeps gaining well past `high`. At its price the extra effort costs little; the planner reads the notes and looks up the rest itself.
+
+Other sub-agents do the reading and writing, most of them on a cheaper model than the orchestrator's. Defaults for the current Claude models, to adapt per run:
 
 | Work | Model | Effort |
 |---|---|---|
+| Orchestrate (this session) | `opus` | `high` |
+| Explore during planning: locate code, map files, collect conventions and commands | `haiku` | `xhigh` |
+| Research that needs judgment: compare approaches, read a specification or a design | `sonnet` | `medium` |
+| Write the plan; detail a later milestone; a significant plan revision | `fable` | `high` |
 | Implement: plumbing, registries, mechanical or tightly specified changes | `sonnet` | `medium` |
 | Implement: core, algorithmic, correctness-critical, or interface-defining work | `opus` | `high` |
 | Implement: the few tasks where a subtle error is costly and a review is unlikely to catch it (concurrency, security boundaries, data migration, a novel algorithm) | `fable` | `high` |
@@ -49,21 +59,60 @@ The orchestrator is the strongest model available (`fable` today). It keeps the 
 | Task review of a `light` task | `sonnet` | `medium` |
 | Merge a finished counter-review into the findings | `sonnet` | `medium` |
 | Verify a doubted finding | `opus` | `high` |
-| Deferral pass | `opus` | `medium` |
+| Deferral pass | `opus` | `high` |
 | Plan review; fidelity and architecture gate lenses | `fable` | `high` |
-| Dogfood and runtime gate lenses | `opus` | `medium` |
+| Dogfood and runtime gate lenses | `opus` | `high` |
 | Fix | the model that implemented the task; `sonnet` for small, mechanical findings | as the implementer |
-| Research during planning | `sonnet` | `medium` |
 
 How to use the table:
 
 - **Always name the effort.** The models' own defaults differ (Opus runs at `medium` when none is given, Sonnet and Fable at `high`), so write `model` and `effort` into each generated agent's frontmatter and pass both on every spawn that differs from it. This skill asks for those per-spawn values; follow the plan's table.
 - **A reviewer is at least as strong as the work it reviews.** One generated reviewer serves every mode, so its frontmatter carries the task-review default and the other modes are per-spawn overrides.
-- **Raise the model before the effort.** Most of a model's gain arrives by `high`; `xhigh` and `max` cost many more tokens for an uneven gain. When an agent returns `blocked`, or a fix still fails its verify after two fix rounds, send the next fresh agent one model up at the same effort. Keep `xhigh` for a task that has already failed at `fable` and `high`.
-- **Cost scales with the tier:** per token, Opus costs about twice Sonnet and Fable about twice Opus. A run with most tasks on `fable` usually means the tasks are too large or under-specified; split them or sharpen the packets instead.
+- **`high` is the floor for `opus` and `fable`.** A model usually loses a good deal between `high` and `medium`, so no route sends work to either below `high`. `medium` is for `sonnet` on work a review will catch.
+- **Raise the model before the effort.** Most of a model's gain arrives by `high`; `xhigh` and `max` cost many more tokens for an uneven gain. Haiku is the exception: it is cheap enough, and gains enough, to explore at `xhigh`. When an agent returns `blocked`, or a fix still fails its verify after two fix rounds, send the next fresh agent one model up at the same effort. Keep `xhigh` for a task that has already failed at `fable` and `high`.
+- **Cost scales with the tier:** per token, Opus costs about twice Sonnet and Fable about twice Opus, and Haiku costs a small fraction of Sonnet. A run with most tasks on `fable` usually means the tasks are too large or under-specified; split them or sharpen the packets instead.
+- **The plan-writing route does not move down.** The plan may adapt every other row, and a run may route more work to a cheaper model. Writing the plan stays on the strongest model.
 - **Size before routing.** If a task mixes kinds, split it, or route it to the more demanding kind.
 
-Model names age. When newer models exist, keep the shape (cheapest model that does well-specified work, a stronger one for core work and review, the strongest for the orchestrator and the rare hard task) and record the run's mapping in `PLAN.md`.
+Model names age. When newer models exist, keep the shape (the cheapest model explores, a cheap one does well-specified work, a stronger one orchestrates and does core work and review, the strongest writes the plan and takes the rare hard task) and record the run's mapping in `PLAN.md`.
+
+## Planning agents
+
+Planning runs before the run's generated agents exist, so explorers and the planner are general-purpose sub-agents with the model and effort passed on the spawn. Each gets a complete brief, because it sees none of the conversation, and each is fresh: the rules under "Never resume an idle agent" apply here too.
+
+**Explorer.** One area or question per explorer, on the exploration route. Its prompt names the area, what the run is about in a sentence or two, and the output file `<run dir>/research/<topic>.md`. A useful note lets the planner go straight to the right place:
+
+- what exists, with paths and line pointers, and how the parts connect;
+- the conventions the code follows there, and the repository instructions that apply;
+- the commands that build, typecheck and test it, including how to run tests for a few files only;
+- what it could not find or is unsure of.
+
+An explorer describes what is there. It does not propose a design, and it says so when a question needs more judgment than a lookup; that question goes to the research route. It returns a few lines: the file it wrote and what it covers.
+
+**Planning brief.** `research/planning.md`, written by the orchestrator, is the planner's starting point: the ask in the human's words, the settled requirements and each decision the human made, the run branch, the active review triggers, and an index of the research files. It is updated when the human answers a question, so a fresh planner starts from the current state.
+
+**Planner.** One fresh sub-agent on the plan-writing route. Its prompt names the brief, the run directory, this skill directory, and which of three jobs it has:
+
+- **First plan.** Read the brief, this file, and `templates/`. Read the research, then look up in the code whatever the research leaves open; the research is a map, not a limit. Write `PLAN.md` from `templates/PLAN.md`, the consequential choices as ADRs in `DECISIONS.md` (marked `human` when the brief records the human's decision, `orchestrator` otherwise), the generated agents, and `BRIEF.md`.
+- **Revision.** The prompt carries the counter-review points the orchestrator accepted, or the human's revision. Change what they require in the plan, the ADRs, the agents and `BRIEF.md`, and keep the rest.
+- **Milestone detail.** For a milestone marked "detailed at start": read the plan, `PROGRESS.md` (handoffs, deferred findings, decisions) and `DECISIONS.md`, look at the merged code the milestone builds on, and write the milestone's task rows, each with its review depth. Correct an architecture detail the run has shown to be wrong, and say so in the return.
+
+`PLAN.md` holds:
+
+- requirements, as the brief settled them;
+- the architecture decisions tasks depend on;
+- invariants every agent follows;
+- the agent check command: targeted tests for the changed files plus fast checks such as typecheck and lint, never a full build, as quick as the targeted scope allows (agents wait on it through `scripts/wait.sh`), and leaving the worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored) because a reviewer runs it while the counter-review reads the same worktree; and the full build and full suite command, which only the orchestrator runs;
+- model and effort routing per kind of task, starting from the defaults under "Model routing";
+- milestones;
+- the task table, with a review depth on every row (see "Review depth");
+- declared STOPs.
+
+Detail the first milestone's tasks. Later milestones may be marked "detailed at start" when earlier work should shape them. Size tasks so one agent finishes each in a single focused spawn (see "Task sizing and the plan table").
+
+Generate run-specific agents when the run has standing guidance that applies across many tasks of one kind. Examples: the reference to compare against and how to validate against it, porting rules, domain invariants, review lenses. Build them from `templates/agents/` into `.claude/agents/<name>-<role>.md`, one per distinct kind of work, and list them in the plan's routing table. Standing guidance belongs in the agent; anything specific to one task belongs in its packet. When no such guidance exists, generate the agents from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance as a short `BRIEF.md` in the run directory; every counter-review receives it.
+
+The planner ends with the return block under "Sub-agent contract". Its NOTES give the main architecture choices, the milestones and the risks in a few lines; the orchestrator reads the plan itself by section. A question whose answer is the human's (a requirement the brief leaves open, a choice between products rather than between designs) comes back as `needs-decision`, with what the planner would assume; the orchestrator asks the human and spawns a fresh planner. The planner does not commit, and it writes only the run's files and agents.
 
 ## Sub-agent contract
 
@@ -295,7 +344,7 @@ At the last milestone nothing can carry. Every open entry is fixed or closed bef
 
 When the next milestone is "detailed at start":
 
-- write its task rows from what the run has learned, each with its review depth;
+- have a fresh planner write its task rows from what the run has learned, each with its review depth (see "Planning agents"); you do not write them yourself;
 - review them once: with the plan-stage counter-review, `counter-reviewer` alone, when they add architecture, interfaces or choices the approved plan does not hold; with a fresh reviewer in plan-review mode when they only continue the approved architecture;
 - fix supported findings;
 - record the result in `PROGRESS.md`.

@@ -46,7 +46,8 @@ The orchestrated workflow, for large jobs ("port this system", "build these fift
 
 ```mermaid
 flowchart LR
-  P["Plan + run agents"] --> R0["Cross-model plan review"]
+  X["Cheap explorers map the repository"] --> P["Planner on the strongest model<br/>writes the plan + run agents"]
+  P --> R0["Cross-model plan review"]
   R0 --> S0{"STOP 0: human approves"}
   S0 --> B["Batch: packet, implementer in a worktree,<br/>one review: reviewer + cross-model review,<br/>decide findings, fixer, verify the fix,<br/>squash-merge, commit"]
   B -->|"about 8-10 tasks"| H["Handoff in PROGRESS.md, fresh session"]
@@ -59,6 +60,7 @@ flowchart LR
 **Why markdown instead of a server.** A strong orchestrator follows a written protocol reliably, and resuming needs only an honest ledger and the commit history. The trust boundaries a human needs are plain rules in the skill:
 
 - the plan is approved before any code, and with it the review depth of every task;
+- the plan is written by a planner sub-agent on the strongest model, never by the orchestrating session;
 - declared STOPs end the session until the human answers;
 - the run halts between STOPs only for a decision that is the human's: a change to what they get, reversing a decision they made, a risky change the plan does not cover, a kind of change the repository's rules ask a human to see, an unresolved critical finding, or an irreversible or outward-facing action;
 - every other decision is the orchestrator's, and none is hidden: each is recorded with how to undo it and reported in the next message that ends a turn;
@@ -104,11 +106,19 @@ The run also reads the repository's review policy during planning and tells the 
 
 **Why no sub-agent waits on a review or is resumed.** A sub-agent's prompt cache lasts about five minutes. An agent that idles while a review runs, or is resumed for a fix, re-reads its whole context uncached. So the orchestrator, whose own cache lasts longer, does all the waiting on reviews, and every fix, check of a fix or answered question goes to a fresh agent that reads one packet and one review file. For the same reason sub-agents run only targeted tests and typecheck-level checks for the files they touched; full builds, the full suite and any slow test groups are the orchestrator's, once per batch. Several agents each compiling a whole workspace at once can overload the machine. A targeted check can still be slow on a busy machine, and an agent sometimes needs a result that takes longer than five minutes, so agents run their commands through the skill's `scripts/wait.sh`. It runs the command in the background and hands control back about every four minutes while it runs; each return is a cheap turn that keeps the cache warm, where a single long blocking call would let it expire. Its `stop` command ends a stuck command together with everything that command started, so an agent never returns with a build still running.
 
-**Why routing names a model and an effort.** The orchestrator is the strongest model and keeps the judgment: the plan, the decision on each finding, the merges, the conversation with the human. Sub-agents do the reading and writing, mostly on cheaper models. The protocol's defaults send well-specified plumbing to Sonnet at medium effort, core and correctness-critical work and its review to Opus at high, the review of `light` tasks to Sonnet, and only the few subtle, hard-to-review tasks, the plan review, and the fidelity and architecture gate lenses to Fable at high. A reviewer is never weaker than the work it reviews. Effort is always named, because the models' own defaults differ, and a struggling task moves up a model before it moves up an effort level. The table is a default the plan adapts and the human approves at STOP 0.
+**Why the orchestrator is not the strongest model.** An orchestrator's context is re-read on every turn of a long session, so its model sets most of what a run costs; a run orchestrated on Fable spent more than its judgment calls were worth. The run is designed for an Opus orchestrator at high effort, which keeps the judgment that needs the whole run in view: the requirements, the decision on each finding, the merges, the conversation with the human. A session on another model or a lower effort says so once and carries on. Planning is split by what each part needs:
+
+- cheap explorers (Haiku at xhigh effort by default: it is cheap, and it keeps gaining past high) locate code and write what they find, with file and line pointers, into the run's `research/` folder;
+- the orchestrator writes a planning brief: the ask, the settled requirements, the human's decisions and an index of that research;
+- a fresh planner sub-agent on the strongest model (Fable at high effort today) reads the brief and the research, looks up whatever else it needs in the code, and writes `PLAN.md`, the decision records, the run's agents and `BRIEF.md`.
+
+The plan is always written this way, and that is one of the skill's hard rules: an error in the plan is repeated in every task built on it, while writing it is one bounded spawn rather than a session. The same planner route details a later milestone and applies any revision that changes scope, architecture, tasks or agents. Small corrections during the run, such as a task row the code has shown to be wrong, stay with the orchestrator.
+
+**Why routing names a model and an effort.** Sub-agents do the reading and writing, mostly on cheaper models than the orchestrator's. The protocol's defaults send well-specified plumbing to Sonnet at medium effort, core and correctness-critical work and its review to Opus at high, the review of `light` tasks to Sonnet, and only the few subtle, hard-to-review tasks, the plan review, and the fidelity and architecture gate lenses to Fable at high. A reviewer is never weaker than the work it reviews. Effort is always named, because the models' own defaults differ, and a struggling task moves up a model before it moves up an effort level. The table is a default the plan adapts and the human approves at STOP 0.
 
 **Why run-specific agents.** During planning the orchestrator can generate `.claude/agents/<name>-<role>.md` from the skill's scaffolds, holding the standing guidance every task of a kind needs (the reference to compare against, how to validate, invariants, review lenses). Prompts stay short, and the human approves the agents together with the plan. The run's files and generated agents are working files to delete before a pull request.
 
-**Requirements and design.** Requirements are sized to the work rather than a separate document stage. Milestones replace per-phase design: a milestone is detailed during planning or "detailed at start", in which case its task rows are written from what the run learned and reviewed once without a human gate unless scope or an accepted decision changes: by the plan-stage counter-review when they add architecture or choices the approved plan does not hold, by a fresh in-model plan review when they only continue it.
+**Requirements and design.** Requirements are sized to the work rather than a separate document stage. Milestones replace per-phase design: a milestone is detailed during planning or "detailed at start", in which case a fresh planner writes its task rows from what the run learned and they are reviewed once without a human gate unless scope or an accepted decision changes: by the plan-stage counter-review when they add architecture or choices the approved plan does not hold, by a fresh in-model plan review when they only continue it.
 
 ## Conventions shared by the skills
 
