@@ -15,7 +15,7 @@ A run's state lives in its files and in git, not in any session's context. Any f
   research/        planning.md (the planner's brief) and the explorers' notes, one file per area
   packets/         per-task context packets (gitignored, regenerated on demand)
   reviews/         <id>-impl.md, <id>-r<k>.md, gate-<milestone>-<lens>.md, STOP-<n>-report.md
-.claude/agents/<name>-<role>.md   generated run agents (Claude Code)
+.claude/agents/<name>[-<domain>]-<role>.md   generated run agents (Claude Code); see "Run agents"
 ```
 
 `PROGRESS.md` starts with one status line:
@@ -36,7 +36,7 @@ Follow it with one sentence on where to resume.
 
 ## Model routing
 
-`PLAN.md` holds the routing table: which generated agent, model and effort handle each kind of task. Spend capability where an error is expensive and hard to detect, and save it where the work is well specified and a review will catch a slip.
+`PLAN.md` holds the routing: which generated agent, model and effort handle each task. The two are chosen separately. The agent follows the kind of work, because that decides what guidance the task needs (see "Run agents"). The model and effort follow how hard the task is: spend capability where an error is expensive and hard to detect, and save it where the work is well specified and a review will catch a slip.
 
 Three roles split the run's cost:
 
@@ -67,12 +67,12 @@ Other sub-agents do the reading and writing, most of them on a cheaper model tha
 How to use the table:
 
 - **Always name the effort.** The models' own defaults differ (Opus runs at `medium` when none is given, Sonnet and Fable at `high`), so write `model` and `effort` into each generated agent's frontmatter and pass both on every spawn that differs from it. This skill asks for those per-spawn values; follow the plan's table.
-- **A reviewer is at least as strong as the work it reviews.** One generated reviewer serves every mode, so its frontmatter carries the task-review default and the other modes are per-spawn overrides.
+- **A reviewer is at least as strong as the work it reviews.** A generated reviewer serves several modes, so its frontmatter carries the task-review default and the other modes are per-spawn overrides.
 - **`high` is the floor for `opus` and `fable`.** A model usually loses a good deal between `high` and `medium`, so no route sends work to either below `high`. `medium` is for `sonnet` on work a review will catch.
 - **Raise the model before the effort.** Most of a model's gain arrives by `high`; `xhigh` and `max` cost many more tokens for an uneven gain. Haiku is the exception: it is cheap enough, and gains enough, to explore at `xhigh`. When an agent returns `blocked`, or a fix still fails its verify after two fix rounds, send the next fresh agent one model up at the same effort. Keep `xhigh` for a task that has already failed at `fable` and `high`.
 - **Cost scales with the tier:** per token, Opus costs about twice Sonnet and Fable about twice Opus, and Haiku costs a small fraction of Sonnet. A run with most tasks on `fable` usually means the tasks are too large or under-specified; split them or sharpen the packets instead.
 - **The plan-writing route does not move down.** The plan may adapt every other row, and a run may route more work to a cheaper model. Writing the plan stays on the strongest model.
-- **Size before routing.** If a task mixes kinds, split it, or route it to the more demanding kind.
+- **Size before routing.** If a task mixes levels of difficulty, split it, or route it to the more demanding one. A task that spans domains is split the same way (see "Run agents").
 
 Model names age. When newer models exist, keep the shape (the cheapest model explores, a cheap one does well-specified work, a stronger one orchestrates and does core work and review, the strongest writes the plan and takes the rare hard task) and record the run's mapping in `PLAN.md`.
 
@@ -95,7 +95,7 @@ An explorer describes what is there. It does not propose a design, and it says s
 
 - **First plan.** Read the brief, this file, and `templates/`. Read the research, then look up in the code whatever the research leaves open; the research is a map, not a limit. Write `PLAN.md` from `templates/PLAN.md`, the consequential choices as ADRs in `DECISIONS.md` (marked `human` when the brief records the human's decision, `orchestrator` otherwise), the generated agents, and `BRIEF.md`.
 - **Revision.** The prompt carries the counter-review points the orchestrator accepted, or the human's revision. Change what they require in the plan, the ADRs, the agents and `BRIEF.md`, and keep the rest.
-- **Milestone detail.** For a milestone marked "detailed at start": read the plan, `PROGRESS.md` (handoffs, deferred findings, decisions) and `DECISIONS.md`, look at the merged code the milestone builds on, and write the milestone's task rows, each with its review depth. Correct an architecture detail the run has shown to be wrong, and say so in the return.
+- **Milestone detail.** For a milestone marked "detailed at start": read the plan, `PROGRESS.md` (handoffs, deferred findings, decisions) and `DECISIONS.md`, look at the merged code the milestone builds on, and write the milestone's task rows, each with its agent and review depth. Correct an architecture detail the run has shown to be wrong, and add or revise a domain's agents when the milestone opens a kind of work the roster does not cover; say so in the return.
 
 `PLAN.md` holds:
 
@@ -103,16 +103,61 @@ An explorer describes what is there. It does not propose a design, and it says s
 - the architecture decisions tasks depend on;
 - invariants every agent follows;
 - the agent check command: targeted tests for the changed files plus fast checks such as typecheck and lint, never a full build, as quick as the targeted scope allows (agents wait on it through `scripts/wait.sh`), and leaving the worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored) because a reviewer runs it while the counter-review reads the same worktree; and the full build and full suite command, which only the orchestrator runs;
-- model and effort routing per kind of task, starting from the defaults under "Model routing";
+- the agent roster, with what each agent covers and why it is its own agent (see "Run agents");
+- model and effort routing per level of difficulty, starting from the defaults under "Model routing";
 - milestones;
 - the task table, with a review depth on every row (see "Review depth");
 - declared STOPs.
 
 Detail the first milestone's tasks. Later milestones may be marked "detailed at start" when earlier work should shape them. Size tasks so one agent finishes each in a single focused spawn (see "Task sizing and the plan table").
 
-Generate run-specific agents when the run has standing guidance that applies across many tasks of one kind. Examples: the reference to compare against and how to validate against it, porting rules, domain invariants, review lenses. Build them from `templates/agents/` into `.claude/agents/<name>-<role>.md`, one per distinct kind of work, and list them in the plan's routing table. Standing guidance belongs in the agent; anything specific to one task belongs in its packet. When no such guidance exists, generate the agents from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance as a short `BRIEF.md` in the run directory; every counter-review receives it.
+Generate the run's agents as "Run agents" describes, and list them in the plan's agent roster. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance as a short `BRIEF.md` in the run directory, with a section per domain when the run has several; every counter-review receives it.
 
 The planner ends with the return block under "Sub-agent contract". Its NOTES give the main architecture choices, the milestones and the risks in a few lines; the orchestrator reads the plan itself by section. A question whose answer is the human's (a requirement the brief leaves open, a choice between products rather than between designs) comes back as `needs-decision`, with what the planner would assume; the orchestrator asks the human and spawns a fresh planner. The planner does not commit, and it writes only the run's files and agents.
+
+## Run agents
+
+The planner generates the run's agents from `templates/agents/` into `.claude/agents/`. An agent is a role scaffold filled with the standing guidance of one kind of work. The roles are few and the same in every run, because their mechanics (the return block, waiting on commands, the context budget, the scope rules) do not depend on what is being built. The kinds of work, called domains here, are what each run decides.
+
+**Where guidance lives.** Put each piece of guidance at the scope it applies to:
+
+| It applies to | It lives in |
+|---|---|
+| every task in the run | the plan's invariants |
+| every task of one kind | that kind's agents |
+| one task | its packet |
+
+**When a kind of work is a domain.** An agent specialized to its work does it better than a general one handed the same task, and each agent is a file to write, review and keep true. A kind of work earns its own agents when an agent that knew only the invariants would do it differently from what the work needs, because it differs from the rest of the run in at least one of:
+
+- what correct is checked against: an analytic solution or a reference engine, a design specification, the behavior of a real database;
+- how it is validated: the check command, the style of test, a tool or environment such as a browser or a database container;
+- how it goes wrong: numerical stability and determinism in one place, accessibility and state handling in another, transactions and migrations in a third;
+- the conventions of that part of the codebase.
+
+The guidance must also be standing: it serves several tasks, typically three or more. One or two tasks of a kind go to the general agent, with their guidance in the packet.
+
+Split where the guidance changes, and no finer. A physics engine, a UI and database integrations are three domains; collision detection and the integrator are tasks of one. Directory, layer, task size, milestone and model tier are not domains: model and effort are chosen per spawn. A run typically has one to four domains. When two agents' guidance would differ by a few lines, merge them. A roster past about five usually means tasks have been mistaken for domains.
+
+**The roster.**
+
+| Agent | Generated | Takes |
+|---|---|---|
+| `<name>-<domain>-implementer` | per domain | implementing the domain's tasks, and fixing their findings in fix mode |
+| `<name>-<domain>-reviewer` | per domain, by default | the reviews of one task in the domain: task-review, merge, fix-verify, verify |
+| `<name>-implementer` | always | tasks outside every domain: glue, configuration, documentation, a kind with too few tasks to be a domain |
+| `<name>-reviewer` | always | the reviews of those tasks, and the reviews that span the run: deferral, plan-review, gate lenses, leftovers from a dead session |
+
+- A domain's implementer and reviewer come as a pair, because they share the reference and how to validate against it. The planner may leave out a domain's reviewer when reviewing that work needs nothing the general reviewer lacks.
+- When the whole run is one kind of work, the general pair carries its guidance and no other agents are generated.
+- There is no separate fixer agent. A fix needs the same guidance as the work it corrects, so a fixer is a fresh spawn of the task's implementer agent in fix mode. It has none of the implementer's context because it is a new agent, not because it is a different definition.
+- A gate lens that judges one domain, such as the fidelity of the physics, may go to that domain's reviewer.
+- Explorers, the planner and the cross-model reviewers are not generated: each gets what it needs in a brief (`research/planning.md`, `BRIEF.md`).
+
+A task's row names its implementer agent. Its fixes go to that agent, and its reviews to the reviewer of the same domain, or to the general reviewer when the domain has none. Split a task that spans domains. A task that joins two domains goes to the domain whose guidance covers the larger risk, or to the general agent with both interfaces in its packet.
+
+**Writing the guidance.** Fill each scaffold's `Domain guidance` section with what a strong engineer new to this run would not know: the reference and how fidelity is proven, the domain's rules and decisions here, where this work goes wrong, the conventions of that code, and the tools it needs. It is not a tutorial on the field. A reviewer's section holds the same reference and validation, plus the lenses to review that work through. The general pair holds only what is true of any task in the run; when no standing guidance exists, generate it from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree, and give each agent the agent check its domain uses.
+
+**Changing the roster mid-run.** The run learns what its agents should have been told. When the same finding returns across a domain's tasks, the lesson belongs in that domain's agents: add the line yourself, in the implementer and the reviewer, and record it as the skill's "Who decides" describes. Adding, removing or re-scoping an agent is a plan revision and goes to a fresh planner, as does a milestone that opens a new domain. Agent definitions load when a session starts, so a new or changed agent takes effect in the next fresh session. Until then, send that work to the general agent with the guidance in its packet.
 
 ## Sub-agent contract
 
@@ -126,7 +171,7 @@ The planner ends with the return block under "Sub-agent contract". Its NOTES giv
 
 Agent sandboxes may not reach the network, so fetch references into the packet instead of trusting an agent to fetch them. Agents read the packet instead of the design documents.
 
-**Prompt.** Pass the packet's absolute path, because worktrees do not contain the gitignored packet directory. Also pass the base commit, any extra task-specific pointers, and the exact output paths. The generated agent definition already carries the standing guidance, the context-budget rules and the return format, so a prompt is typically 20–40 lines.
+**Prompt.** Pass the packet's absolute path, because worktrees do not contain the gitignored packet directory. Also pass the agent's mode, the base commit, any extra task-specific pointers, and the exact output paths. The generated agent definition already carries the standing guidance, the context-budget rules and the return format, so a prompt is typically 20–40 lines.
 
 **Return format.** Every agent ends with a short block, typically 15 lines or fewer, and writes anything longer to its output file:
 
@@ -165,11 +210,11 @@ Depth follows what the diff does, not what the row expected. Raise a task to `fu
 A change gets one open-ended review. A fresh reviewer asked to review again finds something every time, because it has no memory of the round before, so a second open-ended pass over the same work mostly re-judges what the first already judged. After a fix, the question is narrower, and it has an answer: is each finding fixed, and did the fix break anything? Steps 2–5 are the review; step 6 is that check.
 
 1. **Implement.**
-   - Spawn the routed implementer with worktree isolation. Its setup brings the fresh worktree to the base commit you name (`git reset --hard <sha>` is safe in a fresh worktree) and installs dependencies.
+   - Spawn the implementer agent the task's row names, in implement mode, with worktree isolation. Its setup brings the fresh worktree to the base commit you name (`git reset --hard <sha>` is safe in a fresh worktree) and installs dependencies.
    - It writes code and tests, runs the plan's targeted agent check command on its changed files until it passes, writes `reviews/<id>-impl.md` in its worktree when a fixer or reviewer needs more than its short return, and never commits.
    - Run tasks in parallel only when their file sets do not overlap: typically a handful at once, limited by machine load more than by the model.
 2. **Review, once.** When the implementer returns, start the task's reviews together. Other tasks keep moving while they run.
-   - Spawn a fresh routed reviewer. Give it the worktree path, the base commit, the packet, the task's review depth, the implementer's `EXTRA`, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It runs the targeted check command, reviews the diff against the acceptance criteria, writes its findings table, and returns its verdict without waiting for the counter-review.
+   - Spawn a fresh reviewer: the reviewer agent of the task's domain, which also takes this task's later merge, fix-verify and verify spawns. Give it the worktree path, the base commit, the packet, the task's review depth, the implementer's `EXTRA`, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It runs the targeted check command, reviews the diff against the acceptance criteria, writes its findings table, and returns its verdict without waiting for the counter-review.
    - For a `full` task, run the cross-model counter-review on its worktree yourself, in the background (see below). A `light` task has none.
 3. **Merge the counter-review** (`full` tasks). When both have finished and the counter-review produced any reports, spawn a fresh reviewer in merge mode, with the review file, the worktree path, the packet, and the counter-review's `summary.json`. It folds each counter-review point that matches an existing row into that row, adds a row for every other material point, adds each `human_review_reasons` entry as a row with source `human-review`, and updates the verdict. Then:
    - read only the verdict line and the table: `grep '^|' <review>`;
@@ -191,7 +236,7 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
    - **Defer** when it does not matter yet: it is cosmetic, a task that will rework that code anyway is the better place for it, or fixing it now would widen this task's scope. Record why in `PROGRESS.md` (see below).
    - **Dismiss** a finding that is wrong or not worth doing at all, with the reason in the review file.
    - Write each decision as a line under the round's table in the review file: `<row id>: fix | defer → <owner> | dismiss | keep | revert | decided | halt — <reason>`.
-   - Fix-now findings go to a **fresh** fixer, given the review file, the finding ids, the packet and the worktree path. Never resume the implementer for fixes.
+   - Fix-now findings go to a **fresh** fixer: a new spawn of the task's implementer agent in fix mode, given the review file, the finding ids, the packet and the worktree path. Never resume the implementer for fixes.
    - Before spawning the fixer, record the worktree's current tree, so the fix can be checked on its own: `cd <worktree> && git add -A && git write-tree > <run dir>/packets/<id>-pre-r<k+1>.tree && git reset -q`. When the fixer returns, record the fixed tree the same way into `<id>-post-r<k+1>.tree`.
    - When nothing needs fixing now, the task goes straight to the merge.
    - Deferred findings go under "Deferred findings" in `PROGRESS.md`, each with a reason and the task that owns it, and into that task's packet.
@@ -299,7 +344,7 @@ Never drop a reason silently. Each one you decide yourself is listed under "Deci
 
 If the same reason returns on task after task, the repository's rules do not fit an orchestrated run. Say so at the next STOP or handoff, with the rule and how often it fired, and recommend the human review the rule; do not edit the rules yourself.
 
-The plan stage uses the same script with `plan` as the stage, run on the repository root, with `ask.txt` holding the human's ask and `plan.txt` the plan plus each generated agent's standing guidance. The plan's first review runs every role. A later pass over a revised plan names the roles the revision concerns, usually `counter-reviewer` alone.
+The plan stage uses the same script with `plan` as the stage, run on the repository root, with `ask.txt` holding the human's ask and `plan.txt` the plan plus each generated agent's `Domain guidance` section. The plan's first review runs every role. A later pass over a revised plan names the roles the revision concerns, usually `counter-reviewer` alone.
 
 A review of the repository root covers every changed and untracked file in this checkout, so run one only when nothing is writing into it: before spawning tasks, or between batches. Agent worktrees nested in the checkout are skipped.
 
@@ -386,6 +431,7 @@ Task table columns:
 | id | goal | files | acceptance tests | depends on | size | agent | review | lane |
 ```
 
+- **Agent** names the generated implementer agent that takes the task (see "Run agents"), followed by `model/effort` when the task departs from that agent's default.
 - **Review** is the task's depth, `full` or `light` (see "Review depth").
 - **Acceptance tests** name the test file and list concrete assertions.
 - **Dependencies**: `Tn` is a hard edge; `Tn (soft)` is a preference.

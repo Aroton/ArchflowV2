@@ -26,7 +26,7 @@ Start every session by reading `.archflow/runs/<name>/PROGRESS.md` when it exist
 These are hard rules for the whole run:
 
 - No implementation starts until the human explicitly approves the plan at STOP 0. Approval of a declared STOP is explicit too; silence is not approval.
-- The plan is written by a planner sub-agent on the strongest model available, never by this session and never on a cheaper model, unless the human names another model for it. The same holds when a later milestone is detailed and when a revision changes scope, architecture, tasks or agents.
+- The plan is written by a planner sub-agent on the strongest model available, never by this session and never on a cheaper model, unless the human names another model for it. The same holds when a later milestone is detailed and when a revision changes scope, architecture, tasks or the agent roster.
 - Honor every STOP the plan declares. At a STOP, write the report, set the status, commit, and end the session.
 - Between STOPs, halt and ask the human only for a decision that is theirs:
   - a change to what the human gets: a requirement is dropped or weakened, or the product would behave differently from what they approved;
@@ -52,6 +52,7 @@ Plan approval makes the requirements and the declared STOPs the human's. The arc
 - fixing a defect found along the way, including one that was there before the run, when the fix is the kind of work the run is already doing. A fix that makes the product behave as the requirements or the reference intend is not a change to what the human gets, even when it alters behavior that already shipped;
 - correcting a task row, an acceptance criterion or an architecture detail that the code has shown to be wrong, stale or too narrow, while the requirement behind it is still met;
 - adding, splitting, reordering or dropping tasks inside the approved requirements;
+- adding a lesson the run has confirmed to the guidance of a domain's agents;
 - revising a decision you made earlier;
 - deciding a sub-agent's question, a finding, or a human-review reason that names none of the human's decisions above.
 
@@ -94,17 +95,18 @@ Planning has three parts, each on the model it needs: you settle what is wanted,
 
 **Write the planning brief**, `research/planning.md`: the ask in the human's words, the settled requirements and every decision the human made, the run branch, the active review triggers, and an index of the research files with a line on what each covers.
 
-**Have the planner write the plan.** The plan is always written by a planner sub-agent on the plan-writing route, the strongest model available (`fable` / `high` today), never by you and never on a cheaper model: an error in the plan is repeated in every task built on it. Spawn one fresh planner with the brief's path, the run directory, and this skill directory's absolute path. It reads the research, looks up whatever else it needs in the code, and writes `PLAN.md`, `DECISIONS.md`, the run's generated agents in `.claude/agents/`, and `BRIEF.md`. When it returns a question that is the human's, ask it, add the answer to the brief, and spawn a fresh planner.
+**Have the planner write the plan.** The plan is always written by a planner sub-agent on the plan-writing route, the strongest model available (`fable` / `high` today), never by you and never on a cheaper model: an error in the plan is repeated in every task built on it. Spawn one fresh planner with the brief's path, the run directory, and this skill directory's absolute path. It reads the research, looks up whatever else it needs in the code, and writes `PLAN.md`, `DECISIONS.md`, the run's generated agents in `.claude/agents/`, and `BRIEF.md`. The agents are specialized to the run: each kind of work whose guidance differs gets its own implementer and reviewer, beside a general pair for everything else ("Run agents" in `PROTOCOL.md`). When it returns a question that is the human's, ask it, add the answer to the brief, and spawn a fresh planner.
 
 Then create `PROGRESS.md` from `templates/PROGRESS.md`, `reviews/`, and a `.gitignore` containing `packets/`. Read the plan by section: enough to check that it answers the brief and to present it.
 
-**Counter-review the plan before the human sees it.** Write the human's ask to the run's `packets/plan-cr<k>/ask.txt`, and `cat` the plan plus each generated agent's standing guidance into `plan.txt` beside it. Then run `bash <this skill directory>/scripts/counter-review.sh <repository root> <that directory> claude plan`, in the background. The review's subject is every uncommitted run and agent file. Read every report in `summary.json` and decide each point; dismiss the unsupported ones with reasons. Supported defects that change scope, architecture, tasks, routing or agents go to a fresh planner, with the points and your decisions in its prompt. A wording or formatting fix you make yourself.
+**Counter-review the plan before the human sees it.** Write the human's ask to the run's `packets/plan-cr<k>/ask.txt`, and `cat` the plan plus each generated agent's `Domain guidance` section into `plan.txt` beside it. Then run `bash <this skill directory>/scripts/counter-review.sh <repository root> <that directory> claude plan`, in the background. The review's subject is every uncommitted run and agent file. Read every report in `summary.json` and decide each point; dismiss the unsupported ones with reasons. Supported defects that change scope, architecture, tasks, routing or agents go to a fresh planner, with the points and your decisions in its prompt. A wording or formatting fix you make yourself.
 
 Then STOP 0. Commit the run files and agents with the status `AWAITING USER (STOP 0)`. Present the plan conversationally, in one message that stands on its own:
 
 - scope and requirements;
 - milestones and declared STOPs;
-- the generated agents and which model and effort each kind of work is routed to, the orchestrator included;
+- the generated agents: what kind of work each one covers and why it is its own agent;
+- which model and effort each level of difficulty is routed to, the orchestrator included;
 - how the work will be reviewed: which tasks get the cross-model counter-review, which get the in-model review alone and why, and that a fix is checked on its own instead of sending the whole task back for review;
 - what the counter-review changed;
 - what will stop the run for them: the declared STOPs, the decisions that stay theirs, and the repository's active human-review triggers;
@@ -123,10 +125,10 @@ Follow `PROTOCOL.md`:
    - Reconcile the task log with `git log`; git wins.
    - Hand any uncommitted leftovers from a dead session to a reviewer before anything else.
 2. **Run tasks through the per-task loop.** Each change gets one open-ended review, and after that only its fixes are checked:
-   - packet, then an implementer in an isolated worktree;
-   - one review: a fresh reviewer and, for a `full` task, your own counter-review of that worktree in parallel, then a fresh merge-mode reviewer that folds the finished counter-review into the findings;
+   - packet, then the implementer agent the task's row names, in an isolated worktree;
+   - one review: a fresh reviewer for that kind of work and, for a `full` task, your own counter-review of that worktree in parallel, then a fresh merge-mode reviewer that folds the finished counter-review into the findings;
    - your decision on each row. A finding is fixed now, deferred, or dismissed: criticals always get fixed, and anything else gets fixed when leaving it would cost more later. Unplanned work is kept, trimmed or reverted. A human-review reason is decided by you or taken to the human, per "Who decides";
-   - a fresh fixer for what gets fixed now, then a fresh reviewer that verifies those fixes and nothing else. A fix that cannot be checked against something the fixer did not produce, such as new math or a reworked approach, also gets a cross-model review of the fix alone. The task is not sent back for another full review, and the test and constitution reviewers run once per task;
+   - a fresh fixer for what gets fixed now (a new spawn of the task's implementer agent in fix mode), then a fresh reviewer that verifies those fixes and nothing else. A fix that cannot be checked against something the fixer did not produce, such as new math or a reworked approach, also gets a cross-model review of the fix alone. The task is not sent back for another full review, and the test and constitution reviewers run once per task;
    - squash-merge, one commit per task.
 
    Run independent tasks in parallel when their files do not overlap. Sub-agents run only targeted tests and typecheck-level checks; full builds, full suites and slow test groups are yours. A sub-agent that waits on a command does so through `scripts/wait.sh`, which returns about every four minutes so its cache stays warm. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, check of a fix, or answered question goes to a fresh agent.
