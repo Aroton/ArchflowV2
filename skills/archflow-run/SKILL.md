@@ -19,7 +19,7 @@ Start every session by reading `.archflow/runs/<name>/PROGRESS.md` when it exist
 - `PLANNING`: continue planning;
 - `AWAITING USER (STOP n)` or `AWAITING USER (halt)`: present the whole stop or the whole pending question again, from `PROGRESS.md` and the STOP report, as if for the first time, and wait;
 - `RUNNING`: execute the next batch;
-- `COMPLETE`: report the outcome and the cleanup that remains.
+- `COMPLETE`: report the outcome and offer the cleanup that remains (see "STOPs and completion").
 
 ## Human trust boundaries
 
@@ -138,7 +138,7 @@ Follow `PROTOCOL.md`:
    - If the next milestone is "detailed at start", have a fresh planner write its task rows from what the run has learned, and have them reviewed once before spawning any of them: by the plan-stage counter-review when they add architecture or choices the approved plan does not hold, by a fresh in-model plan review when they only continue it. That review needs no human gate unless the milestone changes the requirements or a decision the human made.
 4. **Hand off.**
    - When to stop: after the batch (typically 8–10 merged tasks), or earlier when this session's context grows heavy.
-   - What to do: run the full build and suite, write the session handoff into `PROGRESS.md`, commit, and end with a summary for the human: what this session merged, the build and suite result, each decision you made with how to undo it, anything deferred that they should know, what comes next, and the exact command that starts the next session, on the orchestrator's model and effort.
+   - What to do: run the full build and suite, remove the worktrees and temporary directories this session's finished work left behind ("Worktrees and temporary directories" in `PROTOCOL.md`), write the session handoff into `PROGRESS.md`, commit, and end with a summary for the human: what this session merged, the build and suite result, each decision you made with how to undo it, anything deferred that they should know, what comes next, and the exact command that starts the next session, on the orchestrator's model and effort.
 
 Keep the orchestrator's context small: it is re-read on every turn. Prefer reviewer verdict lines and findings tables to whole reviews or diffs, and bounded windows or delegation to reading large design or source files whole. Let completion notifications wake you instead of polling.
 
@@ -153,4 +153,7 @@ At a declared STOP:
 When the last milestone passes, run the final deferral pass: every open deferred finding is fixed or closed with a reason. Write a final STOP report that lists each won't-fix with its reason, and set the status to `COMPLETE` after the human accepts it. Then:
 
 - Propose durable, task-independent conventions the run discovered for the repository's `CLAUDE.md` or `AGENTS.md`.
-- Remind the human that `.archflow/runs/<name>/` and the run's generated agents are working files to delete before opening a PR.
+- Remove what the run's sub-agents left behind: every remaining task worktree and its branch, and any scratch directory ("Worktrees and temporary directories" in `PROTOCOL.md`).
+- Offer to remove the run itself. `.archflow/runs/<name>/` and the run's generated agents are working files that do not belong in a PR, but the human may still want to read them, so removing them is their call: say what would go, and wait for an explicit yes. Then run `bash <this skill directory>/scripts/cleanup.sh <repository root> <name>`. It deletes the run directory and the run's agents and commits the deletion locally, and it refuses while any of those files has uncommitted changes, so everything it removes can be restored from git. Tell the human in plain language what it removed, how to undo it, and anything it kept or left alone, such as an agent file it could not tie to the run or a worktree that is still there.
+
+The same script drops a run the human decides to abandon: when they ask, commit or discard the run's uncommitted files first, then run it.

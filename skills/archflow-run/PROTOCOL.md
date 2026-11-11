@@ -26,10 +26,12 @@ A run's state lives in its files and in git, not in any session's context. Any f
 
 Follow it with one sentence on where to resume.
 
+**Removing the run.** These are working files: tracked on the run branch while the run is going, and removed before a pull request. `bash <skill dir>/scripts/cleanup.sh <repository root> <name>` removes them: the run directory, the run's generated agents, and any scratch review worktree the run left in the temp directory, in one local commit that `git revert` undoes. It refuses while a run or agent file has uncommitted changes, so nothing it deletes is lost. It keeps and reports anything it cannot prove is this run's, such as an agent file whose description names another run, and it lists the worktrees that remain without touching them or any branch. `--dry-run` shows what it would do. Run it when the human says to remove the run, at completion or to drop an abandoned run; see the skill's "STOPs and completion".
+
 ## Resume (start of every execution session)
 
 1. Read `PROGRESS.md` and `DECISIONS.md`. Read `PLAN.md` by section, not whole when it is large. Do not read research or reference material yourself; sub-agents read it through packets.
-2. Run `git status` and `git log --oneline -15`.
+2. Run `git status`, `git log --oneline -15` and `git worktree list`.
    - Each merged task has a commit whose subject starts with `<name> <id>:`. When the task log and git disagree, git wins: correct the log.
    - Uncommitted changes or leftover agent worktrees mean a previous session died mid-task. Send them to a reviewer before spawning new work, then merge or discard them deliberately.
 3. Compute the ready set: tasks in the current milestone whose dependencies are all merged and that are not already in flight.
@@ -155,7 +157,7 @@ Split where the guidance changes, and no finer. A physics engine, a UI and datab
 
 A task's row names its implementer agent. Its fixes go to that agent, and its reviews to the reviewer of the same domain, or to the general reviewer when the domain has none. Split a task that spans domains. A task that joins two domains goes to the domain whose guidance covers the larger risk, or to the general agent with both interfaces in its packet.
 
-**Writing the guidance.** Fill each scaffold's `Domain guidance` section with what a strong engineer new to this run would not know: the reference and how fidelity is proven, the domain's rules and decisions here, where this work goes wrong, the conventions of that code, and the tools it needs. It is not a tutorial on the field. A reviewer's section holds the same reference and validation, plus the lenses to review that work through. The general pair holds only what is true of any task in the run; when no standing guidance exists, generate it from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree, and give each agent the agent check its domain uses.
+**Writing the guidance.** Fill each scaffold's `Domain guidance` section with what a strong engineer new to this run would not know: the reference and how fidelity is proven, the domain's rules and decisions here, where this work goes wrong, the conventions of that code, and the tools it needs. It is not a tutorial on the field. A reviewer's section holds the same reference and validation, plus the lenses to review that work through. The general pair holds only what is true of any task in the run; when no standing guidance exists, generate it from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree, and give each agent the agent check its domain uses. Fill `{{run}}` with the run's name as given, and keep each description's sentence "Spawned only by the <name> orchestrator" as the scaffold has it: `scripts/cleanup.sh` recognizes the run's agents by their file name and that sentence, and leaves any other file in `.claude/agents/` alone.
 
 **Changing the roster mid-run.** The run learns what its agents should have been told. When the same finding returns across a domain's tasks, the lesson belongs in that domain's agents: add the line yourself, in the implementer and the reviewer, and record it as the skill's "Who decides" describes. Adding, removing or re-scoping an agent is a plan revision and goes to a fresh planner, as does a milestone that opens a new domain. Agent definitions load when a session starts, so a new or changed agent takes effect in the next fresh session. Until then, send that work to the general agent with the guidance in its packet.
 
@@ -270,8 +272,17 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
 8. **Commit.**
    - One commit per task, subject `<name> <id>: <imperative summary>`. The squash merge has staged the task's changes; add the task's own review files by path (`git add <run dir>/reviews/<id>-*`) and the `PROGRESS.md` tick, and commit the index. `git add -A` in this checkout would sweep in other in-flight tasks' review files.
    - Tick the task log in `PROGRESS.md` with the short SHA and the review summary. Close each deferred finding this task carried, using the reviewer's `carried` rows: fixed, with the SHA, or still open and routed to a new owner. The tick can ride along with the next commit.
-   - Remove the worktree and its branch.
+   - Remove the worktree and its branch once the commit exists: `git worktree remove --force <worktree>`, then `git branch -D <branch>`. The branch needs `-D` because a squash merge leaves it looking unmerged. See "Worktrees and temporary directories".
 9. **Full suite and build.** Only the orchestrator runs them, once per batch, serialized, not once per merge. The same goes for any slow test group the agent check leaves out. Several sub-agents running it in parallel overload the machine, and each one spends the wait in keep-alive turns. Bisect a failure by task and send it to a fresh fixer.
+
+## Worktrees and temporary directories
+
+The human comes back to this repository long after the run. A worktree, branch or temp directory the run left behind is something they find later and cannot tell is safe to delete, and on a long run these pile up by the dozen. So clean up as each piece of work ends, not at the end of the run:
+
+- **Task worktrees.** Claude Code keeps a sub-agent's worktree and its branch whenever the agent changed anything, so every implemented task leaves one. Remove both as soon as the work is in the run branch or discarded: after the task's commit (step 8 of the per-task loop), and when you discard an attempt or rescope a task.
+- **A sweep at handoff and at completion.** Run `git worktree list`, then `git worktree prune`. After the sweep the list holds only work that is still in flight, and the handoff names it. Remove a leftover only when its task's commit is in the run branch or you have decided to discard it; work that is not merged goes through "Resume" first, never out with the sweep. A worktree you cannot tie to this run's tasks may belong to another session: leave it, and tell the human it is there.
+- **Scratch review worktrees.** The delta and milestone reviews build theirs under a temp directory named for the run (`archflow-run-<name>.XXXXXX`). Remove the worktree and that directory when the review returns. The name is what lets `scripts/cleanup.sh` find one a dead session left.
+- **Everything else outside the repository.** A directory you or a sub-agent makes for an experiment, a log or a downloaded reference is deleted by whoever made it, before that agent returns. `scripts/wait.sh` clears its own handles: each `run` deletes the ones last touched over a day ago.
 
 ## Cross-model counter-review
 
@@ -316,7 +327,7 @@ A delta review puts only the fix in front of the cross-model reviewer. The revie
 ```bash
 pre=$(cat <run dir>/packets/<id>-pre-r<k>.tree); post=$(cat <run dir>/packets/<id>-post-r<k>.tree)
 c=$(git commit-tree "$pre" -p <base sha> -m "<id> before fix r<k>")
-wt=$(mktemp -d)/wt; git worktree add -q --detach "$wt" "$c"
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/archflow-run-<name>.XXXXXX"); wt=$tmp/wt; git worktree add -q --detach "$wt" "$c"
 git diff --binary "$pre" "$post" | git -C "$wt" apply --index
 out=<run dir>/packets/<id>-cr<k>; mkdir -p "$out"
 { grep -E '^\| <id> \|' <run dir>/PLAN.md
@@ -329,7 +340,7 @@ printf '%s\n' "<check command>: <result the fixer reported>" > "$out/verificatio
 bash <skill dir>/scripts/counter-review.sh "$wt" "$out" claude implementation counter-reviewer
 ```
 
-Remove the scratch worktree afterwards with `git worktree remove --force "$wt"`. The scratch commit is on no branch and needs no cleanup. Because the review reads its own worktree, it can run while the verifier works in the task's worktree.
+Remove the scratch worktree and its directory afterwards with `git worktree remove --force "$wt"; rm -rf "$tmp"`. The scratch commit is on no branch and needs no cleanup. Because the review reads its own worktree, it can run while the verifier works in the task's worktree.
 
 ### Human-review reasons
 
@@ -353,12 +364,12 @@ Task worktrees read `.archflow/config.yaml` and the constitution from the commit
 For a whole-milestone counter-review, keep the run's own ledger and review files out of the subject:
 
 ```bash
-start=<milestone start sha>; wt=$(mktemp -d)/wt
+start=<milestone start sha>; tmp=$(mktemp -d "${TMPDIR:-/tmp}/archflow-run-<name>.XXXXXX"); wt=$tmp/wt
 git worktree add -q --detach "$wt" "$start"
 git diff --binary "$start" HEAD -- . ':!.archflow/runs' | git -C "$wt" apply --index
 ```
 
-Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds the milestone's goal and its task rows, `plan.txt` the plan's architecture and invariants plus `BRIEF.md`, and `verification.txt` the full build and suite result. Remove the worktree afterwards with `git worktree remove --force "$wt"`. A milestone over the review's 25 MiB snapshot limit is reviewed per lane instead.
+Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds the milestone's goal and its task rows, `plan.txt` the plan's architecture and invariants plus `BRIEF.md`, and `verification.txt` the full build and suite result. Remove the worktree and its directory afterwards with `git worktree remove --force "$wt"; rm -rf "$tmp"`. A milestone over the review's 25 MiB snapshot limit is reviewed per lane instead.
 
 ## Milestones and gates
 

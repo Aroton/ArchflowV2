@@ -15,6 +15,9 @@
 # 0. `stop` ends the runner, the command and their children; a later `wait` then reports `exit=unknown`. Give the Bash
 # call a timeout above the slice (300000 ms covers the default).
 # ARCHFLOW_WAIT_SLICE overrides the slice in seconds.
+#
+# Handles live in the temp directory and nobody comes back for them, so each `run` also deletes this user's handles
+# that were last touched more than a day ago and whose command has finished or whose runner is gone.
 set -u
 slice=${ARCHFLOW_WAIT_SLICE:-240}
 self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
@@ -33,6 +36,14 @@ case "${1:-}" in
     $detach nohup bash -c 'echo $$ > "$1/pid.tmp"; mv "$1/pid.tmp" "$1/pid"
       bash -o pipefail "$1/command" > "$1/log" 2>&1 < /dev/null; echo $? > "$1/exit.tmp"; mv "$1/exit.tmp" "$1/exit"' \
       wait-run "$handle" > /dev/null 2>&1 &
+    # Sweep old handles after the command has started, so the sweep never delays it. Only a real directory with a
+    # handle's shape is removed; one whose runner is still alive is kept however old it is.
+    find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'archflow-wait.*' -user "$(id -u)" -mmin +1440 2> /dev/null \
+      | while IFS= read -r old; do
+          [ -f "$old/command" ] || continue
+          if [ ! -f "$old/exit" ] && [ -f "$old/pid" ] && kill -0 "$(cat "$old/pid")" 2> /dev/null; then continue; fi
+          rm -rf -- "$old"
+        done
     ;;
   wait)
     [ $# -eq 2 ] && [ -f "$2/command" ] || { echo "usage: wait.sh wait <handle from a run slice>"; exit 2; }

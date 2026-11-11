@@ -101,7 +101,7 @@ flowchart LR
 - **Everything is tracked in markdown.** Progress, decisions and reviews live in `.archflow/runs/<name>/`. Every few tasks the orchestrator writes a handoff, and you restart it in a fresh session with the same command.
 - **You are involved only when it matters.** That means plan approval, the STOPs you declare, and halts for decisions that are yours: a change to what you get, reversing a decision you made, a risky change the plan does not cover, a kind of change your repository's rules ask a human to see, an unresolved critical finding, or an irreversible action. The orchestrator decides everything else, such as keeping a bug fix a sub-agent made along the way, and reports each of those decisions with how to undo it.
 
-It needs the `archflow-local` launcher and authenticated reviewer CLIs. The run directory and its generated agents (`.claude/agents/`) are working files: delete them before opening a PR.
+It needs the `archflow-local` launcher and authenticated reviewer CLIs. The run directory and its generated agents (`.claude/agents/`) are working files that do not belong in a PR. When the run completes, the orchestrator offers to remove them and, on your yes, does it in one local commit you can revert.
 
 ## File Structure
 

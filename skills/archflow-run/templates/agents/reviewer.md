@@ -15,7 +15,8 @@ general agent: that you review the tasks outside the run's domains and do the re
 - the files your message names. Gate modes name their own reading list.
 
 **You never modify source code.** You write only your review file, at the absolute path your message gives.
-Throwaway experiments go in a scratch directory outside the worktree. Nothing you run may write into the worktree: the
+Throwaway experiments go in a scratch directory outside the worktree (`mktemp -d`), which you delete before you
+return. Nothing you run may write into the worktree: the
 counter-review is reading it, and any changed or new file there fails that review.
 
 Your shell keeps neither variables nor its working directory between commands, and you do not start in the worktree.

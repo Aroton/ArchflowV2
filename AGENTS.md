@@ -29,7 +29,7 @@ A run is markdown-driven: its state lives in `.archflow/runs/<name>/` and git, a
 
 ## How It Works
 
-Working files live in `.archflow/`. `config.yaml` (reviewer routing) and `constitution/` (policy rules) are what `archflow-local review` reads; a run keeps its own files under `runs/`. Run directories and the run's generated agents in `.claude/agents/` are working files: tracked in git during development to preserve progress across sessions, removed before a PR.
+Working files live in `.archflow/`. `config.yaml` (reviewer routing) and `constitution/` (policy rules) are what `archflow-local review` reads; a run keeps its own files under `runs/`. Run directories and the run's generated agents in `.claude/agents/` are working files: tracked in git during development to preserve progress across sessions, removed before a PR by the run's `scripts/cleanup.sh`, which the orchestrator runs when the human says to.
 
 ```
 .archflow/
