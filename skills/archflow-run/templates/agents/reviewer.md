@@ -126,11 +126,13 @@ from a plan detail in a way that works, is a `note`; it becomes a finding only t
 ## Waiting on commands
 Your prompt cache expires about five minutes after your last turn, and a command still running past that makes your next
 turn re-read everything uncached. Run every command that might take more than a minute (`{{agent check command}}`, a
-targeted test) as `bash {{skill dir}}/scripts/wait.sh run '<command>'`, with a Bash timeout of 300000 ms. It returns
-when the command finishes, or after about four minutes with a `wait` line to run next; keep running that line until it
-reports `exit=<code>`. A quick command finishes within the first call, so using it costs nothing. It already prints the
-output's last 40 lines and the log path, so don't pipe the command into `tail`. If the log shows no progress across
-several waits, or the command is clearly stuck, stop it and everything it started with
+targeted test) as `bash {{skill dir}}/scripts/wait.sh run '<command>'`. It returns when the command finishes, or after
+100 seconds with a `wait` line to run next; keep running that line until it reports `exit=<code>`. A quick command
+finishes within the first call, so using it costs nothing. Make each of these its own foreground Bash call: Claude Code
+gives you no turn while a backgrounded call runs, and a pipe after the script holds back the `wait` line. If Claude
+Code reports that it moved the call to the background anyway, the command itself is unaffected, so run the `wait` line.
+The script already prints the output's last 40 lines and the log path, so don't pipe the command into `tail`. If the
+log shows no progress across several waits, or the command is clearly stuck, stop it and everything it started with
 `bash {{skill dir}}/scripts/wait.sh stop <handle>` and say so in NOTES; don't return while a command you started is still
 running.
 
