@@ -1,6 +1,6 @@
 ---
 name: archflow-run
-description: Plan a large piece of work once, get human approval, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, in-model review plus cross-model counter-review, and markdown state.
+description: Plan a large piece of work once, get human approval, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, one in-model review per task plus a cross-model counter-review sized to the task's risk, and markdown state.
 ---
 
 # Orchestrated Run
@@ -15,7 +15,7 @@ Start every session by reading `.archflow/runs/<name>/PROGRESS.md` when it exist
 
 - no run directory: plan the run;
 - `PLANNING`: continue planning;
-- `AWAITING USER (STOP n)`: present the stop and wait;
+- `AWAITING USER (STOP n)` or `AWAITING USER (halt)`: present the whole stop or the whole pending question again, from `PROGRESS.md` and the STOP report, as if for the first time, and wait;
 - `RUNNING`: execute the next batch;
 - `COMPLETE`: report the outcome and the cleanup that remains.
 
@@ -25,22 +25,65 @@ These are hard rules for the whole run:
 
 - No implementation starts until the human explicitly approves the plan at STOP 0. Approval of a declared STOP is explicit too; silence is not approval.
 - Honor every STOP the plan declares. At a STOP, write the report, set the status, commit, and end the session.
-- Between STOPs, halt and ask the human only for:
+- Between STOPs, halt and ask the human only for a decision that is theirs:
+  - a change to what the human gets: a requirement is dropped or weakened, or the product would behave differently from what they approved;
+  - reversing or narrowing a decision the human made, or replacing the approved approach rather than correcting it;
+  - a risky change the approved plan does not already cover: one that can lose or corrupt data, weakens a security or access boundary, breaks a contract something outside the run depends on, or spends money;
+  - a kind of change the repository's own rules ask a human to see, such as database behavior or a path under an approval rule, when the change is real;
   - a critical finding still unresolved after the fix-round limit;
-  - a change to the run's requirements scope or to an accepted decision in `DECISIONS.md`;
-  - a constitution `human_review_reasons` entry;
   - anything outward-facing or hard to reverse: push, deploy, shared databases, installs into machine-global locations, deleting user data.
-- Every task gets the cross-model counter-review. If it cannot run, report the blocker and do not merge that task. Never substitute self-review. The human may explicitly waive it for a named task; record the waiver in `DECISIONS.md`.
+- Every other decision is yours, and none of them is hidden: each is recorded with how to undo it and reported in the next message that ends a turn. See "Who decides".
+- Every task gets the review depth the approved plan assigns it, and never less than an in-model review by an agent that did not write the work. A task whose depth includes the cross-model counter-review does not merge without it: if it cannot run, report the blocker, and never substitute self-review. You may raise a task's depth. Lowering it for a task that changes behavior is the human's: they may waive it for a named task, and the waiver is recorded in `DECISIONS.md`.
 - Commits stay local on the run branch recorded in `PLAN.md`. Never push unless the human asks.
-- Ask the human in plain prose with a recommendation. Explain what needs attention, why it matters, and the choices. Keep digests, JSON, and internal paths out of it unless asked.
+- The human is not watching the run. Every message that ends a turn stands on its own and restates in full anything it asks; see "Talking to the human".
 
 Everything else in this skill and in `PROTOCOL.md` is a default. Adapt numbers and procedure to the work, and record material adaptations in `DECISIONS.md`.
+
+## Who decides
+
+The human approved a plan so the run could proceed without them. Stopping to ask about something they would simply wave through costs them the time the run was meant to save. A question is worth a stop only when their answer could reasonably differ from yours and a wrong guess would be costly to undo.
+
+Plan approval makes the requirements and the declared STOPs the human's. The architecture, the task table and the acceptance criteria are the approved means of meeting them, and keeping those means working is your job. These are your calls:
+
+- keeping, trimming or reverting work a sub-agent did beyond its task row;
+- fixing a defect found along the way, including one that was there before the run, when the fix is the kind of work the run is already doing. A fix that makes the product behave as the requirements or the reference intend is not a change to what the human gets, even when it alters behavior that already shipped;
+- correcting a task row, an acceptance criterion or an architecture detail that the code has shown to be wrong, stale or too narrow, while the requirement behind it is still met;
+- adding, splitting, reordering or dropping tasks inside the approved requirements;
+- revising a decision you made earlier;
+- deciding a sub-agent's question, a finding, or a human-review reason that names none of the human's decisions above.
+
+Something not being written down in the plan or in `DECISIONS.md` is not a reason to ask. Ask when the decision is on the human's list. When it is a close call, weigh what a wrong guess costs: if it is cheap to undo, decide and report it; if it is not, ask.
+
+Make each call, then make it visible:
+
+- Record it where its size puts it. A call that changes the plan, touches behavior beyond its task, or overrides a reviewer goes into `DECISIONS.md`, marked `orchestrator`, with the reason and how to undo it. A routine one, such as keeping a small fix the task needed, needs only its decision line in the review file. Decisions the human made are marked `human`; only those are protected from you.
+- Keep the plan true: when a call changes a task row, a criterion or the architecture, update `PLAN.md` in the same commit.
+- List it under "Decisions to report" in `PROGRESS.md`, and report it in the next message that ends a turn: the recorded ones individually, the routine ones as a short summary. The human can overturn any of them; that report, not a stop, is what keeps them in control.
+
+## Talking to the human
+
+Assume the human reads nothing until the session stops and waits for them. They did not see the tool calls, the notes written between them, or the earlier messages of a long session, and they may be returning from other work hours later. The message that ends a turn is the only one they are sure to read, so write it for a reader with no context:
+
+- **Lead with where the run stands:** what the run is, the milestone and how many tasks are merged of how many, and what happened since the human last answered, in a few plain sentences. Then say whether you need anything from them.
+- **State every open question completely, in that message.** For each: what has to be decided, why it matters, the choices and what each leads to, and your recommendation. Number them when there are several, so the human can answer "1: yes, 2: the second option". Give the facts the decision depends on in the message itself; a file path is a pointer for more detail, not a substitute.
+- **Never point back at an earlier message.** "As I asked above", "the question from before" and "still waiting on your answer" all send the human scrolling for something they never read. If a question is still open after the human replies, because they asked something else, answered only part of it, or said something that does not settle it, respond to what they said and then restate the whole question, with its choices and recommendation, as if for the first time.
+- **Report the decisions you made.** List each call you made on the human's behalf since they last heard from you: what you decided, why, and how to undo it. Keep this apart from the questions, and say that it needs no answer unless they want one changed.
+- **Say what happens next:** what you will do on each answer, or that nothing is needed and how to continue.
+- **Write it plainly:** short sentences, no task ids or finding ids without saying what they are, and no digests, JSON, or internal paths unless asked.
+
+Stop only when the run needs the human: a STOP, a halt from the list above, a handoff, or completion. Notes written mid-turn are for the transcript; do not end a turn on one, and do not leave anything the human needs only in one. Anything that came up along the way and matters to them, such as a gate result, a waiver, or a decision you made, goes into the next message that ends a turn.
+
+When you halt between STOPs, first write the question, its choices and your recommendation under "Waiting on the human" in `PROGRESS.md`, set the status to `AWAITING USER (halt)`, and commit, so a fresh session can present it in full. When the human answers, record the answer under "Approvals", clear the entry, and set the status back.
 
 ## Plan the run
 
 Pick the run branch first. If the checkout is on the repository's default branch, create and check out a branch named after the run; otherwise ask whether to use the current branch. Record it in `PLAN.md`; every run commit lands there.
 
-Check that `archflow-local --help` lists the `review` command; if it does not, the installed ArchFlow predates this skill, so ask the human to reinstall and stop. Understand the ask, the repository, and its instructions. Delegate research to sub-agents when the size of the work calls for it, and persist what later sessions need under `.archflow/runs/<name>/research/`. Requirements are sized to the work. A paragraph is enough when the target is well understood, such as a port of known software. When the product intent is new or ambiguous, interview the human until the requirements are settled.
+Check that `archflow-local --help` lists the `review` command; if it does not, the installed ArchFlow predates this skill, so ask the human to reinstall and stop.
+
+Read the review policy the run will inherit, because it decides what the counter-review sends to the human. Every counter-review judges the work against the repository's `.archflow/constitution/` rules, or ArchFlow's shipped defaults when the repository has none. A rule that carries a `review_trigger` asks for a human whenever it matches, and so does a path under `approval_rules` in `.archflow/config.yaml`. List the active triggers and what each would stop the run for, and include that list at STOP 0. Rule files that sit directly in `.archflow/constitution/`, rather than under `default/` or `custom/`, predate the current defaults: their triggers were written for the gated task workflow and match on almost every orchestrated task. When you find that layout, or a trigger that would fire on ordinary work in this run, say so and recommend refreshing the rules with `/archflow-init` before the run starts. Changing repository policy is the human's decision; when they refresh it, the new rules are committed before any task spawns.
+
+Understand the ask, the repository, and its instructions. Delegate research to sub-agents when the size of the work calls for it, and persist what later sessions need under `.archflow/runs/<name>/research/`. Requirements are sized to the work. A paragraph is enough when the target is well understood, such as a port of known software. When the product intent is new or ambiguous, interview the human until the requirements are settled.
 
 Write `PLAN.md` from `templates/PLAN.md`. It holds:
 
@@ -48,9 +91,9 @@ Write `PLAN.md` from `templates/PLAN.md`. It holds:
 - the architecture decisions tasks depend on;
 - invariants every agent follows;
 - the agent check command: targeted tests for the changed files plus fast checks such as typecheck and lint, never a full build, as quick as the targeted scope allows (agents wait on it through `scripts/wait.sh`), and leaving the worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored) because a reviewer runs it while the counter-review reads the same worktree; and the full build and full suite command, which only the orchestrator runs;
-- model routing per kind of task;
+- model and effort routing per kind of task, starting from the defaults under "Model routing" in `PROTOCOL.md`;
 - milestones;
-- the task table;
+- the task table, with a review depth on every row: `full` for work that changes behavior, `light` for work whose mistakes are cheap and easy to see, such as documentation (see "Review depth" in `PROTOCOL.md`);
 - declared STOPs.
 
 Detail the first milestone's tasks now. Later milestones may be marked "detailed at start" when earlier work should shape them. Size tasks so one agent finishes each in a single focused spawn, and split anything larger before it is spawned. Create `DECISIONS.md`, `PROGRESS.md` from `templates/PROGRESS.md`, `reviews/`, and a `.gitignore` containing `packets/`.
@@ -59,15 +102,17 @@ Generate run-specific agents when the run has standing guidance that applies acr
 
 Counter-review the plan before the human sees it. Write the human's ask to the run's `packets/plan-cr<k>/ask.txt` and the plan plus each generated agent's standing guidance to `plan.txt` beside it. Then run `bash <this skill directory>/scripts/counter-review.sh <repository root> <that directory> claude plan`, in the background. The review's subject is every uncommitted run and agent file. Read every report in `summary.json`. Fix supported defects and dismiss the rest with reasons.
 
-Then STOP 0. Commit the run files and agents with the status `AWAITING USER (STOP 0)`. Present the plan conversationally:
+Then STOP 0. Commit the run files and agents with the status `AWAITING USER (STOP 0)`. Present the plan conversationally, in one message that stands on its own:
 
 - scope and requirements;
 - milestones and declared STOPs;
-- the generated agents and their routing;
+- the generated agents and which model and effort each kind of work is routed to;
+- how the work will be reviewed: which tasks get the cross-model counter-review, which get the in-model review alone and why, and that a fix is checked on its own instead of sending the whole task back for review;
 - what the counter-review changed;
+- what will stop the run for them: the declared STOPs, the decisions that stay theirs, and the repository's active human-review triggers;
 - any decision the human should make.
 
-When the human revises the plan at STOP 0, apply the revision. A significant change to scope, architecture, tasks, or agents runs the plan counter-review again before approval; a wording or formatting change does not.
+When the human revises the plan at STOP 0, apply the revision. A significant change to scope, architecture, tasks, or agents runs the plan counter-review again before approval, naming only the roles the revision concerns (usually `counter-reviewer`); a wording or formatting change does not.
 
 On explicit approval of the final plan, record it in `PROGRESS.md`, set the status to `RUNNING`, commit, and recommend a fresh session for execution. A fresh session loads the new agent definitions and starts with a clean context.
 
@@ -79,14 +124,21 @@ Follow `PROTOCOL.md`:
    - Read only the run's control files: `PLAN.md` by section, `PROGRESS.md` and `DECISIONS.md`.
    - Reconcile the task log with `git log`; git wins.
    - Hand any uncommitted leftovers from a dead session to a reviewer before anything else.
-2. **Run tasks through the per-task loop:** packet, implementer in an isolated worktree, a fresh reviewer and your own counter-review of that worktree in parallel, a fresh merge-mode reviewer that folds the finished counter-review into the findings, your decision on each finding (fix now, defer, or dismiss: criticals always get fixed, and anything else gets fixed when leaving it would cost more later), a fresh fixer for what gets fixed now, squash-merge, one commit per task. Run independent tasks in parallel when their files do not overlap. Sub-agents run only targeted tests and typecheck-level checks; full builds, full suites and slow test groups are yours. A sub-agent that waits on a command does so through `scripts/wait.sh`, which returns about every four minutes so its cache stays warm. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, re-review, or answered question goes to a fresh agent.
+2. **Run tasks through the per-task loop.** Each change gets one open-ended review, and after that only its fixes are checked:
+   - packet, then an implementer in an isolated worktree;
+   - one review: a fresh reviewer and, for a `full` task, your own counter-review of that worktree in parallel, then a fresh merge-mode reviewer that folds the finished counter-review into the findings;
+   - your decision on each row. A finding is fixed now, deferred, or dismissed: criticals always get fixed, and anything else gets fixed when leaving it would cost more later. Unplanned work is kept, trimmed or reverted. A human-review reason is decided by you or taken to the human, per "Who decides";
+   - a fresh fixer for what gets fixed now, then a fresh reviewer that verifies those fixes and nothing else. A fix that cannot be checked against something the fixer did not produce, such as new math or a reworked approach, also gets a cross-model review of the fix alone. The task is not sent back for another full review, and the test and constitution reviewers run once per task;
+   - squash-merge, one commit per task.
+
+   Run independent tasks in parallel when their files do not overlap. Sub-agents run only targeted tests and typecheck-level checks; full builds, full suites and slow test groups are yours. A sub-agent that waits on a command does so through `scripts/wait.sh`, which returns about every four minutes so its cache stays warm. Never resume or message a sub-agent that has been idle: its prompt cache is gone after about five minutes, so every fix, check of a fix, or answered question goes to a fresh agent.
 3. **At a milestone end:**
-   - Run the milestone's declared gate lenses.
+   - Run the milestone's declared gate lenses and, by default, the whole-milestone counter-review, which is the cross-model coverage for `light` tasks and verified fixes.
    - Run the deferral pass: re-decide every open deferred finding as fix, carry, or close.
-   - If the next milestone is "detailed at start", write its task rows and counter-review them with `stage:"plan"` before spawning any of them. That review needs no human gate unless the milestone changes requirements scope or an accepted decision.
+   - If the next milestone is "detailed at start", write its task rows and have them reviewed once before spawning any of them: by the plan-stage counter-review when they add architecture or choices the approved plan does not hold, by a fresh in-model plan review when they only continue it. That review needs no human gate unless the milestone changes the requirements or a decision the human made.
 4. **Hand off.**
    - When to stop: after the batch (typically 8–10 merged tasks), or earlier when this session's context grows heavy.
-   - What to do: run the full build and suite, write the session handoff into `PROGRESS.md`, commit, and tell the human to start a fresh session with this skill and the run name.
+   - What to do: run the full build and suite, write the session handoff into `PROGRESS.md`, commit, and end with a summary for the human: what this session merged, the build and suite result, each decision you made with how to undo it, anything deferred that they should know, what comes next, and the exact command that starts the next session.
 
 Keep the orchestrator's context small: it is re-read on every turn. Prefer reviewer verdict lines and findings tables to whole reviews or diffs, and bounded windows or delegation to reading large design or source files whole. Let completion notifications wake you instead of polling.
 
@@ -94,8 +146,8 @@ Keep the orchestrator's context small: it is re-read on every turn. Prefer revie
 
 At a declared STOP:
 
-- Write `reviews/STOP-<n>-report.md`. It covers what shipped, exact steps to try it, gate results, deferred findings, and decisions needed.
-- Set the status to `AWAITING USER (STOP <n>)`, commit, and present the report conversationally.
+- Write `reviews/STOP-<n>-report.md`. It covers what shipped, exact steps to try it, gate results, deferred findings, the decisions you made since the last report with how to undo each, and decisions needed.
+- Set the status to `AWAITING USER (STOP <n>)`, commit, and present the report conversationally in one message that stands on its own: the summary, the steps to try it, the decisions you made, and each decision needed with its choices and your recommendation.
 - Resume only on the human's explicit answer, and record it in `PROGRESS.md`.
 
 When the last milestone passes, run the final deferral pass: every open deferred finding is fixed or closed with a reason. Write a final STOP report that lists each won't-fix with its reason, and set the status to `COMPLETE` after the human accepts it. Then:

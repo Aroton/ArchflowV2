@@ -216,6 +216,39 @@ describe("standalone simple review", () => {
     expect(calls).toHaveLength(3);
   });
 
+  it("dispatches only the requested roles and still reports deterministic path triggers", async () => {
+    const { root, input, context } = await repo();
+    await mkdir(join(root, ".archflow"), { recursive: true });
+    await writeFile(join(root, ".archflow/config.yaml"), "schema_version: '1'\nroles:\n  counter-reviewer: {model: gpt-6-astra, effort: low}\n  adjudicator: {model: gpt-6-astra, effort: low}\napproval_rules:\n  subjects: []\n  content:\n    - paths: ['app.txt']\n");
+    const calls: Parameters<typeof fakeDispatch>[0] = [];
+    const result = await runSimpleReview({ ...input, roles: ["counter-reviewer"] }, context, { dispatch: fakeDispatch(calls) });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(calls.map((call) => call.role)).toEqual(["counter-reviewer"]);
+    expect(result.value!.reports.map((report) => report.role)).toEqual(["counter-reviewer"]);
+    expect(result.value!.constitution).toEqual({ status: "not-requested", judgments: [] });
+    expect(result.value!.human_review_reasons).toHaveLength(1);
+    const retried: Parameters<typeof fakeDispatch>[0] = [];
+    const specialists = await runSimpleReview({ ...input, roles: ["adjudicator", "test-reviewer"] }, context, { dispatch: fakeDispatch(retried) });
+    expect(specialists.ok, JSON.stringify(specialists)).toBe(true);
+    expect(retried.map((call) => call.role)).toEqual(["test-reviewer", "adjudicator"]);
+    expect(specialists.value!.constitution.status).toBe("complete");
+  });
+
+  it("rejects an empty, repeated, unknown, or inapplicable role selection without dispatch", async () => {
+    const { root, input, context } = await repo();
+    const calls: Parameters<typeof fakeDispatch>[0] = [];
+    for (const roles of [[], ["counter-reviewer", "counter-reviewer"], ["effort-reviewer"]]) {
+      const result = await runSimpleReview({ ...input, roles } as unknown as SimpleReviewInput, context, { dispatch: fakeDispatch(calls) });
+      expect(result.ok).toBe(false);
+      expect(result.error!.code).toBe("INPUT_INVALID");
+      expect(result.error!.message).toContain("roles");
+    }
+    await mkdir(join(root, ".archflow/constitution"), { recursive: true });
+    const inapplicable = await runSimpleReview({ ...input, roles: ["adjudicator"] }, context, { dispatch: fakeDispatch(calls) });
+    expect(inapplicable.error).toMatchObject({ code: "INPUT_INVALID", message: expect.stringContaining("roles") });
+    expect(calls).toHaveLength(0);
+  });
+
   it("rejects changed policy before dispatch and changed bytes during review", async () => {
     const { root, input, context } = await repo();
     const calls: Parameters<typeof fakeDispatch>[0] = [];

@@ -3188,7 +3188,7 @@
       ]
     },
     "src/contracts/simple-review.ts": {
-      "bytes": 4267,
+      "bytes": 4624,
       "format": "esm",
       "imports": [
         {
@@ -4030,7 +4030,7 @@
       ]
     },
     "src/review/simple-review.ts": {
-      "bytes": 11444,
+      "bytes": 12417,
       "format": "esm",
       "imports": [
         {
@@ -4118,7 +4118,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 988012,
+      "bytes": 989260,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -4862,7 +4862,7 @@
           "bytesInOutput": 975
         },
         "src/contracts/simple-review.ts": {
-          "bytesInOutput": 4068
+          "bytesInOutput": 4448
         },
         "src/contracts/trust.ts": {
           "bytesInOutput": 253
@@ -4949,7 +4949,7 @@
           "bytesInOutput": 8730
         },
         "src/review/simple-review.ts": {
-          "bytesInOutput": 9212
+          "bytesInOutput": 10080
         }
       }
     }

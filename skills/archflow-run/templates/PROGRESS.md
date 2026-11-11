@@ -4,6 +4,13 @@
 
 Resume: run `/archflow-run <name>` in a fresh session.
 
+## Waiting on the human
+<!-- Empty unless the status is AWAITING USER. Written so a fresh session can ask again in full:
+- <what must be decided, and why it matters>
+  - Choices: <each choice and what it leads to>
+  - Recommendation: <choice, and why>
+  - Blocked meanwhile: <tasks or none> -->
+
 ## Milestone board
 | Milestone | Goal | Status | Gate | STOP |
 |---|---|---|---|---|
@@ -11,9 +18,15 @@ Resume: run `/archflow-run <name>` in a fresh session.
 
 ## Approvals
 - STOP 0 (plan): <pending | approved <date>: summary of the human's answer>
+<!-- one line per later STOP or halt: - <STOP n | halt: topic> — <date>: <the question in a few words> → <the human's answer> -->
 
 ## Task log
-<!-- one line per merged task: - <id> — <short sha> — reviews/<id>-r<k>.md (critical/major/minor) <notes; carried ids → owner> -->
+<!-- one line per merged task: - <id> — <short sha> — <full | light> — reviews/<id>-r<k>.md (critical/major/minor) <fix rounds; delta review if one ran; carried ids → owner> -->
+
+## Decisions to report
+<!-- Calls the orchestrator made on the human's behalf that they have not been told about yet. Reported in full in the
+     next message that ends a turn, then moved into that session's handoff.
+- <ADR id or review row>: <what was decided, in plain words> — why: <reason> — undo: <how> -->
 
 ## Deferred findings
 <!-- open:   - [ ] <review id>-<finding id> (<severity>): <claim> → <owning task> — deferred because <reason>
@@ -29,6 +42,6 @@ Resume: run `/archflow-run <name>` in a fresh session.
 - Merged: <ids> (<done>/<total>)
 - Checks / full suite: <result>
 - In flight: <ids, worktrees>
-- Decisions: <ADR ids or none>
+- Decisions: <each call the orchestrator made, with how to undo it, or none>
 - Carry-overs: <items next tasks must take>
 - Next: <ordered list> -->

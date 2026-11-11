@@ -89,14 +89,15 @@ Use `/archflow-run <name> <ask>` in Claude Code for a large job you want to appr
 flowchart LR
   A[Plan + run agents] --> B[Cross-model plan review]
   B --> C{You approve}
-  C --> D[Batches of tasks: implement in worktree → review + cross-model review → fix → merge → commit]
+  C --> D[Batches of tasks: implement in worktree → one review + cross-model review → fix → verify the fix → merge → commit]
   D -->|handoff| D
   D --> E{Declared STOPs}
 ```
 
-- **The orchestrator never writes the code itself.** It hands each task to a sub-agent in its own worktree. The orchestrator runs the opposite-family counter-review (`archflow-local review`) on that worktree while a fresh reviewer checks the work against the task's acceptance criteria in parallel; when both finish, another fresh reviewer merges the counter-review's findings into the same table. A fresh fixer handles critical findings, then the work is squash-merged and committed. No sub-agent waits on a review or is resumed later: an idle agent's prompt cache is gone after about five minutes. For the same reason sub-agents run only targeted tests on the files they touched; the orchestrator runs the full suite once per batch.
+- **The orchestrator never writes the code itself.** It hands each task to a sub-agent in its own worktree. The orchestrator runs the opposite-family counter-review (`archflow-local review`) on that worktree while a fresh reviewer checks the work against the task's acceptance criteria in parallel; when both finish, another fresh reviewer merges the counter-review's findings into the same table. A fresh fixer handles the findings worth fixing now, then the work is squash-merged and committed.
+- **Each change is reviewed once; after that only the fix is checked.** A fresh reviewer always finds something, so sending a whole task back for review after every fix loops without converging. Instead a fresh reviewer verifies the fix alone. A fix that cannot be checked against anything independent, such as new math or a reworked approach, also gets a cross-model review of just the fix. The test and constitution reviewers run once per task. Tasks whose mistakes are cheap and visible, such as documentation, are marked `light` in the plan you approve and skip the per-task cross-model review; a whole-milestone counter-review covers them. No sub-agent waits on a review or is resumed later: an idle agent's prompt cache is gone after about five minutes. For the same reason sub-agents run only targeted tests on the files they touched; the orchestrator runs the full suite once per batch.
 - **Everything is tracked in markdown.** Progress, decisions and reviews live in `.archflow/runs/<name>/`. Every few tasks the orchestrator writes a handoff, and you restart it in a fresh session with the same command.
-- **You are involved only when it matters.** That means plan approval, the STOPs you declare, and halts for unresolved critical findings, scope or decision changes, and irreversible actions.
+- **You are involved only when it matters.** That means plan approval, the STOPs you declare, and halts for decisions that are yours: a change to what you get, reversing a decision you made, a risky change the plan does not cover, a kind of change your repository's rules ask a human to see, an unresolved critical finding, or an irreversible action. The orchestrator decides everything else, such as keeping a bug fix a sub-agent made along the way, and reports each of those decisions with how to undo it.
 
 It needs the `archflow-local` launcher and authenticated reviewer CLIs. The run directory and its generated agents (`.claude/agents/`) are working files: delete them before opening a PR.
 

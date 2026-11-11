@@ -56,6 +56,19 @@
       },
       "additionalProperties": false
     },
+    "roles": {
+      "description": "Reviewer roles to dispatch in this pass. Omit to run every applicable role; name a subset to re-check one concern or retry one failed role.",
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "counter-reviewer",
+          "test-reviewer",
+          "adjudicator"
+        ]
+      }
+    },
     "expected_policy_digest": {
       "description": "For implementation, carry the policy_digest returned by plan review to detect policy drift before dispatch.",
       "type": "string",

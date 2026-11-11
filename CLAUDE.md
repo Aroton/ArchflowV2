@@ -17,7 +17,7 @@ The canonical set contains four portable skills:
 | `/archflow-init` | Scaffold `.archflow/config.yaml` and the constitution by running `archflow-local init`, and clean up registrations older versions left |
 | `/archflow-constitution` | Explain and configure repository-owned constitution rules |
 | `/archflow-explore` | Explore codebase, produce or refresh the maintained `docs/` documentation set |
-| `/archflow-run <name> [ask]` | Plan a large job once, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, and cross-model review; markdown state (Claude Code orchestrator) |
+| `/archflow-run <name> [ask]` | Plan a large job once, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, and cross-model review sized to each task's risk; markdown state (Claude Code orchestrator) |
 
 In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, and `$archflow-explore`. `/archflow-run` is installed for every client but currently needs Claude Code as its orchestrator.
 
@@ -25,7 +25,7 @@ In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). 
 
 `/archflow-run` is required only when the user asks for an orchestrated run or the current work belongs to an existing `.archflow/runs/<name>/`. Ordinary conversation, planning mode, code review, and direct implementation requests proceed normally; the presence of `.archflow/`, installed skills, or this repository does not require starting a run. Start one when the user asks for it, not merely because they ask for a plan or code changes.
 
-A run is markdown-driven: its state lives in `.archflow/runs/<name>/` and git, and its own STOP and halt rules (plan approval before code, declared STOPs, cross-model review on every task) govern it. Repository engineering, documentation, and installation-safety rules apply to all work.
+A run is markdown-driven: its state lives in `.archflow/runs/<name>/` and git, and its own STOP and halt rules (plan approval before code, declared STOPs, the review depth the approved plan assigns each task) govern it. Repository engineering, documentation, and installation-safety rules apply to all work.
 
 ## How It Works
 

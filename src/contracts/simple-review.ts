@@ -23,6 +23,9 @@ export const simpleReviewInputSchema = z.object({
     "test-reviewer": configRouteSchema.optional(),
     adjudicator: configRouteSchema.optional(),
   }).strict().optional(),
+  roles: z.array(z.enum(["counter-reviewer", "test-reviewer", "adjudicator"])).min(1)
+    .refine((roles) => new Set(roles).size === roles.length, "roles must be unique").optional()
+    .describe("Reviewer roles to dispatch in this pass. Omit to run every applicable role; name a subset to re-check one concern or retry one failed role."),
   expected_policy_digest: digest.optional().describe("For implementation, carry the policy_digest returned by plan review to detect policy drift before dispatch."),
 }).strict().superRefine((value, ctx) => {
   if (value.stage === "implementation" && value.verification === undefined) {
@@ -47,7 +50,7 @@ export const simpleReviewResultSchema = z.object({
     config_digest: digest,
     constitution_digest: digest,
     reports: z.array(report),
-    constitution: z.object({ status: z.enum(["complete", "not-applicable", "failed"]), judgments: z.array(judgment) }).strict(),
+    constitution: z.object({ status: z.enum(["complete", "not-applicable", "not-requested", "failed"]), judgments: z.array(judgment) }).strict(),
     human_review_reasons: z.array(text),
     failures: z.array(failure),
   }).strict().optional(),

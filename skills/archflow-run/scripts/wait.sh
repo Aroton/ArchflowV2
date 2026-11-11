@@ -5,13 +5,15 @@
 #
 #   bash wait.sh run '<command>'    start the command in the current directory, then wait one slice
 #   bash wait.sh wait <handle>      wait one more slice on a command still running
+#   bash wait.sh stop <handle>      stop a stuck command and everything it started
 #
 # `run` first prints the handle and its continuation line, so a call cut off early can still be continued. The command
 # runs with pipefail, stdin from /dev/null, and output in <handle>/log; the runner's pid is in <handle>/pid (detached
 # into its own session where `setsid` exists). A slice that sees the command finish prints `exit=<code>`, the log path
 # and the output's tail, and exits with the command's status. If the runner is gone without recording a status, it
 # prints `exit=unknown` with the tail and exits 125. Otherwise it prints `running` with the line to run next, and exits
-# 0. Give the Bash call a timeout above the slice (300000 ms covers the default).
+# 0. `stop` ends the runner, the command and their children; a later `wait` then reports `exit=unknown`. Give the Bash
+# call a timeout above the slice (300000 ms covers the default).
 # ARCHFLOW_WAIT_SLICE overrides the slice in seconds.
 set -u
 slice=${ARCHFLOW_WAIT_SLICE:-240}
@@ -26,7 +28,9 @@ case "${1:-}" in
     detach=
     if command -v setsid > /dev/null 2>&1; then detach=setsid; fi
     # The exit file appears only after the command ends, holding the command's own status.
-    $detach nohup bash -c 'echo $$ > "$1/pid"
+    # The pid file is moved into place whole: a reader never sees it empty and mistakes a starting runner for a dead one.
+    [ -n "$detach" ] && : > "$handle/detached"
+    $detach nohup bash -c 'echo $$ > "$1/pid.tmp"; mv "$1/pid.tmp" "$1/pid"
       bash -o pipefail "$1/command" > "$1/log" 2>&1 < /dev/null; echo $? > "$1/exit.tmp"; mv "$1/exit.tmp" "$1/exit"' \
       wait-run "$handle" > /dev/null 2>&1 &
     ;;
@@ -34,7 +38,26 @@ case "${1:-}" in
     [ $# -eq 2 ] && [ -f "$2/command" ] || { echo "usage: wait.sh wait <handle from a run slice>"; exit 2; }
     handle=$2
     ;;
-  *) echo "usage: wait.sh run '<command>' | wait.sh wait <handle>"; exit 2 ;;
+  stop)
+    [ $# -eq 2 ] && [ -f "$2/command" ] || { echo "usage: wait.sh stop <handle from a run slice>"; exit 2; }
+    handle=$2
+    [ -f "$handle/exit" ] && { echo "already finished: exit=$(cat "$handle/exit") log=$handle/log"; exit 0; }
+    [ -f "$handle/pid" ] || { echo "nothing to stop: the runner never started log=$handle/log"; exit 0; }
+    pid=$(cat "$handle/pid")
+    # A detached runner leads its own process group, so one signal reaches the command and its children. Without
+    # setsid, walk the tree instead.
+    tree() { local c; for c in $(pgrep -P "$1" 2> /dev/null); do tree "$c"; done; echo "$1"; }
+    for sig in TERM KILL; do
+      if [ -f "$handle/detached" ]; then kill -s "$sig" -- "-$pid" 2> /dev/null
+      else for p in $(tree "$pid"); do kill -s "$sig" "$p" 2> /dev/null; done; fi
+      for _ in 1 2 3 4 5; do kill -0 "$pid" 2> /dev/null || break; sleep 1; done
+      kill -0 "$pid" 2> /dev/null || break
+    done
+    echo "stopped log=$handle/log"
+    tail -n 20 "$handle/log"
+    exit 0
+    ;;
+  *) echo "usage: wait.sh run '<command>' | wait.sh wait <handle> | wait.sh stop <handle>"; exit 2 ;;
 esac
 
 finished() { [ -f "$handle/exit" ]; }

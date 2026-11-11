@@ -90,4 +90,4 @@ Two parts of this subsystem are coupled to the external CLIs and will drift: the
 
 A third part is coupled to the providers behind those CLIs: the output schemas. Every root is a plain object. A provider that tightens its structured-output validator shows up as an unclassified `PROCESS_FAILED`, and only the opt-in real-host test project can catch it, because the local schema compiler accepts far more than the providers do. Those tests spend paid model calls and are never part of a normal check.
 
-The shipped template's reviewers are GPT-6.1 Sol (counter-review and test review) and Claude Opus 5.5 (constitution review, and counter-review for Codex sessions). Existing repository routes are not rewritten when the template changes.
+The shipped template's reviewers are GPT-6.1 Sol (counter-review and test review), Gemini Flash (`gemini-3.8-flash-high` at high effort, for constitution review: a cheap route for the bounded job of judging a change against written rules) and Claude Opus 5.5 (counter-review for Codex sessions). Existing repository routes are not rewritten when the template changes.

@@ -21,9 +21,15 @@ in it is yours yet), then run `{{install command}}` the way "Waiting on commands
 1. **Reference and validation.** {{The standing guidance for this kind of work: what to compare against, how to
    cite it, how to prove fidelity. Example: port the reference logic rather than re-deriving it, cite the source on
    each ported block, and take expected test values from the reference, never from this implementation.}}
-2. **Stay in scope.** Implement the task, not adjacent improvements.
-3. **Decisions.** Deviations from `.archflow/runs/{{run}}/DECISIONS.md` or the requirements are not yours to make:
-   stop and return `needs-decision`.
+2. **Scope.** The task row is the goal, not a fence. Do what the task needs in order to work, including work the row
+   did not list: a defect in code the task depends on, a caller or test your change breaks, a criterion that turns out
+   to be wrong. Leave out improvements the task does not need. Report everything you did beyond the row under `EXTRA`:
+   what it is, why the task needed it, and which files. The orchestrator decides after review whether it stays, so
+   write it as a record of what you did and why, with nothing marked as pending.
+3. **Decisions.** When the packet leaves something open, make the reasonable choice and report it under `EXTRA`. Stop
+   and return `needs-decision` only when going on would drop or weaken a requirement, contradict a decision marked
+   `human` in `.archflow/runs/{{run}}/DECISIONS.md` or the packet, or do something risky the packet does not cover:
+   a change that can lose data, weakens a security boundary, or breaks a contract used outside this run.
 4. **Tests next to the code.** Every acceptance criterion gets a test.
 5. {{Repository conventions agents keep getting wrong.}}
 
@@ -33,9 +39,10 @@ turn re-read everything uncached. Run every command that might take more than a 
 `{{agent check command}}`, a targeted test) as `bash {{skill dir}}/scripts/wait.sh run '<command>'`, with a Bash timeout
 of 300000 ms. It returns when the command finishes, or after about four minutes with a `wait` line to run next; keep
 running that line until it reports `exit=<code>`. A quick command finishes within the first call, so using it costs
-nothing. It already prints the output's last 40 lines and the log path, so don't pipe the command into `tail`. If the
-log shows no progress across several waits, or the command is clearly stuck, stop it and its children (the runner's pid
-is in `<handle>/pid`) and say so in NOTES; don't return while a command you started is still running.
+nothing. It already prints the output's last 40 lines and the log path, so don't pipe the command into `tail`. If the log shows no progress across
+several waits, or the command is clearly stuck, stop it and everything it started with
+`bash {{skill dir}}/scripts/wait.sh stop <handle>` and say so in NOTES; don't return while a command you started is still
+running.
 
 ## Context budget
 Every tool result stays in your context and is re-read on every later turn.
@@ -57,5 +64,6 @@ STATUS: done | blocked | needs-decision
 FILES: <written/changed paths>
 VERDICT: <one line>
 NOTES: <≤3 bullets, including the check result>
+EXTRA: <work beyond the task row and choices the packet left open, each with why; or none>
 QUESTIONS: <only if blocked/needs-decision>
 ```

@@ -110,7 +110,7 @@ contract tests
 Repository snapshots are at repositories/<name>/; cite files as <name>/<path>. Changed repositories contain the authenticated proposed output; review only their declared outputs and their current post-change behavior. Every other file is supporting evidence only. The artifact and pinned context take precedence on conflict.
 - primary: repositories/primary
 - baseline: repositories/baseline
-<!-- response schema sent by claude-cli -->
+<!-- response schema sent by antigravity-cli -->
 ```json
 {
   "type": "object",
@@ -135,6 +135,7 @@ Repository snapshots are at repositories/<name>/; cite files as <name>/<path>. C
             },
             "rationale": {
               "type": "string",
+              "minLength": 1,
               "pattern": "\\S"
             },
             "trigger": {
@@ -147,6 +148,7 @@ Repository snapshots are at repositories/<name>/; cite files as <name>/<path>. C
             },
             "trigger_evidence": {
               "type": "string",
+              "minLength": 1,
               "pattern": "\\S"
             }
           },
@@ -171,6 +173,7 @@ Repository snapshots are at repositories/<name>/; cite files as <name>/<path>. C
             },
             "rationale": {
               "type": "string",
+              "minLength": 1,
               "pattern": "\\S"
             },
             "trigger": {
@@ -183,6 +186,7 @@ Repository snapshots are at repositories/<name>/; cite files as <name>/<path>. C
             },
             "trigger_evidence": {
               "type": "string",
+              "minLength": 1,
               "pattern": "\\S"
             }
           },

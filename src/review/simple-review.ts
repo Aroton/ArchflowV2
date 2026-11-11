@@ -53,8 +53,12 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: SimpleRev
     const rubricResult = await loadCanonicalRubricForSimpleStage(input.stage);
     if (!rubricResult.ok) return failure("CONFIG_INVALID", "The installed review rubric is missing or invalid.");
     const rubric = rubricResult.value.rubric;
-    const roles: Array<"counter-reviewer" | "test-reviewer" | "adjudicator"> = ["counter-reviewer", "test-reviewer"];
-    if (policy.rules.length > 0) roles.push("adjudicator");
+    const applicable: Array<"counter-reviewer" | "test-reviewer" | "adjudicator"> = ["counter-reviewer", "test-reviewer"];
+    if (policy.rules.length > 0) applicable.push("adjudicator");
+    // A caller may name a subset: a follow-up pass re-checks one concern without repeating the others.
+    const roles = input.roles === undefined ? applicable : applicable.filter((role) => input.roles!.includes(role));
+    if (roles.length === 0) throw new SimpleReviewError("INPUT_INVALID", "Review input is invalid: roles: none of the requested roles applies here (the constitution reviewer needs at least one active rule).");
+    const constitutionRequested = roles.includes("adjudicator");
     const selected = roles.flatMap((role) => {
       const routes = selectDispatchRouteCandidates(policy.config, policyPhaseKind, role, input.review_routes?.[role], host);
       if (routes.length === 0) throw new SimpleReviewError("CONFIG_INVALID", `No route is configured for ${role}.`);
@@ -68,7 +72,7 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: SimpleRev
     const value: NonNullable<SimpleReviewResult["value"]> = {
       stage: input.stage, subject_digest: captured.subject_digest, policy_digest: policy.policy_digest,
       config_digest: policy.config_digest, constitution_digest: policy.constitution_digest,
-      reports: [], constitution: { status: policy.rules.length === 0 ? "not-applicable" : "failed", judgments: [] },
+      reports: [], constitution: { status: policy.rules.length === 0 ? "not-applicable" : constitutionRequested ? "failed" : "not-requested", judgments: [] },
       human_review_reasons: [], failures: [],
     };
     const approval = evaluateApprovalRules(policy.config, policyPhaseKind, input.paths);
@@ -79,7 +83,7 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: SimpleRev
       subject: { stage: input.stage, subject_digest: captured.subject_digest },
       ask: input.ask, plan: input.plan, paths: input.paths, verification: input.verification ?? "Plan review: assess the proposed verification strategy.",
       workspace,
-      scope: "This is a standalone simple task, not an initialized ArchFlow workflow. The primary repository view contains the current work; baseline is the same repository at the starting commit. Inspect declared paths as the subject, with other files only as context. Existing unrelated changes are not findings. There are no task documents, phases, durable gates, or implementation-agent recommendations. The invoking session owns plan review, fixes, explicit human decisions, and execution; do not invent missing workflow records. Custom policy remains applicable; report any conflict rather than silently exempting it. Review once; no follow-up reviewer pass will certify subsequent fixes.",
+      scope: "This is a standalone simple task, not an initialized ArchFlow workflow. The primary repository view contains the current work; baseline is the same repository at the starting commit. Inspect declared paths as the subject, with other files only as context. Existing unrelated changes are not findings. There are no task documents, phases, durable gates, or implementation-agent recommendations. The invoking session owns plan review, fixes, explicit human decisions, and execution; do not invent missing workflow records. That session acts under authority its human delegated: it may make implementation-level decisions within the supplied ask and plan, such as keeping necessary work the plan did not list, fixing a defect found along the way, or correcting its own earlier decision. A note that the session or one of its agents made such a decision is not, by itself, evidence that a human decision is missing; judge the change by what it does. Custom policy remains applicable; report any conflict rather than silently exempting it. Review once; no follow-up reviewer pass will certify subsequent fixes.",
     };
     // Settle every sibling before disposing shared context, and retain successful siblings on failure.
     const outcomes = await serializeDispatchAll(selected.map((selection) => async () => {

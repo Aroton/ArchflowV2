@@ -298,6 +298,7 @@
               "enum": [
                 "complete",
                 "not-applicable",
+                "not-requested",
                 "failed"
               ]
             },

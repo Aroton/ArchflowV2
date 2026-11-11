@@ -85,7 +85,7 @@ In a repository, ArchFlow owns only `.archflow/config.yaml`, `.archflow/constitu
 
 ## The orchestrated workflow
 
-`archflow-run` is the one workflow skill. A human approves a single plan; a fresh Claude Code session then works through it in batches with per-task sub-agents in git worktrees. Each task gets an in-model review and the cross-family review, called through `skills/archflow-run/scripts/counter-review.sh`, which builds the payload from a directory's changed files and runs `archflow-local review`. State is markdown under `.archflow/runs/<name>/` plus one commit per task. Its stops and halt rules live in the skill, not in the CLI. See [workflow/SKILLS.md](workflow/SKILLS.md).
+`archflow-run` is the one workflow skill. A human approves a single plan; a fresh Claude Code session then works through it in batches with per-task sub-agents in git worktrees. Each task gets one in-model review, and each task that changes behavior also gets the cross-family review; after a fix, only the fix is checked. The cross-family review is called through `skills/archflow-run/scripts/counter-review.sh`, which builds the payload from a directory's changed files and runs `archflow-local review`. State is markdown under `.archflow/runs/<name>/` plus one commit per task. Its stops and halt rules live in the skill, not in the CLI. See [workflow/SKILLS.md](workflow/SKILLS.md).
 
 ## Page map
 
