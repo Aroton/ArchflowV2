@@ -40,7 +40,7 @@ Resume: run `/archflow-run <name>` in a fresh session on the orchestrator's mode
 ## Session handoffs
 <!-- ### Session N handoff (<date>)
 - Merged: <ids> (<done>/<total>)
-- Checks / full suite: <result>
+- Merge checks / full validation: <result; how long the full suite took>
 - In flight: <ids, worktrees>
 - Decisions: <each call the orchestrator made, with how to undo it, or none>
 - Carry-overs: <items next tasks must take>

@@ -30,7 +30,7 @@ What ArchFlow needs in order to run and to be built, what it launches, what it r
 
 Each reviewer CLI is probed before its first use in a review: version, then login state, then whether managed-policy files are present (`src/dispatch/cli.ts`). Failures surface as `CLI_MISSING`, `CLI_VERSION_UNSUPPORTED` or `AUTH_UNAVAILABLE` with a fixed next action, never as a guess at a fix. These CLIs are version-coupled: ArchFlow passes flags that suppress project instructions, user configuration, skills and tools, and a new CLI release can rename or drop one. The exact argv for each is covered by fixtures; see [mcp/DISPATCH.md](mcp/DISPATCH.md) and [LIMITATIONS.md](LIMITATIONS.md).
 
-The `archflow-run` helper scripts (`skills/archflow-run/scripts/counter-review.sh`, `wait.sh`, `cleanup.sh`) additionally need `bash`, and `counter-review.sh` needs `jq`.
+The `archflow-run` helper scripts (`skills/archflow-run/scripts/counter-review.sh`, `wait.sh`, `cleanup.sh`) additionally need `bash`, and `counter-review.sh` needs `jq`. `wait.sh` uses `flock` for its limit on concurrent commands and `setsid` to detach, and works without either.
 
 ## Filesystem and git
 

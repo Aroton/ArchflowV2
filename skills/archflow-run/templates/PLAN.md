@@ -21,18 +21,24 @@ the code shows to be wrong, updates this section, and reports it.>
 against it: golden tests, probes, docs to diff. When the run has several domains, give each its own reference and
 validation. Generated agents carry this, and a short version in `BRIEF.md` goes to every cross-model counter-review.>
 
+**Test policy.** <What a test in this run should cost as well as cover, from the protocol's "What tests to write":
+the layer each kind of behavior is tested at, which boundaries get a real integration test and how few, what makes a
+test slow here and which group slow tests join, and how long the full suite takes today. Agents and `BRIEF.md` carry
+it too.>
+
 ## 5. Commands
 | Purpose | Command |
 |---|---|
-| Agent check (targeted: tests for the changed files, typecheck such as `tsc --noEmit` or `cargo check`, lint; never a whole suite or full build) | `<command taking the changed files>` |
-| Full build, full suite and slow test groups (orchestrator only, once per batch) | `<command>` |
-| Install dependencies in a fresh worktree | `<command>` |
+| Task check (implementers and fixers): the task's own test files, by name, plus typecheck such as `tsc --noEmit` or `cargo check`, and lint; never tests selected by what imports the changed files, a whole suite or a full build | `<command taking test files>` |
+| Merge check (orchestrator, once after the tasks in flight together are merged): the task check over those tasks' test files | `<the same command>` |
+| Full validation (orchestrator, at the session handoff and the milestone gate): full build, full suite and slow test groups. Takes <duration> today | `<command>` |
+| Install dependencies in a fresh worktree: the cheapest setup that is correct, such as an offline or cached install | `<command>` |
 
-<Add an agent check row per domain when a domain validates its work differently.> Sub-agents run only the agent check, so full builds and anything slow belong to the orchestrator's once-per-batch run;
-parallel agents each running a full build can overload the machine. Sub-agents run installs and checks through the
-skill's `scripts/wait.sh`, which keeps their prompt cache warm when a command is slow. The agent check must leave the
-worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored): a reviewer runs it while the counter-review
-reads the same worktree, and a changed file fails that review with `SUBJECT_CHANGED`.
+<Add a task check row per domain when a domain validates its work differently.> Each run of the tests has one owner
+(the protocol's "Where tests run"): implementers and fixers run the task check, reviewers read the result instead of
+repeating it, and the orchestrator runs the merge check and full validation. Every one of these goes through the
+skill's `scripts/wait.sh`, which keeps a waiting agent's prompt cache warm and lets only a few commands run at once
+across all worktrees, so parallel tasks cannot overload the machine.
 
 ## 6. Agents and routing
 The agent follows the kind of work; the model and effort follow how hard the task is.

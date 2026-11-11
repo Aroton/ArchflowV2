@@ -59,7 +59,7 @@ Read and apply the criteria in this rubric to the primary subject. It identifies
 
 @review-inputs/counter-reviewer-1/verification.md
 
-Use the reported commands and results to assess what was checked and what remains unsupported. Compare this evidence with relevant tests and the declared behavior; a claim of success is not proof of untested behavior.
+Use the reported commands and results to assess what was checked and what remains unsupported. Compare this evidence with relevant tests and the declared behavior; a claim of success is not proof of untested behavior. Reported durations show what the checks cost.
 
 ### Repository map and investigation scope
 

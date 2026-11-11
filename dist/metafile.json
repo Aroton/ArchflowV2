@@ -1,7 +1,7 @@
 {
   "inputs": {
     "assets/review-inputs.yaml": {
-      "bytes": 8723,
+      "bytes": 8769,
       "imports": []
     },
     "node_modules/yaml/dist/compose/compose-collection.js": {
@@ -4118,7 +4118,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 989260,
+      "bytes": 989306,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -4370,7 +4370,7 @@
       ],
       "inputs": {
         "assets/review-inputs.yaml": {
-          "bytesInOutput": 8839
+          "bytesInOutput": 8885
         },
         "node_modules/yaml/dist/compose/compose-collection.js": {
           "bytesInOutput": 3237

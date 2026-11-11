@@ -86,7 +86,7 @@ Planning runs before the run's generated agents exist, so explorers and the plan
 
 - what exists, with paths and line pointers, and how the parts connect;
 - the conventions the code follows there, and the repository instructions that apply;
-- the commands that build, typecheck and test it, including how to run tests for a few files only;
+- the commands that build, typecheck and test it, including how to run named test files only, how long the full suite takes, and which test groups are slow;
 - what it could not find or is unsure of.
 
 An explorer describes what is there. It does not propose a design, and it says so when a question needs more judgment than a lookup; that question goes to the research route. It returns a few lines: the file it wrote and what it covers.
@@ -104,7 +104,8 @@ An explorer describes what is there. It does not propose a design, and it says s
 - requirements, as the brief settled them;
 - the architecture decisions tasks depend on;
 - invariants every agent follows;
-- the agent check command: targeted tests for the changed files plus fast checks such as typecheck and lint, never a full build, as quick as the targeted scope allows (agents wait on it through `scripts/wait.sh`), and leaving the worktree unchanged (no auto-fix, no snapshot writes, outputs gitignored) because a reviewer runs it while the counter-review reads the same worktree; and the full build and full suite command, which only the orchestrator runs;
+- the commands, in the three tiers of "Where tests run": the task check that agents run on a task's own test files, the merge check, and full validation, with how long the full suite takes today;
+- the run's test policy, from the defaults under "What tests to write";
 - the agent roster, with what each agent covers and why it is its own agent (see "Run agents");
 - model and effort routing per level of difficulty, starting from the defaults under "Model routing";
 - milestones;
@@ -113,7 +114,7 @@ An explorer describes what is there. It does not propose a design, and it says s
 
 Detail the first milestone's tasks. Later milestones may be marked "detailed at start" when earlier work should shape them. Size tasks so one agent finishes each in a single focused spawn (see "Task sizing and the plan table").
 
-Generate the run's agents as "Run agents" describes, and list them in the plan's agent roster. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance as a short `BRIEF.md` in the run directory, with a section per domain when the run has several; every counter-review receives it.
+Generate the run's agents as "Run agents" describes, and list them in the plan's agent roster. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance and the run's test policy as a short `BRIEF.md` in the run directory, with a section per domain when the run has several; every counter-review receives it.
 
 The planner ends with the return block under "Sub-agent contract". Its NOTES give the main architecture choices, the milestones and the risks in a few lines; the orchestrator reads the plan itself by section. A question whose answer is the human's (a requirement the brief leaves open, a choice between products rather than between designs) comes back as `needs-decision`, with what the planner would assume; the orchestrator asks the human and spawns a fresh planner. The planner does not commit, and it writes only the run's files and agents.
 
@@ -157,7 +158,7 @@ Split where the guidance changes, and no finer. A physics engine, a UI and datab
 
 A task's row names its implementer agent. Its fixes go to that agent, and its reviews to the reviewer of the same domain, or to the general reviewer when the domain has none. Split a task that spans domains. A task that joins two domains goes to the domain whose guidance covers the larger risk, or to the general agent with both interfaces in its packet.
 
-**Writing the guidance.** Fill each scaffold's `Domain guidance` section with what a strong engineer new to this run would not know: the reference and how fidelity is proven, the domain's rules and decisions here, where this work goes wrong, the conventions of that code, and the tools it needs. It is not a tutorial on the field. A reviewer's section holds the same reference and validation, plus the lenses to review that work through. The general pair holds only what is true of any task in the run; when no standing guidance exists, generate it from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree, and give each agent the agent check its domain uses. Fill `{{run}}` with the run's name as given, and keep each description's sentence "Spawned only by the <name> orchestrator" as the scaffold has it: `scripts/cleanup.sh` recognizes the run's agents by their file name and that sentence, and leaves any other file in `.claude/agents/` alone.
+**Writing the guidance.** Fill each scaffold's `Domain guidance` section with what a strong engineer new to this run would not know: the reference and how fidelity is proven, the domain's rules and decisions here, where this work goes wrong, the conventions of that code, and the tools it needs. It is not a tutorial on the field. A reviewer's section holds the same reference and validation, plus the lenses to review that work through. The general pair holds only what is true of any task in the run; when no standing guidance exists, generate it from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree, and give each agent the task check its domain uses. Fill `{{run}}` with the run's name as given, and keep each description's sentence "Spawned only by the <name> orchestrator" as the scaffold has it: `scripts/cleanup.sh` recognizes the run's agents by their file name and that sentence, and leaves any other file in `.claude/agents/` alone.
 
 **Changing the roster mid-run.** The run learns what its agents should have been told. When the same finding returns across a domain's tasks, the lesson belongs in that domain's agents: add the line yourself, in the implementer and the reviewer, and record it as the skill's "Who decides" describes. Adding, removing or re-scoping an agent is a plan revision and goes to a fresh planner, as does a milestone that opens a new domain. Agent definitions load when a session starts, so a new or changed agent takes effect in the next fresh session. Until then, send that work to the general agent with the guidance in its packet.
 
@@ -195,8 +196,39 @@ QUESTIONS: <only if blocked/needs-decision>
 - every spawn is a fresh agent that finishes its job in one go and returns;
 - fixes go to a fresh fixer, the check of a fix to a fresh reviewer, and decisions to a fresh agent with the decision in its prompt;
 - no sub-agent step waits on a review. The orchestrator runs the counter-review itself, alongside the reviewer rather than before it, and hands the finished result to a fresh reviewer that merges it. The orchestrator is the one session that waits, and its own cache outlives a typical review;
-- sub-agents run only the plan's agent check, scoped to the files they touched: targeted tests plus typecheck-level checks such as `tsc --noEmit` or `cargo check`. Full builds (a whole-workspace or release compile, a bundle), the full suite and any slow test group belong to the orchestrator. A full build in each of several parallel agents can take the machine down. An agent that thinks a build or broader verification is needed says so in NOTES;
-- a sub-agent that waits on a command keeps its cache warm. A slow host or a command whose result the agent genuinely needs can still outlast five minutes, so agents run installs, targeted tests and the agent check through this skill's `scripts/wait.sh`. It runs the command in the background and returns after 100 seconds when the command is still running; each return is a small turn that refreshes the cache, and the agent waits again until the command finishes. The wait is that short because Claude Code moves a foreground command to the background after three minutes, or at its two-minute default timeout, and the agent then gets a notice instead of the line to run next. A quick command finishes within the first wait, so agents use it for any command that might take more than a minute. `wait.sh stop <handle>` ends a stuck command together with everything it started. Generated agents carry the script's absolute path.
+- implementers and fixers run only the plan's task check: the task's own test files plus typecheck-level checks. Reviewers do not repeat it. Full builds (a whole-workspace or release compile, a bundle), the full suite and any slow test group belong to the orchestrator. See "Where tests run";
+- a sub-agent that waits on a command keeps its cache warm. A slow host or a command whose result the agent genuinely needs can still outlast five minutes, so agents run installs and the task check through this skill's `scripts/wait.sh`. It runs the command in the background and returns after 100 seconds when the command is still running; each return is a small turn that refreshes the cache, and the agent waits again until the command finishes. The wait is that short because Claude Code moves a foreground command to the background after three minutes, or at its two-minute default timeout, and the agent then gets a notice instead of the line to run next. A quick command finishes within the first wait, so agents use it for any command that might take more than a minute. `wait.sh stop <handle>` ends a stuck command together with everything it started. The script also holds a command back while the machine's slots are taken (see "Where tests run"); a `queued` line in the log is that wait, not a stuck command. Generated agents carry the script's absolute path.
+
+## Where tests run
+
+The same tests on the same bytes say the same thing however often they run, and every run takes the machine from the other tasks. So each run of the tests has one owner and one reason:
+
+| Tier | Who runs it | What it runs | When, and where |
+|---|---|---|---|
+| Task check | the implementer or fixer | the task's own tests: the test files its row names and the ones it wrote or edited, plus typecheck-level checks such as `tsc --noEmit` or `cargo check`, and lint | while it works, in its worktree |
+| Merge check | you | the same check, once, over the test files of the tasks you just merged | after the tasks that were in flight together are merged, in this checkout |
+| Full validation | you | the full build, the full suite and every slow test group | at the session handoff and at a milestone gate, in this checkout |
+
+- **The task check is the task's own tests, not every test near its files.** A command that picks tests by what imports the changed files, such as `vitest related` or `jest --findRelatedTests`, runs most of a suite when a core file changes; the plan's command takes test files by name. The typecheck covers what the task's own tests cannot see: a caller elsewhere that no longer compiles.
+- **Reviewers do not repeat the task check.** The implementer ran it on the bytes under review, and its return gives the command, the result and how long it took. A reviewer reads the tests and judges what they prove, which a second run does not show. It runs something only to demonstrate a finding: one test, or a probe of its own in a scratch directory. The run that does not rely on an agent's report is your merge check.
+- **The merge check tests what nobody has run.** Tasks in flight together each passed on the base they started from, not on each other. One run over their test files after they merge covers the combination. A failure goes to a fresh fixer, against the task whose change causes it.
+- **Full validation is not a per-merge step.** Run it once at the handoff and once at a milestone gate, before the gate lenses, and not between merges. When it fails, attribute the failure by reading it: the failing test, then the task whose files it exercises. Bisect only when that leaves it open, and bisect with the failing tests alone, never the whole suite.
+- **Every one of these goes through `scripts/wait.sh`,** yours included. The script lets only a few commands run at once across every worktree on the machine, two unless `ARCHFLOW_WAIT_SLOTS` says otherwise, and queues the rest. Parallel tasks then cannot overload the host by installing or testing at the same moment. For your own runs, start it as a background call with `ARCHFLOW_WAIT_SLICE` set longer than the command needs, so one notification wakes you when it ends.
+- An agent that thinks a build or broader verification is needed says so in NOTES; you decide whether it is worth a run before the handoff.
+
+## What tests to write
+
+Every test a task adds is run again by everything after it, for as long as the code lives. A suite that gains one slow test per task ends up setting how long every later task takes, so the run decides what a test costs as deliberately as what it covers. The planner writes the run's test policy into the plan's §4 and into `BRIEF.md`, starting from these defaults:
+
+- **A test earns its place by a failure no other test would catch.** Coverage is the distinct failures the suite catches, not the number of tests or of lines run.
+- **Test at the lowest layer where the failure can happen.** Logic is tested in-process, with its cases in a table. A real boundary (a spawned process, git, a database, the network, a browser) gets the few tests that prove the wiring works, not one per case.
+- **A criterion needs evidence, which is not always a new test.** Extend an existing test or add a case to its table when that covers it.
+- **A fix's regression test is the cheapest test that fails without the fix,** usually one more case beside the ones already there.
+- **Keep setup cheap.** Build an expensive fixture once per file, and wait on a condition or a fake clock instead of a real delay.
+- **A new test belongs to the fast tier,** the one the task check runs. A test that has to be slow says, in the test, what it proves that a fast one cannot, and joins the slow group that only full validation runs.
+- **Replace instead of adding.** When a new test covers what an older one did, remove the older one in the same task.
+
+Cost is reviewed like correctness. An implementer reports how long its check took, the task's `verification.txt` passes that to the cross-model test reviewer, and a reviewer treats a test that is slower than what it proves requires, or that repeats another test's protection, as a finding whose suggested fix names the cheaper test or the one to remove. Record how long the full suite took in each handoff. When it has grown out of proportion to what a milestone added, say so in the gate row and make the slowest tests a task.
 
 ## Review depth
 
@@ -213,10 +245,10 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
 
 1. **Implement.**
    - Spawn the implementer agent the task's row names, in implement mode, with worktree isolation. Its setup brings the fresh worktree to the base commit you name (`git reset --hard <sha>` is safe in a fresh worktree) and installs dependencies.
-   - It writes code and tests, runs the plan's targeted agent check command on its changed files until it passes, writes `reviews/<id>-impl.md` in its worktree when a fixer or reviewer needs more than its short return, and never commits.
-   - Run tasks in parallel only when their file sets do not overlap: typically a handful at once, limited by machine load more than by the model.
+   - It writes code and tests, runs the plan's task check on the task's own test files until it passes, reports the command, the result and how long it took, writes `reviews/<id>-impl.md` in its worktree when a fixer or reviewer needs more than its short return, and never commits.
+   - Run tasks in parallel only when their file sets do not overlap: typically a handful at once. `wait.sh` keeps their installs and checks from all running at the same moment, so a batch wider than the machine can check mostly waits in its queue.
 2. **Review, once.** When the implementer returns, start the task's reviews together. Other tasks keep moving while they run.
-   - Spawn a fresh reviewer: the reviewer agent of the task's domain, which also takes this task's later merge, fix-verify and verify spawns. Give it the worktree path, the base commit, the packet, the task's review depth, the implementer's `EXTRA`, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It runs the targeted check command, reviews the diff against the acceptance criteria, writes its findings table, and returns its verdict without waiting for the counter-review.
+   - Spawn a fresh reviewer: the reviewer agent of the task's domain, which also takes this task's later merge, fix-verify and verify spawns. Give it the worktree path, the base commit, the packet, the task's review depth, the implementer's `EXTRA` and reported check result, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It reviews the diff and its tests against the acceptance criteria by reading them, without repeating the task check, writes its findings table, and returns its verdict without waiting for the counter-review.
    - For a `full` task, run the cross-model counter-review on its worktree yourself, in the background (see below). A `light` task has none.
 3. **Merge the counter-review** (`full` tasks). When both have finished and the counter-review produced any reports, spawn a fresh reviewer in merge mode, with the review file, the worktree path, the packet, and the counter-review's `summary.json`. It folds each counter-review point that matches an existing row into that row, adds a row for every other material point, adds each `human_review_reasons` entry as a row with source `human-review`, and updates the verdict. Then:
    - read only the verdict line and the table: `grep '^|' <review>`;
@@ -244,8 +276,8 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
    - Deferred findings go under "Deferred findings" in `PROGRESS.md`, each with a reason and the task that owns it, and into that task's packet.
    - You may make trivial fixups yourself, typically 10 lines or fewer, in the worktree. List one made after the review in the task's review file as not separately reviewed; the milestone counter-review covers it. Anything larger is a fix: it goes to a fixer and gets checked.
 6. **Check the fix.** Check what the fixer changed, not the task again.
-   - **Always: fix verify.** Spawn a fresh reviewer in fix-verify mode with the review file, the finding ids sent to the fixer, both tree IDs (the contents of the two `.tree` files), the packet, and the fixer's `EXTRA` and `ORACLE` lines. It appends round `r<k+1>` to the review file. For each finding it says whether the fix resolves it and on what basis:
-     - `test`: a test exercises the finding's failure scenario and passes, and its expected values do not come from the fixer's own computation;
+   - **Always: fix verify.** Spawn a fresh reviewer in fix-verify mode with the review file, the finding ids sent to the fixer, both tree IDs (the contents of the two `.tree` files), the packet, and the fixer's `EXTRA` and `ORACLE` lines and its reported check result. It appends round `r<k+1>` to the review file. For each finding it says whether the fix resolves it and on what basis:
+     - `test`: a test exercises the finding's failure scenario, the fixer saw it fail before the fix and pass after, and its expected values do not come from the fixer's own computation;
      - `reference`: the verifier compared the result with the run's reference itself;
      - `reading`: neither; it could only read the code and judge it right.
 
@@ -273,7 +305,7 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
    - One commit per task, subject `<name> <id>: <imperative summary>`. The squash merge has staged the task's changes; add the task's own review files by path (`git add <run dir>/reviews/<id>-*`) and the `PROGRESS.md` tick, and commit the index. `git add -A` in this checkout would sweep in other in-flight tasks' review files.
    - Tick the task log in `PROGRESS.md` with the short SHA and the review summary. Close each deferred finding this task carried, using the reviewer's `carried` rows: fixed, with the SHA, or still open and routed to a new owner. The tick can ride along with the next commit.
    - Remove the worktree and its branch once the commit exists: `git worktree remove --force <worktree>`, then `git branch -D <branch>`. The branch needs `-D` because a squash merge leaves it looking unmerged. See "Worktrees and temporary directories".
-9. **Full suite and build.** Only the orchestrator runs them, once per batch, serialized, not once per merge. The same goes for any slow test group the agent check leaves out. Several sub-agents running it in parallel overload the machine, and each one spends the wait in keep-alive turns. Bisect a failure by task and send it to a fresh fixer.
+9. **Merge check.** When the tasks that were in flight together are merged, run the task check once over their test files in this checkout. The full build and suite wait for the handoff or the milestone gate. See "Where tests run".
 
 ## Worktrees and temporary directories
 
@@ -304,7 +336,7 @@ For a `full` task's first review, write its inputs into `<run dir>/packets/<id>-
 out=<run dir>/packets/<id>-cr<k>; mkdir -p "$out"
 grep -E '^\| <id> \|' <run dir>/PLAN.md > "$out/ask.txt"   # the task row, acceptance tests included
 cat <run dir>/packets/<id>.md <run dir>/BRIEF.md > "$out/plan.txt"
-printf '%s\n' "<check command>: <result the implementer or fixer reported>" > "$out/verification.txt"
+printf '%s\n' "<check command>: <result the implementer or fixer reported>, in <how long it took>" > "$out/verification.txt"
 bash <skill dir>/scripts/counter-review.sh <worktree> "$out" claude implementation
 ```
 
@@ -312,7 +344,7 @@ Run the last command in the background; reviews often take several minutes. It p
 
 The worktree holds the plan as it was at the base commit, so tell the reviewers what you have decided since. `ask.txt` is read from the current `PLAN.md`, which carries any row you corrected. When you decided to keep unplanned work, or directed work beyond the row in a fix round, add one line saying so to `ask.txt` (`Orchestrator decision: <what is now part of this task, and why>`). Reviewers then judge the work against the decision instead of reporting the difference again.
 
-A nonzero exit is not a pass. An `INPUT_INVALID` error names the input to correct. `SUBJECT_CHANGED` from a review that ran beside a reviewer means something wrote into the worktree meanwhile, usually the agent check: fix the check command in `PLAN.md` and rerun the counter-review on its own. A failed reviewer route may be retried once, naming only that role; if it still fails:
+A nonzero exit is not a pass. An `INPUT_INVALID` error names the input to correct. `SUBJECT_CHANGED` from a review that ran beside a reviewer means something wrote into the worktree meanwhile, usually a test the reviewer ran there: rerun the counter-review on its own. A failed reviewer route may be retried once, naming only that role; if it still fails:
 
 - the task is blocked until the review runs;
 - the human may waive it for that task;
@@ -336,7 +368,7 @@ out=<run dir>/packets/<id>-cr<k>; mkdir -p "$out"
     "Judge whether each fix is correct and complete, and whether it breaks anything." \
     "Already decided, not to be reopened: <deferred and dismissed rows, and your decisions on unplanned work>."; } > "$out/ask.txt"
 cat <run dir>/packets/<id>.md <run dir>/BRIEF.md > "$out/plan.txt"
-printf '%s\n' "<check command>: <result the fixer reported>" > "$out/verification.txt"
+printf '%s\n' "<check command>: <result the fixer reported>, in <how long it took>" > "$out/verification.txt"
 bash <skill dir>/scripts/counter-review.sh "$wt" "$out" claude implementation counter-reviewer
 ```
 
@@ -369,11 +401,11 @@ git worktree add -q --detach "$wt" "$start"
 git diff --binary "$start" HEAD -- . ':!.archflow/runs' | git -C "$wt" apply --index
 ```
 
-Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds the milestone's goal and its task rows, `plan.txt` the plan's architecture and invariants plus `BRIEF.md`, and `verification.txt` the full build and suite result. Remove the worktree and its directory afterwards with `git worktree remove --force "$wt"; rm -rf "$tmp"`. A milestone over the review's 25 MiB snapshot limit is reviewed per lane instead.
+Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds the milestone's goal and its task rows, `plan.txt` the plan's architecture and invariants plus `BRIEF.md`, and `verification.txt` the full build and suite result, how long the suite took, and its slowest test files when the runner reports them. Remove the worktree and its directory afterwards with `git worktree remove --force "$wt"; rm -rf "$tmp"`. A milestone over the review's 25 MiB snapshot limit is reviewed per lane instead.
 
 ## Milestones and gates
 
-A milestone ends with the gate lenses `PLAN.md` declares. A useful default set, each lens a fresh reviewer run in parallel:
+A milestone ends with full validation (see "Where tests run") and then the gate lenses `PLAN.md` declares, which judge a result already known to build and pass instead of running the suite again. A useful default set, each lens a fresh reviewer run in parallel:
 
 - **fidelity:** the result against the reference or requirements;
 - **architecture:** drift from the plan's architecture, and shortcuts that force rework;
@@ -462,7 +494,7 @@ The orchestrator's cost per turn grows with its context:
 The session handoff in `PROGRESS.md` records:
 
 - tasks merged, as a count of done over total;
-- check and suite results;
+- the merge checks and the full validation result, with how long the suite took;
 - anything in flight;
 - decisions made, each with how to undo it;
 - the carry-over items the next tasks must take;

@@ -66,7 +66,7 @@ Judge the primary subject against every supplied rule. Use each listed slot exac
 
 @review-inputs/constitution/verification.md
 
-Use the reported commands and results to assess what was checked and what remains unsupported. Compare this evidence with relevant tests and the declared behavior; a claim of success is not proof of untested behavior.
+Use the reported commands and results to assess what was checked and what remains unsupported. Compare this evidence with relevant tests and the declared behavior; a claim of success is not proof of untested behavior. Reported durations show what the checks cost.
 
 ### Repository map and investigation scope
 

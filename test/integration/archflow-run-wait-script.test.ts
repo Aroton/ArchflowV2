@@ -75,6 +75,27 @@ describe("archflow-run wait script", () => {
     expect(result.status).toBe(3);
   });
 
+  it("holds a command back until another one frees the only slot", async () => {
+    const temp = temporaryRoot("wait-slots");
+    const env = { ...process.env, TMPDIR: temp, ARCHFLOW_WAIT_SLOTS: "1" };
+    const marker = join(temp, "first-is-running");
+
+    const first = run(script, ["run", `touch '${marker}'; sleep 3; rm '${marker}'`], { ...env, ARCHFLOW_WAIT_SLICE: "20" });
+    while (!existsSync(marker)) await new Promise((resolve) => setTimeout(resolve, 50));
+    // The second command fails if it ever runs beside the first. Its first slice ends while it is still queued.
+    const queued = await run(script, ["run", `[ ! -e '${marker}' ]`], { ...env, ARCHFLOW_WAIT_SLICE: "1" });
+
+    expect(queued.status, queued.stdout + queued.stderr).toBe(0);
+    expect(queued.stdout).toContain("running after 1s");
+    expect(queued.stdout).toContain("queued: waiting for one of 1 slots");
+    expect((await first).stdout).toContain("exit=0");
+
+    const handle = /continue with: bash '.*' wait '(.*)'/.exec(queued.stdout)?.[1] ?? "";
+    const finished = await run(script, ["wait", handle], { ...env, ARCHFLOW_WAIT_SLICE: "20" });
+    expect(finished.stdout, finished.stdout + finished.stderr).toContain("exit=0");
+    expect(finished.status).toBe(0);
+  }, 20_000);
+
   it("deletes old finished handles when a command starts and keeps everything else", () => {
     const temp = temporaryRoot("wait-handle-sweep");
     const oldFinished = directory(temp, "archflow-wait.oldfin", { command: "true\n", pid: "1\n", exit: "0\n" }, true);

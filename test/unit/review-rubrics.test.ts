@@ -13,8 +13,8 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 // deliberately, never casually: a changed digest is changed review policy for every
 // installed bundle.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
-  "simple-plan-v1": "0b2ec7c28cf7e32fb6c06ab16b86b5d887f35fb0da70120243cc0bc62447ff1b",
-  "implementation-v1": "32cee8a8cf22ea05a7916d4ca55c6cd79a1aab11e8ef423b71a3e39bd9cfee33",
+  "simple-plan-v1": "4d9d7e6673499cae4f3078fe05413de9b59690a12584b29d162acd8923e35f6a",
+  "implementation-v1": "a9850364b58197ad5a861ea99ce42b029417c19c25d6bf349e7d4dbf15692ebf",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];
@@ -168,9 +168,11 @@ describe("canonical counter-review rubrics", () => {
       implementation.rubric.criteria.find((criterion) => criterion.id === "test-quality")?.text,
     ].join("\n");
     expect(policy).toMatch(/distinct regression protection/iu);
-    expect(policy).toMatch(/duplicate/iu);
-    expect(policy).toMatch(/cheap/iu);
-    expect(policy).toMatch(/expensive.*fixture/iu);
+    expect(policy).toMatch(/cheapest/iu);
+    // Cost is weighed with coverage: a slow or repeated check is answered with its cheaper equivalent.
+    expect(policy).toMatch(/slower than what it proves requires/iu);
+    expect(policy).toMatch(/repeats the protection of another test/iu);
+    expect(policy).toMatch(/name the cheaper/iu);
     expect(policy).toMatch(/raw coverage/iu);
   });
 

@@ -22,7 +22,7 @@ criteria:
     text: "Report unnecessary machinery, repetition, or process only when it obscures decisions, conflicts with the ask, or creates disproportionate delivery or maintenance cost. Document length and a preferred format alone are not defects; a small ask can have a short plan."
     blocking: true
   - id: test-strategy
-    text: "Check the proposed verification and existing tests against the requested behavior and important failures. Name a concrete failure that could escape detection, accept equivalent behavioral evidence, and prefer the cheapest useful check. Flag duplicate or expensive fixtures only for material delivery cost; avoid coverage quotas and exhaustive matrices."
+    text: "Check the proposed verification and existing tests against the requested behavior and important failures. Name a concrete failure that could escape detection, accept equivalent behavioral evidence, and prefer the cheapest useful check. When planned verification is slower or more repetitive than the failures it catches require, such as end-to-end runs for behavior an in-process test would catch, name the cheaper equivalent. Avoid coverage quotas and exhaustive matrices."
     blocking: true
   - id: reviewer-confidence
     text: "Distinguish demonstrated problems from uncertainty. Investigate plausible concerns proportionally and report unresolved uncertainty only with a concrete failure scenario, supporting evidence, and what would settle it."

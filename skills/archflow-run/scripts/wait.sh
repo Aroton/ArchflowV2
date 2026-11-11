@@ -19,6 +19,13 @@
 # agent then gets a notice that it will be told when the command completes, instead of the line to run next. 100
 # seconds stays under both, so a call needs no timeout of its own. ARCHFLOW_WAIT_SLICE overrides the slice in seconds.
 #
+# Several agents in several worktrees call this at once, and an install or a test run in each of them together can
+# take the machine down. So the runner takes one of a few machine-wide slots before it starts the command, and a
+# command with no free slot waits its turn; while it waits, the log holds one `queued` line. ARCHFLOW_WAIT_SLOTS sets
+# the number of slots (2 unless set; 0 turns the limit off). A slot is a `flock` on a file in a directory only this
+# user can write, held by the runner alone, so it is released when the runner ends however it ends. Where `flock` is
+# missing, or that directory is not this user's own, commands run without a limit.
+#
 # Handles live in the temp directory and nobody comes back for them, so each `run` also deletes this user's handles
 # that were last touched more than a day ago and whose command has finished or whose runner is gone.
 #
@@ -43,9 +50,18 @@ main() {
       # The pid file is moved into place whole: a reader never sees it empty and mistakes a starting runner for a dead
       # one.
       [ -n "$detach" ] && : > "$handle/detached"
+      # The command runs with the slot's descriptor closed, so something it leaves running cannot keep the slot.
       $detach nohup bash -c 'echo $$ > "$1/pid.tmp"; mv "$1/pid.tmp" "$1/pid"
-      bash -o pipefail "$1/command" > "$1/log" 2>&1 < /dev/null; echo $? > "$1/exit.tmp"; mv "$1/exit.tmp" "$1/exit"' \
-        wait-run "$handle" > /dev/null 2>&1 &
+      if [ "$2" -gt 0 ] 2> /dev/null && command -v flock > /dev/null 2>&1 \
+        && mkdir -p -m 700 "$3" 2> /dev/null && [ -O "$3" ] && [ ! -L "$3" ]; then
+        until for slot in $(seq "$2"); do exec 9> "$3/$slot" && flock -n 9 && break; done; do
+          [ -s "$1/log" ] || echo "queued: waiting for one of $2 slots; other commands are running" > "$1/log"
+          sleep 2
+        done
+      fi
+      bash -o pipefail "$1/command" > "$1/log" 2>&1 < /dev/null 9>&-
+      echo $? > "$1/exit.tmp"; mv "$1/exit.tmp" "$1/exit"' \
+        wait-run "$handle" "${ARCHFLOW_WAIT_SLOTS:-2}" "${TMPDIR:-/tmp}/archflow-wait-slots.$(id -u)" > /dev/null 2>&1 &
       # Sweep old handles after the command has started, so the sweep never delays it. Only a real directory with a
       # handle's shape is removed; one whose runner is still alive is kept however old it is.
       find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'archflow-wait.*' -user "$(id -u)" -mmin +1440 2> /dev/null \

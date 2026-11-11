@@ -15,7 +15,10 @@ These criteria are focus guidance for consequential, evidence-backed review. Use
 plans as context for intent and constraints, not as a checklist or a whitelist
 of possible defects. Inspect existing code and tests before claiming behavior
 or verification is missing. Extra coverage needs an identified undetected
-failure; equivalent behavioral evidence is sufficient. Free-form reports need
+failure; equivalent behavioral evidence is sufficient. A test's cost is judged
+with its coverage: a test slower than what it proves requires, or one that
+repeats another's protection, is worth naming with its cheaper equivalent.
+Free-form reports need
 no finding taxonomy, special IDs, or agreement on every suggestion. The producer
 resolves supported material concerns and finishes when none remain.
 

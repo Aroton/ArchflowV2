@@ -59,7 +59,7 @@ Read and apply the criteria in this rubric to the primary subject. It identifies
 
 @review-inputs/test-reviewer-1/verification.md
 
-Use the reported commands and results to assess what was checked and what remains unsupported. Compare this evidence with relevant tests and the declared behavior; a claim of success is not proof of untested behavior.
+Use the reported commands and results to assess what was checked and what remains unsupported. Compare this evidence with relevant tests and the declared behavior; a claim of success is not proof of untested behavior. Reported durations show what the checks cost.
 
 ### Repository map and investigation scope
 
@@ -101,7 +101,7 @@ test-quality
 
 ## text
 
-Assess distinct regression protection using existing tests and their actual assertions. Identify a concrete failure that could escape detection before requesting coverage, and accept an equivalent oracle at another layer. Prefer the cheapest credible check; flag duplicated or expensive fixtures only when their concrete cost materially harms delivery. Avoid raw coverage targets, exhaustive matrices, and test-structure preferences.
+Assess distinct regression protection using existing tests and their actual assertions. Identify a concrete failure that could escape detection before requesting coverage, and accept an equivalent oracle at another layer. Prefer the cheapest credible check, and weigh what a test costs alongside what it catches: when a test is slower than what it proves requires, such as a spawned process, a real delay, or a fixture rebuilt per case for behavior an in-process test would catch, or when it repeats the protection of another test, name the cheaper test or the test to remove that keeps the same failure detected. Use reported durations when they are supplied. Avoid raw coverage targets, exhaustive matrices, and test-structure preferences.
 
 ## blocking
 

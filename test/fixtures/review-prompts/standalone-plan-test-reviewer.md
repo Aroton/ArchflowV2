@@ -83,7 +83,7 @@ test-strategy
 
 ## text
 
-Check the proposed verification and existing tests against the requested behavior and important failures. Name a concrete failure that could escape detection, accept equivalent behavioral evidence, and prefer the cheapest useful check. Flag duplicate or expensive fixtures only for material delivery cost; avoid coverage quotas and exhaustive matrices.
+Check the proposed verification and existing tests against the requested behavior and important failures. Name a concrete failure that could escape detection, accept equivalent behavioral evidence, and prefer the cheapest useful check. When planned verification is slower or more repetitive than the failures it catches require, such as end-to-end runs for behavior an in-process test would catch, name the cheaper equivalent. Avoid coverage quotas and exhaustive matrices.
 
 ## blocking
 
