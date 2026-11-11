@@ -1,188 +1,81 @@
 # TESTING
 
-**Explored:** 2026-09-16 · **Commit:** `90aa526` · **Covers:** `test/`, `vitest.config.ts`, `package.json`, `scripts/build-temp.mjs`, `scripts/smoke-release-bundle.mjs`, `scripts/test-release-integrity.mjs`
+**Explored:** 2026-11-11 · **Commit:** `f1fe689` · **Covers:** `vitest.config.ts`, `package.json`, `tsconfig.json`, `test/`, `scripts/`
 
-Report-workflow coverage exercises irregular extracted JSON, explicit producer interpretation, selective follow-up, partial-feedback visibility, sibling reuse, and independent constitution/approval boundaries. Archived structured-review tests remain for old evidence.
-
-## Document milestone repair and transition stability
-
-Document milestone repair tests reproduce a project-wide `state.json` ignore rule and ignored decision archives with real temporary Git repositories. They verify repair stops before committing, stable approval after reconnecting, and recovery of an incomplete commit without another review or approval, including an unchanged PRD and autonomous settlement. Tracked files matching ignore rules remain usable, ignored scratch files are excluded, and task commits preserve unrelated staged and working bytes.
-
-The clean document, default-gate, autonomous-document, implementation-succession, terminal-completion, and autonomous-implementation journeys reconnect and read status twice at each observed transition. They compare the returned view and assert that state bytes and reviewer counts remain unchanged. Together they cover initialization through production, review/triage, approval or settlement, commit, each skill handoff, the next implementation phase, and final completion. These integration tests use scripted reviewers, not installed model credentials; run them with `npm run test:integration` or their behavior-named wrappers.
-
-## Diff transport and PRD completion checks
-
-Local Git fixtures exercise complete implementation patch files, large patches beyond the former envelope cap, `.archflow/` exclusion, independent follow-up baselines, reverted outputs, and explicit fallback when historical context is unavailable. These checks use no model allowance. Semantic document journeys require the PRD's authorized commit before design can start, covering both human approval and autonomous rule settlement.
-
-`review-diffs.test.ts` also carries generated patches larger than 1 MiB through the Claude, provider-wrapped Claude, Codex, and Antigravity invocation builders. It resolves the transmitted patch/stat paths from the configured child directory, verifies their digests and complete bytes, checks source availability, and pins Claude read tools and Codex read-only sandboxing. `review-fixed-point.test.ts` checks that general, test, and constitution children receive full diffs, with revision diffs scoped to the assigned reviewer. These are deterministic transport checks; they do not prove that an installed host actually exposes its advertised tools or that a model reads the files.
-
-### Real reviewer file access
-
-Run `ARCHFLOW_REAL_HOSTS=1 npm run test:real-host -- test/real-host/reviewer-file-access.test.ts` to require real Claude, Codex, and Antigravity reviewers to return two random values omitted from the prompt: one in unchanged source and another in a deleted patch line. This exercises generated diff files, the shared repository workspace, and production dispatch. Unlike the older multi-repository citation check, missing file access fails the test.
-
-The initial run on 2026-09-14 failed on both routes. Claude (`claude-fable-5`, CLI `2.1.272`) returned the source value but reported permission denials for `../review-diffs/full.patch` and `full.stat`. Codex (`gpt-5.6-sol`, CLI `0.154.0`) reported no text-reading tool and returned neither value. The old Codex adapter disabled both `shell_tool` and `unified_exec`; Claude's invocation did not grant the sibling diff directory. After enabling Codex text-reading tools under its read-only sandbox and granting Claude the diff directory relative to the shared repository view, both routes passed: each returned both exact random values. These checks use the checkout's production dispatch code with the installed host CLIs; they do not update or validate a separately installed ArchFlow bundle. A follow-up run on 2026-09-15 also passed for Antigravity (`gemini-3.7-flash-high`, CLI `1.2.2`), returning both exact values. The installed ArchFlow bundle was separately checked to match the rebuilt checkout bytes.
-
-## Gemini completion and recovery coverage
-
-`antigravity-output.test.ts` uses synthetic native stream events to distinguish a recovered 503 followed by completed output from missing completion, later errors, mismatched conversations, damaged streams, and process failures. Coordinator coverage verifies that schema-heavy output does not displace the terminal error from saved diagnostics. Durable-recovery tests validate ten constitution slots before recording success and prove that an incomplete judgment set remains a failure.
-
-Run `ARCHFLOW_REAL_HOSTS=1 npm run test:real-host -- test/real-host/adjudication-output.test.ts` for the Gemini acceptance check. It dispatches a ten-rule constitution review against generated source and complete diff files. Random values absent from the prompt must be recovered from unchanged source and a deleted patch line, and the final judgments must satisfy the normative schema. Service-error ordering is tested deterministically with fixtures; the live check does not depend on provoking a provider outage. The 2026-09-15 run passed through the production dispatcher with `gemini-3.8-flash-high` at high effort on CLI `1.2.3`, returning all ten judgments and both random values after encountering a native 503 capacity error.
-
-## The default is deliberately fast
-
-ArchFlow is an iterated-on prototype, so its everyday gate answers one question: did this edit break the typed code, focused behavior, public shape, or temporary bundle? It does not reproduce a release, simulate process crashes, traverse every schema corpus, or call an authenticated model host.
-
-`npm test` runs only the Vitest `fast` project. `npm run check` runs, in order:
-
-1. the pinned MCP SDK compatibility probe;
-2. strict emit-free TypeScript validation;
-3. the fast Vitest project once;
-4. a temporary esbuild plus inert bundle smoke test;
-5. the dependency-notice inventory and the production MCP SDK import boundary.
-
-On the repository machine used to define this split, the fast project runs in roughly six seconds and the whole ordinary check stays below ten seconds with dependencies installed. Dependency installation is not part of that budget. The repository has no hosted CI workflow; `npm run check` is the local/CI contract.
-
-Expected failure-path tests can emit an `INTERNAL_ERROR` diagnostic while passing. They may also append to ignored `.archflow/runtime/diagnostics/internal-errors.log`; that file is disposable test/runtime data.
+How the tests are organized, what each layer is for, and which command to run. The everyday gate is deliberately fast: it asks whether an edit broke the typed code, the focused behavior, or a public shape. It does not reproduce a release, and it never calls a paid model.
 
 ## Vitest projects
 
-`vitest.config.ts` declares five non-overlapping projects. All use the Node environment. To keep the host system responsive during heavy parallel test execution, worker pools leave capacity equivalent to two CPUs by bounding `maxWorkers` to `availableParallelism() - 2` across all test projects. This bounds worker count; it does not pin workers away from particular CPU IDs.
+`vitest.config.ts` declares four non-overlapping projects, all in the Node environment. Worker counts are bounded to `availableParallelism() - 2` so the machine stays responsive during a run.
 
-| Project | Directory | Purpose | Ordinary check? |
+| Project | Directory | What belongs there | In `npm run check`? |
 |---|---|---|---|
-| `fast` | `test/unit/`, `test/contracts/` | In-process module behavior, focused durable invariants, package boundaries, and representative public contracts | Yes |
-| `extended` | `test/extended/` | Exhaustive schema compilation, advertised-schema traversal, and large corpora | No |
-| `integration` | `test/integration/` | Real temporary Git repositories, durable filesystem workflows, child processes, CLI/stdio, installers, and sharded semantic journeys | No |
-| `crash` | `test/crash/` | Process termination at persistence cut points and restart recovery | No |
-| `real-host` | `test/real-host/` | Installed bundles, authenticated Claude/Codex calls, host selection, provider behavior, and benchmarks | Never automatically |
+| `fast` | `test/unit/`, `test/contracts/` | In-process module behavior, and public shape and documentation checks | Yes |
+| `extended` | `test/extended/` | Exhaustive schema compilation over the whole published schema set | No (`check:deep`) |
+| `integration` | `test/integration/` | Real temporary git repositories, child processes, the CLI over stdin/stdout, a built temporary bundle, the install script | No (`check:deep`) |
+| `real-host` | `test/real-host/` | Authenticated `claude`, `codex` and `agy` calls | Never automatically |
 
-The fast project contains the in-process unit and contract suites. Slow workflow tests that formerly lived under `test/unit/` were moved to integration: live config editing, durable transactions and gates, secret rejection, repository path resolution, status classification, implementation-output construction, legacy upgrade, task workspaces, and — most recently — repository-set resolution, state initialization, and reconciliation discovery over a live repository set. The rule behind every one of those moves: **a test that spawns `git` belongs in `integration`, not in `unit`.** The fast project is in-process by definition, and the integration suite is git-spawn bound (see below), so a temporary repository is an integration-scale cost wherever the file lives.
+`tsc --noEmit` also compiles every `test/**/*.ts` file, so a test in a project nobody runs cannot silently stop compiling. This is how the real-host files stay checked without being run.
 
-The integration project registers its independent semantic journeys, multi-repository implementation journeys, and automation status controller loops through behavior-named one-scenario test files. Vitest schedules files, not ordinary `it` blocks, across its fork workers; keeping dozens of long journeys in large files previously forced one worker to execute almost the entire critical path while others sat idle. Sharding multi-repository implementation journeys and automation status controller loops into behavior files allows Vitest to saturate all responsive worker lanes without making volatile suite counts part of the maintained architecture contract.
+A `bundled-review-yaml` plugin in `vitest.config.ts` loads `assets/review-inputs.yaml` as a string, exactly as the esbuild bundle does, so tests see the same compiled-in configuration as the shipped program.
 
-The crash test project is similarly split into behavior-named files (`state-gate-lifecycle-conflicts.test.ts`, `state-gate-lifecycle-open-recovery.test.ts`, `state-gate-lifecycle-resolve-recovery.test.ts`), bringing the crash test suite duration down to ~35 seconds.
+## npm scripts
 
-The semantic journey harness returns the apply handler's already-refreshed view directly. Apply/status byte parity is proven separately for an ordinary mutation, a compound review, a human decision, and a refusal carrying a safe view; it is not re-run after every one of the hundreds of journey actions.
+| Script | Runs |
+|---|---|
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | `vitest run --project fast` |
+| `npm run test:unit` / `test:contracts` | `fast`, narrowed to `test/unit` or `test/contracts` |
+| `npm run test:extended` | the `extended` project |
+| `npm run test:integration` | the `integration` project |
+| `npm run test:real-host` | the `real-host` project (opt-in; see below) |
+| `npm run check` | `typecheck`, then `test`, then `check:notices` |
+| `npm run check:deep` | `check`, then concurrently `check:schemas`, `test:notices-policy`, `test:extended`, `check:release`; then `test:integration` |
+| `npm run generate:schemas` / `check:schemas` | regenerate, or byte-compare, the JSON Schemas under `src/contracts/schemas/v1/` |
+| `npm run check:notices` / `test:notices-policy` | `THIRD_PARTY_NOTICES.md` against `package-lock.json`; the checker's own policy tests |
+| `npm run release:stage` / `check` / `reproduce` / `write` / `smoke` / `mutations` | build, validate, rebuild-and-compare, promote, smoke-run and hostile-mutate a release payload (`scripts/`) |
+| `npm run check:release` | `release:check`, `release:smoke`, `release:mutations` and `release:reproduce` concurrently, against `dist/` |
 
-The schema generation pipeline (`src/contracts/internal/schema-generation.ts`) uses single-pass schema emission with local pointer rewriting, reducing schema verification (`check:schemas`) from ~17 seconds down to <0.5 seconds while preserving 100% byte parity. In `test/extended/` and `test/unit/`, compiled Ajv validator instances are cached to eliminate redundant JSON Schema re-compilations across corpus evaluations.
+Narrow a run by passing a path after `--`: `npm test -- test/unit/plain-json.test.ts`, `npm run test:integration -- test/integration/local-cli-payload-input.test.ts`. That is the preferred debugging loop; a failure in one integration file does not need the rest.
 
-Automation status crosses all three non-host layers. Fast contract/unit tests pin the strict five-arm runtime contract, generated-schema registry, exhaustive semantic-action mapping, owner descriptors, blocked categories, token exclusion, and observation-ID stability/sensitivity. Integration tests invoke the real temporary bundle to prove input-free stdin behavior, exit/output discipline, absent/staged/unreadable classifications, representative configured and exceptional checkpoints, and a clean descriptor-driven PRD-to-completion loop. Polling tests snapshot `.archflow` before and after repeated reads; a cold-process benchmark uses a temporary Git-counting shim and checks time and spawn ceilings without credentials or model dispatch. The benchmark is a repository-local regression signal, not a universal latency guarantee; its measured reference result is documented in `contracts/AUTOMATION.md`.
+`npm run check:deep` is for changes that cross many boundaries: schemas, process behavior, or release construction. There is deliberately no changed-file detector that guesses when to run it. `check:release` rebuilds and compares the tracked `dist/`, so it reports a difference whenever source changed and `dist/` was not rebuilt.
 
-TypeScript still includes every `test/**/*.ts` file, so optional tests cannot silently rot at compile time. `test/types/mcp-sdk-public-surface.ts` remains compile-only coverage exercised by `npm run typecheck`.
+## What each layer covers
 
-Default approval coverage combines seed-policy assertions with semantic journeys. `semantic-default-human-review.test.ts` exercises embedded queries, ORM writes, schema migrations, deterministic SQL paths, combined path/policy triggers, automatic security/contract/policy completion, and custom human-review rules. Scripted adjudicator judgments prove routing and exact approval/commit boundaries, not live-model classification accuracy. Every active rule still reaches automated compliance review. Existing governing-document tests cover authenticated material-plan comparisons and meaning-preserving maintenance; remediation and controller tests cover unresolved blockers and manual handoffs.
+**Unit (`test/unit/`)** pins module behavior with a representative success and failure per boundary: plain-JSON and canonical-JSON rules (`plain-json`, `canonical`), config, constitution and rubric parsing (`workflow-config`, `constitution*`, `rubric`), approval-rule globs (`approval-rules`), route selection and validation (`dispatch-routing`), adapter argv, preflight and failure classification (`dispatch-cli*`, `dispatch-failure-observation`, `dispatch-recovery`), the child-process runner (`dispatch-process`), workspace creation and view materialization (`dispatch-workspace`), usage parsing and the usage log (`dispatch-usage*`), the Antigravity output reader, review input assembly and envelopes (`review-inputs`, `review-envelopes`, `review-rubrics`), the standalone review itself (`simple-review`, `local-review`), init assets and diagnostics (`init-*`), and git path and worktree identity (`repository-*`). `standalone-review-prompt-snapshots` compares every role's rendered prompt to the files in `test/fixtures/review-prompts/`.
 
-Multi-repository coverage (a task config that names writable and context-only secondaries alongside the primary) is layered the same way. Unit tests pin the dispatch workspace's ordered named snapshots (`dispatch-workspace.test.ts`), config key-order insensitivity (`config-change.test.ts`), and the structured repository-set failure shapes. Integration files build real secondaries with `test/helpers/temp-repository.ts` and prove one behavior each: `repository-set.test.ts` and `state-reconciliation-discovery-repository-set.test.ts` (live set resolution and reconciliation), `multi-repository-counter-review.test.ts` (the plural read-only view reaches the child in name order, evidence pins every member, and a secondary that vanishes before or during dispatch is named in a retryable error while the review stays current), `multi-repository-retained-result.test.ts` (exact secondary after-images reload, forged projection roots and targets are refused, undeclared writable-secondary dirt is reported while context-only dirt is ignored), `secondary-implementation-milestone-proof.test.ts` (the complete proof set survives descendants), `status-baseline-repository-unavailable.test.ts` (a repository leaving the writable set yields a typed error), and the sharded `multi-repo-impl-*.test.ts` suite (primary-then-api commit succession under no-wait authority, a content rule matched only in the secondary opening the human commit gate, target movement before and after the gate, waiver settlement under a content-rule wait, and api-only adopt/restore/deletion reconciliation). The former `test/crash/multi-root-projection-rollback.test.ts` was removed: secondary projection rollback is proven in-process by the retained-result and transaction tests without a process kill. `test/real-host/multi-repository-dispatch.test.ts` is the opt-in end-to-end proof that a context-only secondary reaches a real reviewer of each family and is pinned in server-attested evidence; reviewer prose citing `api/<path>` is recorded softly, never required.
+**Contracts (`test/contracts/`)** pins public shapes: each generated JSON Schema agrees with its zod definition (`foundational-schema-agreement`, `shared-primitives-schema-agreement`, `error-schema-agreement`), canonical hashing matches the release script's (`canonical-parity`), the release manifest contract (`release-contracts`), the skill contract (`skill-contract-canonical`: skills name only shipped local commands and no retired tool, and keep exact frontmatter), `repository-boundary` (`src/contracts` never imports `src/repository`; `package.json` admits only `yaml` and `zod` at runtime on the Node 24 line and keeps expensive projects out of `check`), and a check on the documentation set.
 
-Review-scope coverage is split by boundary. `review-envelopes.test.ts` pins implementation-specific scope and preserves document review guidance. `review-reports.test.ts` exercises readable extraction from conventional and irregular JSON, empty-output refusal, server-bound provenance, and the one-report-field child schema across all adapters. Pinned-context, reviewer-routing, fixed-point, and semantic journey tests cover producer-selected verification, complete previous reports, sibling reuse, partial feedback, and finish/revise/escalate responses. Archived finding-owner and ledger tests remain compatibility coverage; they do not define the fresh report protocol. Opt-in `review-scope.test.ts` asks real reviewers to catch a changed output breaking an unchanged consumer without reporting unrelated pre-existing defects.
+**Extended (`test/extended/`)** compiles every published schema with Ajv, once, with the compiled validators cached.
 
-Validation override and review push-through use the same layered rule. Fast contract tests pin request bounds, the dedicated request-digest discriminator, kind-specific gate evidence, grant/deny/cancel vocabulary, old attempts-exhausted archive acceptance, durable ordinal ordering, public authenticated-versus-invalid audit arms, strict automation v1, and optional automation v2 audit. Unit tests cover review-round-history construction, the minimum of two distinct completed rounds, complete accepted occurrence derivation, and omission of the choice when evidence is partial or stale. Integration journeys own the stateful proof: failed implementation request, exact gate subject, grant/deny/cancel return to the unchanged failed attempt, not-run disclosure, generic-plus-specialized push-through settlement, replay, and continued policy/drift/approval/commit enforcement.
+**Integration (`test/integration/`)** runs real processes:
 
-Milestone recovery crosses the contract, real-Git, gate, and semantic-journey layers. Focused integration coverage proves first-parent candidate selection through descendants and merges; rejects wrong targets, messages, paths, trees, authorities, rewritten history, missing objects, and ref races; and exercises document, intermediate implementation, and final-completion handoffs under human and no-wait authority. Gate and journey coverage binds the complete drift subject, committed/uncommitted classification, stale-interface refresh and replay refusal, governing-document routing, adoption/restore continuation, missing-proof fresh recovery, the no-empty-commit rewrite inspection, and preservation of unrelated index/worktree sentinels.
+- the CLI surface: `local-cli-command-surface`, `local-cli-payload-input` (file and stdin payloads, empty input), `local-cli-stdin-discipline` (an input-free command never reads stdin);
+- the standalone review end to end with scripted reviewer children (`simple-review-dispatch`, `review-corpus`, over `test/fixtures/corpus/review-scenarios.json`);
+- dispatch: `dispatch-cli`, `dispatch-coordinator`, `dispatch-plumbing` (`USER` is preserved for Claude auth, workspaces stay disposable after a failure or abort, the Codex final file is bounded separately, a planted credential and routing canary never reach output and the canary scan is shown to catch a deliberately leaking fake, a grandchild in the process group is reaped on cancel); the oversized-argv guard is a unit test in `dispatch-process`;
+- init: `init-orchestration` and `init-legacy-registration-cleanup` (scaffold, divergence refusal, `--force`, removal of old MCP registrations, symlinks left alone);
+- `install-script` (argument handling, install to all three clients, pruning only files an earlier install owned, rejecting a mutated asset, the `PATH` hint) against a scratch `HOME`;
+- the built bundle (`release-bundle-review`, `release-offline`): a staged payload validates, runs `init` from an install-shaped copy and reviews a repository offline, builds are byte-reproducible in independent roots, unsafe output roots are refused, and a bundle with no assets directory names the places it looked.
 
-## Commands and targeting
+**Real host (`test/real-host/`)** calls the genuine CLIs: `dispatch` (schema-valid reviewer and constitution output in both producer directions), `review-scope` and `reviewer-file-access` (reviewers stay on the declared files), `preflight` (real version and login shapes; credential values never leak into errors), `failure-classes` (an invalid model and an abort are classified), and `cc-switch-dispatch`.
 
-Fresh-review acceptance is layered across report contracts, routing and fixed-point unit tests, and stateful semantic journeys. The producer response is required even when report text sounds clean. Finish proceeds to ordinary policy and approval evaluation; revision selects known previous reviewers and supplies concrete verification requests; escalation asks for human judgment. Legacy taxonomy and disposition fixtures remain readable archive coverage. Skill contract tests audit proportional investigation and consequential review guidance rather than imposing a finding taxonomy on new output.
-
-`test/unit/triage-benchmark.test.ts` is a credential-free, in-process regression signal. It times the public `validateTriage` and `buildHumanGatePresentation` seams after warm-up, using representative taxonomy, validation-override, and fully bound review-push-through shapes, and requires their measured p95 to remain below 100 ms on the implementation host. It performs no filesystem, Git, child-process, network, or provider work and is not a universal host-latency guarantee. That local signal is distinct from `test/real-host/review-benchmark.test.ts`, which is opt-in, uses installed credentials and provider calls, and remains human-scored evidence rather than automated acceptance.
-
-```text
-npm test
-npm test -- test/unit/plain-json.test.ts
-npm run test:unit
-npm run test:contracts
-npm run test:extended
-npm run test:integration
-npm run test:integration -- test/integration/mcp-stdio.test.ts
-npm run test:crash
-npm run check
-npm run check:deep
-```
-
-Passing a file or filename fragment after `--` narrows within the selected project. This is the preferred debugging loop; an integration failure does not require running every integration journey.
-
-For a sharded semantic journey, target its behavior-named `.test.ts` wrapper. The adjacent registrar module is intentionally not a test entrypoint.
-
-`npm run check:deep` is an explicit, expensive validation for unusually broad changes. It first runs the ordinary check, then schema-byte regeneration comparison, extended tests, all integration and crash tests, notice/SDK-boundary mutation tests, and the full release check. It does not run real hosts or the review benchmark.
-
-The integration timing budget is 40 seconds on the reference machine (27–32 seconds measured). Validate performance with at least two complete runs after changing journey layout, worker configuration, shared harnesses, or production code that affects status/apply cost. Machine-independent correctness remains the pass/fail contract; the recorded wall-time budget is the regression signal for this repository's development environment.
-
-There is intentionally no changed-file detector that guesses when deep verification is necessary. Choose it when a change crosses many boundaries, modifies schemas/generation, changes durability/process behavior, or alters release construction.
-
-## Release and real-host validation
-
-The ordinary temporary build (`npm run build:temp`) creates bundles under the OS temporary directory, smoke-exercises them, and removes them. It does not touch tracked `dist/` and does not trigger release reproduction.
-
-Release commands remain separately selectable:
-
-- `release:stage` builds a candidate payload into an explicitly supplied empty directory.
-- `release:check` validates a supplied payload; `release:smoke` exercises copied/hostile runtime modes.
-- `release:mutations` checks representative hostile payload changes in parallel across isolated temp workspaces; `release:reproduce` rebuilds and byte-compares tracked `dist/`.
-- `check:release` composes those four checks concurrently via `scripts/run-concurrent.mjs` and runs only from `check:deep` or by explicit request.
-- `release:write` promotes an explicitly staged candidate into tracked `dist/`; it never installs machine-global assets.
-
-Release validation is not repeated as a Vitest integration wrapper. `check:release` owns tracked-payload validation, guarded smoke startup, independent reproduction, and manifest/provenance mutation checks. A focused fast boundary test pins rejection of the repository itself as a release output root without building or copying any payload bytes.
-
-Real hosts require a separate opt-in:
+## Real hosts need an explicit opt-in
 
 ```text
 ARCHFLOW_REAL_HOSTS=1 npm run test:real-host
-ARCHFLOW_REVIEW_BENCHMARK_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/archflow-review-benchmark.XXXXXX")"
-ARCHFLOW_REAL_HOSTS=1 ARCHFLOW_REVIEW_BENCHMARK=1 ARCHFLOW_REVIEW_BENCHMARK_STAGE="$ARCHFLOW_REVIEW_BENCHMARK_STAGE" ARCHFLOW_REVIEW_BENCHMARK_OUTPUT="$ARCHFLOW_REVIEW_BENCHMARK_STAGE/review-benchmark.json" npm run bench:review
-ARCHFLOW_REAL_HOSTS=1 ARCHFLOW_CC_SWITCH_PROVIDER=zai npx vitest run --project real-host test/real-host/cc-switch-dispatch.test.ts
+ARCHFLOW_REAL_HOSTS=1 ARCHFLOW_CC_SWITCH_PROVIDER=<provider> npx vitest run --project real-host test/real-host/cc-switch-dispatch.test.ts
 ```
 
-These commands may use credentials, provider quota, installed CLIs, and long production-derived timeouts. Neither `check` nor `check:deep`, builds, release staging, or release writing invokes them.
-
-`test/real-host/installed-terminal-semantic.test.ts` scratch-installs the tracked payload and exercises the current launcher boundary: the supported `archflow-local` commands, absence of retired request-building adapters, and read-only `archflow_status` over stdio. Producing semantic journeys remain in `host-selection.test.ts`, where authenticated Claude and Codex exercise `archflow_status` followed by `archflow_apply`. Direct reviewer journeys validate explicit outcome/feedback child output and server-owned Review V5 provenance and judgment-only Adjudication V2 output, with reviewer identities and attribution derived from authenticated dispatch rather than report prose. Routes mirror shipped defaults so host latency and behavior measure the configuration users actually receive.
-
-The review benchmark reviews the corpus in `test/fixtures/corpus/artifacts/` (thirteen cases: nine seeded with exactly one claim each, four clean controls) in both producer directions with the exact production design rubric (`design-v3`), so its measurements are about the policy tasks actually run under. Seeded classes cover single-statement contradictions, unhandled named results, verification shortcuts, and — added after a real design passed review with a budget that could not fit its own measured snapshot — cross-section arithmetic gaps and constants that cannot jointly hold. Routine fast contract tests in `test/contracts/review-benchmark-contract.test.ts` pin the production rubric digest, corpus digest, 26-turn matrix arithmetic, schema validity, seeded-claim detection and clean-control classification, and the split between immutable observations and human scoring. Authenticated execution requires dedicated `ARCHFLOW_REVIEW_BENCHMARK_STAGE` and `ARCHFLOW_REVIEW_BENCHMARK_OUTPUT` paths under temporary storage and writes only to the staged output; quality is a human disposition recorded in `docs/validation/`, never a CI assertion, and replacing tracked validation evidence is a separate, deliberately authorized workflow.
-
-Reviewer coverage is layered rather than measured by a percentage. Unit and contract tests pin invocation legality, route precedence, specialist fallback, authenticated assignments, report extraction, archive compatibility, and judgment-only constitution slots. Integration tests cover initial and selected verification dispatch, upstream-authority failures before dispatch, sibling retention, partial report visibility, and exact failure attribution. Adapter tests send a valid 300 KiB envelope through all three transports and prove no argv element approaches the 131,072-byte process limit.
-
-Effort selection adds focused checks at each trust seam. Unit and contract tests verify screenshot scores, enabled profiles, inclusive thresholds and minimum, cost ordering, shortfall behavior, unknown profiles, omitted effort, fallback, deterministic evidence, and archived readability. Fresh child output contains bound difficulty and a required rationale, never model choices or workload scores. Integration tests exercise manifest-free designs, captured settings, recommendation/status stability, and selector failure using bounded reasoning while ordinary review settles. Calibration examples contrast broad file copying with small but genuinely difficult mechanisms; scripted tests validate selection plumbing, not a model's judgment quality.
-
-Document-production changes need a different check from reviewer accuracy. Compare old and revised guidance on isolated copies of the same repository/task inputs, holding producer, reviewers, and implementation model constant. Useful samples include ordinary integration, interacting state transitions, and a consumer of a tested predecessor API. Give each implementation agent its generated handoff and run independent behavioral checks. Record consequential decisions discovered during implementation, defects/rework, review rounds, and total model usage when available; document size is only a secondary proxy. Existing transcripts and implementation notes are sufficient. A small forward test can expose handoff ambiguity, but does not prove a lower model can execute real phases or establish token savings. Keep new observations separate from historical benchmark evidence.
-
-The paired review-efficiency harness puts that guidance into one reproducible experiment. `test/helpers/review-efficiency/` builds six frozen cases (two document, four implementation; the implementation cases are temp repositories whose post-change tree is sealed as a produced-snapshot view), derives the historical reviewer instructions from the canonical fixture `test/fixtures/review-efficiency/baseline-instructions.json` — captured verbatim from the historical envelope-builder source, stored as strings and never executed — and substitutes them into the selected review recipe and rebuilds the rendered prompt so each case/role exists as an old/new pair. Pair parity compares all supplied files and authority while normalizing instruction selections, their rendered prompt, and derived adjudication source bindings. `test/unit/review-efficiency.test.ts` proves fixture provenance against the pinned Git blobs, pair parity, stream-grammar and checkpoint-journal mechanics, and drives the entire orchestration loop through injected preflight and child runners without credentials. `test/real-host/review-efficiency.test.ts` runs the live 28-turn experiment (six cases × two variants × their roles, on the fixed `claude-opus-5`/high route) behind a double gate: `ARCHFLOW_REAL_HOSTS=1` plus `ARCHFLOW_REVIEW_EFFICIENCY=1`, with explicit `ARCHFLOW_REVIEW_EFFICIENCY_STAGE` and `ARCHFLOW_REVIEW_EFFICIENCY_OUTPUT` paths under temporary storage (`npm run bench:review-efficiency`). The run is resumable from its atomic checkpoint journal, stops inconclusively rather than spending the remaining turns when the probe turn cannot prove usage/model measurement, and stages a two-part observation document: an immutable, digest-bound observation payload plus a separately bound human assessment. Per-field usage is aggregated only when every contributor exposes the field, and concurrent wall time is never summed across sibling roles. As with the review benchmark, quality dispositions are human work recorded in `docs/validation/`, never a CI assertion. The [2026-09-16 observed run](validation/review-efficiency-2026-09-16.json) completed all 28 turns first-try on CLI 2.1.273; the human assessment is `mixed` — every seeded defect was detected in both variants with clean scope discipline, but one new-variant control turn returned a degenerate provider response, and a single 28-turn sample supports directional observations only.
-
-After the reviewer-output merge, both variants use the production `{outcome, feedback}` schema. The historical fixture remains verbatim; delivery replaces only its obsolete request for a `report` string with the current output-format instruction. Observations preserve the explicit outcome and feedback separately, and follow-up fixtures use V5 feedback. The comparison measures the combined investigation and reviewer-writing changes against that adapted baseline; it cannot attribute savings to investigation guidance alone. Pre-merge checkpoints have different source/schema bindings and cannot be resumed as the same experiment. After the file-input refactor, both variants use the same file materialization and Markdown renderer; document-only turns can use read-only tools to load their supplied context. The retained September observation describes the earlier envelope transport, not a fresh measurement of this delivery path.
-
-The focused live selector check uses the configured effort-reviewer route through production workspace creation, CLI preflight, schema projection, dispatch, extraction, and bound evidence construction. Run `ARCHFLOW_REAL_HOSTS=1 npx vitest run --project real-host test/real-host/implementation-selection.test.ts`. It requires only the configured reviewer host; expected categories stay outside the model prompt. Optionally set `ARCHFLOW_IMPLEMENTATION_SELECTION_REPORT` to a report path. The [2026-09-15 observed run](validation/implementation-selection-live-2026-09-15.json) used Luna/xhigh through Codex 0.154.0 and matched all three expectations: 120-file copying → routine/Muse, unresolved cache synchronization → hard/Astra low, scheduler derivation → exceptional/Astra high. These are synthetic design assessments, not implementation execution or a complete multi-reviewer workflow.
-
-## Recommendation and automation-version coverage
-
-Contract tests validate the minimal `ImplementationRecommendationV1` ready and unavailable shapes, plus strict automation version acceptance and cross-version rejection. Semantic journeys cover governing-design selection, stale evidence, legacy ready projection, legacy blocked fallback, and identical actions across recommendation variants. CLI/controller-loop tests pin current V3 emission and retained V1/V2 compatibility, positionless unavailable advice, observation identity, and the rule that advice never launches or reroutes a producer. Skill contract tests require phase design, phase implementation entry, and generic status to render the model, effort when supplied, and returned rationale.
+These use installed credentials, provider quota and a timeout derived from the 15-minute dispatch timeout. `check`, `check:deep`, the release scripts and builds never run them; a real-host run is a person's decision, and the files are kept compiling by `typecheck` alone. A rate-limit or session-limit failure that exits in about a second usually means the account quota, not a harness bug.
 
 ## Placement rules
 
-- Put deterministic module behavior and a representative success/failure pair in `unit`.
-- Put cheap public wire/shape invariants in `contracts`.
-- Put exhaustive matrices or third-party compilation of the full published surface in `extended`.
-- Put real Git, multi-file durable workflows, child processes, CLI/stdio, temporary bundles, installers, and cross-service journeys in `integration`. Anything that spawns `git` — even a one-commit temporary repository — is integration, never unit; build it with `test/helpers/temp-repository.ts` rather than an inline scaffold.
-- Put tracked release payload validation, reproduction, and hostile release mutations in the explicit release scripts composed by `check:release`.
-- Put deliberate process termination in `crash`; put any authenticated or provider-dependent behavior in `real-host`.
+- Deterministic module behavior with a representative success and failure: `unit`.
+- Cheap public shape and wire invariants: `contracts`.
+- Exhaustive matrices over the whole published schema set: `extended`.
+- Anything that spawns `git`, runs a child process, drives the CLI, builds a temporary bundle or runs the installer: `integration`. A one-commit temporary repository is still integration; build it with `test/helpers/temp-repository.ts` (or `review-repository.ts`) rather than an inline scaffold.
+- Anything authenticated or provider-dependent: `real-host`.
 - Name tests for the behavior they cover, never the workflow phase that introduced them.
+- Install and init tests use a scratch `HOME` and never write to the real `~/.claude`, `~/.agents`, `~/.archflow` or `~/.local/bin`.
 
-There is no coverage percentage gate. Confidence comes from the fast representative layer plus explicitly chosen deeper evidence when the affected boundary warrants it.
-
-
-## Automation responsibility
-
-Automation regressions cover bounded transient retries, persistence across producer restarts and deleted diagnostics, corrupted recovery state, intentional policy-trigger classification, five-round remediation accounting, and v3 manual handoffs. Integration controller fixtures simulate an explicit human launch at each successor boundary rather than inferring permission to run the next skill.
-
-Verification evidence regressions cover optional logs during implementation capture, historical manifests with changed or missing caches, bounded UTF-8 log excerpts, and review retry after replacing a log without changing the implementation result. The retry journey also checks that subsequent cache changes do not mutate completed review authority.
-
-Constitution coverage checks default/custom precedence, deprecated overrides, within-layer duplicate rejection, migration conflicts, custom preservation under forced refresh, and unchanged historical policy pins. The Git-backed tests prove unchanged core rules still authenticate automatic advancement after moving into `default/`, while unsupported custom core overrides cannot. Existing semantic journeys continue to exercise automatic API changes and retained database/custom approval triggers.
-
-## Simple-task review coverage
-
-`test/unit/simple-review.test.ts` drives both stages with fake reviewer responses in disposable Git repositories. It covers one pass per role, configuration fallback and explicit routing, test assignments, constitution/path triggers, partial output failure, transient retry bounds, cancellation, branch and policy drift, path rejection, dirty/add/delete snapshots, cleanup, and public MCP validation. `test/integration/simple-review-dispatch.test.ts` invokes the public boundary and real CLI runner with a fake executable, checking all roles, byte-identical snapshots, and cleanup. Existing dispatch coordinator integration tests guard workflow behavior through the extracted runner. The portable skill specifies post-review fixes without reviewer re-checks; real model judgment remains distinct from deterministic test coverage.
-
-## Inspectable review prompts
-
-`review-prompt-snapshots.test.ts` drives every phase, applicable reviewer, and initial/follow-up mode through the production file materializer. Its 24 checked-in Markdown outputs in `test/fixtures/review-prompts/` show the exact final prompts, including per-file usage guidance and local references. Review these diffs when changing either bundled YAML configuration; a snapshot update is not a substitute for inspecting the result. General/test snapshots require the explicit rubric reference and every assigned criterion in its materialized file.
-
-`review-inputs.test.ts` checks missing-rubric failures, configuration selection, complete large files, source/materialization tampering, instruction limits and preview/adapter equality. Diff tests preserve skipped-round baselines and explicit missing history. Offline CLI fixtures read actual referenced files. The preview integration checks that preparing a preview leaves durable task state unchanged and matches subsequent dispatch. Amendment examples distinguish proposed task-design bytes from the authenticated baseline comparison; they never relabel a proposal as approved context. Real-host probes remain narrowly scoped and opt-in; their recorded observations are in `validation/review-file-reference-probes.md`.
-
-Workflow response tests cover action-specific field omission, diagnostic/standard offer equivalence, and the separate prepare/wait/settle human states. Recovery tests check nested validation paths and distinguish stale-offer refresh from exact operation replay. The missing-output integration journey follows the returned retrieval recipe to restore authenticated content and resume review. Approval-trigger tests exercise shared derivation directly, while semantic integration journeys exercise the real gate composer and transaction boundary.
+There is no coverage percentage gate. Confidence comes from the fast layer plus deeper evidence chosen for the boundary a change touches. Expected-failure tests may print an `INTERNAL_ERROR` line to stderr while passing; that is the internal error log doing its job.

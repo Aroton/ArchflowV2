@@ -1,5 +1,0 @@
-schema_version: "1"
-roles:
-  counter-reviewer:
-    model: gpt-5-codex
-    effort: high

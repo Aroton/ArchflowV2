@@ -88,16 +88,3 @@ export function readAntigravityOutput(stdout: Uint8Array): AntigravityOutput {
       finish > lastError && finish === lastStep,
   };
 }
-
-/** Bounded private diagnostics; schema metadata cannot displace the actual error. */
-export function antigravityOutputDiagnostics(stdout: Uint8Array): JsonObject {
-  const output = readAntigravityOutput(stdout);
-  const bounded = (value: string): string => Buffer.from(value).subarray(0, 4096).toString("utf8");
-  return {
-    ...(typeof output.wrapper?.status === "string" ? { terminal_status: bounded(output.wrapper.status) } : {}),
-    ...(output.error_message === undefined ? {} : { error_message: bounded(output.error_message) }),
-    has_structured_output: output.wrapper?.structured_output !== undefined,
-    ...(output.last_error_step_index === undefined ? {} : { last_error_step_index: output.last_error_step_index }),
-    ...(output.completed_finish_step_index === undefined ? {} : { completed_finish_step_index: output.completed_finish_step_index }),
-  };
-}

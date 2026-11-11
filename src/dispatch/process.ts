@@ -23,7 +23,7 @@ export type DispatchChildSpec = Readonly<{
   env: Readonly<NodeJS.ProcessEnv>;
   stdin?: Uint8Array;
   signal: AbortSignal;
-  cancellation_source?: "client" | "transport";
+  cancellation_source?: "client";
   final_output_path?: string;
   timeout_ms?: number;
   byte_cap?: number;

@@ -1,30 +1,27 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { PassThrough } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
-import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
-import { deriveHostIdentity } from "../../src/contracts/hosts.js";
-import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
+import { reviewReportOutputSchema } from "../../src/contracts/review.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
 import { detectManagedPolicyPaths, preflightAdapter } from "../../src/dispatch/cli.js";
-import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
+import { createReviewDispatcher } from "../../src/dispatch/coordinator.js";
 import { CliAdapterError } from "../../src/dispatch/cli.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import { createDispatchWorkspace } from "../../src/dispatch/workspace.js";
-import { startMcpRuntime } from "../../src/mcp/sdk-adapter.js";
-import type { DispatchEnvelope } from "../../src/review/envelopes.js";
-import { REAL_HOST_PROBE_TIMEOUT_MS, REAL_HOST_TEST_TIMEOUT_MS, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
-import { createTaskWorkspace } from "../helpers/task-workspace.js";
+import { sealDispatchInput, type DispatchEnvelope } from "../../src/review/envelopes.js";
+import { REAL_HOST_PROBE_TIMEOUT_MS, REAL_HOST_TEST_TIMEOUT_MS, failedAttemptObserver, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
+import { createReviewRepository } from "../helpers/review-repository.js";
+import { standaloneReviewFields } from "../helpers/standalone-review-input.js";
+
+/** The standalone review output contract, as `createReviewResponseSchema` hands it to dispatch. */
+const reviewSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue;
 
 const REAL_HOSTS_AVAILABLE = realHostsAvailable();
 requireRealHostsAvailable(REAL_HOSTS_AVAILABLE);
-const decoder = new TextDecoder("utf-8", { fatal: true });
-const encoder = new TextEncoder();
-const PHASE = parsePhaseInstanceId("prd");
 
 function command(commandName: string, argv: readonly string[]): string {
   return execFileSync(commandName, [...argv], {
@@ -32,14 +29,6 @@ function command(commandName: string, argv: readonly string[]): string {
     timeout: REAL_HOST_PROBE_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-}
-
-async function waitForLines(lines: readonly string[], count: number): Promise<void> {
-  for (let attempt = 0; attempt < 400; attempt += 1) {
-    if (lines.length >= count) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  throw new Error(`timed out waiting for ${String(count)} MCP responses`);
 }
 
 describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
@@ -76,13 +65,6 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
     }
   }, REAL_HOST_PROBE_TIMEOUT_MS * 4);
 
-  it("derives the stable first-party host names at the real installed versions", () => {
-    const claudeVersion = command("claude", ["--version"]).match(/^(\d+\.\d+\.\d+)/u)![1]!;
-    const codexVersion = command("codex", ["--version"]).match(/^codex-cli (\d+\.\d+\.\d+)$/u)![1]!;
-    expect(deriveHostIdentity({ name: "claude-code", version: claudeVersion })).toBe("claude");
-    expect(deriveHostIdentity({ name: "codex-mcp-client", version: codexVersion })).toBe("codex");
-  }, REAL_HOST_PROBE_TIMEOUT_MS);
-
   it("reports a synthesized present managed-policy path through production detection", async () => {
     const root = await mkdtemp(join(tmpdir(), "archflow-managed-policy-"));
     const present = join(root, "managed-policy.json");
@@ -95,47 +77,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
     }
   }, REAL_HOST_PROBE_TIMEOUT_MS);
 
-  it("serves an unsolicited pre-initialize list request and remains open for initialization", async () => {
-    const input = new PassThrough();
-    const output = new PassThrough();
-    const lines: string[] = [];
-    let buffered = "";
-    output.on("data", (chunk: Buffer) => {
-      buffered += chunk.toString("utf8");
-      for (;;) {
-        const newline = buffered.indexOf("\n");
-        if (newline < 0) break;
-        lines.push(buffered.slice(0, newline));
-        buffered = buffered.slice(newline + 1);
-      }
-    });
-    const runtime = await startMcpRuntime({ input, output, workingDirectory: process.cwd() });
-    try {
-      input.write(`${JSON.stringify({ jsonrpc: "2.0", id: "early", method: "tools/list", params: {} })}\n`);
-      await waitForLines(lines, 1);
-      expect(JSON.parse(lines[0]!)).toMatchObject({
-        jsonrpc: "2.0", id: "early", result: { tools: expect.any(Array) },
-      });
-
-      input.write(`${JSON.stringify({
-        jsonrpc: "2.0", id: "initialize-after-error", method: "initialize",
-        params: {
-          protocolVersion: "2025-11-25", capabilities: {},
-          clientInfo: { name: "codex-mcp-client", version: command("codex", ["--version"]).replace(/^codex-cli /u, "") },
-        },
-      })}\n`);
-      await waitForLines(lines, 2);
-      expect(JSON.parse(lines[1]!)).toMatchObject({
-        jsonrpc: "2.0", id: "initialize-after-error",
-        result: { protocolVersion: "2025-11-25", serverInfo: { name: "archflow-mcp" } },
-      });
-    } finally {
-      input.end();
-      await runtime.close();
-    }
-  }, REAL_HOST_PROBE_TIMEOUT_MS);
-
-  it("never persists Claude authentication PII values in attempt or diagnostic bytes", async () => {
+  it("never surfaces Claude authentication PII values in a failed attempt's error or diagnostics", async () => {
     const rawAuth = JSON.parse(command("claude", ["auth", "status"])) as Record<string, unknown>;
     expect(rawAuth.loggedIn).toBe(true);
     // The installed CLI no longer echoes account fields from `auth status`; the canaries are the
@@ -149,36 +91,31 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host preflight", () => {
       .filter((value): value is string => typeof value === "string" && value.length >= 16);
     expect(pii.length).toBeGreaterThan(0);
 
-    const workspace = await createTaskWorkspace({ taskId: "real-preflight-pii", label: "real-preflight-pii" });
+    const repository = await createReviewRepository({ label: "real-preflight-pii" });
     const route: DispatchRoute = {
       adapter: "claude-cli", family: "claude", model: "claude-model-does-not-exist", effort: "high",
     };
-    const envelope: DispatchEnvelope = {
-      result_kind: "review", bytes: encoder.encode("{}\n"), digest: "d".repeat(64) as never, byte_count: 3,
-    };
+    const envelope: DispatchEnvelope = sealDispatchInput("review", {
+      ...standaloneReviewFields({ subject: "A local parser rejects malformed JSON before changing state." }),
+      assignment: { reviewer_id: "counter-reviewer-1", focus: "general", criterion_ids: ["correctness"] },
+      rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "correctness", text: "Report a concrete correctness defect.", blocking: true }] },
+    });
+    const observer = failedAttemptObserver();
     try {
-      const dispatch = createDispatchCoordinator({
-        authority: workspace.services.authority,
-        dependencies: workspace.services.dependencies,
+      const dispatch = createReviewDispatcher({
         host: "codex",
-        repository_root: workspace.root,
-        phase_instance: PHASE,
+        repository_root: repository.root,
         signal: new AbortController().signal,
         cancellation_source: "client",
-      });
-      await expect(dispatch(route, envelope, reviewSchema as PlainJsonValue)).rejects.toSatisfy((error: unknown) =>
+      }, observer.observe);
+      await expect(dispatch(route, envelope, reviewSchema)).rejects.toSatisfy((error: unknown) =>
         error instanceof CliAdapterError && error.project_error.code === "PROCESS_FAILED");
-      const attemptDirectory = join(
-        workspace.root,
-        ".archflow", "runtime", "tasks", workspace.taskId, "diagnostics", "attempts", "prd",
-      );
-      const attempts = await readdir(attemptDirectory);
-      expect(attempts).toHaveLength(1);
-      const persisted = await readFile(join(attemptDirectory, attempts[0]!));
-      const diagnosticBytes = Buffer.from(decoder.decode(persisted));
+      expect(observer.attempts).toHaveLength(1);
+      const error = observer.attempts[0]!.error as CliAdapterError;
+      const diagnosticBytes = Buffer.from(JSON.stringify({ attempt: { ...observer.attempts[0], error: undefined }, project_error: error.project_error, message: error.message }));
       for (const value of pii) expect(diagnosticBytes.includes(Buffer.from(value))).toBe(false);
     } finally {
-      workspace.dispose();
+      repository.dispose();
     }
   }, REAL_HOST_TEST_TIMEOUT_MS);
 });

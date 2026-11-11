@@ -1,288 +1,149 @@
 # LIMITATIONS
 
-**Explored:** 2026-09-16 · **Commit:** `e479c26` · **Covers:** `skills/archflow-simple/`, `src/dispatch/`, `src/review/`, `src/init/diagnostics.ts`, `src/mcp/`, `src/state/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `skills/archflow-prd/`, `skills/archflow-design/`, `skills/archflow-phase-design/`, `skills/archflow-phase-impl/`
+**Explored:** 2026-11-11 · **Commit:** `f1fe689` · **Covers:** `src/dispatch/`, `src/review/`, `src/init/`, `src/local/`, `src/contracts/config.ts`, `src/contracts/dispatch-failure.ts`, `src/contracts/errors.ts`, `assets/config.template.yaml`, `install.sh`, `skills/archflow-run/`
 
-Review V5 deliberately does not prove that every reported concern was addressed. The working AI interprets reports and may finish with explained disagreement. Server-attested provenance identifies who reviewed which subject; it does not attest correctness. Partial and previous-version reports are not current completed review authority.
+ArchFlow is a local developer-workflow prototype, not a security sandbox. This page lists what it does *not* guarantee, so a human auditing the system does not have to find out by reading source. Each entry says what is not provided, what mitigates it, and why that trade was accepted. A planted canary that never shows up in a reviewer's output is evidence about that run; it is not proof the reviewer could not read it.
 
-Minor-revision eligibility is also the orchestrator's judgment. The server authenticates the original review, authorizing triage, recorded classification, unchanged inputs and governing documents, and final output; it does not prove that a prose or comment change is minor. One batch of localized corrections may reuse review evidence once, with an explicit disclosure. Coordinated rewrites and new requirements need fresh review, and existing policy blockers, applicable checks, and final-byte human approvals remain in force.
+## What a review does and does not claim
 
-ArchFlow is a local developer-workflow prototype, not a security sandbox. The controls below reduce accidental context leakage and constrain ordinary operation, but the listed cases are unsupported because the current implementation cannot prove the claimed boundary. A planted canary not appearing in output is evidence about that run; it is not proof that the child could not read the canary.
+### Review judgment is generative
 
-These limitations assume a trusted developer account and a filesystem not being changed by a malicious local process. They are acceptable for the prototype's current operating envelope because ArchFlow runs locally for that developer, model output is validated before it becomes evidence, and advancement and approval remain subject to the workflow's durable evidence and human gates. They would not be acceptable as claims of isolation from hostile code, another process running as the same user, or a malicious local user.
+A review reports what other models found when they read the supplied bytes. **Not provided:** proof that every real defect was found, that a reported concern is real, or that fixes made afterward are correct. A clean `no_issues_found` from two reviewers is not a certification, and a family of models can share a blind spot.
 
-## Multi-repository writes are coordinated, not atomic
+**Existing mitigation:** the result names every reviewer's role, route (adapter, family, model, effort) and report, so a caller sees who looked; reviewer output must satisfy a closed schema; and the constitution reviewer, which judges the repository's written rules, is a separate call.
 
-**Not protected:** A phase that changes several writable repositories is installed, restored, and committed as a sequence, not as one transaction. ArchFlow prevalidates every changed member, applies primary then ordinal secondaries, and rolls back in reverse after an ordinary failure, but a process or machine crash can interrupt that sequence and leave some members applied. Commit authorization is likewise one human decision or authenticated settlement but several Git commits, one per repository.
+**Why accepted:** review is a second opinion for the working agent and its human, who decide what to act on. Nothing in the CLI approves, blocks or advances work.
 
-**Existing mitigation:** Every member is validated before any write, and rollback runs in reverse order on ordinary failure. Commit proof is repository-local and race-closed: a successful earlier commit is preserved, and status resumes at the first repository without proof rather than repeating or undoing one that already landed. Every adopted, restored, or committed path stays bound to its `(repository, path)` tuple, so identical relative paths in different members cannot collide.
+### `human_review_reasons` are advice
 
-**Why accepted:** The repositories are ordinary sibling Git checkouts on one developer's machine; there is no shared transaction primitive to build on, and inventing one would be a large subsystem for a rare interruption. A paused sequence is visible in status and recoverable by repairing the named repository and continuing, which is proportional for the prototype.
+A matched `approval_rules` entry or constitution `review_trigger` adds a reason to the result. **Not provided:** enforcement. The CLI cannot stop a caller from ignoring a reason; the `archflow-run` skill and the human at its STOPs are what honor it. A skill that skips the question skips the human.
 
-## Generative review judgment
+### Reports describe one snapshot
 
-**Not deterministic:** A review envelope and its attestation are byte-reproducible, but a fresh Claude or Codex invocation is not guaranteed to return the same findings or verdict for those bytes. Model aliases, provider behavior, managed context, and the model's own search path can change which defect it notices.
+There is no stored state, resume cursor or approval archive: a lost response cannot be recovered, and a new call spends a fresh review. Before returning, the review re-reads the working-tree files, `HEAD`, branch and policy digest and fails with `SUBJECT_CHANGED` if any moved, but edits made after the result is returned are not covered, and nothing certifies a later fix.
 
-**Existing mitigation:** Rubrics require a concrete material consequence. Implementation review is limited to declared outputs and their current post-change behavior; unchanged files and context-only repositories are evidence only. Every implementation finding must identify a defect introduced, exposed, or materially worsened by the current change. A follow-up reviewer receives its previous report, the working AI’s revision summary, and the verification request selected for it. Document and implementation follow-ups also receive a diff against their own last reviewed version when retained material permits it. Small diffs and governing documents are included up front; source is read as needed. Batching guidance and smaller initial context do not guarantee fewer turns, lower subscription usage, or equivalent review quality across models. Current reports, previous-version reports, and incomplete sibling feedback remain distinguishable; fresh V5 review does not enforce a per-finding disposition ledger.
+The input contract is narrow: one git repository with an existing `HEAD` that must still equal the payload's `base_commit` (`BASELINE_CHANGED` otherwise); declared paths are files, not directories; a path that traverses a symlinked parent, or names a directory or other non-file entry, is refused; a path that is itself a symlink is reviewed as a symlink (its link text), never followed; changed bytes are capped at 25 MiB (`INPUT_TOO_LARGE`); a nested repository (an agent worktree inside the checkout) is never part of the subject. Every dirty and untracked file is included as context, so the caller must tell its own outputs from edits that were already there, and reviewers are told that unrelated changes are not findings.
 
-**Why accepted:** The product needs independent semantic judgment, not identical prose from repeated model calls. ArchFlow claims deterministic inputs, provenance, evidence currency, state transitions, and approval authority; it does not claim deterministic model judgment.
+An implementation review can carry the plan review's `policy_digest` as `expected_policy_digest`; the check happens only if the caller passes it.
 
-## Live-read rubric files can strand an in-flight task
+## The reviewer children
 
-**Not protected:** The counter-review rubrics are read fresh from the installed bundle on every review and status call, like task config. A rubric edit (or a bundle reinstall carrying one) between two steps of an in-flight task changes the rubric digest, which folds into the task's input fingerprints, so the task's next review-cycle step fails closed with `INPUT_FINGERPRINT_MISMATCH` until a fresh intent is composed or the previous bytes are restored.
+### Child repository reads
 
-**Existing mitigation:** A missing or invalid file fails closed with `CONFIG_INVALID` naming the file — there is no silent fallback to a previous rubric. The shipped files' exact digests are pinned by test, so an unintended byte change cannot ship unnoticed. `assets/rubrics/README.md` documents the discipline: edit rubrics between tasks.
+**Not protected:** a dispatched `claude` or `codex` process is not stopped by the operating system from finding and reading the repository. It runs from a temporary directory outside the repository holding two `git archive` checkouts (the work, and the baseline commit), with the committed `.archflow/constitution/` removed from the work view (uncommitted constitution files are part of the reviewed subject and therefore appear in it); this keeps the real repository path and the committed constitution out of the intended view, but it is context hygiene, and the child may read elsewhere on the machine.
 
-**Why accepted:** Rubrics are server review policy, deliberately live-editable without a rebuild — the same posture as task config, which reports edits informationally rather than blocking. Fail-closed fingerprint churn is the honest behavior when review policy changes under an open task; an operator who edits mid-task is changing the rules the task is judged by, and the workflow says so loudly instead of quietly mixing policies across rounds.
+**Existing mitigation:** a temporary working directory, an explicit environment allowlist, and CLI flags that suppress project instructions, user configuration, skills and tools. Planted-canary tests detect values reaching child output, including a leaking negative control that proves the scanner works.
 
-## Phase sizing remains approximate
+**Why accepted:** the tool is run by a developer on their own workstation, and the goal is an independent second opinion, not confinement of hostile code.
 
-**Not deterministic:** ArchFlow cannot calculate a uniquely correct phase boundary or guarantee a token budget or implementation model's success. Planning targets economical agents using settled decisions, tested predecessors, coherent mechanisms, and meaningful verification. These are engineering judgments, not calibrated thresholds. A smaller phase can still contain hard reasoning, and a larger mechanical change can suit a cheaper agent. Evaluate total design, implementation, verification, and rework cost; compaction and overruns remain possible.
+### Canonical home and credentials
 
-**Existing mitigation:** Architecture design compares the implementation and rework savings of a split with its extra design/review cost, while preserving coherent outcomes, valid completion states, stable predecessor inputs, and meaningful verification. Tested internal prerequisites can be useful phases before the complete feature exists. Intermediate phases have machine-verifiable exit criteria; genuinely manual validation belongs at the end. There is no additive score, token target, or preferred phase count. Numbered phase design retains its bounded fit check, and counter-review raises materially harmful boundary defects rather than enforcing numeric preferences. Existing human approval gates are unaffected.
+**Not protected:** the child receives the developer's real `HOME` and is not blocked from the CLI's credential store. ArchFlow never reads or copies credential values, drops API keys and provider variables from the child's environment, and passes only the authentication-location variables.
 
-**Why accepted:** A lightweight heuristic helps the design agent choose manageable phases without introducing a scoring engine or false guarantees. A small sample of actual implementation and review/rework outcomes can inform calibration without mandatory tracking. Concrete boundary rationale and material consequences still govern exceptions.
+**Why accepted:** using the first-party CLI's existing subscription login is the point. Authentication is mutable (an OAuth refresh replaces the credential file atomically), and a disposable copy or symlink could capture a refresh in a temporary directory and strand the real login. Keeping it canonical matches ordinary interactive use.
 
-## Adversarial stdio peers at the JSON-RPC layer
+### Managed context
 
-**Not protected:** The MCP server's JSON-RPC layer trusts the pinned MCP SDK and the local host process on the other end of stdio. It does not defend against an adversarial stdio peer: duplicate or pathological request IDs are served as the SDK serves them (both responses carry the same ID; there is no duplicate-ID ledger or cap), malformed envelopes — null or fractional IDs, extra top-level members, non-object `_meta` — are dropped silently with no wire response, and wire-schema violations such as non-object `tools/call` arguments are answered with the SDK's own validator prose rather than a canonicalized message. SDK error prose can therefore reach the wire.
+**Not protected:** system-managed or server-delivered settings (managed hooks, an `apiKeyHelper`, an enterprise Codex bundle) can still reach a child even when repository and user configuration are suppressed; Claude managed hooks run without model tools.
 
-**Existing mitigation:** Both SDK packages are pinned to exact version 2.0.0 and every retired defense is replaced by a behavioral pin in `scripts/probe-mcp-sdk-compatibility.mjs`, so an SDK behavior change fails the gate instead of shipping silently. SDK imports are fenced into `src/mcp/sdk-adapter.ts` (`check:mcp-sdk-boundary`). The framer still enforces newline framing, a 10 MiB cap, and the fatal malformed-UTF-8 split; the send queue still bounds and orders all output; the adapter still rejects repeated initialization (`-32004`) and enforces result-xor-error at the single egress point. ArchFlow's own validation begins unweakened at the tool boundary: `assertPlainJson` on every input, schema and digest rechecks, and WeakSet-branded outcomes — a `tools/call` without an authentic branded outcome answers a prose-free `-32603`.
+**Existing mitigation:** preflight records the managed-policy paths it can find, `init` reports the best-effort limitation, and review output is parsed against a strict schema, so managed context alone cannot turn into an approval.
 
-**Why accepted:** The only intended stdio peer is the developer's own host CLI on a trusted machine — the same trusted developer account/machine stance the rest of this page assumes. The retired second JSON-RPC state machine (`session.ts`, 554 lines) validated nearly every message twice to defend against a peer the prototype does not claim to withstand; the pinned-and-probed SDK is the honest authority for that layer, and the human trust boundaries live in durable state and gates, not in wire canonicalization.
+### Codex tool surface
 
-## Child repository reads
+**Not protected:** repository-backed Codex reviews expose shell execution so reviewers can read files. Codex has no disable-all-tools switch and cannot report the tools it will use, so ArchFlow's suppression is a denylist against a registry that can change between versions, and `-s read-only` constrains generated commands, not the Codex parent process.
 
-**Not protected:** A dispatched Claude or Codex process is not prevented by the operating system from locating and reading the repository. Running it from a temporary directory outside the repository and omitting repository content from the server-side review binding do not revoke the child process's filesystem permissions. Every configured repository is copied into a named, commit-pinned review snapshot with secondary `.archflow/` content removed, and changed writable members are reconstructed at their retained proposed trees; this improves relevance and keeps task state out of the intended view, but it remains best-effort context hygiene, and the child may still read outside its cwd.
+**Existing mitigation:** a minimum tested CLI version, strict configuration, skills and project docs disabled, read-only mode, and fixtures pinning the exact invocation. Any support claim stronger than this would need an inspectable allowlist or OS containment.
 
-**Existing mitigation:** Dispatch uses a non-repository temporary working directory, an explicit environment allowlist, and CLI flags intended to suppress project instructions, user configuration, skills, and tools. Authentication remains in the caller's canonical CLI home and is not treated as an instruction-isolation mechanism. The server hashes a versioned binding of declared inputs, bundled configuration, and the rendered prompt/file manifest. Only the instruction/reference prompt is size-bounded; referenced evidence files remain complete. Planted-canary scans detect values that reach child output or persisted diagnostics, including a leaking negative control that proves the scanner works.
+### No sandbox or OS containment
 
-**Why accepted:** ArchFlow is currently operated by a developer on their own trusted workstation, and the immediate goal is independent review context rather than hostile-code confinement. The product therefore treats repository non-discovery as best-effort hygiene and does not claim that repository canaries are unreadable.
+**Not protected:** there is no filesystem namespace, credential boundary, network boundary or OS-enforced containment around a reviewer. Scrubbed environments, flags and output scanning are hygiene, and dispatch does not fail closed merely because isolation cannot be proved.
 
-## Canonical home and credentials
+**Existing mitigation:** children are launched without a shell, with explicit argv, bounded input and output, a timeout and cancellation, and a temporary working directory.
 
-**Not protected:** A child receives the developer's canonical `HOME` and is not OS-blocked from reading that home or either CLI family's credential store. ArchFlow runs under the same developer identity and does not claim a credential boundary against the selected first-party client.
+**Why accepted:** a partially effective sandbox would be a misleading claim and a lot of platform machinery. The trusted-machine assumption is stated instead.
 
-**Existing mitigation:** ArchFlow neither reads nor projects credential values. It passes canonical authentication-location variables, drops API keys, provider-routing variables, and unrelated environment values, and pins each CLI's configuration/instruction suppression flags. Canary scans check that planted credential and routing values are not emitted or retained in diagnostics. The process-wide review queue bounds load only; first-party clients own credential refresh and concurrency.
+### Descendants that escape the process group
 
-**Why accepted:** Using the selected first-party CLI's existing subscription session is an explicit feature of this local tool. Authentication is mutable: OAuth refresh commonly replaces the credential file atomically. A disposable symlink or copy can capture the replacement in temporary storage and delete the only fresh refresh token, leaving the canonical store logged out. Keeping authentication canonical matches ordinary interactive CLI behavior and avoids ArchFlow becoming a broken credential manager. The prototype assumes the developer controls the account and machine; absence from output is the supported assurance, not proof of unreadability.
+**Not protected:** on non-Windows systems the child's process group gets SIGTERM and then SIGKILL on cancel or timeout, but a descendant that calls `setsid()` leaves the group and survives. A grandchild that stays in the group is reaped (an integration test covers it).
 
-## Managed-context containment
+**Why accepted:** the supported first-party CLIs keep their descendants in the group; stronger coverage would need cgroups, job objects or another containment provider.
 
-**Not protected:** ArchFlow cannot suppress or fully enumerate every system-managed or server-delivered context layer. Managed settings, managed hooks, an `apiKeyHelper`, or an enterprise-managed Codex bundle may affect a child even when repository and user configuration are suppressed. In particular, Claude managed hooks can execute independently of model tools.
+### Path check-to-use window
 
-**Existing mitigation:** Preflight records discoverable managed-policy paths; when a dispatch fails, that observation is persisted in ignored, current-phase `.archflow/runtime/tasks/<task>/diagnostics/attempts/` (successful Claude dispatches retain small numeric usage records without channel transcripts; accepted reviewer feedback also retains usage in its authoritative result). Explicit CLI flags suppress the ordinary project, user, MCP, session, rule, and skill sources that the supported versions expose. Initialization reports the best-effort isolation limitation rather than treating a clean preflight as proof.
+**Not protected:** `safeParents` checks each parent directory with `lstat` before the file is opened, so a component can change between check and use. Node does not expose a directory-relative open that makes resolve and open one operation. `O_NOFOLLOW` protects the final path component on platforms that provide it, not every intermediate one.
 
-**Why accepted:** Managed configuration is part of the developer's administratively controlled machine, not an untrusted multi-tenant boundary in the prototype's operating envelope. Its presence remains visible for diagnosis, while validated outputs and durable workflow gates prevent managed context alone from becoming approval authority.
+**Why accepted:** the checks reliably reject malformed and pre-existing escapes; the model assumes no other process of the same user rewrites the repository adversarially during a review.
 
-## Codex tool-surface control
+### Antigravity workspace binding
 
-**Not protected:** Repository-backed Codex reviews intentionally expose shell execution so reviewers can read source and patches. All file-based Codex reviews need text readers; ArchFlow does not claim an empty model-visible tool surface. Codex has no disable-all-tools flag or command that reports the effective `tools[]` for an invocation; its prompt-input debugger shows messages only. The current suppression list is a denylist against a tool and feature registry that can change between CLI versions, and `-s read-only` constrains generated shell commands rather than the Codex parent process's read access.
+A 2026-09-11 real-host run observed `agy` advertising the temporary snapshot as its working directory while its `run_command` tool actually started in a global scratch directory; the reviewer searched outside the snapshot and read the answer from a source fixture. A passing real-host assertion on that route is therefore weaker evidence of an independent review. Passing a working directory and disabling slash commands do not isolate Antigravity's tool execution.
 
-**Existing mitigation:** ArchFlow requires a minimum tested CLI version, uses strict configuration, disables unrelated features and enables shell execution only for repository-backed reads under the read-only sandbox, supplies the canonical `CODEX_HOME` for authentication, ignores user configuration and rules, disables project instructions and skill content, skips repository discovery, and requests read-only command behavior. The exact invocation is covered by fixtures, and model output must satisfy the strict result schema before it can become evidence.
+### Antigravity recovery depends on native events
 
-**Why accepted:** The prototype prioritizes useful opposite-family review on a trusted developer machine and accepts that suppression can reduce unwanted context without proving an empty capability set. It makes no stronger tool-isolation claim; a future support claim would require an inspectable allowlist or OS containment.
+A clean exit is not proof a review completed: Antigravity can retain a recovered Gemini capacity (503) error in its terminal status. The adapter accepts that case only when the error is the native format, the exit was clean, the stream shows one coherent turn ending in a completed `finish`, and the structured output is present; any other shape disables the exception. A changed CLI event format will turn this into a visible failure, not a silent pass.
 
-## No `SandboxProvider` or OS containment
+### File references are not immediate inclusion
 
-**Not protected:** ArchFlow has no `SandboxProvider`, filesystem namespace, credential boundary, network boundary, or OS-enforced process containment around review children. Generated directories, scrubbed environment variables, CLI flags, and output scanning are context-hygiene controls, not a sandbox. Dispatch does not fail closed merely because isolation cannot be proved.
+Claude preloaded small referenced files, did not expand nested references and omitted a file of about 400 KB; Codex and Antigravity required tool reads. ArchFlow supplies complete files with usage guidance and read instructions but does not claim a CLI or model consumed every byte immediately.
 
-**Existing mitigation:** Children run without a shell, with explicit arguments, bounded input and output, timeout and cancellation, a temporary working directory, canonical authentication paths, and a narrow environment. Process-group termination covers descendants that remain in the adopted group. Candidate sandbox and process-tree packages were evaluated and rejected because they did not provide the needed portable guarantee within the prototype's dependency, platform, and licensing constraints.
+### Third-party interface claims
 
-**Why accepted:** Adding a partially effective sandbox would create a misleading security claim and substantial platform machinery without meeting the approved requirement. The local prototype instead states the trusted-machine assumption plainly. This acceptance does not satisfy the architecture's future release criterion for a currently proven and acceptably licensed sandbox/OS combination.
+A reviewer sees the repository at `HEAD` without dependency sources (`git archive` carries no `node_modules/`) and with no network, so a claim about a library's API can be checked only against what the plan or code states. Recording the gap honestly is proportional for a prototype.
 
-## `openResolved` check-to-use window
+## Routing
 
-**Not protected:** Repository path containment is checked before the eventual filesystem open. A path component can change between `realpath` validation and use, and the branded resolved path records the earlier check rather than a standing containment guarantee. Node.js 24 does not expose the directory-relative `openat`/`RESOLVE_BENEATH`-style primitive needed to make resolution and open one contained operation. `O_NOFOLLOW` protects the final symlink where available, but does not close every intermediate-component race and is unavailable on Windows.
+### Route declarations are not authorization
 
-**Existing mitigation:** Inputs reject absolute, drive/UNC, traversal, cross-task, and symlink-escape paths; containment is checked on normalized real paths and every sanctioned open adds `O_NOFOLLOW` where the platform provides it. Tests preserve the window as an explicit limitation and verify that the final-leaf symlink defense works on the supported Linux test environment.
+A route given in a payload's `review_routes` is validated like a configured one (known family, supported effort, safe model name, no cc-switch provider on a non-Claude model) but not authenticated as having come from a human. The connected model builds the payload. The skills tell the agent to report an outage and ask rather than substitute; that instruction is the only enforcement.
 
-**Why accepted:** The prototype assumes its task filesystem is not being adversarially rewritten by another same-user process during an operation. The checks reliably reject ordinary malformed and pre-existing escape paths. Closing the race would require a different native/runtime filesystem capability and is outside the current local-developer scope.
+### Same-family and low-effort routes are legal
 
-## Descendants that escape the process group
+"The other model family" describes the shipped template: a Claude producer is reviewed by GPT, a Codex producer by Claude, an Antigravity producer by both. Nothing checks it: a repository may route any role to the producer's own family or a low effort, and the template's own test reviewer is `gpt-6.1-sol` at low effort for every producer. Each report carries its route, so a human relying on a review can see who gave it. A same-family or low-effort reviewer is a legitimate operator choice (outages, cost, domain fit), and enforcing a family rule would recreate the outage dead end an explicit override exists to avoid.
 
-**Not protected:** On non-Windows systems ArchFlow terminates the detached child's process group, but a descendant that calls `setsid()` leaves that group. Cancellation, timeout, or server shutdown therefore cannot guarantee termination of that escaped descendant. The bounded Phase 20 observation confirmed the operating-system behavior; it is recorded here instead of kept as a permanent test that could not be fixed by an ArchFlow code change.
+### The dispatch timeout is fixed
 
-**Existing mitigation:** Children are launched without a shell and with an adopted process group. Cancellation and server shutdown have lifecycle tests proving that the direct child and a grandchild that remains in the group are reaped. Server shutdown currently resolves before that reaping completes, so callers cannot treat `close()` completion as proof that the process group is already gone. These tests exercise ordinary SIGTERM termination, not the later SIGKILL escalation. A cancelled or failed dispatch cannot produce pass evidence or approval.
+Every reviewer child gets the same 15 minutes (`DISPATCH_TIMEOUT_MS`), regardless of input size or effort. A high-effort review of a large subject can exceed it and returns a classified `TIMEOUT` failure with the role and route, and the other reviewers' reports are kept. In one recorded case the same envelope timed out at the highest effort and finished in about seven minutes at `high`. The remedy is a lower effort, supplied for one call through `review_routes` or in config; nothing is downgraded silently. A per-size budget would be a guess presented as policy.
 
-**Why accepted:** Supported first-party CLI processes are expected to keep their ordinary descendants in the adopted group, and the prototype runs under the developer's account on a trusted machine. ArchFlow claims best-effort termination for that ordinary tree, not containment of deliberately detached processes. Stronger coverage requires an OS process namespace, cgroup/job-object equivalent, or another proven containment provider.
+### Retries cover only transient failures
 
-## Reviewer route declarations are provenance, not independent authorization
+Up to three attempts (waits of one and four seconds) for a classified rate limit, timeout, unavailable repository view or transient transport error. Authentication problems, schema failures and generic process errors fail at once, because retrying them hides the real fault.
 
-**Not provided:** A route carried through a producer skill invocation is not independently authenticated as coming from an external controller or human. The connected model constructs the semantic invocation, so `invocation-declared` says exactly how the server received the route, not who originated the prompt or CLI argument that led to it.
+## Configuration and policy
 
-**Existing mitigation:** Fresh evidence attests the actual adapter, family, model, effort, optional provider, and route source, plus any raw configured route displaced by invocation selection. A controller that needs assurance compares those retained facts with the route it supplied. Invalid or unavailable invocation routing fails visibly and never falls back silently. Invocation route bytes bind every semantic offer/operation and counter-review request in the run, so drift between status and apply is rejected.
+### Config is live, trusted and not migrated
 
-**Why accepted:** ArchFlow has no server-observable authenticated controller channel in this phase. Honest provenance supports automation without claiming an authority boundary that does not exist; adding controller authentication would be a separate product and trust design.
+`review` reads `.archflow/config.yaml` and `.archflow/constitution/` from the working tree on every call (falling back to the bundle's template and rules when the repository has none). Anyone with write access can lower an effort, change a route or remove an approval rule, and ArchFlow neither authorizes the edit nor judges whether it weakens policy; the config and constitution digests in the result record what ran. Configs written by older templates keep working: retired keys are accepted and ignored, but nothing migrates other shapes. Unknown or malformed fields fail as `CONFIG_INVALID` with a message pointing at the file to check, not as a guess.
 
-## Same-family and low-effort reviewer routes are legal, and only visible
+### Content approval triggers are path heuristics
 
-**Not enforced:** Nothing stops a repository from routing a general or test reviewer to the producer's own model family, or to a low effort. The shipped template routes general reviewers across families and selects Luna/xhigh for test review, but an edited task can choose otherwise; "opposite-family by default" describes the template rather than a check. Merged evidence retains legacy primary provenance for compatibility and also records every fresh contributor, assignment, route, effort, responsibility, and owned finding. `review_strength` exposes both the primary scalar and the complete contributor list; archived evidence without that list is explicitly synthesized as one legacy general reviewer.
+A `content` rule matches the *declared* `paths` of the payload (not every changed file the snapshot picked up) with case-sensitive whole-path globs: `*` and `?` stay inside one segment and `**` spans whole segments. It does not read bytes, language semantics or embedded SQL. The shipped default flags `**/*.sql`; the database constitution rule asks a reviewer model to catch embedded queries, ORM operations and migrations, which can miss or misclassify. Naming can under- or over-match, and an undeclared changed file never triggers a rule. Path globs are understandable repository policy; semantic analysis would be a language-specific engine out of proportion for the prototype.
 
-**Existing mitigation:** Every fresh review records the actual producer and every reviewer family, model, effort, focus, assignment, and finding count. The semantic view projects per-contributor `same_family` flags, the attempt number, remediation status, and per-round finding and acceptance counts. Skills present those facts at every human gate with the same prominence as an exceptional reason. A same-family or low-effort contribution is therefore visible when a human relies on it.
+## Installation and operation
 
-**Why accepted:** A same-family or low-effort reviewer is a legitimate operator choice — outages, cost, or a family that is simply better at the domain — and the research this design rests on says the generation–verification gap narrows when the same family writes and reviews, not that it closes. Making the choice visible at the gate preserves the human's judgment; enforcing a family rule would recreate the outage dead end the route override exists to avoid.
+### A missing installed-assets error reports `CONFIG_INVALID`
 
-## Third-party interface claims are unverifiable outside the snapshot
+When the bundle has no `assets/` directory, `init` fails with error code `CONFIG_INVALID`, issue code `installed-assets-missing`, and the registry's next action for that code, `repair-config`. That is the wrong hint: the config is fine and the fix is to reinstall ArchFlow. The stderr line is right: it names every directory searched and says "Reinstall ArchFlow to restore them." A caller that acts only on the structured next action will be sent to repair a config that is not broken. `review` in the same situation does not use that code: with no assets directory it returns `REVIEW_FAILED` with a generic message while the same stderr line explains, and if the directory exists but a rubric file does not, it returns `CONFIG_INVALID` with "The installed review rubric is missing or invalid". Fixing this needs a separate error code or next action; until then, read stderr.
 
-**Not provided:** A document reviewer sees the repository at HEAD without dependency sources: `git archive` carries no `node_modules/`, `target/`, or cargo registry, the child has no shell or network, and a crate or package the design proposes to *adopt* is not in the lockfile yet. A claim about a third-party API's signature or semantics can be checked only against what the artifact itself states.
+### Init diagnostics are partial
 
-**Existing mitigation:** The rubric routes such gaps to the non-blocking `unverifiable-claims` criterion, which triage must reject with an `envelope-gap:` rationale so the gap is recorded rather than guessed at. Design skills instruct the producer to cite version-pinned documentation or source lines for load-bearing third-party claims, which lets the reviewer at least check the design against its own citation, and the framing literal directs it to trace the stated signature through the inputs the system will meet — a decoder declared to take valid text is still reviewable for what it does with invalid bytes.
+`init` probes `claude` and `codex` and the managed-policy files, but not `agy`. It cannot prove isolation (it says so), and the Antigravity route is checked only when a review first uses it.
 
-**Why accepted:** Materializing dependency sources into the sealed view is a transport and provenance problem of its own, and the claim most often at stake is the design's, not the library's. Recording the gap honestly is proportional for a prototype; a later change can pin vendored sources when a task actually needs them.
+### Usage accounting is best-effort
 
-## The dispatch timeout is fixed, and a high-effort review of a large design can exceed it
+An installed bundle writes one private JSON file per dispatch to `<ARCHFLOW_HOME>/usage/` (duration, route, status, and the token and cost numbers a CLI reported) and deletes files older than seven days on the next dispatch; there is no idle cleanup. Claude's figures are the CLI's own estimates, interrupted calls and CLIs that do not report usage leave fields unknown, and a succeeded record means the dispatch completed, not that a review was sound. Source-checkout runs write nothing.
 
-**Not adaptive:** Every reviewer child gets the same 15-minute `DISPATCH_TIMEOUT_MS` regardless of artifact size, effort, or whether a repository view was materialized. On 2026-08-28 a replay of a 74 KB design with its 26 KB PRD pinned and a repository view, routed to `gpt-5.6-sol` at `xhigh`, was killed at the timeout with no output; the same envelope at `gpt-5.6-sol`/`high` (the template's route for a Claude producer) returned eight blockers in seven minutes, and `claude-opus-5`/`medium` returned in six and a half. The template now routes `gpt-5.6-sol` at `medium` for exactly that reason: at `high` the reviewer kept finding real-but-endless issues on every remediation round of a large design, and the loop never converged.
+### Internal-error log
 
-**Existing mitigation:** The timeout surfaces as a classified `TIMEOUT` dispatch failure with the role and route, the review attempt stays pending rather than being consumed, and the skill offers repair or a one-dispatch human `route_override` (for example the same model at `high`). Nothing is silently downgraded.
+An unexpected failure while dispatching a reviewer appends a stack to `.archflow/runtime/diagnostics/internal-errors.log` (only when `.archflow/` exists) and to stderr, under a correlation id the result does not carry beyond a generic message. The write is swallowed on failure so diagnostics can never change a result. The file is ignored by the scaffolded `.archflow/.gitignore` but is otherwise never cleaned up. A failure while preparing the review (for example missing installed assets or a git spawn failure) returns `REVIEW_FAILED` with a generic message and logs no stack.
 
-**Why accepted:** A per-size or per-effort budget would be a guess dressed as policy, and an unbounded child is worse than a visible failure. The honest control for now is the visible failure plus the human's substitute route; the design skills' guidance to keep artifacts to what a reviewer can recompute also keeps them inside the budget.
+### Legacy cleanup is exact
 
-## Gemini recovery depends on native completion events
+`init` removes only an `archflow` server in `.mcp.json` whose command is exactly `archflow-mcp`, and only the marked block in `.codex/config.toml`. A different command, unmatched markers, a symlink, or an unparsable `.mcp.json` that mentions `archflow-mcp` are left alone and listed in the result's `legacy_registrations.left_alone` (on stderr if init then fails); an unparsable `.mcp.json` that never mentions it is ignored silently. Registrations in user-level host configuration are not touched by `init` at all.
 
-**Not provided:** A successful exit or a filled-in object in a conversation is not sufficient proof that a review completed. Antigravity CLI 1.2.3 can also retain a recovered Gemini capacity error in its terminal status, so that status alone can incorrectly reject a completed review.
+### The installer rewrites the Antigravity MCP config
 
-**Existing mitigation:** The adapter recognizes only the native 503 capacity-error format paired with a clean exit, a coherent single-turn stream ending in a completed `finish`, and terminal structured output. Ordinary schema and provenance checks still run before any success is recorded. Missing or changed event shapes disable this exception; unknown errors, partial output, timeouts, and cancellations still fail. Unrecovered capacity errors use the existing bounded retry policy. Private diagnostic summaries preserve the terminal error separately from schema-heavy stdout tails, while public messages remain server-authored.
+When `install.sh` removes the old Antigravity `archflow` MCP entry from `~/.gemini/config/mcp_config.json`, it rewrites that file with normalized JSON formatting. Other servers and keys are kept, but integers above 2^53 lose precision. The old `init` did the same when it wrote the entry.
 
-**Why accepted:** This is a narrow compatibility repair for an observed CLI behavior, not a claim that failed processes generally produce trustworthy reviews. Synthetic stream fixtures protect the failure boundary, and a live ten-rule adjudication test checks the current CLI interface and diff access.
+## The orchestrated workflow
 
-## A reviewer route override is not proof a human chose it
-
-**Not provided:** Nothing in the request pipeline distinguishes a substitute reviewer the human asked for from one the agent picked to get past a failed dispatch. `route_override` carries a free-text `reason`, and the server validates the *route* it names exactly as it validates a pinned one — but it never validates the *authorization*. The skills instruct the agent to report an outage and ask rather than substitute on its own, and that instruction is the only thing enforcing it.
-
-**Existing mitigation:** The override is covered by the request digest, so it cannot be added to a composed request without invalidating it, and it is recorded separately from normal route source with the human-supplied reason, actual provider when present, configured-route facts, and normally selected invocation/config route it displaced. That provenance remains auditable and is shown in plain language whenever a later human presentation opens. Under targeted approval rules an eligible `wait:false` path may have no later human gate, so the override can remain evidence-only rather than being surfaced to a person during that run.
-
-**Why accepted:** Reviewer routing is policy, not a trust boundary — families are recorded rather than enforced, and a same-family reviewer is already a legal config choice, so a substitute is the same kind of decision made later. Enforcing authorization would mean a human gate in front of the review, which costs more than the risk for this prototype. The current guarantee is authenticated provenance, not proof of human selection or eventual human visibility.
-
-## Dispatch-failure observations are disposable
-
-**Not provided:** The compact failure projected by status is not durable authority and is not proof that an outage remains current after it was observed. It is an ignored latest-failure runtime interface; a fresh clone or cleanup may lose it, and the same revision can retain it after an operator repairs credentials until review is retried.
-
-**Existing mitigation:** The record is strict and safe: supported classified codes, bounded server-authored prose, role, and optional route/source only. Status reads exactly the deterministic current-attempt path and projects it only when task, phase instance, running step, attempt, and state revision match. No raw exception, path, credential, stdout/stderr tail, transition, attempt consumption, evidence, or authority enters the observation. The original failure remains the operation result.
-
-**Why accepted:** Its purpose is to help the owning interactive skill explain a reviewer outage without parsing forensic files. Durable state already preserves the pending review and safe retry boundary, so making this convenience record authoritative would add complexity and make runtime loss capable of stranding workflow progress.
-
-## Retained review-round outputs are an ignored cache
-
-**Not provided:** When one child of a review round fails, the validated outputs of its siblings are kept as ignored runtime files so the retry re-dispatches only what failed. Those files are not durable authority: a fresh clone, a cleanup, or a server restart on another machine loses them, and the retry then simply runs every child again.
-
-**Existing mitigation:** A record is reused only for the exact envelope digest the server just recomputed from durable authority, the same role, route, and route provenance, and only when its bytes still hash to the recorded digest and pass the same output validation and binding checks a fresh dispatch must pass. Reuse then goes through the ordinary currency re-check and atomic commit. Records are deleted when the round commits and swept with the phase otherwise.
-
-**Contributor record:** Fresh Review V5 records each report with its reviewer identity, focus, model/effort, and reviewed subject. Dispatch provenance and snapshot bindings remain server-owned. The server does not attest that the report is correct or that every concern was addressed. Previous-version reports are labeled separately from current verification, and partial reports never authorize completion. Archived V1–V3 retain their native attribution records.
-
-**Why accepted:** The cache lives under the same same-user filesystem assumption as every other runtime file (see "Task filesystem races are not adversarially hardened" above): a process that can rewrite it can equally replace the reviewer CLI on `PATH`. Making retained outputs authoritative would add durable-state machinery to save one re-dispatch, and the records never change state, consume an attempt, or authorize anything on their own.
-
-## Trusted live config edits can weaken policy
-
-**Not protected:** Task-local config is mutable throughout a task. A developer or agent with write access can lower review effort, change routes, or remove an approval rule before a later settlement. The server reports field-level changes and records dispatch provenance and settlement config digests, but it does not require a separate authorization for the edit or interpret whether the new policy is weaker.
-
-**Existing mitigation:** Every config-observing transaction parses the complete strict shape, records it in `last_seen_config`, and status reports later changes without invalidating already-authenticated review evidence or retroactively changing a settled conclusion. Unknown fields fail closed instead of silently disappearing. Per-dispatch provenance records what actually ran, and settlements bind the exact config digest they evaluated.
-
-**Why accepted:** ArchFlow's prototype operating model already trusts the developer account and repository writers. Making config edits visible and binding each resulting action is proportional; a full policy-amendment authorization system would recreate the lock-in this feature removes.
-
-## Editable config is not schema migration
-
-**Not provided:** Making the task-local config live and editable does not make older or future config shapes migratable. Every config-observing transaction and dispatch still parses the complete current strict schema; unknown fields, unsupported values, malformed YAML, and otherwise incompatible shapes fail closed. The retired `roles.producer` key is one narrow read-compatibility allowance for configs created before the connected host became the producer. Nothing consumes that key, and its acceptance is not a general unknown-field or version fallback.
-
-**Existing mitigation:** A valid edit becomes the normalized `last_seen_config` snapshot and later field-level changes are informational. An invalid edit cannot dispatch review or advance state, and status reports repair guidance without pretending that read-only degraded mode can repair the bytes.
-
-**Why accepted:** Automatic schema migration would need explicit version transforms, ownership of rewritten bytes, and review of policy-changing defaults. The prototype instead keeps one current strict authority and fails visibly when a human must update an incompatible config.
-
-## Content approval triggers are path heuristics
-
-**Semantic database coverage:** The shipped database constitution rule complements SQL path matching by asking the existing independent reviewer to identify changed embedded queries, ORM operations, schemas, and migrations. This uses model judgment over the supplied changed subject and repository evidence; it can miss or misclassify behavior. It is not deterministic SQL analysis. Concrete uncertainty is remediated before escalation under the existing review budget. Custom path rules remain available when a repository needs deterministic coverage of known database directories.
-
-**Not provided:** Content triggers do not inspect file bytes, language semantics, embedded SQL, generated effects, or dependency impact. They examine only the paths a result changed: those declared by a `phase-impl` implementation output, and the task's governing documents (`design.md`, `prd.md`) a phase design or implementation rewrote, judged against the newest earlier retained projection of that document. Matching is case-sensitive over the whole repository-relative slash-separated path: `*` and `?` stay inside one segment, while `**` is recursive only as a complete segment. Path naming can therefore under-match semantically relevant work or over-match unrelated work.
-
-**Existing mitigation:** Subject triggers can require approval for the whole `phase-impl` subject independently of content paths. When a content rule does match, the settlement freezes the complete sorted path set; a later presentation reconstructs operations and signed byte deltas from those paths and retained outputs without re-evaluating mutable config.
-
-**Known edge:** "rewrote" is measured against retained authority, not the worktree. After a human `baseline-adoption` of `design.md` bytes, the newest retained projection is still the pre-adoption one, so the next phase design reports the document as changed and the shipped governing-document rule gates it once more.
-
-**Why accepted:** Path globs are understandable repository policy and sufficient for representative triggers such as migration-file locations. Semantic inspection would introduce a language-specific policy engine whose complexity is disproportionate to this prototype.
-
-## Legacy fingerprint compatibility is one bounded read retry
-
-**Not provided:** The compatibility reader does not migrate arbitrary in-flight state or accept approximately matching evidence. It runs only when a caller supplies an exact expected pre-cutover fingerprint that the current composition does not reproduce, and it can succeed only by recomputing the retired composition with that same task state's creation-time `config_digest` provenance.
-
-**Existing mitigation:** The resolver computes the current fingerprint first, then makes one read-side legacy comparison. A mismatch under both compositions remains a mismatch. Success returns the already expected legacy digest for that read; it rewrites no state, evidence, subject, config, or retained result.
-
-**Why accepted:** This preserves narrowly identifiable work created before config left the fingerprint without turning compatibility into a migration subsystem or weakening exact digest authentication.
-
-## Memoized repository binding in a long-lived server
-
-**Not protected:** The MCP server memoizes worktree discovery and Git preflight per working directory for its process lifetime. If a repository is deleted and re-created at the same path while the server is running, later calls keep the stale worktree binding: a different repository surfaces as `REPOSITORY_MISMATCH` and a removed one as `IO_ERROR` rather than `REPOSITORY_NOT_FOUND`, until the server restarts.
-
-**Existing mitigation:** Only successful discovery is memoized; repository identity (root commits) is still observed live on every call and compared against `state.json`; the pinned constitution memo is keyed by an immutable commit, so it can never serve stale policy bytes.
-
-**Why accepted:** Re-probing the repository on every handler call and every substep refresh cost more child processes than the work itself, in tests and in ordinary use. Replacing a repository underneath a running server is not a supported workflow, and the failure it produces is loud rather than silent.
-
-## Process-lifetime dispatch preflight memo
-
-**Not protected:** A successful CLI version/auth preflight is memoized per adapter for the server process lifetime. A CLI upgraded underneath a running server keeps dispatching on the memoized version until the server restarts, and the memo does not re-prove authentication on later dispatches.
-
-**Existing mitigation:** Only successful preflights are memoized — a failed or cancelled probe re-runs on the next dispatch — and auth that breaks after a memo hit still fails visibly at child launch, where the failure classifier names it (`AUTH_UNAVAILABLE`, rate limits, unsupported model).
-
-**Why accepted:** The memo removes two child spawns from every dispatch of a review, and the honest failure modes surface at the launch that actually fails rather than silently degrading evidence.
-
-## Legacy adjudication evidence fails the round binding closed
-
-**Not provided:** Adjudication evidence from tasks created before the constitution subject bound the server-side review binding's digest (previously the retained review set's digest) does not parse or stay current under the new strict checks. There is no shim, translation, or dual read.
-
-**Existing mitigation:** The fixed point treats an unreadable or non-current constitution slot like any other stale slot: the next action is a fresh review round, whose new adjudication carries the new binding. Retained review evidence is unaffected — its `envelope_input_digest` predates and outlives this change.
-
-**Why accepted:** Consistent with the repository's fail-closed version posture; `.archflow/` task state is removed before PR, so the affected population is in-flight local tasks across one upgrade, and the recovery is the ordinary restart-the-round path.
-
-## Dynamic adjudication slots still need authenticated Gemini evidence
-
-**Not yet proven:** Local schema compilation exercises the Antigravity projection for Adjudication V2's dynamic judgment-slot object, but that is not authenticated evidence that the live Gemini host accepts and returns the representative multi-rule shape.
-
-**Existing mitigation:** The projected root remains a plain object, dynamic slot properties stay below it, and normative local validation checks the exact slot set before minting evidence. The opt-in real-host scope probe reports each family as passed or unavailable separately; missing Antigravity credentials are never converted into a pass.
-
-**Why accepted:** Provider schema behavior cannot be inferred from the local validator, while requiring credentials for the ordinary deterministic suite would make normal development unreliable. This limitation remains until an authenticated Antigravity/Gemini run records the boundary.
-
-## Effort recommendations are policy judgments, not measurements
-
-**Not provided:** Model selection does not predict elapsed time, token use, cost, or a universal ranking. A detailed design can still leave hard implementation reasoning, and the hazard registry can be incomplete. An unmatched path does not prove the code safe or easy.
-
-**Existing mitigation:** V5 assessment credits tested predecessors and requires a concrete explanation of remaining difficulty. Deterministic selection uses configured benchmark thresholds and subscription-cost priorities; file volume is excluded from difficulty. Defaults of 19/30/40/50% are calibration choices, not benchmark-derived task success guarantees. The reviewer can still misclassify work, and benchmark ranking does not guarantee quality on a particular implementation. Model scores retain their effort and fallback qualifications; cost order represents user preferences, not measured billing. Evidence validates the selected result against its captured inputs, and the explanation remains advisory rather than authority.
-
-**Why accepted:** A small sample of real implementation outcomes can guide calibration without a telemetry subsystem. The recommendation cannot switch the producing session, rewrite the plan, or bypass approval. Earlier scored assessments remain historical evidence only.
-
-## Automation v1 retains its legacy effort-failure surrogate
-
-**Not provided:** The strict automation-status v1 `failed_role` vocabulary cannot represent historical `effort-reviewer` failures without breaking existing consumers.
-
-**Existing mitigation:** Fresh effort-selector failures no longer reach automation at all: the server uses bounded reasoning with the captured model preferences and continues ordinary review. V2 retains the historical enum for archived projections; V1 remains a separate strict compatibility contract.
-
-**Why accepted:** Widening v1 would break strict readers. A deliberate v2 lets updated controllers consume the real role and advice while old consumers can continue parsing exactly the contract they adopted.
-
-
-## Automation responsibility
-
-Public-contract and governing-amendment materiality are independent reviewer judgments over pinned evidence, not syntactic proofs. Public class visibility alone is not an approval trigger. Original governing-document Git blobs must remain available for non-material amendment assessment; missing authenticated before-images cannot silently clear approval. Durable dispatch recovery records operational failures, but cannot make an unavailable filesystem or corrupt task authority writable.
-
-### Observed Antigravity workspace mismatch
-
-The 2026-09-11 real-host investigation observed `agy` advertising the supplied temporary repository snapshot as its cwd while its `run_command` tool actually started in the machine-global Antigravity scratch directory. The reviewer searched outside the snapshot, located the source fixture and read the test itself before reporting the seeded defect. A passing assertion from that run is contaminated evidence, not proof of an independent review. Passing a process cwd and disabling slash commands do not isolate Antigravity tool execution or inherited context. The adapter needs a verified workspace binding before this route can support a clean repository-scope validation claim. See [investigation evidence](validation/real-host-investigation-2026-09-11.md).
-
-## Simple-task guarantees
-
-Standalone simple tasks deliberately have no durable state, authenticated human-decision archive, resume cursor, or server-enforced sequencing. The skill owns plan-before-code and conversational approvals. MCP results describe one inspected snapshot; they neither authorize workflow advancement nor certify fixes applied afterward. A lost response cannot be recovered from task storage, and a new call spends a fresh review pass.
-
-The first version supports one connected Git repository with an existing HEAD, requires that HEAD to remain at the starting baseline, and accepts declared file paths rather than directories. Current uncommitted files are included as context, so the session must distinguish pre-existing edits from its own outputs. Snapshot capture rejects symlink parents and unsupported file types and caps changed bytes at 25 MiB. Existing reviewer sandbox limitations still apply. Required CLIs and authentication are necessary even when repository initialization is skipped.
-
-## Dispatch usage accounting
-
-Installed bundles keep private, best-effort per-dispatch records beside `bundle/` in `<ARCHFLOW_HOME>/usage/`. The central log survives task cleanup and reinstall, but deletes records older than seven days on the next dispatch; there is no idle background cleanup. It contains numeric usage and dispatch identity/status, not transcripts. Claude token/cost values are CLI-reported estimates; missing measurements, including interrupted calls without a terminal wrapper or adapters without token extraction, remain unknown. A successful dispatch record does not itself establish completed review or approval. Source runs do not automatically write shared-installation state.
-
-## The review-efficiency experiment measures one route on a tiny sample
-
-**Not provided:** The paired review-efficiency harness (`test/helpers/review-efficiency/`, run via `npm run bench:review-efficiency`) compares historical and current reviewer instructions on six frozen cases at one fixed route (`claude-opus-5`/high) in one sitting. It does not measure reviewer quality in general, does not sample provider variance over time, and its token totals say nothing about other models, efforts, or task shapes. Twenty-eight planned turns is a directed probe, not a study.
-
-**Existing mitigation:** The historical instructions are captured verbatim into a canonical fixture whose provenance is proven against the pinned Git blobs, and the harness substitutes them into the selected review recipe and regenerates the prompt, adapting only the historical request for a `report` string to the common `{outcome, feedback}` format. The fixture itself is unchanged. The intended difference between variants is the selected instruction text and its rendered prompt; supplied file bytes and authority remain equal, with pair parity asserted at build time and in the unit suite. Historical observations predate file-based delivery and do not establish its cost. The first completed turn acts as a probe: if cumulative usage, accepted model, or the read-only tool surface cannot be observed, the run stops inconclusive instead of spending the remaining turns. Usage fields are aggregated only when every contributor exposes them, per-attempt absence is never recorded as zero, and concurrent sibling wall time is never summed. The staged observation document is digest-bound and immutable; the supported/mixed conclusion is a separately bound human assessment, and a changed CLI version across resumed runs stops as inconclusive rather than mixing environments.
-
-**Why accepted:** The experiment exists to answer one question — does the current instruction set still find the seeded defects with comparable cost — with the least machinery that makes the answer auditable. The merged current instructions also simplify reviewer writing, so observed savings cannot be attributed to investigation changes alone. Treating its observation as a general benchmark would require route matrices, repeat runs, and variance analysis that no current decision needs.
-
-## File references are not universal immediate inclusion
-
-The tested Claude safe-mode print invocation preloaded small direct references, did not recursively expand a reference inside an ordinary document, and omitted a roughly 404 KB file. Codex exec and Antigravity print required model tool reads. ArchFlow supplies complete files with usage guidance and explicit read instructions, but does not claim the CLI or model consumed every byte immediately. Nearby-instruction suppression is adapter-specific, and Antigravity retains host context. Preview separates exactly supplied inputs from those CLI behaviors; see the recorded file-reference probes.
+`archflow-run` is markdown and git, with no server holding its state, so its guarantees are the skill's: plan approval before code, declared STOPs, and a cross-family review per task are instructions an orchestrating session follows. It needs Claude Code as the orchestrator, `jq` and `bash` for its helper scripts, and an authenticated reviewer CLI of the other family. A session that deviates from the skill leaves no mechanical trace; the per-task commits and `.archflow/runs/<name>/` files are the audit trail.

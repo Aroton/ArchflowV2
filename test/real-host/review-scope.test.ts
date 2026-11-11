@@ -8,42 +8,38 @@ import { join } from "node:path";
 
 import { describe, expect, it, type TestContext } from "vitest";
 
-import reviewOutputSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import {
   createRawAdjudicationV2Schema,
-  parseRawAdjudicationV2,
   type AdjudicationRuleSlotV1,
 } from "../../src/contracts/adjudication.js";
-import { canonicalJsonDigest, sha256Bytes, type GitOid } from "../../src/contracts/canonical.js";
+import type { GitOid } from "../../src/contracts/canonical.js";
 import { parseConfigYaml } from "../../src/contracts/config.js";
-import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
-import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
-import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import {
-  parseReviewFeedback,
-} from "../../src/contracts/review.js";
-import { CliAdapterError, preflightAdapter, serializeDispatch } from "../../src/dispatch/cli.js";
-import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
+import { reviewReportOutputSchema } from "../../src/contracts/review.js";
+import { CliAdapterError, preflightAdapter, serializeDispatchAll } from "../../src/dispatch/cli.js";
+import { createReviewDispatcher } from "../../src/dispatch/coordinator.js";
 import { DispatchProcessError } from "../../src/dispatch/process.js";
-import { resolveDispatchRoute } from "../../src/dispatch/routing.js";
+import type { DispatchRoute } from "../../src/dispatch/routing.js";
+import { configuredRoute } from "../helpers/dispatch-routes.js";
 import {
   createDispatchWorkspace,
   projectRepositoryWorkspaceBinding,
+  shareRepositoryViewWorkspace,
   type DispatchRepositoryViewPlan,
 } from "../../src/dispatch/workspace.js";
-import { buildAdjudicationEnvelope, buildReviewEnvelope } from "../../src/review/envelopes.js";
+import { sealDispatchInput, type DispatchEnvelope } from "../../src/review/envelopes.js";
+import { dispatchInputRecord } from "../../src/review/inputs.js";
 import { reviewAssignment } from "../../src/review/rubrics.js";
 import { loadTestRubric } from "../helpers/rubrics.js";
 import {
   REAL_HOST_TEST_TIMEOUT_MS,
   realHostsEnabled,
 } from "../helpers/real-host.js";
-import { createTaskWorkspace } from "../helpers/task-workspace.js";
+import { createReviewRepository } from "../helpers/review-repository.js";
+import { standaloneReviewFields } from "../helpers/standalone-review-input.js";
 
 const enabled = realHostsEnabled();
 const utf8 = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
-const phase = parsePhaseInstanceId("phase-impl-1");
 const selectedRubric = await loadTestRubric("phase-impl");
 
 const directions = Object.freeze([
@@ -99,19 +95,20 @@ async function dispatchOrSkip<T>(context: TestContext, operation: () => Promise<
   }
 }
 
+/** Dispatches one sealed input with the response schema it carries, as the standalone review does. */
+const serialized = (dispatch: ReturnType<typeof createReviewDispatcher>, route: DispatchRoute, envelope: DispatchEnvelope) =>
+  serializeDispatchAll([() => dispatch(route, envelope, dispatchInputRecord(envelope).response_schema!)]).then(([result]) => result!);
+
 function git(root: string, ...argv: string[]): string {
   return execFileSync("git", argv, { cwd: root, encoding: "utf8" }).trim();
 }
 
 describe.skipIf(!enabled)("real-host reviewer-owned evidence scope", () => {
   for (const direction of directions) {
-    it(`records role-scoped Review V3 and judgment-only Adjudication V2 for ${direction.id}`, async (context) => {
+    it(`keeps role-scoped reviews and constitution judgments to the declared outputs for ${direction.id}`, async (context) => {
       await skipUnavailable(context, direction);
-      const workspace = await createTaskWorkspace({
-        taskId: `scope-${direction.id}`,
-        operation: "real-review-scope",
-        configBytes: utf8.encode(direction.config),
-      });
+      const workspace = await createReviewRepository({ label: `scope-${direction.id}`, configBytes: utf8.encode(direction.config) });
+      let disposeViews = async (): Promise<void> => undefined;
       try {
         await mkdir(join(workspace.root, "src"), { recursive: true });
         await writeFile(join(workspace.root, "src", "format-count.js"),
@@ -151,80 +148,53 @@ describe.skipIf(!enabled)("real-host reviewer-owned evidence scope", () => {
           }],
           co_produced_documents: [],
         }, null, 2)}\n`;
+        // The standalone review's view plan: the work under review as primary, its starting commit as baseline.
         const repositoryViews: DispatchRepositoryViewPlan = Object.freeze([Object.freeze({
           name: "primary" as const,
           member_kind: "primary" as const,
           repository_root: workspace.root,
-          repository_identity_digest: workspace.initialization.repository_identity_digest,
+          repository_identity_digest: workspace.repository_identity_digest,
           commit: after,
+        }), Object.freeze({
+          name: "baseline",
+          member_kind: "secondary" as const,
+          repository_root: workspace.root,
+          repository_identity_digest: workspace.repository_identity_digest,
+          commit: baseline,
         })]);
+        const shared = shareRepositoryViewWorkspace(repositoryViews, workspace.root);
+        disposeViews = shared.dispose;
         const config = parseConfigYaml(direction.config, `${direction.id} scope config`);
-        const generalRoute = resolveDispatchRoute(config, "phase-impl", "counter-reviewer");
-        const testRoute = resolveDispatchRoute(config, "phase-impl", "test-reviewer");
-        const adjudicationRoute = resolveDispatchRoute(config, "phase-impl", "adjudicator");
+        const generalRoute = configuredRoute(config, "phase-impl", "counter-reviewer");
+        const testRoute = configuredRoute(config, "phase-impl", "test-reviewer");
+        const adjudicationRoute = configuredRoute(config, "phase-impl", "adjudicator");
         for (const route of [generalRoute, testRoute, adjudicationRoute]) {
           expect(route).toMatchObject({ adapter: direction.adapter, family: direction.family });
         }
-        const subjectBase = {
-          task_id: workspace.taskId,
-          phase_instance: phase,
-          role: "counter-review" as const,
-          step: "counter_review" as const,
-          attempt: parseSafeInteger(1),
-          subject_digest: sha256Bytes(utf8.encode(artifact)),
-          input_fingerprint: canonicalJsonDigest({ probe: direction.id, baseline, after }),
-          rubric_digest: selectedRubric.rubric_digest,
-          producer_family: direction.producer,
-        };
-        const generalAssignment = reviewAssignment(
-          "general", "general", "phase-impl", selectedRubric.rubric,
-          { expected_upstream_digests: [] },
-        );
-        const generalEnvelope = buildReviewEnvelope({
-          artifact,
-          rubric: selectedRubric.rubric,
-          assignment: generalAssignment,
-          context: [],
+        const fields = standaloneReviewFields({
+          subject: artifact,
+          paths: ["src/format-count.js"],
           workspace: projectRepositoryWorkspaceBinding(repositoryViews),
-          subject: {
-            ...subjectBase,
-            invocation_id: parseSafeId(`invocation-general-${direction.id}`),
-            result_id: parseSafeId(`result-general-${direction.id}`),
-          },
         });
-        const dispatch = createDispatchCoordinator({
-          authority: workspace.services.authority,
-          dependencies: workspace.services.dependencies,
+        const generalAssignment = reviewAssignment("counter-reviewer-1", "general", "phase-impl", selectedRubric.rubric);
+        const generalEnvelope = sealDispatchInput("review", { ...fields, assignment: generalAssignment, rubric: selectedRubric.rubric });
+        const dispatch = createReviewDispatcher({
           host: direction.producer,
           repository_root: workspace.root,
-          phase_instance: phase,
           signal: new AbortController().signal,
           cancellation_source: "client",
-          repository_views: repositoryViews,
+          shared_workspace: shared,
         });
-        const generalResult = await dispatchOrSkip(context, () => serializeDispatch(() =>
-          dispatch(generalRoute, generalEnvelope, reviewOutputSchema as PlainJsonValue)));
-        const generalReport = parseReviewFeedback(JSON.parse(decoder.decode(generalResult.extracted_output_bytes))).feedback.toLowerCase();
+        const generalResult = await dispatchOrSkip(context, () => serialized(dispatch, generalRoute, generalEnvelope));
+        const generalReport = reviewReportOutputSchema.strict().parse(JSON.parse(decoder.decode(generalResult.extracted_output_bytes))).feedback.toLowerCase();
         expect(generalReport).toContain("format-count");
         expect(["summary", "touppercase", "call site", "consumer", "string operation", "interface"].some(term => generalReport.includes(term)), generalReport).toBe(true);
         expect(generalReport.includes("legacy-auth") || generalReport.includes("always grants access"), generalReport).toBe(false);
 
-        const testAssignment = reviewAssignment("test", "tests", "phase-impl", selectedRubric.rubric);
-        const testEnvelope = buildReviewEnvelope({
-          artifact,
-          rubric: selectedRubric.rubric,
-          assignment: testAssignment,
-          context: [],
-          workspace: projectRepositoryWorkspaceBinding(repositoryViews),
-          subject: {
-            ...subjectBase,
-            invocation_id: parseSafeId(`invocation-test-${direction.id}`),
-            result_id: parseSafeId(`result-test-${direction.id}`),
-          },
-        });
-        const testResult = await dispatchOrSkip(context, () => serializeDispatch(() =>
-          dispatch(testRoute, testEnvelope, reviewOutputSchema as PlainJsonValue)));
-        const testReport = parseReviewFeedback(JSON.parse(decoder.decode(testResult.extracted_output_bytes))).feedback;
+        const testAssignment = reviewAssignment("test-reviewer-1", "tests", "phase-impl", selectedRubric.rubric);
+        const testEnvelope = sealDispatchInput("review", { ...fields, assignment: testAssignment, rubric: selectedRubric.rubric });
+        const testResult = await dispatchOrSkip(context, () => serialized(dispatch, testRoute, testEnvelope));
+        const testReport = reviewReportOutputSchema.strict().parse(JSON.parse(decoder.decode(testResult.extracted_output_bytes))).feedback;
         expect(testReport.trim().length).toBeGreaterThan(0);
         expect(testReport.toLowerCase()).toMatch(/test|assert|coverage|regression/u);
 
@@ -232,8 +202,8 @@ describe.skipIf(!enabled)("real-host reviewer-owned evidence scope", () => {
           Object.freeze({ slot: "scope-b", rule_id: "consumer-compatibility", rule_version: 1 }),
           Object.freeze({ slot: "scope-a", rule_id: "declared-output-scope", rule_version: 1 }),
         ]);
-        const adjudicationEnvelope = buildAdjudicationEnvelope({
-          artifact,
+        const adjudicationEnvelope = sealDispatchInput("adjudication", {
+          ...fields,
           rules: [
             {
               slot: "scope-b",
@@ -247,35 +217,17 @@ describe.skipIf(!enabled)("real-host reviewer-owned evidence scope", () => {
               enforced_by: ["declared-output-review-scope"],
             },
           ],
-          source_review_envelope_digest: generalEnvelope.digest,
-          workspace: projectRepositoryWorkspaceBinding(repositoryViews),
-          subject: {
-            task_id: workspace.taskId,
-            phase_instance: phase,
-            role: "adjudication",
-            step: "adjudicate",
-            subject_digest: subjectBase.subject_digest,
-            input_fingerprint: subjectBase.input_fingerprint,
-            pinned_constitution_digest: canonicalJsonDigest({ probe: "constitution", direction: direction.id }),
-            source_review_envelope_digest: generalEnvelope.digest,
-            invocation_id: parseSafeId(`invocation-adjudication-${direction.id}`),
-            result_id: parseSafeId(`result-adjudication-${direction.id}`),
-          },
         });
-        const adjudicationSchema = JSON.parse(JSON.stringify(
-          createRawAdjudicationV2Schema(ruleSlots).toJSONSchema({ target: "draft-2020-12" }),
-        )) as PlainJsonValue;
-        const adjudicationResult = await dispatchOrSkip(context, () => serializeDispatch(() =>
-          dispatch(adjudicationRoute, adjudicationEnvelope, adjudicationSchema)));
-        const adjudication = parseRawAdjudicationV2(
+        const adjudicationResult = await dispatchOrSkip(context, () => serialized(dispatch, adjudicationRoute, adjudicationEnvelope));
+        const adjudication = createRawAdjudicationV2Schema(ruleSlots).parse(
           JSON.parse(decoder.decode(adjudicationResult.extracted_output_bytes)),
-          ruleSlots,
         );
         expect(adjudication.schema_version).toBe("2");
         expect(Object.keys(adjudication.judgments).sort()).toEqual(["scope-a", "scope-b"]);
         expect(["fail", "uncertain"]).toContain(adjudication.judgments["scope-b"]?.compliance);
         expect(["matched", "uncertain"]).toContain(adjudication.judgments["scope-b"]?.trigger);
       } finally {
+        await disposeViews();
         workspace.dispose();
       }
     }, REAL_HOST_TEST_TIMEOUT_MS);

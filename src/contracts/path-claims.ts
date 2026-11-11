@@ -1,18 +1,11 @@
 import { z } from "zod";
 
-import { endsWithDotOrSpace, isReservedDeviceName, type PathSafeId, type Sha256Digest, type TaskSlug } from "./evidence.js";
+import { endsWithDotOrSpace, isReservedDeviceName } from "./evidence.js";
 import { assertPlainJson } from "./plain-json.js";
 
-declare const taskPathClaimBrand: unique symbol;
 declare const repositoryPathClaimBrand: unique symbol;
-declare const rawGitPathBrand: unique symbol;
-
-/** A lexical claim rooted at the task directory, `.archflow/tasks/<task-id>/`. */
-export type TaskPathClaim = string & { readonly [taskPathClaimBrand]: true };
-/** Same lexical rules as `TaskPathClaim`; different frame — rooted at the worktree, not the task. */
+/** A lexical path claim rooted at the worktree. */
 export type RepositoryPathClaim = string & { readonly [repositoryPathClaimBrand]: true };
-/** A path exactly as Git emitted it. Total constructor; carries no lexical guarantee at all. */
-export type RawGitPath = string & { readonly [rawGitPathBrand]: true };
 
 const utf8Length = (value: string): number => Buffer.byteLength(value, "utf8");
 const containsControl = (value: string): boolean => /[\u0000-\u001f\u007f-\u009f]/u.test(value);
@@ -39,10 +32,9 @@ const PATH_CLAIM_PATTERN = new RegExp(
 );
 
 /**
- * The sole lexical authority for both claim frames, mirroring
- * `src/contracts/schemas/v1/path-claim.schema.json` rule for rule. Built once per identity: the
- * schema generator registers the document root and both branded `primitives` defs separately, and
- * a registry identity can carry only one URI, so each must be its own object.
+ * The sole lexical path-claim authority, mirroring `src/contracts/schemas/v1/path-claim.schema.json`
+ * rule for rule. Built once per identity: the schema generator registers the document root, and a
+ * registry identity can carry only one URI, so the branded schema must be its own object.
  */
 const pathClaimLexical = () => z.string()
   .min(1)
@@ -58,91 +50,12 @@ const pathClaimLexical = () => z.string()
   .refine((value) => !hasTrailingDotOrSpace(value), "path claim components must not end with a dot or a space")
   .refine((value) => value.normalize("NFC") === value, "path claim components must already be NFC");
 
-/** The `path-claim.schema.json` document root; the branded schemas below are its two frames. */
+/** The `path-claim.schema.json` document root; `simple-review-input` references it for declared paths. */
 export const pathClaimLexicalV1Schema = pathClaimLexical();
-export const taskPathClaimV1Schema = pathClaimLexical() as unknown as z.ZodType<TaskPathClaim>;
 export const repositoryPathClaimV1Schema = pathClaimLexical() as unknown as z.ZodType<RepositoryPathClaim>;
 
-/**
- * Parses a bounded task-relative lexical claim. This does not inspect a file
- * system or grant repository/task containment authority.
- */
-export function parseTaskPathClaim(value: unknown): TaskPathClaim {
-  assertPlainJson(value, "task path claim");
-  return taskPathClaimV1Schema.parse(value);
-}
-
-/** Parses the same lexical claim in the worktree frame rather than the task frame. */
+/** Parses a worktree-relative lexical claim. This does not inspect a file system. */
 export function parseRepositoryPathClaim(value: unknown): RepositoryPathClaim {
   assertPlainJson(value, "repository path claim");
   return repositoryPathClaimV1Schema.parse(value);
-}
-
-/**
- * Re-frames a task claim as a worktree claim under `.archflow/tasks/<task-id>/`. Throws, per the
- * contract-layer convention, if the composed path is not itself a valid claim — which a 1024-byte
- * task claim plus the prefix, or a task slug ending in a dot, can produce.
- */
-export function toRepositoryPathClaim(taskId: TaskSlug, claim: TaskPathClaim): RepositoryPathClaim {
-  return parseRepositoryPathClaim(`.archflow/tasks/${taskId}/${claim}`);
-}
-
-/** The verbatim request and clarification record pinned into PRD review envelopes. */
-export function userAskClaim(): TaskPathClaim {
-  return parseTaskPathClaim("ask.md");
-}
-
-export function authorityInitializationClaim(): TaskPathClaim {
-  return parseTaskPathClaim("authority/initialization.json");
-}
-
-/** The sole durable manifest location derived from its content digest. */
-export function authorityResultClaim(resultDigest: Sha256Digest): TaskPathClaim {
-  return parseTaskPathClaim(`authority/results/${resultDigest}.json`);
-}
-
-export function authorityDecisionRequestClaim(gateId: PathSafeId): TaskPathClaim {
-  return parseTaskPathClaim(`authority/decisions/${gateId}/request.json`);
-}
-
-export function authorityDecisionRecordClaim(gateId: PathSafeId): TaskPathClaim {
-  return parseTaskPathClaim(`authority/decisions/${gateId}/decision.json`);
-}
-
-/** Total constructor: a path is branded as Git's output without asserting anything about it. */
-export function rawGitPath(value: string): RawGitPath {
-  return value as RawGitPath;
-}
-
-/**
- * The sole promotion from untrusted Git output to a branded claim. Returns `undefined` rather
- * than throwing, so a caller can count the names it cannot represent instead of failing while
- * merely inspecting them.
- */
-export function tryRepositoryPathClaim(value: RawGitPath): RepositoryPathClaim | undefined {
-  const result = repositoryPathClaimV1Schema.safeParse(value);
-  return result.success ? result.data : undefined;
-}
-
-export const TASK_PATH_CLASSES = [
-  "task-config", "task-state", "task-ask", "document",
-  "authority-initialization", "authority-result", "authority-decision", "authority-recovery",
-] as const;
-export const REPOSITORY_PATH_CLASSES = [
-  "shared-workflow", "shared-constitution", "task-branch-constitution", "repository-source",
-] as const;
-export const PATH_CLASSES = [...TASK_PATH_CLASSES, ...REPOSITORY_PATH_CLASSES] as const;
-
-export type TaskPathClass = (typeof TASK_PATH_CLASSES)[number];
-export type RepositoryPathClass = (typeof REPOSITORY_PATH_CLASSES)[number];
-export type PathClass = (typeof PATH_CLASSES)[number];
-
-/** Classes ArchFlow reads but never writes. */
-export const READ_ONLY_PATH_CLASSES: readonly PathClass[] = ["shared-workflow", "shared-constitution"];
-
-const pathClassSchema = z.enum(PATH_CLASSES);
-
-export function parsePathClass(value: unknown): PathClass {
-  assertPlainJson(value, "path class");
-  return pathClassSchema.parse(value);
 }

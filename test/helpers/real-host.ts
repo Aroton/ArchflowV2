@@ -2,20 +2,20 @@
  * The shared opt-in and availability gate for tests that invoke real coding-agent hosts.
  *
  * Test helpers normally know nothing about `src/**`, so fixture defects cannot be mistaken for
- * source defects. This is the deliberate third exception (after `resolved-constitution.ts` and
- * `task-workspace.ts`): its test timeout is coupled to the production dispatch timeout.
+ * source defects. This is a deliberate exception (like `review-repository.ts`): its test timeout is
+ * coupled to the production dispatch timeout, and its attempt observer reads production error types.
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { delimiter, normalize } from "node:path";
 
+import type { CliPreflight } from "../../src/dispatch/cli.js";
 import { DISPATCH_TIMEOUT_MS } from "../../src/dispatch/process.js";
+import type { DispatchRoute } from "../../src/dispatch/routing.js";
 
 export const REAL_HOST_OPT_IN_ENV = "ARCHFLOW_REAL_HOSTS";
-export const REVIEW_BENCHMARK_OPT_IN_ENV = "ARCHFLOW_REVIEW_BENCHMARK";
 export const REAL_HOST_PROBE_TIMEOUT_MS = 10_000;
 export const REAL_HOST_TEST_TIMEOUT_MS = DISPATCH_TIMEOUT_MS + 60_000;
-export const REVIEW_BENCHMARK_TEST_TIMEOUT_MS = 3_600_000;
 
 function optedIn(name: string): boolean {
   return process.env[name] === "1";
@@ -33,11 +33,6 @@ function sanitizePathForRealHosts(): void {
 /** Returns whether real-host tests were explicitly enabled for this process. */
 export function realHostsEnabled(): boolean {
   return optedIn(REAL_HOST_OPT_IN_ENV);
-}
-
-/** Returns whether the longer review benchmark received its separate second opt-in. */
-export function benchmarkEnabled(): boolean {
-  return realHostsEnabled() && optedIn(REVIEW_BENCHMARK_OPT_IN_ENV);
 }
 
 function output(command: string, argv: readonly string[]): string {
@@ -117,4 +112,37 @@ export function requireRealHostsAvailable(available: boolean): void {
   if (realHostsEnabled() && !available) {
     throw new Error("ARCHFLOW_REAL_HOSTS=1, but authenticated Claude and Codex hosts are unavailable after PATH sanitization");
   }
+}
+
+/** What the review dispatcher reports about one failed attempt: the route, the preflight, the classified code. */
+export type ObservedFailedAttempt = Readonly<{
+  adapter: DispatchRoute["adapter"];
+  model: string;
+  cli_version?: string;
+  failure_code?: string;
+  error: unknown;
+}>;
+
+/** An `observeAttempt` callback for `createReviewDispatcher` that keeps every failed attempt. */
+export function failedAttemptObserver(): Readonly<{
+  attempts: ObservedFailedAttempt[];
+  observe: (attemptId: string, route: DispatchRoute, preflight: CliPreflight | undefined, error: unknown) => Promise<void>;
+}> {
+  const attempts: ObservedFailedAttempt[] = [];
+  return {
+    attempts,
+    observe: async (_attemptId, route, preflight, error) => {
+      if (error === undefined) return;
+      const code = typeof error === "object" && error !== null && "project_error" in error
+        ? (error as { project_error: { code: string } }).project_error.code
+        : undefined;
+      attempts.push({
+        adapter: route.adapter,
+        model: route.model,
+        ...(preflight === undefined ? {} : { cli_version: preflight.cli_version }),
+        ...(code === undefined ? {} : { failure_code: code }),
+        error,
+      });
+    },
+  };
 }

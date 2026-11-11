@@ -1,22 +1,19 @@
 import { spawnSync, execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildSync } from "esbuild";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { parseTaskSlug } from "../../src/contracts/evidence.js";
-import { scaffoldRepositoryAssets } from "../../src/init/assets.js";
-import { stageTaskInitialization } from "../../src/init/task-initialization.js";
 import { LOCAL_COMMANDS } from "../../src/local/commands.js";
 
 const TIMEOUT = 30_000;
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const fakeHostCli = join(repositoryRoot, "test", "fixtures", "init", "fake-host-cli.mjs");
 const roots: string[] = [];
-const task = parseTaskSlug("local-cli");
 let bundleRoot = "";
 let localBundle = "";
 
@@ -30,8 +27,13 @@ const gitEnvironment: NodeJS.ProcessEnv = {
   GIT_COMMITTER_EMAIL: "test@example.invalid",
 };
 
-/** Every command the helper choreography retirement removed from the local surface. */
-const RETIRED_COMMANDS = ["build-request", "envelope", "decide", "commit", "status", "gate-preview"] as const;
+/** Commands earlier releases shipped (task workflow, MCP debugging, helper choreography); none survive. */
+const REMOVED_COMMANDS = [
+  "validate", "hash", "render", "snapshot", "restore", "clean", "reconcile",
+  "manual-status", "automation-status", "upgrade", "upgrade-adopt", "set-commit-authority",
+  "implementation-profiles", "review-preview",
+  "build-request", "envelope", "decide", "commit", "status", "gate-preview",
+] as const;
 
 beforeAll(async () => {
   bundleRoot = await mkdtemp(resolve(tmpdir(), "archflow-local-cli-"));
@@ -59,105 +61,89 @@ function git(root: string, ...argv: string[]): string {
   return execFileSync("git", argv, { cwd: root, env: gitEnvironment, encoding: "utf8" }).trim();
 }
 
-function cli(root: string, command: string, value?: unknown): Readonly<{ status: number | null; stdout: string; stderr: string; value?: any }> {
-  const result = spawnSync(process.execPath, [localBundle, command, "--task", task], {
-    cwd: root,
-    env: gitEnvironment,
-    input: value === undefined ? undefined : JSON.stringify(value),
-    encoding: "utf8",
-    timeout: TIMEOUT,
-  });
+/** A committed scratch repository plus a scratch HOME and fake reviewer CLIs, so init touches nothing real. */
+function repository(): Readonly<{ root: string; env: NodeJS.ProcessEnv }> {
+  const root = mkdtempSync(join(tmpdir(), "archflow-local-cli-repo-"));
+  roots.push(root);
+  const work = join(root, "work");
+  const home = join(root, "home");
+  const bin = join(root, "bin");
+  for (const directory of [work, home, bin]) mkdirSync(directory);
+  for (const adapter of ["claude", "codex"]) {
+    writeFileSync(join(bin, adapter), `#!/bin/sh\nFAKE_HOST_ADAPTER=${adapter} exec "${process.execPath}" "${fakeHostCli}" "$@"\n`, { mode: 0o755 });
+  }
+  git(work, "-c", "init.defaultBranch=main", "init", "-q");
+  writeFileSync(join(work, "README.md"), "repository\n");
+  git(work, "add", "--", "README.md");
+  git(work, "commit", "-q", "-m", "root");
+  return { root: work, env: { ...gitEnvironment, HOME: home, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}` } };
+}
+
+function cli(cwd: string, env: NodeJS.ProcessEnv, ...argv: string[]): Readonly<{ status: number | null; stdout: string; stderr: string; value?: any }> {
+  const result = spawnSync(process.execPath, [localBundle, ...argv], { cwd, env, input: "", encoding: "utf8", timeout: TIMEOUT });
   return {
     status: result.status,
     stdout: result.stdout,
     stderr: result.stderr,
-    ...(result.stdout === "" ? {} : { value: JSON.parse(result.stdout) }),
+    ...(result.stdout === "" || argv.includes("--help") ? {} : { value: JSON.parse(result.stdout) }),
   };
 }
 
-async function repository() {
-  const root = mkdtempSync(join(tmpdir(), "archflow-local-cli-repo-"));
-  roots.push(root);
-  git(root, "-c", "init.defaultBranch=main", "init", "-q");
-  writeFileSync(join(root, "README.md"), "repository\n");
-  git(root, "add", "--", "README.md");
-  git(root, "commit", "-q", "-m", "root");
-  const scaffolded = await scaffoldRepositoryAssets({ working_directory: root });
-  if (!scaffolded.ok) throw new Error(scaffolded.error.code);
-  git(root, "add", "--", ".gitattributes", ".archflow/.gitignore", ".archflow/workflow.yaml", ".archflow/constitution", ".archflow/config.yaml");
-  git(root, "commit", "-q", "-m", "policy");
-  const staged = await stageTaskInitialization({ working_directory: root, task_id: task });
-  if (!staged.ok) throw new Error(staged.error.code);
-  return { root, initialization: staged.value };
-}
-
 describe("bundled local CLI", () => {
-  it("lists exactly the surviving commands in its usage", async () => {
-    const help = spawnSync(process.execPath, [localBundle, "--help"], { encoding: "utf8", timeout: TIMEOUT });
+  it("lists exactly review and init in its usage", () => {
+    const help = cli(repositoryRoot, gitEnvironment, "--help");
     expect(help.status).toBe(0);
     const listed = [...help.stdout.matchAll(/^  (\S+)(?=\s{2,})/gmu)].map((match) => match[1]);
-    expect(listed.sort()).toEqual([...LOCAL_COMMANDS].sort());
+    expect(listed.sort()).toEqual(["init", "review"]);
+    expect([...LOCAL_COMMANDS].sort()).toEqual(["init", "review"]);
+    expect(help.stdout).toContain("usage: archflow-local <command>");
+    expect(help.stdout).toContain("review --producer <claude|codex|antigravity>");
+    expect(help.stdout).not.toContain("--task");
   }, TIMEOUT);
 
-  it("keeps every retired helper command out of the registry and rejecting at the CLI entry", async () => {
-    const fixture = await repository();
-    for (const retired of RETIRED_COMMANDS) {
-      expect(LOCAL_COMMANDS).not.toContain(retired);
-      const rejected = cli(fixture.root, retired, {});
-      expect(rejected.status, `${retired} must reject`).not.toBe(0);
+  it("rejects every other command name with the unknown-command message", () => {
+    for (const removed of [...REMOVED_COMMANDS, "upgrade adopt"]) {
+      const rejected = cli(repositoryRoot, gitEnvironment, ...removed.split(" "));
+      expect(rejected.status, `${removed} must reject`).toBe(1);
       expect(rejected.stderr).toMatch(/unknown archflow-local command/u);
+      expect(rejected.value).toMatchObject({
+        schema_version: "1",
+        ok: false,
+        error: { code: "CONTRACT_INVALID", diagnostic: { parameters: { issue_code: "local-command-invalid" } } },
+      });
     }
   }, TIMEOUT);
 
-  it("loads effective implementation profiles without changing task files", async () => {
-    const fixture = await repository();
-    const before = git(fixture.root, "status", "--porcelain", "--untracked-files=all");
-    const result = cli(fixture.root, "implementation-profiles");
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.value).toMatchObject({ schema_version: "1", task_id: task });
-    expect(result.value.profiles).toContainEqual({ profile_id: "glm-5-3-max", model: "glm-5.3", effort: "max", enabled: true });
-    expect(result.value.profiles).toContainEqual({ profile_id: "glm-5-3-flash", model: "glm-5.3-flash", enabled: true });
-    expect(git(fixture.root, "status", "--porcelain", "--untracked-files=all")).toBe(before);
+  it("rejects options that belong to the other command", () => {
+    const fixture = repository();
+    expect(cli(fixture.root, fixture.env, "review", "--producer", "claude", "--force").stderr).toContain("--force is supported only by init");
+    expect(cli(fixture.root, fixture.env, "init", "--producer", "claude").stderr).toContain("--producer is supported only by review");
+    expect(cli(fixture.root, fixture.env, "init", "--input", "payload.json").stderr).toContain("init accepts no input payload; omit --input");
+    expect(cli(fixture.root, fixture.env, "review", "--producer", "claude", "--task", "example").stderr).toMatch(/Unknown option '--task'/u);
+    expect(existsSync(join(fixture.root, ".archflow"))).toBe(false);
   }, TIMEOUT);
 
-  it("hashes canonical JSON and rejects unsupported validate kinds through the bundle", async () => {
-    const fixture = await repository();
-    const value = { z: [2, 1], a: "value" } as const;
-    const hashed = cli(fixture.root, "hash", value);
-    expect(hashed).toMatchObject({ status: 0 });
-    expect(typeof hashed.value.digest).toBe("string");
-
-    const rejected = cli(fixture.root, "validate", { kind: "unknown", value: {} });
-    expect(rejected.status).not.toBe(0);
-    expect(rejected.stderr).toMatch(/not supported/u);
-    expect(rejected.value).toMatchObject({
-      schema_version: "1",
-      ok: false,
-      error: { code: "CONTRACT_INVALID", diagnostic: { parameters: { issue_code: "local-command-invalid" } } },
-    });
+  it("initializes a repository with only the review inputs", () => {
+    const fixture = repository();
+    const initialized = cli(fixture.root, fixture.env, "init");
+    expect(initialized.status, initialized.stderr).toBe(0);
+    expect(initialized.value).toMatchObject({ schema_version: "1", ok: true });
+    expect(readdirSync(join(fixture.root, ".archflow")).sort()).toEqual([".gitignore", "config.yaml", "constitution"]);
+    const refreshed = cli(fixture.root, fixture.env, "init", "--force");
+    expect(refreshed.status, refreshed.stderr).toBe(0);
+    expect(refreshed.value).toMatchObject({ schema_version: "1", ok: true });
   }, TIMEOUT);
 
-  it("classifies a task without durable state through manual-status", async () => {
-    const fixture = await repository();
-    const classified = cli(fixture.root, "manual-status");
-    expect(classified).toMatchObject({ status: 0, value: { ok: true } });
-  }, TIMEOUT);
-
-  it("reports a failed result through the process exit code", async () => {
-    const fixture = await repository();
+  it("reports a failed review result through the process exit code", () => {
+    const fixture = repository();
     // A structured project failure keeps its full JSON body on stdout — scripts still parse the
     // error — while the exit code turns nonzero so an unchecked shell pipeline cannot mistake the
-    // failure for success. Previewing an import from a directory that is not a legacy repository
-    // fails closed.
-    const unavailable = cli(fixture.root, "upgrade", {
-      operation: "preview",
-      source_root: join(fixture.root, "missing-legacy-root"),
-      task_id: task,
-      policy_base_commit: "0".repeat(40),
-      import_baseline_commit: "0".repeat(40),
-      code_baseline_commit: "0".repeat(40),
+    // failure for success.
+    const result = spawnSync(process.execPath, [localBundle, "review", "--producer", "claude"], {
+      cwd: fixture.root, env: fixture.env, input: JSON.stringify({ schema_version: "1", stage: "plan" }), encoding: "utf8", timeout: TIMEOUT,
     });
-    expect(unavailable).toMatchObject({ status: 1, value: { ok: false } });
-    expect(unavailable.value.error.code).toEqual(expect.any(String));
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({ schema_version: "1", ok: false, error: { code: "INPUT_INVALID" } });
+    expect(result.stderr).toContain("review failed: INPUT_INVALID");
   }, TIMEOUT);
 });

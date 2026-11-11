@@ -1,13 +1,8 @@
 import { simpleReviewSchemaGroup } from "./schema-generation-simple-review.js";
 import { z, type ZodType } from "zod";
 
-import { durableSchemaGroup } from "./schema-generation-durable.js";
 import { errorSchemaGroup } from "./schema-generation-errors.js";
-import { gateSchemaGroup } from "./schema-generation-gate.js";
 import { leafSchemaGroup } from "./schema-generation-leaf.js";
-import { mcpToolsSchemaGroup } from "./schema-generation-mcp-tools.js";
-import { semanticWorkflowSchemaGroup } from "./schema-generation-semantic-workflow.js";
-import { automationStatusSchemaGroup } from "./schema-generation-automation-status.js";
 
 /** A hand-authored JSON Schema fragment emitted verbatim in place of a def's Zod emission. */
 export type GeneratedDefOverride = Readonly<Record<string, unknown>>;
@@ -23,9 +18,8 @@ export type SchemaDocumentPlan = {
    * The `$defs` layout in emission order: def name → the exact Zod object other schemas in this
    * manifest reference. Identity matters — a `$ref` is emitted only where the registered object
    * itself appears, so defs must be the shared exported schema, not a structural copy. A name
-   * containing `/` publishes a nested member — `archflow_state/input` is written to
-   * `$defs.archflow_state.input` and referenced as `#/$defs/archflow_state/input`, the form the
-   * per-tool input/success/result inventory of `mcp-tools.schema.json` pins.
+   * containing `/` publishes a nested member — `a/b` is written to `$defs.a.b` and referenced
+   * as `#/$defs/a/b`.
    */
   readonly defs?: Readonly<Record<string, ZodType>>;
   /**
@@ -43,7 +37,7 @@ export type SchemaDocumentPlan = {
 };
 
 export type SchemaGenerationGroup = {
-  readonly group: "leaf" | "durable" | "gate" | "errors" | "mcp-tools" | "semantic-workflow" | "automation-status" | "simple-review";
+  readonly group: "leaf" | "errors" | "simple-review";
   readonly documents: readonly SchemaDocumentPlan[];
 };
 
@@ -59,12 +53,7 @@ export const HAND_WRITTEN_SCHEMA_FILES: readonly string[] = Object.freeze([
 /** The full emission manifest. Each group module owns exactly one shape group's documents. */
 export const SCHEMA_GENERATION_GROUPS: readonly SchemaGenerationGroup[] = Object.freeze([
   leafSchemaGroup,
-  durableSchemaGroup,
-  gateSchemaGroup,
   errorSchemaGroup,
-  mcpToolsSchemaGroup,
-  semanticWorkflowSchemaGroup,
-  automationStatusSchemaGroup,
   simpleReviewSchemaGroup,
 ]);
 

@@ -10,11 +10,8 @@ import {
 } from "../contracts/errors.js";
 import { planConstitutionScaffold, type ConstitutionMigration } from "./constitution.js";
 
-const ARCHFLOW_GITATTRIBUTES_LINE = ".archflow/** -text merge=binary";
 const ASSETS = Object.freeze([
   ["archflow.gitignore", ".archflow/.gitignore"],
-  ["workflow.yaml", ".archflow/workflow.yaml"],
-  ["hazards.yaml", ".archflow/hazards.yaml"],
   ["constitution/README.md", ".archflow/constitution/README.md"],
   ["constitution/custom/README.md", ".archflow/constitution/custom/README.md"],
   ["constitution/default/00-process.md", ".archflow/constitution/default/00-process.md"],
@@ -40,7 +37,6 @@ export type AssetScaffoldReport = {
   readonly preserved_custom: readonly string[];
   readonly constitution_migration: ConstitutionMigration;
   readonly policy_notice: string;
-  readonly gitattributes_updated: boolean;
   readonly runtime_gitignore: "created" | "already-present";
 };
 
@@ -66,7 +62,20 @@ function ioFailure(): ProjectResult<never> {
   }));
 }
 
-/** Resolves the installed bundle's asset directory (source-tree sibling layout in tests). */
+/** The bundle found no asset directory; retrying cannot help, reinstalling ArchFlow can. */
+export class InstalledAssetsMissingError extends Error {
+  readonly code = "ENOENT";
+  constructor(readonly searched: readonly string[]) {
+    super(`installed ArchFlow assets are missing: looked in ${searched.join(", ")}`);
+    this.name = "InstalledAssetsMissingError";
+  }
+}
+
+/**
+ * Resolves the installed bundle's asset directory (source-tree sibling layout in tests). When none
+ * exists it names the searched directories on stderr, so both init and review show the human where
+ * the bundle looked, and throws `InstalledAssetsMissingError`.
+ */
 export async function assetRoot(): Promise<string> {
   // In the install root, `dist/archflow-local.mjs` and `assets/` are siblings. The second candidate
   // is the source-tree layout used by the test suite and disappears from the shipped bundle.
@@ -76,41 +85,15 @@ export async function assetRoot(): Promise<string> {
   ];
   for (const candidate of candidates) {
     try {
-      await access(join(candidate, "workflow.yaml"), constants.R_OK);
+      await access(join(candidate, "config.template.yaml"), constants.R_OK);
       return candidate;
     } catch (error) {
       if (!errno(error, "ENOENT")) throw error;
     }
   }
-  throw Object.assign(new Error("installed ArchFlow assets are missing"), { code: "ENOENT" });
-}
-
-async function appendGitAttributes(workingDirectory: string): Promise<boolean> {
-  const path = join(workingDirectory, ".gitattributes");
-  let current: Uint8Array;
-  try {
-    current = new Uint8Array(await readFile(path));
-  } catch (error) {
-    if (!errno(error, "ENOENT")) throw error;
-    const handle = await open(path, "wx");
-    try {
-      await handle.writeFile(`${ARCHFLOW_GITATTRIBUTES_LINE}\n`);
-    } finally {
-      await handle.close();
-    }
-    return true;
-  }
-
-  const text = new TextDecoder("utf-8", { fatal: true }).decode(current);
-  if (text.split(/\r?\n/u).includes(ARCHFLOW_GITATTRIBUTES_LINE)) return false;
-  const prefix = current.byteLength === 0 || text.endsWith("\n") ? "" : "\n";
-  const handle = await open(path, "a");
-  try {
-    await handle.writeFile(`${prefix}${ARCHFLOW_GITATTRIBUTES_LINE}\n`);
-  } finally {
-    await handle.close();
-  }
-  return true;
+  const missing = new InstalledAssetsMissingError(candidates);
+  process.stderr.write(`${missing.message}. Reinstall ArchFlow to restore them.\n`);
+  throw missing;
 }
 
 /**
@@ -122,7 +105,13 @@ export async function scaffoldRepositoryAssets(
   input: ScaffoldRepositoryAssetsInput,
 ): Promise<ProjectResult<AssetScaffoldReport>> {
   try {
-    const sourceRoot = await assetRoot();
+    let sourceRoot: string;
+    try {
+      sourceRoot = await assetRoot();
+    } catch (error) {
+      if (!(error instanceof InstalledAssetsMissingError)) throw error;
+      return fail(createProjectError("CONFIG_INVALID", { issue_code: "installed-assets-missing" }));
+    }
     const sources = await Promise.all(ASSETS.map(async ([source, destination]) =>
       Object.freeze({ source: new Uint8Array(await readFile(join(sourceRoot, source))), destination })));
     let constitution;
@@ -183,7 +172,6 @@ export async function scaffoldRepositoryAssets(
       await unlink(join(input.working_directory, path));
     }
 
-    const gitattributesUpdated = await appendGitAttributes(input.working_directory);
     return ok(Object.freeze({
       schema_version: "1",
       created: Object.freeze(created),
@@ -191,8 +179,7 @@ export async function scaffoldRepositoryAssets(
       overwritten: Object.freeze(overwritten),
       preserved_custom: Object.freeze(preservedCustom.sort()),
       constitution_migration: constitution.migration,
-      policy_notice: "Defaults come from the running bundle. Commit repository policy changes before starting affected tasks. Existing tasks keep their pinned policy, task-local config, and pending approvals. init --force also refreshes other scaffold files, including .archflow/config.yaml; custom/ is preserved.",
-      gitattributes_updated: gitattributesUpdated,
+      policy_notice: "Defaults come from the running bundle. Review reads .archflow/config.yaml and .archflow/constitution/ from the working tree, so changes apply to the next review. init --force also refreshes other scaffold files, including .archflow/config.yaml; custom/ is preserved.",
       runtime_gitignore: created.includes(".archflow/.gitignore") ? "created" : "already-present",
     }));
   } catch {

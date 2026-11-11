@@ -1,6 +1,5 @@
-import { dispatchInputRecord, materializeReviewInputs } from "../review/inputs.js";
-import type { DispatchUsage } from "../contracts/dispatch-usage.js";
-import { reviewReportOutputSchema } from "../contracts/review.js";
+import { materializeReviewInputs } from "../review/inputs.js";
+import type { AdapterId, ModelFamily } from "../contracts/review.js";
 import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { canonicalJsonBytes } from "../contracts/canonical.js";
@@ -8,29 +7,7 @@ import { createProjectError, type ProjectError } from "../contracts/errors.js";
 import type { HostIdentity } from "../contracts/hosts.js";
 import { safeIdV1Schema } from "../contracts/evidence.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
-import {
-  type AdapterId,
-  type ModelFamily,
-  type ReviewedRepositoryV1,
-  type RouteOverrideRecord,
-  type RouteSourceRecord,
-} from "../contracts/review.js";
-import {
-  createAdjudicationObservationCapability,
-  createReviewObservationCapability,
-} from "../contracts/internal/trust-mints.js";
-import {
-  observationSource,
-  type ObservationBindingByKind,
-  type ReviewObservationAssignmentV3,
-} from "../contracts/trust.js";
-import type { AdjudicationRuleSlotV1 } from "../contracts/adjudication.js";
-import type {
-  AdjudicationSubject,
-  DispatchEnvelope,
-  DispatchSubject,
-  ReviewAssignmentV1,
-} from "../review/envelopes.js";
+import type { DispatchEnvelope } from "../review/envelopes.js";
 import {
   DISPATCH_TIMEOUT_MS,
   MAX_ARGV_ELEMENT_BYTES,
@@ -109,7 +86,7 @@ export interface CliAdapter {
 
 /**
  * Prepends the user's `~/.local/bin` to the child PATH. cc-switch commonly installs there,
- * and the MCP server process may have been started without it on PATH.
+ * and the review process may have been started without it on PATH.
  */
 function withLocalBinOnPath(workspace: DispatchWorkspace): NodeJS.ProcessEnv {
   const home = workspace.env.HOME;
@@ -168,193 +145,20 @@ function codexStrictNode(value: PlainJsonValue): PlainJsonValue {
 }
 
 /**
- * Binds one server-derived subject field into the child's output schema so the child cannot return
- * a result bound to a different task, digest, or rubric.
- *
- * A scalar binds as an exact `const`. An array cannot, on Codex: OpenAI structured outputs rejects
- * an array-valued `const` outright — `Invalid schema for response_format 'codex_output_schema':
- * context=('properties', 'approved_upstream_digests'), Unexpected constant value: []` — which
- * failed every constitution review whose subject had no approved upstream. The equivalent Codex
- * binding is exact cardinality plus a closed element set: `parseAndDeriveAdjudication` requires
- * `approved_upstream_digests` to be sorted and unique, so a same-length array drawn from the same
- * set is the same array, and `observationSource.observeAdjudication` still compares element by
- * element before any evidence is minted. One shape serves both the empty and non-empty case, so
- * whichever the host accepts, it accepts both.
- *
- * Claude keeps the plain `const`: its projection deliberately strips `minItems`/`maxItems`, and it
- * accepts an array `const` today.
+ * Projects a reviewer output contract to the structured-output subset each host CLI accepts.
+ * Conditional semantics remain enforced by local parsing after output; required fields and closed
+ * object shapes remain in the transport schema.
  */
-function boundSubjectNode(property: PlainJsonValue, value: PlainJsonValue, adapter: AdapterId): PlainJsonValue {
-  if (adapter !== "codex-cli" || !Array.isArray(value)) return { const: structuredClone(value) };
-  const arrayProperty = property === null || typeof property !== "object" || Array.isArray(property)
-    ? undefined
-    : property as Readonly<Record<string, PlainJsonValue>>;
-  const items = arrayProperty?.items;
-  if (items === null || typeof items !== "object" || Array.isArray(items)) {
-    throw new TypeError("array subject binding requires an array property schema with an object items schema");
-  }
-  if (value.some((element) => element !== null && typeof element === "object")) {
-    throw new TypeError("array subject binding requires scalar elements");
-  }
-  const element = structuredClone(items) as Record<string, PlainJsonValue>;
-  return {
-    type: "array",
-    items: value.length === 0 ? element : { ...element, enum: [...new Set(value)] },
-    minItems: value.length,
-    maxItems: value.length,
-  };
-}
-
-function hostEffortComponentSchema(value: PlainJsonValue): PlainJsonValue {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  const component = value as Readonly<Record<string, PlainJsonValue>>;
-  const properties = component.properties;
-  if (properties === null || typeof properties !== "object" || Array.isArray(properties)) return value;
-  const base = { ...(properties as Readonly<Record<string, PlainJsonValue>>) };
-  delete base.blocker;
-  const unblocked = {
-    type: "object",
-    additionalProperties: false,
-    properties: base,
-    required: Object.keys(base),
-  };
-  const blocked = {
-    type: "object",
-    additionalProperties: false,
-    properties: properties as Record<string, PlainJsonValue>,
-    required: Object.keys(properties),
-  };
-  return {
-    type: "object",
-    anyOf: [unblocked, blocked],
-  };
-}
-
-function hostTaskSlugSchema(value: PlainJsonValue): PlainJsonValue {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  return {
-    ...(value as Readonly<Record<string, PlainJsonValue>>),
-    // Both hosts accept ordinary regex patterns but not the normative reserved-name lookaheads.
-    // The exact task-slug parser still runs during local output validation and attestation.
-    pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
-  };
-}
-
-/**
- * Projects the two normative output contracts to the structured-output subset accepted by both
- * installed hosts. Conditional semantics remain enforced by local parsing and attestation after
- * output; required fields and closed object shapes remain in the transport schema.
- */
-export function projectCliOutputSchema(
-  outputSchema: PlainJsonValue,
-  resultKind: DispatchEnvelope["result_kind"],
-  adapter: AdapterId,
-  subject?: Readonly<Record<string, PlainJsonValue>>,
-  assignment?: ReviewAssignmentV1,
-): PlainJsonValue {
-  const roleSpecific = resultKind === "review" && assignment !== undefined
-    ? JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) as unknown
-    : outputSchema;
-  assertPlainJson(roleSpecific, "CLI output schema");
-  const snapshot = structuredClone(roleSpecific);
-  const projected = projectSchemaNode(snapshot, adapter);
+export function projectCliOutputSchema(outputSchema: PlainJsonValue, adapter: AdapterId): PlainJsonValue {
+  assertPlainJson(outputSchema, "CLI output schema");
+  const projected = projectSchemaNode(structuredClone(outputSchema), adapter);
   if (projected === null || typeof projected !== "object" || Array.isArray(projected)) {
     throw new TypeError("CLI output schema must be an object");
   }
-  let root = projected as Readonly<Record<string, PlainJsonValue>>;
-  const definitions = root.$defs;
-  if (definitions !== null && typeof definitions === "object" && !Array.isArray(definitions)) {
-    const named = definitions as Readonly<Record<string, PlainJsonValue>>;
-    const common: Record<string, PlainJsonValue> = { ...named, taskSlug: hostTaskSlugSchema(named.taskSlug!) };
-    root = { ...root, $defs: common };
-  }
-  if (resultKind === "effort-review") {
-    const rawProperties = root.properties;
-    if (rawProperties !== null && typeof rawProperties === "object" && !Array.isArray(rawProperties)) {
-      const propertiesObj = rawProperties as Readonly<Record<string, PlainJsonValue>>;
-      const components = propertiesObj.components;
-      if (components !== null && typeof components === "object" && !Array.isArray(components)) {
-        const items = (components as Readonly<Record<string, PlainJsonValue>>).items;
-        if (items !== undefined) {
-          root = {
-            ...root,
-            properties: {
-              ...propertiesObj,
-              components: {
-                ...(components as Readonly<Record<string, PlainJsonValue>>),
-                items: hostEffortComponentSchema(items),
-              },
-            },
-          };
-        }
-      }
-    }
-  }
-  const bindingKeys = resultKind === "review"
-    ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family"]
-    : resultKind === "effort-review"
-      ? ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "policy_id"]
-      : ["task_id", "phase_instance", "step", "subject_digest", "input_fingerprint", "pinned_constitution_digest", "approved_upstream_digests", "source_review_envelope_digest"];
-  if (subject !== undefined) {
-    const properties = root.properties;
-    if (properties === null || typeof properties !== "object" || Array.isArray(properties)) {
-      throw new TypeError("CLI output schema must declare properties");
-    }
-    const bound = { ...(properties as Readonly<Record<string, PlainJsonValue>>) };
-    for (const key of bindingKeys) {
-      const hazardRegistry = key === "hazard_registry_digest" ? subject.hazard_registry : undefined;
-      const value = key === "hazard_registry_digest" && hazardRegistry !== null &&
-          typeof hazardRegistry === "object" && !Array.isArray(hazardRegistry)
-        ? (hazardRegistry as Readonly<Record<string, PlainJsonValue>>).registry_digest
-        : subject[key];
-      // Fresh role-specific roots deliberately omit server-owned identity fields (notably the
-      // constitution-only V2 judgments root). Bind only fields the selected output contract
-      // actually declares; never widen a strict schema by manufacturing a subject property.
-      if (value !== undefined && bound[key] !== undefined) {
-        bound[key] = boundSubjectNode(bound[key], value, adapter);
-      }
-    }
-    root = { ...root, properties: bound };
-  }
-  return adapter === "codex-cli" ? codexStrictNode(root) : root;
-}
-
-const envelopeDocument = dispatchInputRecord;
-
-function envelopeProjection(envelope: DispatchEnvelope): Readonly<{
-  subject: Readonly<Record<string, PlainJsonValue>>;
-  assignment?: ReviewAssignmentV1;
-}> {
-  const decoded = envelopeDocument(envelope);
-  if (envelope.result_kind === "effort-review") return Object.freeze({ subject: decoded });
-  const subject = decoded.subject;
-  if (subject === undefined) return Object.freeze({ subject: Object.freeze({}) });
-  if (subject === null || typeof subject !== "object" || Array.isArray(subject)) throw new TypeError("dispatch envelope subject must be an object");
-  const assignment = decoded.assignment;
-  if (assignment !== undefined && (assignment === null || typeof assignment !== "object" || Array.isArray(assignment))) {
-    throw new TypeError("dispatch envelope assignment must be an object");
-  }
-  return Object.freeze({
-    subject: subject as Readonly<Record<string, PlainJsonValue>>,
-    ...(assignment === undefined ? {} : { assignment: assignment as ReviewAssignmentV1 }),
-  });
+  return adapter === "codex-cli" ? codexStrictNode(projected) : projected;
 }
 
 let dispatchQueue: Promise<void> = Promise.resolve();
-
-/**
- * Serializes dispatch operations through one process-wide FIFO. This bounds one MCP server
- * process to one resource-intensive reviewer at a time; authentication remains owned and
- * coordinated by each first-party CLI through its canonical credential store.
- */
-export function serializeDispatch<T>(operation: () => Promise<T>): Promise<T> {
-  const result = dispatchQueue.then(operation);
-  dispatchQueue = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  return result;
-}
 
 /**
  * Runs multiple dispatch operations concurrently as ONE process-wide FIFO link, so all counter-review
@@ -398,33 +202,6 @@ export async function memoizedCliPreflight(
 export function resetMemoizedCliPreflight(): void {
   memoizedPreflights.clear();
 }
-
-export type ReviewObservationMint = Readonly<{
-  usage?: DispatchUsage;
-  subject: DispatchSubject;
-  adapter: AdapterId;
-  cli_version: string;
-  route: DispatchRoute;
-  envelope_input_digest: ObservationBindingByKind["review"]["envelope_input_digest"];
-  repositories: readonly ReviewedRepositoryV1[];
-  extracted_output_bytes: Uint8Array;
-  route_source?: RouteSourceRecord;
-  route_override?: RouteOverrideRecord;
-  assignment?: ReviewObservationAssignmentV3;
-}>;
-
-export type AdjudicationObservationMint = Readonly<{
-  subject: AdjudicationSubject;
-  adapter: AdapterId;
-  cli_version: string;
-  route: DispatchRoute;
-  envelope_input_digest: ObservationBindingByKind["adjudication"]["envelope_input_digest"];
-  repositories: readonly ReviewedRepositoryV1[];
-  extracted_output_bytes: Uint8Array;
-  route_source?: RouteSourceRecord;
-  route_override?: RouteOverrideRecord;
-  rule_slots?: readonly AdjudicationRuleSlotV1[];
-}>;
 
 export class CliAdapterError extends Error {
   public constructor(
@@ -687,10 +464,7 @@ const claudeAdapter: CliAdapter = Object.freeze({
   ) {
     assertRoute("claude-cli", route);
     const reviewInputs = await materializeReviewInputs(envelope, workspace, outputSchema);
-    const projection = envelopeProjection(envelope);
-    const schema = projectCliOutputSchema(
-      reviewInputs.prepared.response_schema, envelope.result_kind, "claude-cli", projection.subject,
-    );
+    const schema = projectCliOutputSchema(reviewInputs.prepared.response_schema, "claude-cli");
     if (route.effort === "ultra") {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "effort-unsupported" }));
     }
@@ -801,10 +575,7 @@ const codexAdapter: CliAdapter = Object.freeze({
       // cc-switch wraps only the claude CLI; routing already rejects this pairing.
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
-    const projection = envelopeProjection(envelope);
-    const schema = projectCliOutputSchema(
-      reviewInputs.prepared.response_schema, envelope.result_kind, "codex-cli", projection.subject,
-    );
+    const schema = projectCliOutputSchema(reviewInputs.prepared.response_schema, "codex-cli");
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
     // Named per result kind so the two children of one review can share a workspace root
     // without colliding on the codex final-output file.
@@ -920,10 +691,7 @@ const antigravityAdapter: CliAdapter = Object.freeze({
     if (route.provider !== undefined) {
       return fail(createProjectError("CONFIG_INVALID", { issue_code: "provider-unsupported" }));
     }
-    const projection = envelopeProjection(envelope);
-    const schema = projectCliOutputSchema(
-      reviewInputs.prepared.response_schema, envelope.result_kind, "antigravity-cli", projection.subject,
-    );
+    const schema = projectCliOutputSchema(reviewInputs.prepared.response_schema, "antigravity-cli");
     // Only bounded instructions and references ride on argv; full inputs and schemas are files.
     const schemaPath = join(workspace.root, `${envelope.result_kind}.schema.json`);
     await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -1007,70 +775,4 @@ export function selectCliAdapter(
     case "antigravity":
       return claudeAdapter;
   }
-}
-
-/** Binds extracted child output to its validated dispatch provenance. */
-export function mintReviewObservation(input: ReviewObservationMint): ReturnType<typeof observationSource.observeReview> {
-  assertRoute(input.adapter, input.route);
-  const binding: ObservationBindingByKind["review"] = {
-    kind: "review",
-    ...(input.usage === undefined ? {} : { usage: input.usage }),
-    task_id: input.subject.task_id,
-    phase_instance: input.subject.phase_instance,
-    role: input.subject.role,
-    subject_digest: input.subject.subject_digest,
-    input_fingerprint: input.subject.input_fingerprint,
-    invocation_id: input.subject.invocation_id,
-    envelope_input_digest: input.envelope_input_digest,
-    result_id: input.subject.result_id,
-    adapter: input.adapter,
-    cli_version: input.cli_version,
-    family: input.route.family,
-    model: input.route.model,
-    effort: input.route.effort,
-    ...(input.route.provider === undefined ? {} : { provider: input.route.provider }),
-    route_source: input.route_source ?? Object.freeze({ provenance: "configured" as const }),
-    repositories: input.repositories,
-    rubric_digest: input.subject.rubric_digest,
-    producer_family: input.subject.producer_family,
-    ...(input.assignment === undefined ? {} : { assignment: input.assignment }),
-    ...(input.route_override === undefined ? {} : { route_override: input.route_override }),
-  };
-  const capability = createReviewObservationCapability(binding);
-  return observationSource.observeReview(capability, input.extracted_output_bytes);
-}
-
-/** Binds extracted adjudicator output to the complete server-derived adjudication subject. */
-export function mintAdjudicationObservation(
-  input: AdjudicationObservationMint,
-): ReturnType<typeof observationSource.observeAdjudication> {
-  assertRoute(input.adapter, input.route);
-  if (input.rule_slots === undefined) {
-    throw new TypeError("fresh adjudication observation requires exact rule slots");
-  }
-  const binding: ObservationBindingByKind["adjudication"] = {
-    kind: "adjudication",
-    task_id: input.subject.task_id,
-    phase_instance: input.subject.phase_instance,
-    role: input.subject.role,
-    subject_digest: input.subject.subject_digest,
-    input_fingerprint: input.subject.input_fingerprint,
-    invocation_id: input.subject.invocation_id,
-    envelope_input_digest: input.envelope_input_digest,
-    result_id: input.subject.result_id,
-    adapter: input.adapter,
-    cli_version: input.cli_version,
-    family: input.route.family,
-    model: input.route.model,
-    effort: input.route.effort,
-    ...(input.route.provider === undefined ? {} : { provider: input.route.provider }),
-    route_source: input.route_source ?? Object.freeze({ provenance: "configured" as const }),
-    repositories: input.repositories,
-    pinned_constitution_digest: input.subject.pinned_constitution_digest,
-    rule_slots: input.rule_slots,
-    source_review_envelope_digest: input.subject.source_review_envelope_digest,
-    ...(input.route_override === undefined ? {} : { route_override: input.route_override }),
-  };
-  const capability = createAdjudicationObservationCapability(binding);
-  return observationSource.observeAdjudication(capability, input.extracted_output_bytes);
 }

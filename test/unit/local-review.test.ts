@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -54,6 +54,43 @@ describe("archflow-local review", () => {
     expect(untouchedMain.value.subject_digest).not.toBe(fromWorktree.value.subject_digest);
     await writeFile(join(root, "app.txt"), "changed in the worktree\n");
     expect((await review(root)).value.subject_digest).toBe(fromWorktree.value.subject_digest);
+  });
+
+  it("reviews a config written by the earlier template with the same routes", async () => {
+    const { root, base_commit } = await repo();
+    await mkdir(join(root, ".archflow"));
+    // The template as shipped before review dropped the task workflow's keys (implementation, repositories,
+    // max_attempts, the effort-reviewer role, and the prd/design approval subjects).
+    await copyFile(new URL("../fixtures/foundation/config/legacy-template.yaml", import.meta.url), join(root, ".archflow/config.yaml"));
+    const sol = { model: "gpt-6.1-sol", adapter: "codex-cli" };
+    const opus = { model: "claude-opus-5-5", adapter: "claude-cli" };
+    const counter: Record<string, Array<Record<string, string>>> = {
+      claude: [{ ...sol, effort: "high" }],
+      codex: [{ ...opus, effort: "medium" }],
+      antigravity: [{ ...sol, effort: "high" }, { ...opus, effort: "medium" }],
+    };
+    for (const producer of ["claude", "codex", "antigravity"]) {
+      for (const stage of ["plan", "implementation"] as const) {
+        const routes: Array<Record<string, string>> = [];
+        const dispatch: NonNullable<SimpleReviewDependencies["dispatch"]> = async (route, envelope, schema) => {
+          const role = envelope.result_kind === "adjudication" ? "adjudicator"
+            : JSON.parse(new TextDecoder().decode(envelope.bytes)).assignment.focus === "tests" ? "test-reviewer" : "counter-reviewer";
+          routes.push({ role, model: route.model, effort: route.effort, adapter: route.adapter });
+          return await passingDispatch()(route, envelope, schema);
+        };
+        const { verification: _verification, ...plan } = payload(base_commit);
+        const value = stage === "plan" ? { ...plan, stage } : payload(base_commit);
+        const result = await runLocalReview({ working_directory: root, producer, value }, { dispatch }) as any;
+        expect(result.ok, JSON.stringify(result)).toBe(true);
+        // The legacy prd/design subjects never apply to a standalone review.
+        expect(result.value.human_review_reasons).toEqual([]);
+        expect(routes.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual([
+          ...counter[producer]!.map((route) => ({ role: "counter-reviewer", ...route })),
+          { role: "test-reviewer", ...sol, effort: "low" },
+          { role: "adjudicator", ...opus, effort: "high" },
+        ].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))));
+      }
+    }
   });
 
   it("names the offending fields of a hand-built payload", async () => {

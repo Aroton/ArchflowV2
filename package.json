@@ -1,5 +1,5 @@
 {
-  "name": "archflow-mcp-server",
+  "name": "archflow",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,12 +13,7 @@
     "test:contracts": "vitest run --project fast test/contracts",
     "test:extended": "vitest run --project extended",
     "test:integration": "vitest run --project integration",
-    "test:crash": "vitest run --project crash",
     "test:real-host": "vitest run --project real-host",
-    "bench:review": "vitest run --project real-host test/real-host/review-benchmark.test.ts",
-    "bench:review-efficiency": "vitest run --project real-host test/real-host/review-efficiency.test.ts",
-    "probe:mcp-sdk-compatibility": "node scripts/probe-mcp-sdk-compatibility.mjs",
-    "build:temp": "node scripts/build-temp.mjs",
     "release:stage": "node scripts/build-release.mjs",
     "release:check": "node scripts/check-release.mjs",
     "release:reproduce": "node scripts/reproduce-release.mjs",
@@ -30,22 +25,14 @@
     "check:schemas": "node scripts/generate-schemas.mjs --check",
     "check:notices": "node scripts/check-notices.mjs",
     "test:notices-policy": "node scripts/test-notices-policy.mjs",
-    "check:mcp-sdk-boundary": "node scripts/check-mcp-sdk-boundary.mjs",
-    "test:mcp-sdk-boundary-policy": "node scripts/test-mcp-sdk-boundary-policy.mjs",
-    "check": "npm run probe:mcp-sdk-compatibility && npm run typecheck && npm test && npm run build:temp && npm run check:notices && npm run check:mcp-sdk-boundary",
-    "check:deep": "npm run check && node scripts/run-concurrent.mjs --npm check:schemas test:notices-policy test:mcp-sdk-boundary-policy test:extended check:release && npm run test:crash && npm run test:integration"
+    "check": "npm run typecheck && npm test && npm run check:notices",
+    "check:deep": "npm run check && node scripts/run-concurrent.mjs --npm check:schemas test:notices-policy test:extended check:release && npm run test:integration"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0",
-    "@secretlint/core": "13.0.4",
-    "@secretlint/profiler": "13.0.4",
-    "@secretlint/secretlint-rule-preset-recommend": "13.0.4",
-    "write-file-atomic": "8.0.0",
     "yaml": "2.9.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@secretlint/secretlint-rule-aws": "13.0.4",
     "@types/node": "24.13.3",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",

@@ -7,13 +7,13 @@ description: Explore a codebase and produce or refresh its maintained documentat
 
 Produce or refresh the repository's maintained documentation set in `docs/`. Caps-named files — `docs/OVERVIEW.md`, `docs/<section>/FILE.md`, and root pages like `docs/PATTERNS.md` — are that set: tracked in git, permanent, and shared by humans auditing the system, future agent sessions, and reviewers reading the repository checkout. Lowercase files in `docs/` are historical working documents; never overwrite or delete them.
 
-A focus area may be supplied with the invocation. If `.archflow/workflow.yaml` or `.archflow/constitution/` is absent, stop and direct the user to `archflow-init` before writing documentation.
+A focus area may be supplied with the invocation.
 
 ## Document format
 
 Every maintained page follows one convention:
 
-- **Caps filename**, either at the docs root (`OVERVIEW.md`) or in a section directory mirroring the source layout (`mcp/SERVER.md` for `src/mcp/`).
+- **Caps filename**, either at the docs root (`OVERVIEW.md`) or in a section directory mirroring the source layout (`review/COUNTER-REVIEW.md` for `src/review/`).
 - **A stamp under the title**: `**Explored:** <date> · **Commit:** <git rev-parse --short HEAD> · **Covers:** <the source paths this page documents>`. The stamp is what makes staleness detectable and refresh incremental.
 - **Human-readable prose**: what each system accomplishes and *why it exists*, in plain language — not an API reference. Use mermaid diagrams where a picture carries the mechanism. Call out trust boundaries, honest limitations, and surprises a maintainer would want to know.
 - **Sized to the subsystem** — a page per major subsystem, not per file.
@@ -35,7 +35,7 @@ Delegate exploration when its size or separable subsystems justify parallel cont
 
 Write or update `docs/OVERVIEW.md` when the system map, glossary, subsystem relationships, or maintained page set changed. Otherwise preserve its existing bytes and stamp.
 
-All correspondence with the user is conversational and human-readable. Lead with what changed, why it matters, and any unresolved blocker. Do not dump IDs, digests, JSON, internal workflow paths, or protocol codes unless the user explicitly asks for diagnostics or audit detail.
+All correspondence with the user is conversational and human-readable. Lead with what changed, why it matters, and any unresolved blocker. Do not dump IDs, digests, JSON, internal paths, or protocol codes unless the user explicitly asks for diagnostics or audit detail.
 
 ## CLAUDE.md pointer
 
@@ -49,16 +49,10 @@ Review the written pages against the code and check links, coverage stamps, and 
 Archflow: Explore Codebase Docs
 ```
 
-Report completion with both refresh and workflow-next actions. The next task will use the canonical tree `.archflow/tasks/<task>/{config.yaml,state.json,prd.md,design.md}` and `.archflow/tasks/<task>/phases/<n>/{design.md,impl-notes.md}`; never create the legacy `.archflow/context/` or `phases/phase-<n>-*.md` layouts.
+Report completion with the findings, changed pages, and commit, and how to refresh or focus exploration later:
 
 ```text
 Documentation committed. Refresh or focus exploration anytime:
 Claude Code: /archflow-explore [focus]
 Codex: $archflow-explore [focus]
-
-Next, define the task:
-Claude Code: /archflow-prd <task>
-Codex: $archflow-prd <task>
 ```
-
-Report the findings, changed pages, and commit. Do not launch the successor skill or infer authority to bypass an existing human gate.

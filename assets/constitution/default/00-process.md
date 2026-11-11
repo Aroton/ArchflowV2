@@ -1,6 +1,6 @@
 ---
 id: explicit-human-authority
-version: 4
+version: 5
 status: active
 ---
-In an initialized workflow, required human decisions are explicit and bound to the exact artifact or code subject at gates opened by an approval rule or safety condition. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a gate, or advances the workflow. Commits are not human-gated by default. The workflow server enforces this at its gates; an artifact complies unless it asserts, records, or relies on a human decision the workflow did not record. For a standalone simple task, explicit decisions are made in conversation for the presented work and reasons; no durable gate is required.
+Required human decisions are explicit and bound to the exact plan, requirement, or change they decide, made in conversation or at a run's declared STOP. Silence, elapsed time, agent prose, or a model verdict never supplies approval, waives a decision a human owns, or lets work proceed past one. Commits are not human-gated by default. A change complies unless it asserts, records, or relies on a human decision that was not made.

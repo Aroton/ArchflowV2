@@ -1,5 +1,5 @@
-# Server-owned counter-review rubric for standalone simple plans.
-# Loaded fresh and strictly validated; criterion order is digest-significant.
+# Counter-review rubric for plan review.
+# `archflow-local review` loads it fresh and strictly validated; criterion order is digest-significant.
 # See README.md for editing and installation rules.
 rubric_id: simple-plan-v1
 schema_version: "1"

@@ -25,11 +25,13 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(path => rm(path, {
 
 describe("central dispatch usage log", () => {
   it("resolves default and custom install homes without writing source-checkout state", () => {
-    expect(installedDispatchUsageDirectory(pathToFileURL("/home/person/.archflow/bundle/dist/archflow-mcp.mjs").href))
+    expect(installedDispatchUsageDirectory(pathToFileURL("/home/person/.archflow/bundle/dist/archflow-local.mjs").href))
       .toBe("/home/person/.archflow/usage");
     expect(installedDispatchUsageDirectory(pathToFileURL("/custom install/bundle/dist/archflow-local.mjs").href))
       .toBe("/custom install/usage");
-    expect(installedDispatchUsageDirectory(pathToFileURL("/checkout/dist/archflow-mcp.mjs").href)).toBeUndefined();
+    expect(installedDispatchUsageDirectory(pathToFileURL("/checkout/dist/archflow-local.mjs").href)).toBeUndefined();
+    // Only the shipped entry writes: an unrecognized bundle name in an install layout stays silent.
+    expect(installedDispatchUsageDirectory(pathToFileURL("/home/person/.archflow/bundle/dist/other.mjs").href)).toBeUndefined();
     expect(installedDispatchUsageDirectory()).toBeUndefined();
   });
 
@@ -76,7 +78,7 @@ describe("central dispatch usage log", () => {
   it("uses the installed bundle's location by default and survives bundle replacement", async () => {
     const home = await root();
     const bundle = join(home, "bundle");
-    const entry = join(bundle, "dist", "archflow-mcp.mjs");
+    const entry = join(bundle, "dist", "archflow-local.mjs");
     await build({ entryPoints: [fileURLToPath(new URL("../../src/dispatch/usage-log.ts", import.meta.url))],
       outfile: entry, bundle: true, platform: "node", loader: { ".yaml": "text" }, format: "esm", logLevel: "silent" });
     const installed = await import(pathToFileURL(entry).href);

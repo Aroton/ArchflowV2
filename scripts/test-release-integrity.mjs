@@ -5,7 +5,16 @@ import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const trackedPayload = resolve(repositoryRoot, "dist");
+
+// Mutates copies of the tracked dist/ by default; `--payload <dir>` targets a staged payload instead.
+function payloadArgument(argv) {
+  if (argv.length === 0) return resolve(repositoryRoot, "dist");
+  if (argv.length !== 2 || argv[0] !== "--payload" || argv[1] === "") {
+    throw new Error("usage: test-release-integrity.mjs [--payload <dir>]");
+  }
+  return resolve(argv[1]);
+}
+const trackedPayload = payloadArgument(process.argv.slice(2));
 
 function sortCanonical(value) {
   if (Array.isArray(value)) return value.map(sortCanonical);
@@ -161,22 +170,25 @@ async function main() {
         return "metafile-size";
       },
       async () => {
-        await mutatePayload(temporaryRoot, "adjacent-map-expectation", async (root) => {
+        await mutatePayload(temporaryRoot, "second-entry", async (root) => {
           const path = resolve(root, "manifest.json");
           const manifest = JSON.parse(await readFile(path, "utf8"));
-          manifest.adjacent_map_expectations.pop();
+          assert.equal(manifest.build_entries.length, 1, "release must build exactly one entry");
+          manifest.build_entries.push({ ...manifest.build_entries[0], id: "second-cli", output_path: "archflow-second.mjs" });
           await writeFile(path, `${canonicalJson(manifest)}\n`);
         }, support.checkReleasePayload);
-        return "adjacent-map-expectation";
+        return "second-entry";
       },
       async () => {
-        await mutatePayload(temporaryRoot, "launch-profile", async (root) => {
+        await mutatePayload(temporaryRoot, "runtime-asset", async (root) => {
           const path = resolve(root, "manifest.json");
           const manifest = JSON.parse(await readFile(path, "utf8"));
-          manifest.launch_profile.fixture_digests[0].digest = "0".repeat(64);
+          const record = manifest.runtime_assets.find((asset) => asset.path === "assets/config.template.yaml");
+          assert.ok(record, "manifest has no config template runtime asset");
+          record.digest = "0".repeat(64);
           await writeFile(path, `${canonicalJson(manifest)}\n`);
         }, support.checkReleasePayload);
-        return "launch-profile";
+        return "runtime-asset";
       },
       async () => {
         await mutatePayload(temporaryRoot, "upstream-license", async (root) => {

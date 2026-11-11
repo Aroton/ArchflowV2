@@ -1,144 +1,141 @@
 # cli/COMMANDS
 
-**Explored:** 2026-09-16 · **Commit:** `90aa526` · **Covers:** `src/local/`, `src/contracts/automation-status.ts`, `src/state/status.ts`, `src/state/request-composition.ts`, `src/init/`, `install.sh`
+**Explored:** 2026-11-11 · **Commit:** `f1fe689` · **Covers:** `src/local/`, `src/init/`, `src/contracts/simple-review.ts`, `src/contracts/dispatch-failure.ts`, `src/review/simple-review.ts`, `src/review/simple-context.ts`, `assets/config.template.yaml`, `skills/archflow-run/scripts/counter-review.sh`
 
-Fresh report triage accepts `response` with `decision` and `rationale`; revise also supplies reviewer IDs and verification requests. Archived per-finding `dispositions` remain accepted only for archived structured review evidence. Fresh review feedback carries an explicit issues/no-issues outcome; historical prose keeps its original shape. Requests continue to derive bindings from current authority.
+`archflow-local` is the only program ArchFlow ships. It has two commands: `review`, which asks other AI models to review a plan or a change, and `init`, which prepares a repository for `review`. Everything else ArchFlow does is a skill (see [SKILLS](../workflow/SKILLS.md)) that calls one of these two commands.
 
-`archflow-local` is the local adapter surface: repository bootstrap, the legacy-upgrade adapter, the standalone counter-review (`review`) for `archflow-run` worktrees, bounded diagnostics, a degraded human classifier, and the versioned read-only automation observation used by external controllers. It is deliberately *not* the authority — with one narrow exception (the staged legacy import and its atomic adoption), it derives and verifies rather than writes.
-
-Every workflow action itself is composed server-side. PRD, design, phase design, phase implementation, status reporting, and the post-adoption half of a legacy upgrade run through `archflow_status` and `archflow_apply`; the semantic action planner calls the same transport-neutral request composer (`src/state/request-composition.ts`) that once backed a local request-building command, so the CLI and the live MCP surface never maintained parallel request builders. Hand-assembling request fields was measured as the dominant failure mode — in a full PRD loop, 8 of 10 requests were mechanical transcription — and the inversion removes that door entirely: the caller supplies only judgment, the server derives everything mechanical from durable authority. Git stays client-owned; the semantic view returns the exact authorized commit facts and the client stages and commits them itself.
-
-A packaging note that trips up maintainers: there is no `bin` entry in `package.json`. `install.sh` writes a shell shim into `~/.local/bin` that execs `node dist/archflow-local.mjs`; the source of truth is `src/local/main.ts`.
+This page is also the contract for callers of `review`: the payload to send, the result to expect, and how to treat it. How the review itself works is in [COUNTER-REVIEW](../review/COUNTER-REVIEW.md); how reviewer processes are launched is in [DISPATCH](../mcp/DISPATCH.md).
 
 ## Invocation shape
 
 ```
-archflow-local <command> [--task <task>] [--input <json-file>]
+archflow-local review --producer <claude|codex|antigravity> [--input <json-file>]
+archflow-local init [--force]
+archflow-local --help
 ```
 
-- Payload commands read JSON from `--input <file>`, or stdin when `--input` is omitted. If stdin is a TTY and no `--input` was given, the command fails immediately rather than hanging.
-- Input-free commands (`automation-status`, `manual-status`, `init`, `clean`, `review-preview`, and `upgrade adopt`) never read stdin at all.
-- Output is canonical JSON on stdout, except `review-preview`, which defaults to readable text and accepts `--format json`. **Failures exit nonzero** and now include thrown argument/handler failures as one structured `{"ok": false, ...}` envelope on stdout plus a concise stderr reason. A classified `automation-status` document—including `blocked`—is successful and exits zero.
-- `--help` is generated from the same command table that drives dispatch (`LOCAL_COMMAND_CONTRACTS` in `src/local/commands.ts`), so help can't drift from behavior.
+- **One bundle.** The command is `dist/archflow-local.mjs`, a single file with the shipped `assets/` directory beside it. The installer puts both under `~/.archflow/bundle/` and a launcher named `archflow-local` on the `PATH`. The bundle reads its defaults (config template, constitution rules, rubrics, review recipes) from that sibling `assets/`.
+- **Payload commands** (`review`) read JSON from `--input <file>`, or from stdin when `--input` is omitted. If stdin is a terminal and no file was given, the command fails at once instead of waiting.
+- **Input-free commands** (`init`) never read stdin and reject `--input`. A parent process commonly keeps stdin open, so a command that waited for end-of-file would hang even though it already had everything it needed. The command table in `src/local/commands.ts` marks which commands take a payload, and both the argument check and `--help` are generated from it, so help cannot drift from behavior.
+- **Output** is one canonical JSON document on stdout. **A failure exits nonzero**: a result with `"ok": false` exits 1 and writes the error code to stderr. A bad argument or an unreadable payload does too, as one `{"ok": false, "error": …}` document with code `CONTRACT_INVALID` and issue `local-command-invalid` that names the problem.
+- `--force` belongs to `init` only and `--producer` to `review` only; the other command rejects them.
 
-## The command surface
+```mermaid
+flowchart LR
+    A["archflow-local<br/>main.ts"] -->|review| B["payload from --input or stdin"]
+    A -->|init| C["no payload, no stdin"]
+    B --> D["review: src/review/<br/>simple-review.ts"]
+    C --> E["init: src/init/"]
+    D --> F["canonical JSON on stdout<br/>nonzero exit when ok is false"]
+    E --> F
+```
 
-**Pure / stateless** (no task directory touched):
+## review: one counter-review of the current work
 
-| Command | Purpose |
-|---|---|
-| `validate` | Run an artifact through its contract parser and echo the parsed value |
-| `hash` | SHA-256 of a value's canonical encoding |
-| `render` | Preview the canonical Markdown projection of a review or constitution-review result, with digest |
-| `init` | Set up the repository: `.archflow/` assets + MCP registrations for every host. Refuses a diverged scaffold file; `init --force` refreshes shipped defaults and other scaffold files, including config, while preserving custom constitution rules |
+`review` asks reviewers from a different model family than the asking client to read a plan or a change, and returns their reports. It runs in the caller's working directory, so a Git worktree reviews its own files; that is how an orchestrating session gets cross-model review of a sub-agent's worktree. It keeps no state between calls: nothing is written into the repository except a diagnostics log under `.archflow/runtime/` when a reviewer fails unexpectedly, nothing resumes, and a second call is a fresh review.
 
-Initialization diagnostics also list generated ArchFlow assets hidden by an ancestor `.gitignore`. Init does not rewrite repository ignore policy; it names the affected paths so the human can review the rule and explicitly add the intended files.
+`--producer` names the client session that is asking. It is required because the configured reviewer routes depend on it (the shipped template sends a Claude session to GPT reviewers and a Codex session to Claude reviewers, for example).
 
-**Model-invoking, no task state:**
+### The payload
 
-| Command | Purpose |
-|---|---|
-| `review` | Dispatch the standalone counter-review, test review and constitution review (the `archflow_review` path) on the current working directory, with no MCP and no task state. Requires `--producer claude\|codex\|antigravity` because the producer decides cross-family routing. The payload is the `archflow_review` input. Because the repository is `process.cwd()`, a sub-agent can review its own git worktree, which the MCP tool cannot: it always reviews the server's startup directory. An invalid payload fails with `INPUT_INVALID` naming each offending field. Untracked nested repositories, such as agent worktrees inside the checkout, are not part of the subject. Exits nonzero on `ok:false`, including `REVIEW_INCOMPLETE`, where the partial reports are still printed. SIGINT/SIGTERM cancel the reviewer children. The `/archflow-run` orchestrator runs it on each task worktree |
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `schema_version` | yes | The string `"1"`. |
+| `stage` | yes | `"plan"` reviews a proposed approach before work starts; `"implementation"` reviews the finished change. |
+| `ask` | yes | What the person actually asked for, in their terms. Reviewers judge the work against it. |
+| `plan` | yes | The plan, or for an implementation review the plan that was followed. Nonblank text. |
+| `base_commit` | yes | The full 40-character `HEAD` commit recorded before the work began. `HEAD` must still equal it when the review runs. |
+| `paths` | yes | Repository-relative files the work adds, changes or deletes, including planned additions and deletions. Unique entries, files only (no directories), nothing under `.git` or `.archflow/tasks` (a path there is rejected as `INPUT_INVALID`). This declares the scope of the review; files that are changed but not listed still appear as context. Approval rules (see `human_review_reasons`) see only the declared `paths`, so declare every output that needs those checks. |
+| `verification` | for `implementation` | What was run and what it showed, including checks that were unavailable or not applicable. Optional for a plan, where reviewers assess the proposed verification strategy instead. |
+| `review_routes` | no | Per-call reviewer routes: any of `counter-reviewer`, `test-reviewer` and `adjudicator`, each `{model, effort, provider?}`. A route given here beats configuration for that role on this call only. |
+| `expected_policy_digest` | no | The `policy_digest` returned by an earlier review. If the repository's config or constitution has changed since, the review stops with `POLICY_CHANGED` before spending any reviewer time. |
 
-**Task-scoped, read-only:**
+Unknown fields are rejected. A rejected payload fails with `INPUT_INVALID` and a message that names every offending field, because callers build this payload by hand.
 
-| Command | Purpose |
-|---|---|
-| `automation-status` | Emit strict automation status v3: reconcile one task, classify its condition, expose authenticated implementation advice, and identify exactly one skill, human, operator, or terminal actor without mutation |
-| `review-preview` | Preview the exact prepared review prompts, referenced file sizes and originating versions; requires `--producer claude\|codex\|antigravity`, optionally `--reviewer <id>` and `--format text\|json`. Uses authenticated current-task material, never invokes a model or advances state |
-| `manual-status` | Read-only mode classifier: `normal`, `degraded`, `repair-required`, `upgrade-staged` (one strictly validated current import waits for MCP), or `upgrade-restart-required` (old, malformed, incompatible, or ambiguous staging must be explicitly discarded) |
+What gets reviewed is the working tree as it is: every file that differs from `HEAD`, every untracked file that is not ignored, and every declared path, up to 25 MiB. The reviewers also get the same repository at `base_commit` as a baseline to compare against. A symlink is reviewed as a link (its target text), but a path that passes through a symlinked directory is refused.
 
-In its normal classification, `manual-status` carries the same `TaskStatusV1.repositories` projection as semantic status: implicit writable `primary` first, then configured secondaries in ordinal name order, with resolved absolute location, resolved mode, current commit, and `last_reviewed_commit` only when current-position server-attested review evidence names that member. Relative declarations are rooted at the primary worktree, absolute declarations are accepted, omitted mode resolves to `context-only`, and `primary` is reserved. Repository config edits and moved-HEAD review notices remain informational and nonblocking.
+### The result
 
-`automation-status --task <task>` is the supported polling surface. Its success body is the strict versioned document itself, not an `ok/value` envelope. The readable path reuses authoritative semantic status and projects it without an invocation, so no mutation offer exists. State absence becomes PRD ownership; staged or unreadable authority becomes a safe blocked category; a repository failure too early to classify remains a structured command failure. See [`../contracts/AUTOMATION.md`](../contracts/AUTOMATION.md) for the complete action union, controller loop, freshness rules, benchmark, and trust boundary.
+```json
+{
+  "schema_version": "1",
+  "ok": true,
+  "value": {
+    "stage": "implementation",
+    "subject_digest": "…", "policy_digest": "…", "config_digest": "…", "constitution_digest": "…",
+    "reports": [ … ],
+    "constitution": { "status": "complete", "judgments": [ … ] },
+    "human_review_reasons": [ … ],
+    "failures": [ … ]
+  }
+}
+```
 
-Automation status may also project `validation_overrides` and `review_push_throughs`. These optional arrays are audit-only observations copied after the ordinary condition, actor, owner, and next action have already been selected. A validation override reports named checks as **not run**, never passed; a review push-through reports the exact accepted review occurrences it settled. Neither array selects or changes an action, launches a skill, satisfies review, or authorizes a commit. Damaged archives expose only their safe invalid or unavailable summaries.
+- **`reports`** has one entry per reviewer that finished. Counter-reviewer and test-reviewer entries carry `role`, `reviewer_id`, the `route` that ran (adapter, family, model, effort, optional provider), an `outcome` that is exactly `issues_found` or `no_issues_found`, and `feedback`, the reviewer's concise text. A constitution entry carries `report`, a plain summary of its judgments. Claude reviewers also carry `usage` (tokens, turns, duration, estimated cost) when the CLI reported it; a missing number means unknown, not zero.
+- **`constitution`** is `not-applicable` when the repository has no active rules, `complete` when the constitution reviewer judged every active rule, and `failed` when it could not. Each judgment names `rule_id` and `rule_version` and gives `compliance` (`pass`, `fail` or `uncertain`), a `rationale`, whether the rule's human-review `trigger` was `not-matched`, `matched` or `uncertain`, and the `trigger_evidence`.
+- **`human_review_reasons`** is a list of plain sentences, each a reason a human should look before the work is accepted. It is empty when none applies. Two things add to it: a project `approval_rules` match in `.archflow/config.yaml` (a whole stage, or declared `paths` matching a glob such as `**/*.sql`; a changed file that is not declared never triggers a content rule, and `skills/archflow-run/scripts/counter-review.sh` declares every changed and untracked file), and a constitution rule whose `review_trigger` came back `matched` or `uncertain`.
+- **`failures`** lists reviewers that did not produce a usable report: `role`, `reviewer_id`, `route`, a `code` and a safe `message`.
+- The four digests identify the bytes the review covered (`subject_digest`) and the policy it ran under (`config_digest` for `.archflow/config.yaml`, `constitution_digest` for the rules, `policy_digest` for both together). They are for detecting drift, not for a human to read.
 
-The command emits schema version 3. Its required implementation recommendation is copied from semantic status and never participates in actor or action selection; no-state, staged-import, and unreadable-state edge documents use unavailable/not-applicable advice without fabricating a phase. The v1/v2 parsers and schemas remain compatibility surfaces, but the command emits neither. Successor launch is human-owned `awaiting-transition`; continuation of the current skill remains automatic.
+`ok` is `true` only when every required reviewer reported and, if there are active rules, the constitution reviewer completed. Otherwise `ok` is `false` and `error` is set. A failed result can still carry `value` with the reports that did arrive, so a caller can read them, but they are not complete coverage.
 
-**Task-scoped, mutating:**
+### Error codes
 
-| Command | Purpose |
-|---|---|
-| `snapshot` / `restore` | Install / read back a content-addressed retained result |
-| `clean` | Remove only unreferenced authority plus stale or reconstructible work; reports removed/retained file and byte counts |
-| `reconcile` | Compare recorded projections against what's on disk |
-| `set-commit-authority` | Explicitly re-anchor task milestone or policy commit authority to a target Git commit (e.g. `HEAD`) |
-| `upgrade` | The legacy-adoption adapter, below |
+| Code | When |
+| --- | --- |
+| `INPUT_INVALID` | The payload failed validation, a path passes through a symlinked directory, or a path names something that is not a file or symlink (a directory, for example). |
+| `BASELINE_CHANGED` | `HEAD` no longer equals `base_commit`. |
+| `POLICY_CHANGED` | `expected_policy_digest` does not match the current config and constitution. |
+| `INPUT_TOO_LARGE` | The changed files exceed 25 MiB. |
+| `CONFIG_INVALID` | `.archflow/config.yaml`, the constitution, a configured route, or the shipped rubric is invalid, or a role has no route. |
+| `CONFIG_MODEL_UNSUPPORTED` | A configured or per-call route names a model whose family ArchFlow cannot tell. |
+| `SUBJECT_CHANGED` | The files, the branch, or the policy changed while reviewers were running, so the reports do not describe the current work. |
+| `REVIEW_INCOMPLETE` | One or more reviewers failed (see `failures`); the available reports do not give complete coverage. |
+| `CANCELLED` | The process received an interrupt. Reviewer processes are stopped and their scratch files removed. |
+| `REVIEW_FAILED` | Anything unexpected while preparing or validating the review. The result carries only a generic message. |
+| `CLI_MISSING`, `AUTH_UNAVAILABLE`, `CLI_VERSION_UNSUPPORTED`, `RATE_LIMITED`, `TIMEOUT`, `UNSUPPORTED_MODEL`, `CONFIG_MODEL_UNSUPPORTED`, `PROCESS_FAILED`, `MODEL_OUTPUT_INVALID`, `REPOSITORY_VIEW_UNAVAILABLE` | A reviewer could not be run or returned unusable output. These usually appear as the `code` of an entry in `failures`, with a fixed safe message (see [DISPATCH](../mcp/DISPATCH.md#how-failures-are-classified)), and the call itself reports `REVIEW_INCOMPLETE`. A route rejected before any reviewer starts (`CONFIG_INVALID`, `CONFIG_MODEL_UNSUPPORTED`) is instead the call's own error code. |
 
-## upgrade: the legacy-adoption adapter
+A `failures` entry whose process failed in a way ArchFlow could not classify has the code `DISPATCH_FAILED`; its cause is recorded in `.archflow/runtime/diagnostics/internal-errors.log` and on stderr, not in the result.
 
-Adoption of a legacy in-flight task is the one workflow that must start before any task exists, so it stays a purpose-specific local adapter rather than a task `archflow_apply` action. Its operations:
+### How to treat the result
 
-- `preview` — validate the repository, baselines, source selection, exclusions, secret scan, mapping, phase continuity, visible document set, and derived resume phase, without writing. An unresolved task-local constitution edit or a secret finding blocks staging.
-- `stage` — write the approved import (bound by `approved_preview_digest`) into ignored runtime only; no visible destination file is created. An incompatible pre-fix stage is discarded with `discard-stage`.
-- `adopt` — the input-free `archflow-local upgrade adopt --task <task>` form (registered as `upgrade-adopt`; `upgrade adopt` is the one two-token CLI form). It runs the existing initialization transaction locally over the staged artifact, atomically publishing `config.yaml`, `state.json`, `prd.md`, `design.md`, and the mapped phase documents. Adoption is retry-safe through the transaction's replay machinery; replaced or tampered staged bytes fail closed.
+A successful result means the review coverage was completed. It does not mean the work is accepted, correct, or approved by a human; reviewers give independent opinions and can be wrong in either direction.
 
-After adoption the task exists and the workflow returns to the semantic surface: the imported design travels the ordinary review/triage cycle and the one `migration-audit` gate through `archflow_status`/`archflow_apply`, and acceptance authorizes the task-local import commit the client creates itself. The human approvals are the preview approval before `stage` and the migration-audit decision; adoption itself is mechanical.
+- **Read every report.** Fix the findings you agree are real and say why you set the others aside. Run the checks that bear on what you changed.
+- **Honor `human_review_reasons`.** Take each one to the person in plain language before treating the work as accepted. A review that found nothing wrong can still require a human.
+- **Do not loop on reviewers.** The call does not re-review your fixes; ask for another review only when the change was significant, and tell the person when fixes were not independently re-reviewed.
+- **When `ok` is `false`,** read any partial reports, repair what `failures` names (a missing CLI, a login that expired, a rate limit), and call again. There is no job to resume and no cache of the reviewers that did finish; a repeat call runs all of them again. Transient failures (rate limits, timeouts, dropped connections) are already retried twice inside the call.
+- **Carry `policy_digest` forward.** Pass the plan review's value as `expected_policy_digest` on the implementation review, so a change to the config or the constitution in between is noticed.
 
-## One naming note
+`skills/archflow-run/scripts/counter-review.sh` is the shipped caller. Given a directory, an output directory holding `ask.txt` and `plan.txt` (and `verification.txt` for an implementation), a producer and a stage, it records `HEAD`, lists the changed and untracked files as `paths`, builds the payload, runs `archflow-local review`, and writes `result.json` (everything) and `summary.json` (what a person reads: outcomes, feedback, failures, human-review reasons) next to it. It prints one line and exits with the review's exit code.
 
-Internal request-digest derivation lives in `src/local/call-envelope.ts` — the authentication wrapper the composer binds around one durable request. It is unrelated to `src/review/envelopes.ts`, the sealed evidence package sent to a child reviewer (see `../review/COUNTER-REVIEW.md`). The shared name is a known collision; a rename is on the simplification list.
+### Reviewer routing and configuration
 
-## Degraded mode
+`review` reads `.archflow/config.yaml` from the working tree on every call, so an edit applies to the next review. If the file does not exist it falls back to the shipped template instead of failing. The constitution works the same way. A file that exists but is invalid is an error, never a silent fallback.
 
-When the MCP server is unavailable, there is no offline recording path — the server is the only writer of workflow progress. What remains is `manual-status`, a read-only classifier that never blocks on stdin:
+Routes name a model, an effort and optionally a cc-switch `provider`. For each role the first match wins: the call's `review_routes`, then `producers.<producer>`, then `overrides.phase-design` (plan reviews) or `overrides.phase-impl` (implementation reviews), then the top-level `roles`. The test reviewer additionally has a built-in last resort of `gpt-6.1-sol` at `low`. A `counter-reviewers` list runs several counter-reviewers at once. The shipped template routes each producer to the other family. Older configs may carry keys this version ignores (`implementation`, `repositories`, `max_attempts`, `roles.producer`, `roles.effort-reviewer`, and overrides for `explore`, `prd` and `design`, and approval subjects `prd` and `design`); they parse without error and have no effect.
 
-- `normal` — the server's durable state is present and readable; the result delegates to task status and returns the one `next_action`.
-- `degraded` — no durable state exists for the task; the single next action is to wait for the server. Once it is available, proceed through the workflow skills as usual (if the server binary is missing, report that an install is needed; shared installation requires an explicit per-action user request).
-- `repair-required` — state is present but unreadable; the result is a position summary for a human to act on.
-- `upgrade-staged` — no state exists, but one current-format import stage is reusable once the session exposes MCP.
-- `upgrade-restart-required` — no state exists and staging is old, malformed, incompatible, or ambiguous; the shared strict descriptor inspector reports only exact import digests for safe explicit cleanup and adoption uses the same classification.
+## init: prepare a repository
 
-Nothing in this mode advances the workflow, resolves gates, or records progress.
+`init` creates the files `review` reads, and nothing else. It never creates a commit and never edits the project's own `.gitignore`.
 
-`clean --task <id>` is safe to run after an automatic cleanup warning. It never reads stdin, never treats cache as authority, and never rolls a committed transition back.
+It writes, relative to the repository root:
 
-Repository-aware recovery keeps the existing primary spelling and adds `--repository <name>` for a configured writable secondary. Restore and reconciliation guidance always name the affected repository; the helper resolves that name through the current task configuration and checks its identity and mode rather than accepting a filesystem path. A restore validates every selected repository group before writing, applies primary then ordinal secondaries, and rolls back in reverse on an ordinary failure. Context-only members are never restore targets.
+- `.archflow/config.yaml`, copied from the template: reviewer routing and `approval_rules`.
+- `.archflow/constitution/`: shipped rules under `default/`, an explanatory `README.md`, and `custom/` (holding only a README) for the repository's own rules.
+- `.archflow/.gitignore`, which ignores `/runtime/`, the scratch directory reviews may write diagnostics into.
 
+Rules for existing files:
 
-## Automation responsibility
+- **Nothing diverged is overwritten.** If a scaffold file exists with different bytes, `init` refuses with `scaffold-diverged`, names the file on stderr, and writes nothing. Keep the repository's version and stop, or re-run with `--force`.
+- **`--force`** replaces diverged scaffold files, including `config.yaml`, with the shipped bytes. It always preserves `custom/`.
+- **Older flat constitutions** (rules directly in `.archflow/constitution/`) are migrated only under `--force`: files with shipped names are replaced by the current defaults, and any other numbered rule moves into `custom/`. The whole resulting rule set is validated first, and a conflict stops everything before any write. Plain `init` refuses a flat layout instead of guessing.
+- Installing a newer bundle never changes a repository's policy by itself; refreshing defaults is an explicit `init --force`.
 
-`automation-status` now emits schema version 3. A completed skill yields `awaiting-transition` with a human-owned `launch-skill` descriptor. Controllers must wait for the user to launch it. Current-skill continuation and transient retries remain automatic. The v1/v2 contract readers remain available for archived observations; neither may parse v3 as automatic launch permission.
+Before scaffolding, `init` removes the MCP registrations that earlier versions wrote, so a repository that used them does not keep pointing at a server that no longer exists. This is ownership-guarded: it touches only the `archflow` entry in `.mcp.json` whose command is exactly the old `archflow-mcp` launcher, and the marker-delimited block in `.codex/config.toml` that earlier inits appended. It deletes a file only when the ArchFlow entry was all that was in it. Anything it cannot prove is ArchFlow's (a different command, unparseable JSON, markers that do not pair up, a symlinked file or directory) is left alone and reported. It runs first so that a refused scaffold does not also leave the stale registrations behind.
 
-## Recovering an adopted implementation snapshot
+The result reports `assets` (what was `created`, `unchanged`, `overwritten`, `preserved_custom`, and any constitution migration), the `legacy_registrations` removed or left alone, and `diagnostics`: the Node version, a preflight of the Claude and Codex CLIs (version, whether logged in, whether a managed policy file is present), and any generated ArchFlow file hidden by an ancestor Git ignore rule. The diagnostics exist so a person finds out at setup, not at the first review, that a reviewer CLI is missing or logged out. `init` is safe to repeat; re-running it is the recovery path after an interrupted run.
 
-After installing a recovery fix, restart the host's ArchFlow MCP server so it loads the new bundle. In the affected repository, resume the current implementation skill. Status derives recovery from durable records, including adoptions made before the fix; no state migration or hand-edited archive is needed. If review is pending over an older snapshot, follow `begin-work`, then submit a fresh `work-result` over the preserved current files and verification notes. The next review uses the newly captured subject and runs the normal secret scanner and independent reviewer. A credential that remains in the new subject still blocks review.
+## Where the pieces are built and shipped
 
-For the reported `management-dashboard` task in `/home/aroton/MealDeals-Website.feature/management-dashboard`, the observed position is `phase-impl-4`, `counter_review/running`, with no completed implementation review. The decision at revision 117 adopted corrections in `discovery.test.ts`, `preflight.test.ts`, and `scanProcessor.test.ts` after production at revision 113. Recover as follows:
-
-1. Open that repository with the restarted MCP server and invoke `$archflow-phase-impl management-dashboard 4` in Codex (or `/archflow-phase-impl management-dashboard 4` in Claude Code/Antigravity).
-2. Read fresh status with the phase-4 implementation resume invocation and apply its `begin-work` offer without a submission. This preserves the working tree and opens production; the earlier approval to keep corrections remains archived.
-3. Keep the existing implementation and its log. Verify the current bytes, retain the reported 305-test and corrected 102-test results as prior evidence, and write the verification transcript used for this submission. Submit a succeeded `work-result` with the current base commit, complete output/restore declarations, and declared inputs. Follow the server-returned resources and submission shape.
-4. Apply the fresh review offer. Only the normal review/triage and any returned human gate can establish subsequent commit authority. If review detects another secret, correct it and repeat the supported adoption/revision path.
-
-The implementation remains uncommitted throughout recovery. Do not restore the old snapshot, remove the task, edit retained evidence, or reuse a stale review offer. Read-only polling is available with `archflow-local automation-status --task management-dashboard`; workflow mutations use MCP, not a CLI resume command.
-
-### Compacting verification logs before retrying review
-
-When an implementation review is pending, compact or replace the optional `verification-transcript` resource and apply the offered `review` again. The server pins the current log into a new review envelope; it does not replace the implementation result. Large logs are bounded excerpts with full-log digest and size metadata. Preserve meaningful verification details and label omissions. Code or verification-claim changes belong in the normal revision path. This works for previously produced results carrying historical transcript metadata too; no hand-edited hashes or task reset is required. Finished reviews and approvals remain bound to their original evidence.
-
-## Implementation profile discovery
-
-`archflow-local implementation-profiles --task <task>` is an input-free, read-only
-catalog query for application launch settings. Its version `"1"` response contains
-`task_id` and `profiles`: each has `profile_id`, `model`, optional `effort`, and
-`enabled`. The command uses the same shipped catalog and effective task settings as
-fresh assessments. Disabled profiles remain visible for configuring future use.
-It never updates task state or changes retained recommendations. Errors use the
-helper's existing nonzero-exit JSON error contract.
-
-Consumers map model IDs to their own CLI, API provider and model/slot settings.
-Catalog IDs and cost groups do not name installed API providers. An omitted effort
-must not be replaced with a guessed value. Existing recommendations may name profiles
-no longer in the current catalog; discovery is not launch authorization.
-
-## Constitution refresh during initialization
-
-`init` creates `constitution/default/` for shipped policy and `constitution/custom/` for repository additions or replacements by ID. `init --force` is an explicit refresh from the running bundle, including repository config; it never rewrites custom rules. Its asset report includes `preserved_custom`, `constitution_migration` (`replaced` legacy files and `moved` source/destination pairs), and a `policy_notice` explaining which tasks are affected.
-
-Older flat rules require explicit forced migration. Known shipped filenames are replaced with the current defaults; additional numbered rules move to `custom/`. A conflicting custom destination, duplicate ID within a layer, or invalid effective policy stops preflight before scaffold writes. Identical already-copied destinations are accepted on retry. The full scaffold is not a transactional filesystem update: an interrupted write may need the forced command repeated; flat sources are removed only after all destinations exist.
-
-Commit refreshed repository policy before starting affected tasks. Existing tasks retain their pinned constitution, task-local configuration, and pending decisions. Reinitialization never changes that authority.
-
-For a restorable missing projection, semantic status supplies the exact `archflow-local restore` arguments and JSON input. `restore` returns base64 content, file type, and Git mode; it does not write the file. The producer checks the returned content digest and confirms the destination remains absent before recreating it, then refreshes status. This avoids finding retained-result identifiers by reading authority archives. Unavailable or ambiguous sources remain explicit operator recovery.
+`npm run release:stage` builds the bundle and its assets into a staging directory, `release:check` verifies it, and `release:write` writes the tracked `dist/` payload that the installer copies. `check:release` runs the check, a smoke run of the built bundle, the integrity mutation tests and a reproducibility build together. Installing is a separate, explicit step (`install.sh`) and is never part of the build.

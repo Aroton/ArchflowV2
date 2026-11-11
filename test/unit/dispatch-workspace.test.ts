@@ -9,29 +9,34 @@ import {
   createDispatchWorkspace,
   materializeRepositoryViews,
   projectRepositoryWorkspaceBinding,
-  projectReviewedRepositories,
   type DispatchRepositoryView,
   type DispatchRepositoryViewPlan,
+  type DispatchWorkspace,
+  type ReviewProjectionPlan,
 } from "../../src/dispatch/workspace.js";
-import type { ProjectionPlan } from "../../src/state/snapshots.js";
-import { buildReviewEnvelope } from "../../src/review/envelopes.js";
+import { MULTI_REPOSITORY_VIEW_NOTE, sealDispatchInput } from "../../src/review/envelopes.js";
 import { cleanupTemporaryRepositories, createTempRepository, type TempRepository } from "../helpers/temp-repository.js";
 
 const roots: string[] = [];
 
 const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
 
-/** A real single-member plan for the historical primary-only layout. */
-function primaryPlan(repository: string, commit: string, projectionPlan?: ProjectionPlan): DispatchRepositoryViewPlan {
+/**
+ * The plan the standalone review builds: the work under review as `primary` (the commit plus any
+ * after-images) and the same repository at the starting commit as the `baseline` secondary.
+ */
+function reviewPlan(repository: string, commit: string, projectionPlan?: ReviewProjectionPlan): DispatchRepositoryViewPlan {
+  const member = { repository_root: repository, repository_identity_digest: sha256(repository) as never, commit: commit as never };
   return [{
     name: "primary",
     member_kind: "primary",
-    repository_root: repository,
-    repository_identity_digest: sha256(repository) as never,
-    commit: commit as never,
+    ...member,
     ...(projectionPlan === undefined ? {} : { projection_plan: projectionPlan, snapshot_digest: sha256(`${commit}:snapshot`) as never }),
-  }];
+  }, { name: "baseline", member_kind: "secondary", ...member }];
 }
+
+/** Where a materialized workspace holds one named repository view. */
+const viewOf = (workspace: DispatchWorkspace, name: string): string => join(workspace.review_root!, "repositories", name);
 
 async function temporaryRoot(label: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), `archflow-workspace-test-${label}-`));
@@ -161,7 +166,7 @@ describe("dispatch workspace", () => {
     expect(await readdir(nestedTemporary)).toEqual([]);
   });
 
-  it("materializes a git-free repository view without task state and disposes it whole", async () => {
+  it("materializes git-free primary and baseline views without task state and disposes them whole", async () => {
     const sourceHome = await temporaryRoot("view-home");
     vi.stubEnv("HOME", sourceHome);
     const { repository: { path: repository }, commit } = seededRepository("view-repository", {
@@ -172,14 +177,27 @@ describe("dispatch workspace", () => {
     });
 
     const base = await createDispatchWorkspace("codex-cli", repository);
-    const workspace = await materializeRepositoryViews(base, primaryPlan(repository, commit));
-    const view = workspace.repository_view_root!;
-    expect(view).toBe(join(workspace.root, "review", "repositories", "primary"));
+    expect(projectRepositoryWorkspaceBinding(reviewPlan(repository, commit))).toEqual({
+      kind: "read-only-multi-repository-view",
+      note: MULTI_REPOSITORY_VIEW_NOTE,
+      repositories: [
+        { name: "primary", path: "primary", repository_identity_digest: sha256(repository), commit },
+        { name: "baseline", path: "baseline", repository_identity_digest: sha256(repository), commit },
+      ],
+    });
+    const workspace = await materializeRepositoryViews(base, reviewPlan(repository, commit));
+    expect(workspace.review_root).toBe(join(workspace.root, "review"));
+    expect((await readdir(join(workspace.review_root!, "repositories"))).sort()).toEqual(["baseline", "primary"]);
+    const view = viewOf(workspace, "primary");
     await expect(readFile(join(view, "src", "index.ts"), "utf8")).resolves.toBe("export {};\n");
     await expect(readFile(join(view, ".archflow", "context", "map.md"), "utf8")).resolves.toBe("# context\n");
     await expect(lstat(join(view, ".git"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(join(view, ".archflow", "tasks"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(join(view, ".archflow", "constitution"))).rejects.toMatchObject({ code: "ENOENT" });
+    const baseline = viewOf(workspace, "baseline");
+    await expect(readFile(join(baseline, "src", "index.ts"), "utf8")).resolves.toBe("export {};\n");
+    await expect(lstat(join(baseline, ".git"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(join(baseline, ".archflow"))).rejects.toMatchObject({ code: "ENOENT" });
 
     await workspace.dispose();
     await expect(lstat(workspace.root)).rejects.toMatchObject({ code: "ENOENT" });
@@ -221,26 +239,17 @@ describe("dispatch workspace", () => {
         { name: "api", path: "api", snapshot_digest: "b".repeat(64) },
       ],
     });
-    const envelope = buildReviewEnvelope({
-      artifact: "# Implementation\n\nReview both proposed trees.\n",
+    const envelope = sealDispatchInput("review", {
+      subject: { stage: "implementation", subject_digest: "c".repeat(64) },
+      ask: "Review both proposed trees.",
+      plan: "Change the tracked file in each repository.",
+      paths: ["tracked.txt"],
+      verification: "npm test",
+      workspace: binding,
+      assignment: { reviewer_id: "counter-reviewer-1", focus: "general", criterion_ids: ["repository-views"] },
       rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [
         { id: "repository-views", text: "Review every authenticated proposed tree.", blocking: true },
       ] },
-      context: [],
-      workspace: binding,
-      subject: {
-        task_id: "multi-repository-review" as never,
-        phase_instance: "phase-impl-3" as never,
-        role: "counter-review",
-        step: "counter_review",
-        attempt: 1 as never,
-        subject_digest: "c".repeat(64) as never,
-        input_fingerprint: "d".repeat(64) as never,
-        rubric_digest: "e".repeat(64) as never,
-        producer_family: "claude",
-        invocation_id: "multi-repository-envelope",
-        result_id: "multi-repository-envelope-result",
-      },
     });
     const childVisible = JSON.parse(new TextDecoder().decode(envelope.bytes)) as {
       workspace: { repositories: Array<{ name: string; snapshot_digest?: string }> };
@@ -249,20 +258,17 @@ describe("dispatch workspace", () => {
       expect.objectContaining({ name: "primary" }),
       expect.objectContaining({ name: "api", snapshot_digest: "b".repeat(64) }),
     ]);
-    expect(projectReviewedRepositories(plan)).toEqual(plan.map(({ name, repository_identity_digest, commit }) => ({
-      name, repository_identity_digest, commit,
-    })));
     const workspace = await materializeRepositoryViews(
       await createDispatchWorkspace("codex-cli", primary),
       plan,
     );
 
-    expect(workspace.repository_view_root).toBe(join(workspace.root, "review", "repositories"));
-    await expect(readFile(join(workspace.repository_view_root!, "primary", "tracked.txt"), "utf8")).resolves.toBe("primary\n");
-    await expect(lstat(join(workspace.repository_view_root!, "primary", ".archflow", "constitution"))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(lstat(join(workspace.repository_view_root!, "primary", ".archflow", "tasks"))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(join(workspace.repository_view_root!, "api", "tracked.txt"), "utf8")).resolves.toBe("api proposed\n");
-    await expect(lstat(join(workspace.repository_view_root!, "api", ".archflow"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(workspace.review_root).toBe(join(workspace.root, "review"));
+    await expect(readFile(join(viewOf(workspace, "primary"), "tracked.txt"), "utf8")).resolves.toBe("primary\n");
+    await expect(lstat(join(viewOf(workspace, "primary"), ".archflow", "constitution"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(join(viewOf(workspace, "primary"), ".archflow", "tasks"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(viewOf(workspace, "api"), "tracked.txt"), "utf8")).resolves.toBe("api proposed\n");
+    await expect(lstat(join(viewOf(workspace, "api"), ".archflow"))).rejects.toMatchObject({ code: "ENOENT" });
     await workspace.dispose();
   });
 
@@ -292,9 +298,9 @@ describe("dispatch workspace", () => {
     const repository = createTempRepository({ label: "view-failure-repository", attributes: undefined }).path;
     const workspace = await createDispatchWorkspace("codex-cli", repository);
     try {
-      await expect(materializeRepositoryViews(workspace, primaryPlan(repository, "HEAD")))
+      await expect(materializeRepositoryViews(workspace, reviewPlan(repository, "HEAD")))
         .rejects.toThrow(/full lowercase git object id/u);
-      await expect(materializeRepositoryViews(workspace, primaryPlan(repository, "f".repeat(40))))
+      await expect(materializeRepositoryViews(workspace, reviewPlan(repository, "f".repeat(40))))
         .rejects.toThrow(/repository view materialization failed/u);
     } finally {
       await workspace.dispose();
@@ -318,16 +324,21 @@ describe("dispatch workspace", () => {
       ],
       collisions: [],
       collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
-    } as unknown as ProjectionPlan;
+    } as unknown as ReviewProjectionPlan;
     const base = await createDispatchWorkspace("codex-cli", repository);
-    const workspace = await materializeRepositoryViews(base, primaryPlan(repository, commit, plan));
-    const view = workspace.repository_view_root!;
+    const workspace = await materializeRepositoryViews(base, reviewPlan(repository, commit, plan));
+    const view = viewOf(workspace, "primary");
 
     await expect(readFile(join(view, "src", "modify.ts"), "utf8")).resolves.toBe("after\n");
     expect((await lstat(join(view, "src", "modify.ts"))).mode & 0o111).not.toBe(0);
     await expect(lstat(join(view, "src", "delete.ts"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(join(view, "new", "nested.ts"), "utf8")).resolves.toBe("new\n");
     await expect(readlink(join(view, "src", "link"))).resolves.toBe("modify.ts");
+    // The baseline view keeps the starting commit's bytes: after-images apply to primary only.
+    const baseline = viewOf(workspace, "baseline");
+    await expect(readFile(join(baseline, "src", "modify.ts"), "utf8")).resolves.toBe("before\n");
+    await expect(readFile(join(baseline, "src", "delete.ts"), "utf8")).resolves.toBe("remove me\n");
+    await expect(lstat(join(baseline, "new"))).rejects.toMatchObject({ code: "ENOENT" });
     await workspace.dispose();
   });
 
@@ -347,13 +358,13 @@ describe("dispatch workspace", () => {
       }],
       collisions: [],
       collision_choices: ["discard-and-restore", "adopt-as-new-generation", "abort"],
-    } as unknown as ProjectionPlan;
+    } as unknown as ReviewProjectionPlan;
     const workspace = await materializeRepositoryViews(
-      await createDispatchWorkspace("codex-cli", repository), primaryPlan(repository, commit, plan),
+      await createDispatchWorkspace("codex-cli", repository), reviewPlan(repository, commit, plan),
     );
-    await expect(readFile(join(workspace.repository_view_root!, "tracked.txt"), "utf8"))
+    await expect(readFile(join(viewOf(workspace, "primary"), "tracked.txt"), "utf8"))
       .resolves.toBe("after\n");
-    await expect(lstat(join(workspace.repository_view_root!, ".archflow", "tasks")))
+    await expect(lstat(join(viewOf(workspace, "primary"), ".archflow", "tasks")))
       .rejects.toMatchObject({ code: "ENOENT" });
     await workspace.dispose();
   });

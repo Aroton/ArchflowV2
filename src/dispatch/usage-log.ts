@@ -14,9 +14,6 @@ export type DispatchUsageRecord = {
   readonly completed_at: string;
   readonly duration_ms: number;
   readonly repository: string;
-  readonly task_id?: string;
-  readonly phase_instance?: string;
-  readonly attempt?: number;
   readonly adapter: string;
   readonly model: string;
   readonly effort: string;
@@ -25,25 +22,25 @@ export type DispatchUsageRecord = {
   readonly result_kind: string;
   readonly envelope_digest: string;
   readonly input_byte_count: number;
-  /** Completion of the CLI dispatch, not approval or completion of the workflow round. */
+  /** Completion of the CLI dispatch, not the outcome of the review it served. */
   readonly status: "succeeded" | "failed";
   readonly failure_code?: string;
   readonly failure_stage?: string;
   readonly usage?: DispatchUsage;
 };
 
-/** The installer always lays out <ARCHFLOW_HOME>/bundle/dist/<entry>.mjs. */
+/** The installer always lays out <ARCHFLOW_HOME>/bundle/dist/archflow-local.mjs. */
 export function installedDispatchUsageDirectory(moduleUrl: string = import.meta.url): string | undefined {
   const entry = fileURLToPath(moduleUrl);
   const dist = dirname(entry);
   const bundle = dirname(dist);
   if (basename(dist) !== "dist" || basename(bundle) !== "bundle" ||
-      !["archflow-mcp.mjs", "archflow-local.mjs"].includes(basename(entry))) return undefined;
+      basename(entry) !== "archflow-local.mjs") return undefined;
   // Keep logs outside bundle/: installing an update replaces that entire directory.
   return join(dirname(bundle), "usage");
 }
 
-/** One small file per dispatch avoids interleaved appends from concurrent MCP servers. */
+/** One small file per dispatch avoids interleaved appends from concurrent `archflow-local review` processes. */
 export async function writeDispatchUsageRecord(
   record: DispatchUsageRecord,
   directory = installedDispatchUsageDirectory(),

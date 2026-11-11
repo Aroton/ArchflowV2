@@ -44,7 +44,6 @@ const DIST_TRANSACTION = Object.freeze({
 
 export const RELEASE_FILES = Object.freeze([
   "archflow-local.mjs",
-  "archflow-mcp.mjs",
   "legal/THIRD_PARTY_NOTICES.md",
   "manifest.json",
   "metafile.json",
@@ -52,7 +51,6 @@ export const RELEASE_FILES = Object.freeze([
 
 export const RELEASE_BUILD_PROFILE = Object.freeze({
   entries: Object.freeze([
-    Object.freeze({ id: "mcp-stdio", role: "mcp-stdio", entryPoint: "src/main.ts", output: "archflow-mcp.mjs", handlerAuthority: "mcp-tool-handler" }),
     Object.freeze({ id: "local-cli", role: "local-cli", entryPoint: "src/local/main.ts", output: "archflow-local.mjs", handlerAuthority: "local-cli-handler" }),
   ]),
   platform: "node",
@@ -73,17 +71,8 @@ const PROOF_INPUTS = Object.freeze([
   "package.json",
   "scripts/smoke-release-bundle.mjs",
   "scripts/test-release-integrity.mjs",
-  "test/fixtures/mcp/runtime/adversarial-bytes.json",
-  "test/fixtures/mcp/runtime/calls.json",
-  "test/fixtures/mcp/runtime/initialize.json",
-  "test/fixtures/release/hostile-runtime-guard.cjs",
-  "test/integration/mcp-stdio.test.ts",
+  "test/integration/release-bundle-review.test.ts",
   "test/integration/release-offline.test.ts",
-]);
-const LAUNCH_FIXTURES = Object.freeze([
-  "test/fixtures/mcp/runtime/adversarial-bytes.json",
-  "test/fixtures/mcp/runtime/calls.json",
-  "test/fixtures/mcp/runtime/initialize.json",
 ]);
 
 const REQUIRED_CONTROLS = Object.freeze([
@@ -100,52 +89,21 @@ const REQUIRED_CONTROLS = Object.freeze([
   "src/contracts/schemas/v1/release-manifest.schema.json",
   "src/contracts/versions.ts",
   "test/contracts/release-contracts.test.ts",
-  "test/contracts/schema-registry.test.ts",
-  "test/fixtures/mcp/runtime/adversarial-bytes.json",
-  "test/fixtures/mcp/runtime/calls.json",
-  "test/fixtures/mcp/runtime/initialize.json",
-  "test/fixtures/release/hostile-runtime-guard.cjs",
-  "test/integration/mcp-stdio.test.ts",
+  "test/integration/release-bundle-review.test.ts",
   "test/integration/release-offline.test.ts",
 ]);
 
-const DECLARED_ASSETS = Object.freeze([
+// The files the installed bundle reads at runtime, beside dist/ in the install root, plus every
+// file under assets/constitution/. Review input YAML is inlined into the bundle by the ".yaml" text
+// loader, and assets/rubrics/README.md documents the rubrics for maintainers, so neither ships.
+const RUNTIME_ASSET_FILES = Object.freeze([
   "assets/archflow.gitignore",
   "assets/config.template.yaml",
-  "assets/hazards.yaml",
-  "assets/implementation-models.yaml",
-  "assets/review-inputs.yaml",
-  "assets/review-documents.yaml",
-  "assets/constitution/default/00-process.md",
-  "assets/constitution/default/10-architecture.md",
-  "assets/constitution/default/15-dependencies.md",
-  "assets/constitution/default/20-data.md",
-  "assets/constitution/default/25-database.md",
-  "assets/constitution/default/30-product.md",
-  "assets/constitution/default/35-plan-changes.md",
-  "assets/constitution/default/40-authentication.md",
-  "assets/constitution/default/45-public-contracts.md",
-  "assets/constitution/default/50-cryptography.md",
-  "assets/constitution/default/60-control-plane.md",
-  "assets/constitution/README.md",
-  "assets/constitution/custom/README.md",
-  "assets/rubrics/README.md",
-  "assets/rubrics/design.yaml",
   "assets/rubrics/implementation.yaml",
-  "assets/rubrics/phase-design.yaml",
-  "assets/rubrics/prd.yaml",
   "assets/rubrics/simple-plan.yaml",
-  "assets/workflow.yaml",
 ]);
+const RUNTIME_ASSET_DIRECTORIES = Object.freeze(["assets/constitution"]);
 
-const KNOWN_EMBEDDED = new Map([
-  ["ajv", "8.18.0"],
-  ["ajv-formats", "3.0.1"],
-  ["content-type", "1.0.5"],
-  ["fast-deep-equal", "3.1.3"],
-  ["fast-uri", "3.1.0"],
-  ["json-schema-traverse", "1.0.0"],
-]);
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -154,14 +112,10 @@ function ordinal(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-const EXPECTED_BARE_EXTERNALS = new Set(["supports-color"]);
 const BUILTIN_IMPORTS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
 function assertExpectedExternalImport(path) {
-  invariant(
-    BUILTIN_IMPORTS.has(path) || EXPECTED_BARE_EXTERNALS.has(path),
-    `unexpected external release import: ${path}`,
-  );
+  invariant(BUILTIN_IMPORTS.has(path), `unexpected external release import: ${path}`);
 }
 
 function buildEntries() {
@@ -364,11 +318,19 @@ async function fileRecord(root, path) {
   return Object.freeze({ path, size: bytes.byteLength, digest: sha256(bytes) });
 }
 
+async function collectRuntimeAssetPaths(repositoryRoot) {
+  const paths = [...RUNTIME_ASSET_FILES];
+  for (const directory of RUNTIME_ASSET_DIRECTORIES) {
+    for (const path of await walkRegularFiles(resolve(repositoryRoot, directory))) paths.push(`${directory}/${path}`);
+  }
+  return paths.sort(ordinal);
+}
+
 async function collectDeclaredPaths(repositoryRoot) {
   const schemas = (await readdir(resolve(repositoryRoot, "src/contracts/schemas/v1")))
     .filter((name) => name.endsWith(".schema.json"))
     .map((name) => `src/contracts/schemas/v1/${name}`);
-  return [...schemas, ...DECLARED_ASSETS].sort(ordinal);
+  return [...schemas, ...(await collectRuntimeAssetPaths(repositoryRoot))].sort(ordinal);
 }
 
 async function collectLegalSourcePaths(repositoryRoot) {
@@ -380,25 +342,6 @@ async function collectLegalSourcePaths(repositoryRoot) {
     if (error.code !== "ENOENT") throw error;
   }
   return paths;
-}
-
-async function deriveLaunchProfile(repositoryRoot, allowedImports) {
-  return {
-    node_major: 24,
-    executable: "process.execPath",
-    argv: ["--require", "hostile-runtime-guard.cjs", "archflow-mcp.mjs"],
-    environment_keys: ["HOME", "LANG", "LC_ALL", "NPM_CONFIG_CACHE", "PATH", "TMPDIR", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"],
-    removed_environment_keys: ["NODE_OPTIONS", "NODE_PATH"],
-    cwd_class: "copied-payload",
-    stdio: { stdin: "pipe", stdout: "pipe", stderr: "pipe", guard_fd: 3 },
-    guard_path: "test/fixtures/release/hostile-runtime-guard.cjs",
-    canary_paths: ["ambient/node_modules/archflow-release-canary/index.js", "repository-canary/SECRET"],
-    fixture_digests: await Promise.all(LAUNCH_FIXTURES.map(async (path) => ({
-      path,
-      digest: sha256(await readRegularFile(repositoryRoot, path)),
-    }))),
-    allowed_imports: [...allowedImports],
-  };
 }
 
 function packageIdentity(inputPath) {
@@ -413,77 +356,12 @@ async function readPackageVersion(repositoryRoot, packageName) {
   return value.version;
 }
 
-async function collectDependencyProvenance(repositoryRoot, metafile, contributing) {
+async function collectDependencyProvenance(repositoryRoot, contributing) {
   const records = new Map();
-  const embedded = new Map();
-  const expectations = [];
   const packageNames = new Set();
   for (const path of contributing) {
     const identity = packageIdentity(path);
-    if (!identity) continue;
-    packageNames.add(identity.packageName);
-    if (!path.endsWith(".mjs")) continue;
-    const mapPath = `${path}.map`;
-    let mapBytes;
-    try {
-      mapBytes = await readRegularFile(repositoryRoot, mapPath);
-    } catch (error) {
-      if (error.code === "ENOENT") {
-        invariant(
-          path === "node_modules/@modelcontextprotocol/server/dist/chunk-Br0eD_fh.mjs",
-          `missing adjacent source map is unexpected: ${path}`,
-        );
-        expectations.push({
-          input_key: path,
-          expectation: "expected-absent",
-          rationale: "The published SDK bridge chunk has no adjacent source map in @modelcontextprotocol/server@2.0.0.",
-        });
-        continue;
-      }
-      throw error;
-    }
-    const mapIdentity = packageIdentity(mapPath);
-    const version = await readPackageVersion(repositoryRoot, mapIdentity.packageName);
-    records.set(`${mapIdentity.packageName}:${mapIdentity.packagePath}`, {
-      package_name: mapIdentity.packageName,
-      package_version: version,
-      package_relative_path: mapIdentity.packagePath,
-      size: mapBytes.byteLength,
-      digest: sha256(mapBytes),
-          purpose: "source-map",
-    });
-    const sourceMap = JSON.parse(decoder.decode(mapBytes));
-    const firstPartyRoots = new Set();
-    const recognizedComponents = new Set();
-    for (const source of sourceMap.sources ?? []) {
-      const match = source.match(/\.pnpm\/((?:@[^/]+\/)?[^@/]+)@([^/]+)\/node_modules\/((?:@[^/]+\/)?[^/]+)/);
-      if (match) {
-        const name = match[3];
-        const versionWithoutPeer = match[2].split("_")[0];
-        invariant(KNOWN_EMBEDDED.get(name) === versionWithoutPeer, `unknown mapped component: ${name}@${versionWithoutPeer}`);
-        embedded.set(name, versionWithoutPeer);
-        recognizedComponents.add(`${name}@${versionWithoutPeer}`);
-        continue;
-      }
-      const firstParty = source.match(/^((?:\.\.\/)+(?:core-internal\/)?src)\//);
-      invariant(firstParty, `unexpected source-map source path: ${source}`);
-      firstPartyRoots.add(firstParty[1]);
-    }
-    expectations.push({
-      input_key: path,
-      expectation: "present",
-      map: {
-        package_name: mapIdentity.packageName,
-        package_version: version,
-        package_relative_path: mapIdentity.packagePath,
-        digest: sha256(mapBytes),
-      },
-      first_party_roots: [...firstPartyRoots].sort(ordinal),
-      recognized_third_party_components: [...recognizedComponents].sort(ordinal),
-    });
-  }
-  for (const [name, version] of KNOWN_EMBEDDED) {
-    invariant(embedded.get(name) === version, `missing mapped component: ${name}@${version}`);
+    if (identity) packageNames.add(identity.packageName);
   }
   for (const packageName of packageNames) {
     const packageRoot = `node_modules/${packageName}`;
@@ -492,28 +370,20 @@ async function collectDependencyProvenance(repositoryRoot, metafile, contributin
     for (const packagePath of ["package.json", "LICENSE", "LICENSE.md", "license.md", "LICENSE.txt", "LICENSE.BSD", "NOTICE"]) {
       // Case-insensitive lookups must not invent paths that fail on Linux.
       if (!packageEntries.has(packagePath)) continue;
-      try {
-        const bytes = await readRegularFile(repositoryRoot, `${packageRoot}/${packagePath}`);
-        records.set(`${packageName}:${packagePath}`, {
-          package_name: packageName,
-          package_version: version,
-          package_relative_path: packagePath,
-          size: bytes.byteLength,
-          digest: sha256(bytes),
-          purpose: packagePath === "package.json" ? "package-manifest" : packagePath === "NOTICE" ? "notice" : "license",
-        });
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-      }
+      const bytes = await readRegularFile(repositoryRoot, `${packageRoot}/${packagePath}`);
+      records.set(`${packageName}:${packagePath}`, {
+        package_name: packageName,
+        package_version: version,
+        package_relative_path: packagePath,
+        size: bytes.byteLength,
+        digest: sha256(bytes),
+        purpose: packagePath === "package.json" ? "package-manifest" : packagePath === "NOTICE" ? "notice" : "license",
+      });
     }
   }
-  return {
-    records: [...records.values()].sort((a, b) =>
-      ordinal(`${a.package_name}/${a.package_relative_path}`, `${b.package_name}/${b.package_relative_path}`),
-    ),
-    expectations: expectations.sort((a, b) => ordinal(a.input_key, b.input_key)),
-    embedded,
-  };
+  return [...records.values()].sort((a, b) =>
+    ordinal(`${a.package_name}/${a.package_relative_path}`, `${b.package_name}/${b.package_relative_path}`),
+  );
 }
 
 async function loadSchemaValidators(repositoryRoot) {
@@ -669,7 +539,7 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
   const exactControls = await expectedControls(repository, bundleInputs);
   assertEqualPathSet(recordPaths(controls), recordPaths(exactControls), "release controls");
   await assertRecords(repository, runtimeAssets, "runtime assets");
-  assertEqualPathSet(recordPaths(runtimeAssets), [...DECLARED_ASSETS].sort(ordinal), "runtime assets");
+  assertEqualPathSet(recordPaths(runtimeAssets), await collectRuntimeAssetPaths(repository), "runtime assets");
   await verifyDependencyRecords(repository, dependencyInputs);
   const owners = [
     ...bundleInputs.filter((record) => record.origin.kind === "repository").map((record) => ({ path: record.origin.path })),
@@ -682,9 +552,8 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
   const declared = manifest.value.declared_content;
   const expectedDeclared = await collectDeclaredPaths(repository);
   assertEqualPathSet(declared.schemas, expectedDeclared.filter((path) => path.startsWith("src/contracts/schemas/v1/")), "declared schemas");
-  invariant(declared.workflow === "assets/workflow.yaml", "declared workflow differs");
   assertEqualPathSet(declared.constitution, expectedDeclared.filter((path) => path.startsWith("assets/constitution/")), "declared constitution");
-  for (const path of [...declared.schemas, declared.workflow, ...declared.constitution]) invariant(ownerPaths.has(path), `unresolved declared content: ${path}`);
+  for (const path of [...declared.schemas, ...declared.constitution]) invariant(ownerPaths.has(path), `unresolved declared content: ${path}`);
   assertSortedUnique(contributing, "contributing inputs");
   invariant(contributing.every((path) => bundleInputs.some((record) => record.key === path)), "contributing input is not scanned");
   invariant(
@@ -705,7 +574,7 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
     const bytes = await readRegularFile(payload, artifact.path);
     invariant(bytes.byteLength === artifact.size && sha256(bytes) === artifact.digest, `stale payload artifact: ${artifact.path}`);
   }
-  const bundleBytes = await readRegularFile(payload, "archflow-mcp.mjs");
+  const bundleBytes = await readRegularFile(payload, "archflow-local.mjs");
   invariant(sha256(bundleBytes) === manifest.value.bundle_digest, "bundle digest mismatch");
   const metafileDocument = parseCanonicalDocument(await readRegularFile(payload, "metafile.json"), "release metafile");
   const metafileInputs = metafileDocument.value.inputs;
@@ -732,19 +601,15 @@ export async function validateReleaseSemantics({ repositoryRoot, payloadRoot, ma
     });
   }
   invariant(isDeepStrictEqual(manifest.value.entry_provenance, expectedProvenance), "per-entry release provenance differs from metafile and output bytes");
-  const derivedAllowedImports = [...new Set(expectedProvenance.flatMap((entry) => entry.allowed_imports).concat("node:module"))].sort(ordinal);
-  const derivedDependency = await collectDependencyProvenance(repository, metafileDocument.value, contributing);
-  invariant(isDeepStrictEqual(dependencyInputs, derivedDependency.records), "dependency provenance inputs are not the exact derived closure");
-  invariant(isDeepStrictEqual(manifest.value.adjacent_map_expectations, derivedDependency.expectations), "adjacent source-map expectations differ from derived evidence");
+  const derivedDependencyInputs = await collectDependencyProvenance(repository, contributing);
+  invariant(isDeepStrictEqual(dependencyInputs, derivedDependencyInputs), "dependency provenance inputs are not the exact derived closure");
 
   const dependencyInventoryDigest = sha256(canonicalJsonBytes({
-    adjacent_map_expectations: manifest.value.adjacent_map_expectations,
     bundle_inputs: bundleInputs.filter((record) => record.origin.kind === "dependency"),
     dependency_provenance_inputs: dependencyInputs,
   }));
   invariant(dependencyInventoryDigest === manifest.value.dependency_inventory_digest, "dependency inventory digest mismatch");
   invariant(isDeepStrictEqual(manifest.value.build_entries, buildEntries()), "release has unexpected build entries");
-  invariant(isDeepStrictEqual(manifest.value.launch_profile, await deriveLaunchProfile(repository, derivedAllowedImports)), "release launch profile differs from derived proof inputs");
   await validateNoticeContents(repository, payload, actualFiles);
 
   const summary = Object.freeze({
@@ -816,7 +681,7 @@ async function createControlRecords(repositoryRoot, bundleInputs) {
 }
 
 async function createRuntimeAssetRecords(repositoryRoot) {
-  return Promise.all([...DECLARED_ASSETS].sort(ordinal).map((path) => fileRecord(repositoryRoot, path)));
+  return Promise.all((await collectRuntimeAssetPaths(repositoryRoot)).map((path) => fileRecord(repositoryRoot, path)));
 }
 
 async function copyLegal(repositoryRoot, files) {
@@ -944,14 +809,14 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
     write: false,
     metafile: true,
     bundle: true,
-    platform: "node",
-  loader: { ".yaml": "text" },
-    format: "esm",
-    target: "node24",
-    splitting: false,
-    minify: false,
-    sourcemap: false,
-    legalComments: "none",
+    platform: RELEASE_BUILD_PROFILE.platform,
+    loader: RELEASE_BUILD_PROFILE.loader,
+    format: RELEASE_BUILD_PROFILE.format,
+    target: RELEASE_BUILD_PROFILE.target,
+    splitting: RELEASE_BUILD_PROFILE.splitting,
+    minify: RELEASE_BUILD_PROFILE.minify,
+    sourcemap: RELEASE_BUILD_PROFILE.sourcemap,
+    legalComments: RELEASE_BUILD_PROFILE.legalComments,
     plugins: [],
     banner: { js: RELEASE_BUILD_PROFILE.banner },
     tsconfigRaw: RELEASE_BUILD_PROFILE.tsconfigRaw,
@@ -972,15 +837,12 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
       allowed_imports: deriveExternalImports(outputMeta),
     });
   }
-  const allowedImports = [...new Set(entryProvenance.flatMap((entry) => entry.allowed_imports).concat("node:module"))].sort(ordinal);
 
   const { bundleInputs, contributing } = await buildRecords(repository, result.metafile);
   const controls = await createControlRecords(repository, bundleInputs);
   const runtimeAssets = await createRuntimeAssetRecords(repository);
-  const dependency = await collectDependencyProvenance(repository, result.metafile, contributing);
-  const dependencyInputs = dependency.records;
+  const dependencyInputs = await collectDependencyProvenance(repository, contributing);
   const dependencyInventoryDigest = sha256(canonicalJsonBytes({
-    adjacent_map_expectations: dependency.expectations,
     bundle_inputs: bundleInputs.filter((record) => record.origin.kind === "dependency"),
     dependency_provenance_inputs: dependencyInputs,
   }));
@@ -998,23 +860,20 @@ export async function buildReleasePayload({ repositoryRoot, stageRoot }) {
   const declaredPaths = await collectDeclaredPaths(repository);
   const manifestValue = {
     schema_version: "1",
-    bundle_digest: entryProvenance.find((entry) => entry.id === "mcp-stdio").output_digest,
+    bundle_digest: entryProvenance.find((entry) => entry.id === "local-cli").output_digest,
     dependency_inventory_digest: dependencyInventoryDigest,
     bundle_inputs: bundleInputs,
     contributing_inputs: contributing,
     release_control_inputs: controls,
     runtime_assets: runtimeAssets,
     dependency_provenance_inputs: dependencyInputs,
-    adjacent_map_expectations: dependency.expectations,
     declared_content: {
       schemas: declaredPaths.filter((path) => path.startsWith("src/contracts/schemas/v1/")),
-      workflow: "assets/workflow.yaml",
       constitution: declaredPaths.filter((path) => path.startsWith("assets/constitution/")),
     },
     proof_inputs: [...PROOF_INPUTS],
     build_entries: buildEntries(),
     entry_provenance: entryProvenance,
-    launch_profile: await deriveLaunchProfile(repository, allowedImports),
     artifacts,
   };
   const manifest = canonicalDocument(manifestValue);
@@ -1053,8 +912,7 @@ async function comparePayloads(candidate, reproduced) {
 
 function reproductionProof(candidate, reproduced, comparedFiles) {
   const proofInputsDigest = sha256(canonicalJsonBytes(candidate.manifest.value.proof_inputs));
-  const launchProfileDigest = sha256(canonicalJsonBytes(candidate.manifest.value.launch_profile ?? {}));
-  return Object.freeze({ candidate, reproduced, comparedFiles, proofInputsDigest, launchProfileDigest });
+  return Object.freeze({ candidate, reproduced, comparedFiles, proofInputsDigest });
 }
 
 export async function materializeReleaseSourceRoot({ repositoryRoot, stage, materializationRoot }) {
@@ -1227,7 +1085,6 @@ export function jsonSummary(value) {
       reproduced: jsonSummary(value.reproduced),
       compared_files: value.comparedFiles,
       proof_inputs_digest: value.proofInputsDigest,
-      launch_profile_digest: value.launchProfileDigest,
     };
   }
   return value;

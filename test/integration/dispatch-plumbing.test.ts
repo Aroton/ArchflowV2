@@ -43,7 +43,7 @@ afterEach(async () => {
   await Promise.all(scratchRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-function envelope(text = '{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'): DispatchEnvelope {
+function envelope(text = '{"schema_version":"1","subject":{"stage":"plan"},"rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'): DispatchEnvelope {
   const bytes = Buffer.from(text);
   return Object.freeze({
     result_kind: "review",
@@ -158,7 +158,7 @@ describe("dispatch plumbing proof", () => {
     const adapter = selectCliAdapter(host);
     expect(adapter.id).toBe(expectedAdapter);
     const { workspace } = await fixtureWorkspace(adapter.id, "observe-input");
-    const input = envelope('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"artifact":"envelope-only"}\n');
+    const input = envelope('{"schema_version":"1","subject":{"stage":"plan"},"rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"plan":"envelope-only"}\n');
     try {
       const result = await dispatch(adapter, workspace, input);
       expect(adapter.classifyFailure(result)).toBeUndefined();
@@ -271,7 +271,7 @@ describe("dispatch plumbing proof", () => {
     const { workspace } = await fixtureWorkspace(adapter.id, "success");
     const canaries = ["credential-canary-7429", "routing-sentinel-1836"];
     try {
-      const result = await dispatch(adapter, workspace, envelope(`{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"artifact":"${canaries.join(" ")}"}\n`));
+      const result = await dispatch(adapter, workspace, envelope(`{"schema_version":"1","subject":{"stage":"plan"},"rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"plan":"${canaries.join(" ")}"}\n`));
       expect(scanDispatchOutput(result, canaries)).toEqual([]);
       const diagnostics = await readFile(join(workspace.root, "plumbing-observation.json"));
       expect(scanDispatchOutput({ stdout: diagnostics, stderr: Buffer.alloc(0) }, canaries)).toEqual([]);
@@ -308,7 +308,7 @@ describe("dispatch plumbing proof", () => {
         writeFile(join(workspace.root, ".codex", "skills", "planted", "SKILL.md"), excluded[1]!)),
       writeFile(join(workspace.root, "AGENTS.md"), excluded[2]!),
     ]);
-    const input = envelope('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"artifact":"prompt-envelope"}\n');
+    const input = envelope('{"schema_version":"1","subject":{"stage":"plan"},"rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"plan":"prompt-envelope"}\n');
     try {
       await dispatch(adapter, workspace, input);
       const rendered = await readFile(join(workspace.root, "prompt-input.json"), "utf8");

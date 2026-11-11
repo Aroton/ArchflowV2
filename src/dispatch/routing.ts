@@ -7,7 +7,8 @@ import type { AdapterId, ModelFamily, RouteSourceRecord } from "../contracts/rev
 import { EFFORT_VALUES } from "../contracts/review.js";
 import { assertAdapterFamily } from "../contracts/trust.js";
 
-export type RoutingPhaseKind = keyof NonNullable<ConfigV1["overrides"]>;
+/** The review stages routing serves: a plan review routes as `phase-design`, an implementation review as `phase-impl`. */
+export type RoutingPhaseKind = "phase-design" | "phase-impl";
 export type RoutingRole = (typeof ROUTING_ROLES)[number];
 
 export type DispatchRoute = Readonly<{
@@ -18,13 +19,13 @@ export type DispatchRoute = Readonly<{
   provider?: string;
 }>;
 
-export type SelectedDispatchRoute = Readonly<{
+type SelectedDispatchRoute = Readonly<{
   selected: SelectedRouteCandidate;
   route: DispatchRoute;
   source: RouteSourceRecord;
 }>;
 
-export type SelectedRouteCandidate = Readonly<{
+type SelectedRouteCandidate = Readonly<{
   raw_route: ModelRouteV1;
   source: RouteSourceRecord;
 }>;
@@ -68,8 +69,8 @@ function assertSupportedEffort(adapter: AdapterId, effort: string): void {
 }
 
 /**
- * Validates one configured route into a dispatchable route. Shared by the pinned-config path and
- * the per-dispatch override, so an override is held to exactly the same rules as a pinned route.
+ * Validates one configured route into a dispatchable route. Shared by routes read from config and
+ * routes the review input declares, so a declared route is held to exactly the same rules.
  */
 export function routeFromConfiguredRoute(configured: ModelRouteV1): DispatchRoute {
   if (configured.model === "gpt-6-astra" && configured.effort === "max") {
@@ -109,7 +110,7 @@ function normalizeRawRoutes(value: ModelRouteV1 | readonly ModelRouteV1[] | unde
  * Resolves the raw configured routes for a role, taking into account producer client specialization
  * (e.g., config.producers.antigravity), phase-kind overrides, and base roles.
  */
-export function configuredRoutes(
+function configuredRoutes(
   config: ConfigV1,
   phaseKind: RoutingPhaseKind,
   role: RoutingRole,
@@ -122,8 +123,6 @@ export function configuredRoutes(
       if (candidates.length > 0) return candidates;
     } else if (role === "test-reviewer" && producerRoles?.["test-reviewer"] !== undefined) {
       return [producerRoles["test-reviewer"]];
-    } else if (role === "effort-reviewer" && producerRoles?.["effort-reviewer"] !== undefined) {
-      return [producerRoles["effort-reviewer"]];
     } else if (role === "adjudicator" && producerRoles?.adjudicator !== undefined) {
       return [producerRoles.adjudicator];
     }
@@ -136,8 +135,6 @@ export function configuredRoutes(
       if (candidates.length > 0) return candidates;
     } else if (role === "test-reviewer" && phaseOverrides["test-reviewer"] !== undefined) {
       return [phaseOverrides["test-reviewer"]];
-    } else if (role === "effort-reviewer" && phaseOverrides["effort-reviewer"] !== undefined) {
-      return [phaseOverrides["effort-reviewer"]];
     } else if (role === "adjudicator" && phaseOverrides.adjudicator !== undefined) {
       return [phaseOverrides.adjudicator];
     }
@@ -149,40 +146,22 @@ export function configuredRoutes(
     if (candidates.length > 0) return candidates;
   } else if (role === "test-reviewer" && baseRoles["test-reviewer"] !== undefined) {
     return [baseRoles["test-reviewer"]];
-  } else if (role === "effort-reviewer") {
-    if (baseRoles["effort-reviewer"] !== undefined) return [baseRoles["effort-reviewer"]];
-    return [Object.freeze({ model: "gpt-6-luna", effort: "xhigh" as const })];
   } else if (role === "adjudicator" && baseRoles.adjudicator !== undefined) {
     return [baseRoles.adjudicator];
   }
 
-  // Phase design and implementation always have a distinct test assignment. Configuration and
-  // invocation routing retain their existing precedence; this built-in is only the final fallback
-  // when the optional configured role was omitted.
-  if (role === "test-reviewer" && (phaseKind === "phase-design" || phaseKind === "phase-impl")) {
+  // Plan and implementation reviews always have a distinct test assignment. Configured and
+  // invocation-declared routes take precedence; this built-in is only the final fallback when the
+  // optional configured role was omitted.
+  if (role === "test-reviewer") {
     return [Object.freeze({ model: "gpt-6.1-sol", effort: "low" as const })];
   }
 
   return [];
 }
 
-/**
- * The primary route the config pins for a role, unvalidated.
- */
-export function configuredRoute(
-  config: ConfigV1,
-  phaseKind: RoutingPhaseKind,
-  role: RoutingRole,
-  host?: HostIdentity,
-): ModelRouteV1 | undefined {
-  return configuredRoutes(config, phaseKind, role, host)[0];
-}
-
-const displacedRoute = (
-  source: "configured" | "invocation-declared",
-  route: ModelRouteV1,
-): NonNullable<RouteSourceRecord["displaced"]> => Object.freeze({
-  source,
+const displacedConfiguredRoute = (route: ModelRouteV1): NonNullable<RouteSourceRecord["displaced"]> => Object.freeze({
+  source: "configured" as const,
   model: route.model,
   effort: route.effort,
   ...(route.provider === undefined ? {} : { provider: route.provider }),
@@ -196,31 +175,17 @@ export function selectDispatchRouteCandidates(
   phaseKind: RoutingPhaseKind,
   role: RoutingRole,
   invocationRoute?: ModelRouteV1,
-  humanOverride?: ModelRouteV1,
   host?: HostIdentity,
 ): readonly SelectedRouteCandidate[] {
   const configured = configuredRoutes(config, phaseKind, role, host);
   const primaryConfigured = configured[0];
-  const normallySelected = invocationRoute ?? primaryConfigured;
-
-  if (humanOverride !== undefined) {
-    return Object.freeze([{
-      raw_route: humanOverride,
-      source: Object.freeze({
-        provenance: "route-override" as const,
-        ...(normallySelected === undefined
-          ? {}
-          : { displaced: displacedRoute(invocationRoute === undefined ? "configured" : "invocation-declared", normallySelected) }),
-      }),
-    }]);
-  }
 
   if (invocationRoute !== undefined) {
     return Object.freeze([{
       raw_route: invocationRoute,
       source: Object.freeze({
         provenance: "invocation-declared" as const,
-        ...(primaryConfigured === undefined ? {} : { displaced: displacedRoute("configured", primaryConfigured) }),
+        ...(primaryConfigured === undefined ? {} : { displaced: displacedConfiguredRoute(primaryConfigured) }),
       }),
     }]);
   }
@@ -235,73 +200,10 @@ export function selectDispatchRouteCandidates(
   })));
 }
 
-/**
- * Selects one role's primary route candidate by trust precedence.
- */
-export function selectDispatchRouteCandidate(
-  config: ConfigV1,
-  phaseKind: RoutingPhaseKind,
-  role: RoutingRole,
-  invocationRoute?: ModelRouteV1,
-  humanOverride?: ModelRouteV1,
-  host?: HostIdentity,
-): SelectedRouteCandidate {
-  const candidates = selectDispatchRouteCandidates(config, phaseKind, role, invocationRoute, humanOverride, host);
-  return candidates[0]!;
-}
-
 export function validateSelectedDispatchRoute(selected: SelectedRouteCandidate): SelectedDispatchRoute {
   return Object.freeze({
     selected,
     route: routeFromConfiguredRoute(selected.raw_route),
     source: selected.source,
   });
-}
-
-export function selectDispatchRoute(
-  config: ConfigV1,
-  phaseKind: RoutingPhaseKind,
-  role: RoutingRole,
-  invocationRoute?: ModelRouteV1,
-  humanOverride?: ModelRouteV1,
-  host?: HostIdentity,
-): SelectedDispatchRoute {
-  return validateSelectedDispatchRoute(selectDispatchRouteCandidate(
-    config,
-    phaseKind,
-    role,
-    invocationRoute,
-    humanOverride,
-    host,
-  ));
-}
-
-export function selectDispatchRoutes(
-  config: ConfigV1,
-  phaseKind: RoutingPhaseKind,
-  role: RoutingRole,
-  invocationRoute?: ModelRouteV1,
-  humanOverride?: ModelRouteV1,
-  host?: HostIdentity,
-): readonly SelectedDispatchRoute[] {
-  const candidates = selectDispatchRouteCandidates(config, phaseKind, role, invocationRoute, humanOverride, host);
-  return Object.freeze(candidates.map(validateSelectedDispatchRoute));
-}
-
-export function resolveDispatchRoute(
-  config: ConfigV1,
-  phaseKind: RoutingPhaseKind,
-  role: RoutingRole,
-  host?: HostIdentity,
-): DispatchRoute {
-  return selectDispatchRoute(config, phaseKind, role, undefined, undefined, host).route;
-}
-
-export function resolveDispatchRoutes(
-  config: ConfigV1,
-  phaseKind: RoutingPhaseKind,
-  role: RoutingRole,
-  host?: HostIdentity,
-): readonly DispatchRoute[] {
-  return selectDispatchRoutes(config, phaseKind, role, undefined, undefined, host).map((s) => s.route);
 }

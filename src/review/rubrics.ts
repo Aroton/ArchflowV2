@@ -15,8 +15,9 @@ import type { ReviewAssignmentV1, ReviewFocus } from "./envelopes.js";
 import { parseSingleYamlDocument } from "../contracts/yaml.js";
 import { assetRoot } from "../init/assets.js";
 
-export type CounterReviewPhaseKind = "prd" | "design" | "phase-design" | "phase-impl";
-export type CanonicalRubricId = "prd-v1" | "design-v3" | "phase-design-v1" | "simple-plan-v1" | "implementation-v1";
+/** The two review recipes: a standalone plan runs on `phase-design`, an implementation on `phase-impl`. */
+export type CounterReviewPhaseKind = "phase-design" | "phase-impl";
+export type CanonicalRubricId = "simple-plan-v1" | "implementation-v1";
 
 export type CanonicalRubric = Readonly<{
   rubric_id: CanonicalRubricId;
@@ -28,7 +29,6 @@ export function reviewCriterionIds(
   phaseKind: CounterReviewPhaseKind,
   rubric: RubricV1,
   focus: ReviewFocus,
-  _specialistActive?: boolean,
 ): readonly string[] {
   const all = rubric.criteria.map((criterion) => criterion.id);
   const tests = loadReviewInputConfiguration().phases[phaseKind].rubric.test_criteria;
@@ -39,47 +39,15 @@ export function reviewCriterionIds(
   return Object.freeze(all.filter((criterion) => !tests.includes(criterion)));
 }
 
-export type ReviewAssignmentOptions = Readonly<{
-  /** Override the ordinary criterion channel, primarily for bounded remediation subsets. */
-  criterion_ids?: readonly string[];
-  /** Presence, including `[]`, assigns approved-upstream alignment to the primary general run. */
-  expected_upstream_digests?: NonNullable<ReviewAssignmentV1["expected_upstream_digests"]>;
-  /** Exact criterion-less archive occurrences assigned for bounded confirmation. */
-  legacy_confirmations?: NonNullable<ReviewAssignmentV1["legacy_confirmations"]>;
-}>;
-
 export function reviewAssignment(
   reviewerId: string,
   focus: ReviewFocus,
   phaseKind: CounterReviewPhaseKind,
   rubric: RubricV1,
-  legacySpecialistActiveOrOptions?: boolean | ReviewAssignmentOptions,
 ): ReviewAssignmentV1 {
-  const options = typeof legacySpecialistActiveOrOptions === "boolean"
-    ? undefined
-    : legacySpecialistActiveOrOptions;
-  if (options?.legacy_confirmations !== undefined && options.legacy_confirmations.length === 0) {
-    throw new TypeError("legacy_confirmations must be non-empty when present");
-  }
-  const criterionIds = Object.freeze([...(options?.criterion_ids ?? reviewCriterionIds(phaseKind, rubric, focus))]);
-  if (criterionIds.length === 0 && options?.expected_upstream_digests === undefined &&
-      options?.legacy_confirmations === undefined) {
-    throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind} without a present responsibility`);
-  }
-  return Object.freeze({
-    reviewer_id: reviewerId,
-    focus,
-    criterion_ids: criterionIds,
-    ...(options?.expected_upstream_digests === undefined
-      ? {}
-      : { expected_upstream_digests: Object.freeze([...options.expected_upstream_digests]) }),
-    ...(options?.legacy_confirmations === undefined
-      ? {}
-      : { legacy_confirmations: Object.freeze(options.legacy_confirmations.map((confirmation) => Object.freeze({
-        finding_id: confirmation.finding_id,
-        criterion_ids: Object.freeze([...confirmation.criterion_ids]),
-      }))) }),
-  });
+  const criterionIds = reviewCriterionIds(phaseKind, rubric, focus);
+  if (criterionIds.length === 0) throw new TypeError(`review focus ${focus} is not applicable to ${phaseKind}`);
+  return Object.freeze({ reviewer_id: reviewerId, focus, criterion_ids: criterionIds });
 }
 
 function canonicalRubric(rubricId: CanonicalRubricId, rubric: RubricV1): CanonicalRubric {
@@ -152,9 +120,9 @@ export async function loadRubricFile(input: Readonly<{
 }
 
 /**
- * Loads the server-owned rubric file for one durable phase kind, fresh on every
- * call so an installed bundle edit takes effect on the next review without a
- * restart. Missing or invalid files fail closed; nothing is cached.
+ * Loads the installed rubric file a review recipe names, fresh on every call so an
+ * installed bundle edit takes effect on the next review. Missing or invalid files
+ * fail closed; nothing is cached.
  */
 export async function loadCanonicalRubricForPhaseKind(
   phaseKind: CounterReviewPhaseKind,
@@ -162,13 +130,11 @@ export async function loadCanonicalRubricForPhaseKind(
   return loadInstalledRubric(loadReviewInputConfiguration().phases[phaseKind].rubric);
 }
 
-/** Standalone plans have their own policy; implementations share defect criteria. */
+/** The rubric of the recipe a standalone stage runs on. */
 export async function loadCanonicalRubricForSimpleStage(
   stage: SimpleReviewInput["stage"],
 ): Promise<ProjectResult<CanonicalRubric>> {
-  return stage === "plan"
-    ? loadInstalledRubric({ file: "rubrics/simple-plan.yaml", id: "simple-plan-v1" })
-    : loadCanonicalRubricForPhaseKind("phase-impl");
+  return loadCanonicalRubricForPhaseKind(stage === "plan" ? "phase-design" : "phase-impl");
 }
 
 async function loadInstalledRubric(
@@ -179,7 +145,7 @@ async function loadInstalledRubric(
     root = await assetRoot();
   } catch (error) {
     return rubricFailure("rubric-file-missing", [
-      `assets/rubrics: installed ArchFlow assets are missing (${error instanceof Error ? error.message : "unknown error"})`,
+      `assets/rubrics: ${error instanceof Error ? error.message : "installed ArchFlow assets are missing"}`,
     ]);
   }
   return loadRubricFile({ root, file: expected.file, expected_id: expected.id });

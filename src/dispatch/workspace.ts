@@ -6,22 +6,14 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { type GitOid } from "../contracts/canonical.js";
 import { repositoryNameV1Schema, type RepositoryName } from "../contracts/config.js";
 import type { Sha256Digest } from "../contracts/evidence.js";
-import type { ReviewedRepositoryV1 } from "../contracts/review.js";
-import {
-  MULTI_REPOSITORY_VIEW_NOTE,
-  PRODUCED_REPOSITORY_VIEW_NOTE,
-  REPOSITORY_VIEW_NOTE,
-  type ReviewWorkspaceBinding,
-} from "../review/envelopes.js";
-import type { ProjectionPlan } from "../state/snapshots.js";
+import type { RepositoryPathClaim } from "../contracts/path-claims.js";
+import { MULTI_REPOSITORY_VIEW_NOTE, type ReviewWorkspaceBinding } from "../review/envelopes.js";
 
 import type { AdapterId } from "../contracts/review.js";
 
 export type DispatchWorkspace = Readonly<{
   root: string;
   env: Readonly<NodeJS.ProcessEnv>;
-  /** Read-only checkout for review dispatch; absent for adjudication and preflight-only use. */
-  repository_view_root?: string;
   /** Reviewer cwd: contains only the repository snapshots and supplied review files. */
   review_root?: string;
   dispose: () => Promise<void>;
@@ -104,8 +96,14 @@ export async function createDispatchWorkspace(
 const GIT_OID = /^[0-9a-f]{40}$/u;
 const SHA256_DIGEST = /^[0-9a-f]{64}$/u;
 
+/** The after-image one path must have in the proposed tree. */
+export type ReviewProjectionDesired =
+  | Readonly<{ state: "absent" }>
+  | Readonly<{ state: "present"; file_type: "regular"; mode: "100644" | "100755"; bytes: Uint8Array }>
+  | Readonly<{ state: "present"; file_type: "symlink"; mode: "120000"; bytes: Uint8Array }>;
+
 export type ReviewProjectionPlan = Readonly<{
-  entries: readonly Pick<ProjectionPlan["entries"][number], "path" | "desired">[];
+  entries: readonly Readonly<{ path: RepositoryPathClaim; desired: ReviewProjectionDesired }>[];
 }>;
 
 export type DispatchRepositoryView = Readonly<{
@@ -115,7 +113,7 @@ export type DispatchRepositoryView = Readonly<{
   repository_root: string;
   repository_identity_digest: Sha256Digest;
   commit: GitOid;
-  /** Server-captured after-images for the proposed tree; retained and authenticated for workflows. */
+  /** Server-captured after-images that turn the archived commit into the proposed tree. */
   projection_plan?: ReviewProjectionPlan;
   /** Digest of the authenticated projection represented by projection_plan. */
   snapshot_digest?: Sha256Digest;
@@ -184,17 +182,6 @@ export function projectRepositoryWorkspaceBinding(
   candidate: DispatchRepositoryViewPlan,
 ): ReviewWorkspaceBinding {
   const plan = validateDispatchRepositoryViewPlan(candidate);
-  if (plan.length === 1) {
-    const primary = plan[0]!;
-    return primary.snapshot_digest === undefined
-      ? Object.freeze({ kind: "read-only-repository-checkout", commit: primary.commit, note: REPOSITORY_VIEW_NOTE })
-      : Object.freeze({
-          kind: "read-only-produced-repository-snapshot",
-          base_commit: primary.commit,
-          snapshot_digest: primary.snapshot_digest,
-          note: PRODUCED_REPOSITORY_VIEW_NOTE,
-        });
-  }
   return Object.freeze({
     kind: "read-only-multi-repository-view",
     note: MULTI_REPOSITORY_VIEW_NOTE,
@@ -208,26 +195,14 @@ export function projectRepositoryWorkspaceBinding(
   });
 }
 
-/** Projects the ordered server-attested commit pins without exposing live repository roots. */
-export function projectReviewedRepositories(
-  candidate: DispatchRepositoryViewPlan,
-): readonly ReviewedRepositoryV1[] {
-  const plan = validateDispatchRepositoryViewPlan(candidate);
-  return Object.freeze(plan.map((member) => Object.freeze({
-    name: member.name,
-    repository_identity_digest: member.repository_identity_digest,
-    commit: member.commit,
-  })));
-}
-
 /**
  * Materializes a read-only checkout of the repository at `commit` under the workspace. When a
  * retained projection is supplied, its authenticated after-images reconstruct the proposed tree.
  * `git archive` (NOT `git worktree add`) is deliberate: an archive extraction has
- * no `.git` link back to the repository object database, so after `.archflow/tasks` is removed
- * the tracked task blobs (produce artifacts, triage) are unreachable from the view — the
- * reviewer-fresh-context property of `src/review/envelopes.ts` holds structurally, not by child
- * good behavior. Tracked documentation (`docs/**`) stays readable: it is guidance, not authority.
+ * no `.git` link back to the repository object database, so once `.archflow/tasks` and
+ * `.archflow/constitution` are removed their tracked blobs are unreachable from the view and the
+ * reviewer sees only the repository files, structurally rather than by child good behavior.
+ * Tracked documentation (`docs/**`) stays readable: it is guidance, not authority.
  * The pipeline is a plain POSIX `git archive | tar -x`, matching this module's existing posture.
  */
 async function materializeRepositoryArchive(
@@ -310,7 +285,7 @@ export async function materializeRepositoryViews(
       throw new RepositoryViewMaterializationError(member.name, error);
     }
   }
-  return Object.freeze({ ...workspace, review_root: reviewRoot, repository_view_root: plan.length === 1 ? join(container, "primary") : container });
+  return Object.freeze({ ...workspace, review_root: reviewRoot });
 }
 
 function errno(error: unknown): string | undefined {

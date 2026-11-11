@@ -3,14 +3,12 @@ import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
-import { parseSimpleReviewInput, type SimpleReviewInput } from "../../src/contracts/simple-review.js";
+import { parseSimpleReviewInput, parseSimpleReviewResult, type SimpleReviewInput } from "../../src/contracts/simple-review.js";
 import { createProjectError } from "../../src/contracts/errors.js";
 import { CliAdapterError } from "../../src/dispatch/cli.js";
-import { runSimpleReview, type SimpleReviewDependencies } from "../../src/review/simple-review.js";
+import { runSimpleReview, type SimpleReviewContext, type SimpleReviewDependencies } from "../../src/review/simple-review.js";
 import { captureSimpleContext, loadSimplePolicy } from "../../src/review/simple-context.js";
 import { shareRepositoryViewWorkspace } from "../../src/dispatch/workspace.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
 import { loadCanonicalRubricForSimpleStage } from "../../src/review/rubrics.js";
 
 const roots: string[] = [];
@@ -26,9 +24,7 @@ async function repo() {
   git(root, "add", "."); git(root, "commit", "-qm", "base");
   const base_commit = git(root, "rev-parse", "HEAD");
   const controller = new AbortController();
-  const connection = connectionContextFactory.captureStartup({ connection_id: "simple-test", startup_repository_candidate: { working_directory: root } })
-    .initialize({ client: { name: "codex", version: "test" }, host: "codex", protocol_version: "2025-11-25" });
-  const context = createInvocationContext(connection, { invocation_id: "simple-test", transport_metadata: { request_id: "test", operation: "tools/call" } }, controller.signal);
+  const context: SimpleReviewContext = { working_directory: root, host: "codex", signal: controller.signal, invocation_id: "simple-test" };
   const input: SimpleReviewInput = { schema_version: "1", stage: "plan", ask: "Update app", plan: "Update app and test it", base_commit, paths: ["app.txt"] };
   return { root, input, context, controller };
 }
@@ -200,6 +196,11 @@ describe("standalone simple review", () => {
     expect(result.ok, JSON.stringify(result)).toBe(true);
     expect(calls[0]!.route.model).toBe("gpt-5.6-sol");
     expect(result.value!.human_review_reasons).toHaveLength(2);
+    // One reason from the approval rule's content path match, one from the constitution trigger.
+    expect(result.value!.human_review_reasons).toEqual([
+      expect.stringMatching(/^Approval rule trigger: these changed paths matched the project's content rules:\n- .*app\.txt/u),
+      "custom-review: matched. app.txt changes",
+    ]);
     expect(result.value!.constitution.judgments[0]!.rule_id).toBe("custom-review");
     expect(await readdir(join(root, ".archflow"))).not.toContain("tasks");
   });
@@ -232,6 +233,42 @@ describe("standalone simple review", () => {
     const captured = await captureSimpleContext(root, input, context.signal);
     git(root, "checkout", "-qb", "other");
     await expect(captured.assertCurrent()).rejects.toMatchObject({ code: "SUBJECT_CHANGED" });
+  });
+
+  it("raises a human review reason for an approval-rule subject only at its stage", async () => {
+    const { root, input, context } = await repo();
+    await mkdir(join(root, ".archflow"));
+    await writeFile(join(root, ".archflow/config.yaml"), "schema_version: '1'\nroles:\n  counter-reviewer: {model: gpt-6-astra, effort: low}\n  adjudicator: {model: gpt-6-astra, effort: low}\napproval_rules:\n  subjects: ['phase-impl']\n  content: []\n");
+    const plan = await runSimpleReview(input, context, { dispatch: fakeDispatch([]) });
+    expect(plan.ok, JSON.stringify(plan)).toBe(true);
+    expect(plan.value!.human_review_reasons).toEqual([]);
+    const implementation = await runSimpleReview({ ...input, stage: "implementation", verification: "Relevant check passed",
+      expected_policy_digest: plan.value!.policy_digest }, context, { dispatch: fakeDispatch([]) });
+    expect(implementation.ok, JSON.stringify(implementation)).toBe(true);
+    expect(implementation.value!.human_review_reasons).toEqual([
+      'Approval rule trigger: this project requires human approval for the "phase-impl" subject.',
+    ]);
+  });
+
+  it("raises the phase-design subject only on a plan review and ignores the legacy prd and design subjects", async () => {
+    const { root, input, context } = await repo();
+    await mkdir(join(root, ".archflow"));
+    const configWithSubjects = (subjects: string) => writeFile(join(root, ".archflow/config.yaml"), `schema_version: '1'\nroles:\n  counter-reviewer: {model: gpt-6-astra, effort: low}\n  adjudicator: {model: gpt-6-astra, effort: low}\napproval_rules:\n  subjects: ${subjects}\n  content: []\n`);
+    const review = async () => {
+      const plan = await runSimpleReview(input, context, { dispatch: fakeDispatch([]) });
+      expect(plan.ok, JSON.stringify(plan)).toBe(true);
+      const implementation = await runSimpleReview({ ...input, stage: "implementation", verification: "Relevant check passed",
+        expected_policy_digest: plan.value!.policy_digest }, context, { dispatch: fakeDispatch([]) });
+      expect(implementation.ok, JSON.stringify(implementation)).toBe(true);
+      return { plan: plan.value!.human_review_reasons, implementation: implementation.value!.human_review_reasons };
+    };
+    await configWithSubjects("['phase-design']");
+    expect(await review()).toEqual({
+      plan: ['Approval rule trigger: this project requires human approval for the "phase-design" subject.'],
+      implementation: [],
+    });
+    await configWithSubjects("[prd, design]");
+    expect(await review()).toEqual({ plan: [], implementation: [] });
   });
 
   it("rejects invalid existing configuration without defaults or dispatch", async () => {
@@ -285,14 +322,35 @@ describe("standalone simple review", () => {
     expect(result.error!.code).toBe("CANCELLED"); expect(calls).toHaveLength(0);
   });
 
-  it("validates input and output at the public MCP boundary", async () => {
+  it("does not retry a non-transient failure and stops a transient one after three dispatches", async () => {
     const { input, context } = await repo();
-    const boundary = createToolBoundary({ archflow_review: async () => ({ schema_version: "1", ok: true }) });
-    const badOutput = await boundary.invoke("archflow_review", input, context);
-    expect(badOutput.kind).toBe("review-result");
-    if (badOutput.kind === "review-result") expect(badOutput.result.error!.code).toBe("INTERNAL_ERROR");
-    const badInput = await boundary.invoke("archflow_review", { ...input, stage: "implementation" }, context);
-    if (badInput.kind === "review-result") expect(badInput.result.error!.message).toContain("verification");
-    else throw new Error("missing public review result");
+    for (const [code, failure, expected] of [
+      ["AUTH_UNAVAILABLE", () => createProjectError("AUTH_UNAVAILABLE", { adapter: "claude-cli" }), 1],
+      ["RATE_LIMITED", () => createProjectError("RATE_LIMITED", { adapter: "claude-cli", attempt: 1 }), 3],
+    ] as const) {
+      let generalDispatches = 0;
+      const waits: number[] = [];
+      const fake = fakeDispatch([]);
+      const result = await runSimpleReview(input, context, { wait: async (ms) => { waits.push(ms); }, dispatch: async (...args) => {
+        const body = JSON.parse(new TextDecoder().decode(args[1].bytes));
+        if (body.assignment?.focus === "general") { generalDispatches++; throw new CliAdapterError(failure()); }
+        return fake(...args);
+      } });
+      expect(result.ok).toBe(false);
+      expect(result.value!.failures).toEqual([expect.objectContaining({ role: "counter-reviewer", code })]);
+      expect(result.value!.reports.map(report => report.role)).toEqual(["test-reviewer", "adjudicator"]);
+      expect(generalDispatches).toBe(expected);
+      expect(waits).toEqual(expected === 1 ? [] : [1000, 4000]);
+    }
+  });
+
+  it("validates its own input and returns a result that satisfies the public result schema", async () => {
+    const { input, context } = await repo();
+    const badInput = await runSimpleReview({ ...input, stage: "implementation" }, context, { dispatch: fakeDispatch([]) });
+    expect(badInput.error!.code).toBe("INPUT_INVALID");
+    expect(badInput.error!.message).toContain("verification");
+    expect(parseSimpleReviewResult(badInput)).toEqual(badInput);
+    const reviewed = await runSimpleReview(input, context, { dispatch: fakeDispatch([]) });
+    expect(parseSimpleReviewResult(reviewed)).toEqual(reviewed);
   });
 });

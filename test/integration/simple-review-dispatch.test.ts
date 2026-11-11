@@ -3,10 +3,8 @@ import { chmod, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
 import { resetMemoizedCliPreflight } from "../../src/dispatch/cli.js";
-import { createToolHandlers } from "../../src/mcp/handlers/index.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
+import { runLocalReview } from "../../src/local/review.js";
 
 const roots: string[] = [];
 const initialPath = process.env.PATH;
@@ -52,17 +50,12 @@ else {
 }
 `);
   await chmod(executable, 0o755); process.env.PATH = `${bin}:${initialPath ?? ""}`; resetMemoizedCliPreflight();
-  const connection = connectionContextFactory.captureStartup({ connection_id: "standalone-dispatch", startup_repository_candidate: { working_directory: repository } })
-    .initialize({ client: { name: "codex", version: "test" }, host: "codex", protocol_version: "2025-11-25" });
-  const context = createInvocationContext(connection, { invocation_id: "standalone-dispatch", transport_metadata: { request_id: "review", operation: "tools/call" } }, new AbortController().signal);
   const route = { model: "gpt-5.6-sol", effort: "medium" };
-  const outcome = await createToolBoundary(createToolHandlers()).invoke("archflow_review", {
+  const result = await runLocalReview({ working_directory: repository, producer: "codex", value: {
     schema_version: "1", stage: "implementation", ask: "Update app", plan: "Update app and verify", base_commit: git("rev-parse", "HEAD"),
     paths: ["app.txt"], verification: "Application check passed", review_routes: { "counter-reviewer": route, "test-reviewer": route, adjudicator: route },
-  }, context);
-  expect(outcome.kind).toBe("review-result");
-  if (outcome.kind !== "review-result") throw new Error("wrong tool outcome");
-  expect(outcome.result.ok, JSON.stringify(outcome.result)).toBe(true);
+  } }) as { ok: boolean };
+  expect(result.ok, JSON.stringify(result)).toBe(true);
   const calls = (await readFile(log, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   expect(calls).toHaveLength(3); expect(new Set(calls.map((call) => call.cwd)).size).toBe(1);
   expect(calls.map((call) => call.role).sort()).toEqual(["constitution", "general", "tests"]);

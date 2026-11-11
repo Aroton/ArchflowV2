@@ -1,98 +1,81 @@
-import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
-import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
+import { reviewReportOutputSchema } from "../../src/contracts/review.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
 import { CliAdapterError } from "../../src/dispatch/cli.js";
-import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
+import { createReviewDispatcher } from "../../src/dispatch/coordinator.js";
 import { DispatchProcessError } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
-import type { DispatchEnvelope } from "../../src/review/envelopes.js";
-import { REAL_HOST_TEST_TIMEOUT_MS, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
-import { createTaskWorkspace, type TaskWorkspace } from "../helpers/task-workspace.js";
+import { sealDispatchInput, type DispatchEnvelope } from "../../src/review/envelopes.js";
+import { REAL_HOST_TEST_TIMEOUT_MS, failedAttemptObserver, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
+import { createReviewRepository } from "../helpers/review-repository.js";
+import { standaloneReviewFields } from "../helpers/standalone-review-input.js";
+
+/** The standalone review output contract, as `createReviewResponseSchema` hands it to dispatch. */
+const reviewSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue;
 
 const REAL_HOSTS_AVAILABLE = realHostsAvailable();
 requireRealHostsAvailable(REAL_HOSTS_AVAILABLE);
-const encoder = new TextEncoder();
-const PHASE = parsePhaseInstanceId("prd");
-const ENVELOPE: DispatchEnvelope = Object.freeze({
-  result_kind: "review",
-  bytes: encoder.encode("{}\n"),
-  digest: "e".repeat(64) as DispatchEnvelope["digest"],
-  byte_count: 3,
+/** A sealed standalone counter-review input, the shape `runSimpleReview` dispatches. */
+const ENVELOPE: DispatchEnvelope = sealDispatchInput("review", {
+  ...standaloneReviewFields({ subject: "A local parser rejects malformed JSON before changing state." }),
+  assignment: { reviewer_id: "counter-reviewer-1", focus: "general", criterion_ids: ["correctness"] },
+  rubric: { schema_version: "1", kind: "implementation", mode: "adversarial", criteria: [{ id: "correctness", text: "Report a concrete correctness defect.", blocking: true }] },
 });
-
-async function attemptRecord(workspace: TaskWorkspace): Promise<Record<string, unknown>> {
-  const directory = join(workspace.root, ".archflow", "runtime", "tasks", workspace.taskId, "diagnostics", "attempts", "prd");
-  const names = await readdir(directory);
-  expect(names).toHaveLength(1);
-  return JSON.parse(await readFile(join(directory, names[0]!), "utf8")) as Record<string, unknown>;
-}
 
 describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host failure classes", () => {
   it("classifies a real Codex invalid-model rejection as UNSUPPORTED_MODEL", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "real-failure-model", label: "real-failure-model" });
+    const repository = await createReviewRepository({ label: "real-failure-model" });
     const route: DispatchRoute = {
       adapter: "codex-cli",
       family: "codex",
       model: "gpt-model-does-not-exist",
       effort: "xhigh",
     };
+    const observer = failedAttemptObserver();
     try {
-      const dispatch = createDispatchCoordinator({
-        authority: workspace.services.authority,
-        dependencies: workspace.services.dependencies,
+      const dispatch = createReviewDispatcher({
         host: "claude",
-        repository_root: workspace.root,
-        phase_instance: PHASE,
+        repository_root: repository.root,
         signal: new AbortController().signal,
         cancellation_source: "client",
-      });
-      await expect(dispatch(route, ENVELOPE, reviewSchema as PlainJsonValue)).rejects.toSatisfy((error: unknown) =>
+      }, observer.observe);
+      await expect(dispatch(route, ENVELOPE, reviewSchema)).rejects.toSatisfy((error: unknown) =>
         error instanceof CliAdapterError && error.project_error.code === "UNSUPPORTED_MODEL");
-      expect(await attemptRecord(workspace)).toMatchObject({
+      expect(observer.attempts).toHaveLength(1);
+      expect(observer.attempts[0]).toMatchObject({
         adapter: "codex-cli",
         model: route.model,
-        status: "failed",
         failure_code: "UNSUPPORTED_MODEL",
         cli_version: expect.stringMatching(/^\d+\.\d+\.\d+$/u),
       });
     } finally {
-      workspace.dispose();
+      repository.dispose();
     }
   }, REAL_HOST_TEST_TIMEOUT_MS);
 
   it("classifies an aborted real dispatch path as CANCELLED", async () => {
-    const workspace = await createTaskWorkspace({ taskId: "real-failure-cancel", label: "real-failure-cancel" });
+    const repository = await createReviewRepository({ label: "real-failure-cancel" });
     const controller = new AbortController();
     const route: DispatchRoute = {
       adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "xhigh",
     };
+    const observer = failedAttemptObserver();
     try {
-      const dispatch = createDispatchCoordinator({
-        authority: workspace.services.authority,
-        dependencies: workspace.services.dependencies,
+      const dispatch = createReviewDispatcher({
         host: "claude",
-        repository_root: workspace.root,
-        phase_instance: PHASE,
+        repository_root: repository.root,
         signal: controller.signal,
         cancellation_source: "client",
-      });
-      const pending = dispatch(route, ENVELOPE, reviewSchema as PlainJsonValue);
+      }, observer.observe);
+      const pending = dispatch(route, ENVELOPE, reviewSchema);
       setTimeout(() => controller.abort(), 1).unref();
       await expect(pending).rejects.toSatisfy((error: unknown) =>
         error instanceof DispatchProcessError && error.project_error.code === "CANCELLED");
-      expect(await attemptRecord(workspace)).toMatchObject({
-        adapter: "codex-cli",
-        status: "failed",
-        failure_code: "CANCELLED",
-        cancellation_source: "client",
-      });
+      expect(observer.attempts).toHaveLength(1);
+      expect(observer.attempts[0]).toMatchObject({ adapter: "codex-cli", failure_code: "CANCELLED" });
     } finally {
-      workspace.dispose();
+      repository.dispose();
     }
   }, REAL_HOST_TEST_TIMEOUT_MS);
 

@@ -1,25 +1,30 @@
 import type { DispatchCoordinatorResult } from "../dispatch/coordinator.js";
-import { reportInternalError } from "../mcp/diagnostics.js";
+import { reportInternalError } from "./internal-error-log.js";
 import { setTimeout as delay } from "node:timers/promises";
-import { canonicalJsonBytes, sha256Bytes } from "../contracts/canonical.js";
 import { createRawAdjudicationV2Schema } from "../contracts/adjudication.js";
-import type { InvocationContext } from "../contracts/contexts.js";
+import type { HostIdentity } from "../contracts/hosts.js";
 import type { PlainJsonValue } from "../contracts/plain-json.js";
 import { dispatchInputRecord } from "./inputs.js";
 import { reviewReportOutputSchema } from "../contracts/review.js";
 import { parseSimpleReviewInput, parseSimpleReviewResult, type SimpleReviewInput, type SimpleReviewResult } from "../contracts/simple-review.js";
 import { createReviewDispatcher } from "../dispatch/coordinator.js";
 import { serializeDispatchAll } from "../dispatch/cli.js";
-import { classifiedDispatchFailure } from "../dispatch/failure-observation.js";
-import { isTransientDispatchFailure } from "../dispatch/recovery.js";
+import { classifiedDispatchFailure, isTransientDispatchFailure } from "../dispatch/failure-classification.js";
 import { selectDispatchRouteCandidates, validateSelectedDispatchRoute, type DispatchRoute } from "../dispatch/routing.js";
 import { projectRepositoryWorkspaceBinding, shareRepositoryViewWorkspace } from "../dispatch/workspace.js";
-import { approvalRuleMatchSummary, evaluateApprovalRules } from "../state/approval-rules.js";
+import { approvalRuleMatchSummary, evaluateApprovalRules } from "./approval-rules.js";
 import { sealDispatchInput, type DispatchEnvelope } from "./envelopes.js";
 import { loadCanonicalRubricForSimpleStage, reviewAssignment } from "./rubrics.js";
 import { captureSimpleContext, SimpleReviewError } from "./simple-context.js";
 import { ZodError } from "zod";
 
+/** Who is asking and where: the repository is reviewed in place, and `host` picks the opposite-family routes. */
+export type SimpleReviewContext = {
+  working_directory: string;
+  host: HostIdentity;
+  signal: AbortSignal;
+  invocation_id: string;
+};
 export type SimpleReviewDependencies = {
   dispatch?: (route: DispatchRoute, envelope: DispatchEnvelope, schema: PlainJsonValue) => Promise<DispatchCoordinatorResult>;
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -29,7 +34,7 @@ const failure = (code: string, message: string): SimpleReviewResult => ({ schema
 const envelope = sealDispatchInput;
 
 /** One stateless pass. Reports describe inspected bytes, never authorization or a workflow transition. */
-export async function runSimpleReview(raw: SimpleReviewInput, context: InvocationContext, dependencies: SimpleReviewDependencies = {}): Promise<SimpleReviewResult> {
+export async function runSimpleReview(raw: SimpleReviewInput, context: SimpleReviewContext, dependencies: SimpleReviewDependencies = {}): Promise<SimpleReviewResult> {
   let dispose: (() => Promise<void>) | undefined;
   try {
     let input;
@@ -40,9 +45,9 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
       throw new SimpleReviewError("INPUT_INVALID", `Review input is invalid: ${error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ")}`);
     }
     context.signal.throwIfAborted();
-    const captured = await captureSimpleContext(context.connection.startup_repository_candidate.working_directory, input, context.signal);
+    const captured = await captureSimpleContext(context.working_directory, input, context.signal);
     const { policy } = captured;
-    const host = context.connection.initialization_candidates.host;
+    const host = context.host;
     // Reuse existing configured routing, approval rules, and specialist partition only.
     const policyPhaseKind = input.stage === "plan" ? "phase-design" : "phase-impl";
     const rubricResult = await loadCanonicalRubricForSimpleStage(input.stage);
@@ -51,7 +56,7 @@ export async function runSimpleReview(raw: SimpleReviewInput, context: Invocatio
     const roles: Array<"counter-reviewer" | "test-reviewer" | "adjudicator"> = ["counter-reviewer", "test-reviewer"];
     if (policy.rules.length > 0) roles.push("adjudicator");
     const selected = roles.flatMap((role) => {
-      const routes = selectDispatchRouteCandidates(policy.config, policyPhaseKind, role, input.review_routes?.[role], undefined, host);
+      const routes = selectDispatchRouteCandidates(policy.config, policyPhaseKind, role, input.review_routes?.[role], host);
       if (routes.length === 0) throw new SimpleReviewError("CONFIG_INVALID", `No route is configured for ${role}.`);
       return routes.map((candidate, index) => ({ role, reviewer_id: `${role}-${index + 1}`, route: validateSelectedDispatchRoute(candidate).route }));
     });

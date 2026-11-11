@@ -5,40 +5,10 @@ import { configV1Schema } from "../../src/contracts/config.js";
 import { constitutionRuleV1Schema } from "../../src/contracts/constitution.js";
 import { rubricV1Schema } from "../../src/contracts/rubric.js";
 import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
-import { workflowV1Schema } from "../../src/contracts/workflow.js";
 
 const schema = async (name: string) => JSON.parse(await readFile(new URL(`../../src/contracts/schemas/v1/${name}.schema.json`, import.meta.url), "utf8")) as object;
 
 describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
-  it("compiles phase-instance references and enforces the canonical object contract", async () => {
-    const validator = createJsonSchemaValidator(
-      await schema("phase-instance"),
-      [await schema("primitives")]
-    );
-    const valid = [
-      { kind: "prd" },
-      { kind: "design" },
-      { kind: "phase-design", phase: 1 },
-      { kind: "phase-impl", phase: Number.MAX_SAFE_INTEGER },
-    ];
-    for (const value of valid) expect(validator.assert(value)).toBe(value);
-    for (const invalid of [
-      { kind: "explore" },
-      { kind: "phase-design", phase: 0 },
-      { kind: "phase-impl", phase: Number.MAX_SAFE_INTEGER + 1 },
-      { kind: "phase-impl", phase: 1, extra: true },
-    ]) expect(() => validator.assert(invalid)).toThrow();
-  });
-
-  it("agrees for workflow valid and mutated cases", async () => {
-    const validator = createJsonSchemaValidator(await schema("workflow"));
-    const valid = JSON.parse(JSON.stringify((await import("../../src/contracts/workflow.js")).WORKFLOW_V1)) as unknown;
-    expect(assertZodAgreement(valid, validator, workflowV1Schema)).toEqual(valid);
-    const invalid = structuredClone(valid) as { phases: Array<{ gate: string }> };
-    invalid.phases[1]!.gate = "on_trigger";
-    expect(() => assertZodAgreement(invalid, validator, workflowV1Schema)).toThrow(/schema validation failed|must be equal/);
-  });
-
   it("agrees for routing boundaries", async () => {
     const validator = createJsonSchemaValidator(await schema("config"));
     const valid = { schema_version: "1", roles: { "counter-reviewer": { model: "example", effort: "high" } }, overrides: { design: { adjudicator: { model: "other", effort: "xhigh" } } } };
@@ -54,28 +24,31 @@ describe("normative foundational JSON Schemas agree with Zod mirrors", () => {
       .toEqual({ ...valid, approval_rules: rules });
     expect(assertZodAgreement({ ...valid, approval_rules: { subjects: [], content: [] } }, validator, configV1Schema))
       .toEqual({ ...valid, approval_rules: { subjects: [], content: [] } });
-    const repositories = { apis: { path: "../apis" }, stripe: { path: "/srv/stripe", mode: "writable" } };
-    expect(assertZodAgreement({ ...valid, repositories }, validator, configV1Schema))
-      .toEqual({ ...valid, repositories });
+    // Keys older templates wrote are accepted with any value and ignored, and pass through unchanged.
+    for (const legacy of [
+      { max_attempts: 0 },
+      { max_attempts: Number.MAX_SAFE_INTEGER + 1 },
+      { repositories: { apis: { path: "../apis" }, stripe: { path: "/srv/stripe", mode: "writable" } } },
+      { repositories: { primary: { path: "../other" }, "Not-Lowercase": { path: "   ", mode: "read-only", extra: true } } },
+      { implementation: { enabled_profiles: ["glm-5-3-flash"], cost_priority: ["zai"], minimum_score: 19 } },
+      { implementation: "anything" },
+      { roles: { ...valid.roles, "effort-reviewer": { model: "gpt-6-luna", effort: "xhigh" } } },
+      { overrides: { explore: {}, prd: { "counter-reviewer": { model: "x", effort: "high" } }, design: {} } },
+      { approval_rules: { subjects: ["prd", "design"], content: [] } },
+    ]) expect(assertZodAgreement({ ...valid, ...legacy }, validator, configV1Schema)).toEqual({ ...valid, ...legacy });
     for (const invalid of [
       { ...valid, repository: "/tmp/repo" },
       { ...valid, roles: { producer: { model: "x", effort: "high", family: "codex" } } },
       { ...valid, roles: { producer: { model: "   ", effort: "high" } } },
       { ...valid, roles: { prodcer: { model: "x", effort: "high" } } },
       { ...valid, overrides: { unknown: {} } },
-      { ...valid, max_attempts: 0 },
-      { ...valid, max_attempts: Number.MAX_SAFE_INTEGER + 1 },
       { ...valid, approval_rules: { subjects: ["explore"], content: [] } },
+      { ...valid, roles: { ...valid.roles, "effort-reviewer": { model: "x", effort: "high", family: "codex" } } },
       { ...valid, approval_rules: { subjects: ["prd", "PRD"], content: [] } },
       { ...valid, approval_rules: { subjects: [], content: [{ paths: ["**/*.sql"], note: "x" }] } },
       { ...valid, approval_rules: { subjects: [], content: [{ paths: ["   "] }] } },
       { ...valid, approval_rules: { subjects: [] } },
       { ...valid, approval_rules: { content: [], subjects: [], extra: true } },
-      { ...valid, repositories: { primary: { path: "../other" } } },
-      { ...valid, repositories: { "Not-Lowercase": { path: "../other" } } },
-      { ...valid, repositories: { apis: { path: "   " } } },
-      { ...valid, repositories: { apis: { path: "../apis", mode: "read-only" } } },
-      { ...valid, repositories: { apis: { path: "../apis", extra: true } } },
     ]) expect(() => assertZodAgreement(invalid, validator, configV1Schema)).toThrow(/schema validation failed|additional properties/);
     // A repeated subject is the one rule the generated document cannot see: uniqueness keywords
     // are retired from generation, so Ajv accepts and only the Zod authority rejects.

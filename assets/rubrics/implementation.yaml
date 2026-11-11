@@ -1,7 +1,7 @@
-# Server-owned counter-review rubric for workflow and standalone implementation review.
+# Counter-review rubric for implementation review.
 #
-# The MCP server reads and strictly parses this file fresh on every review and
-# status call; a missing or invalid file fails the review closed. `rubric_id` is
+# `archflow-local review` reads and strictly parses this file fresh on every
+# review; a missing or invalid file fails the review closed. `rubric_id` is
 # cross-checked against the phase kind that selects this file and is excluded
 # from the rubric digest. Criterion order is significant: the digest and the
 # review contract both depend on it. See README.md for the editing rules.

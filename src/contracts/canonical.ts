@@ -10,15 +10,9 @@ declare const gitOidBrand: unique symbol;
 /** Lowercase 40-character hexadecimal SHA-1 object name; blobs and commits share one brand. */
 export type GitOid = string & { readonly [gitOidBrand]: true };
 
-export const GIT_TREE_MODES = ["040000", "100644", "100755", "120000", "160000"] as const;
-export type GitTreeMode = (typeof GIT_TREE_MODES)[number];
-/** The only mode legal below the `.archflow` tree: no executables, symlinks, or gitlinks. */
-export type ArchflowTreeMode = "100644";
-
 const GIT_OID_REGEX = /^[0-9a-f]{40}$/u;
 
 export const gitOidV1Schema = z.string().regex(/^[0-9a-f]{40}$/u) as unknown as z.ZodType<GitOid>;
-export const gitTreeModeV1Schema = z.enum(GIT_TREE_MODES) as unknown as z.ZodType<GitTreeMode>;
 
 export function parseGitOid(value: unknown): GitOid {
   if (typeof value === "string" && value.length === 40 && GIT_OID_REGEX.test(value)) {
@@ -28,27 +22,7 @@ export function parseGitOid(value: unknown): GitOid {
   return gitOidV1Schema.parse(value);
 }
 
-export function parseGitTreeMode(value: unknown): GitTreeMode {
-  if (
-    value === "040000" ||
-    value === "100644" ||
-    value === "100755" ||
-    value === "120000" ||
-    value === "160000"
-  ) {
-    return value;
-  }
-  assertPlainJson(value, "git tree mode");
-  return gitTreeModeV1Schema.parse(value);
-}
-
-/** Normalises the raw-tree 5-character `40000` form to the displayed `040000` form. */
-export function normalizeGitTreeMode(value: string): GitTreeMode {
-  return parseGitTreeMode(value === "40000" ? "040000" : value);
-}
-
 const encoder = new TextEncoder();
-const decoder = new TextDecoder("utf-8", { fatal: true });
 
 function ordinal(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -109,81 +83,8 @@ export function canonicalJsonDigest(value: PlainJsonValue): Sha256Digest {
     .digest("hex") as Sha256Digest;
 }
 
-/** OID = SHA1("blob " + ASCII_decimal(content.byteLength) + NUL + content). */
-export function gitBlobOid(content: Uint8Array): GitOid {
-  return createHash("sha1")
-    .update(`blob ${String(content.byteLength)}\0`, "ascii")
-    .update(content)
-    .digest("hex") as GitOid;
-}
-
-/**
- * Shared digest helpers so independent callers construct identical error parameters. Both are
- * domain-tagged so a commit name and a filesystem path can never collide on one digest, and both
- * hash their subject rather than carrying it, because the project error parameter schemas accept
- * only `/^[0-9a-f]{64}$/`.
- */
-export function historyIdentityDigest(oid: GitOid): Sha256Digest {
-  return createHash("sha256")
-    .update(`archflow:history-identity:v1:${oid}`, "utf8")
-    .digest("hex") as Sha256Digest;
-}
-
 export function repositoryCandidateDigest(absoluteCwd: string): Sha256Digest {
   return createHash("sha256")
     .update(`archflow:repository-candidate:v1:${absoluteCwd}`, "utf8")
     .digest("hex") as Sha256Digest;
-}
-
-export interface CanonicalDocument<T extends PlainJsonValue> {
-  readonly bytes: Uint8Array;
-  readonly value: T;
-  readonly digest: Sha256Digest;
-}
-
-export function canonicalDocument<T extends PlainJsonValue>(value: T): CanonicalDocument<T> {
-  const bytes = canonicalJsonBytes(value);
-  return Object.freeze({ bytes, value, digest: sha256Bytes(bytes) });
-}
-
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.byteLength !== b.byteLength) return false;
-  return Buffer.from(a.buffer, a.byteOffset, a.byteLength).equals(
-    Buffer.from(b.buffer, b.byteOffset, b.byteLength)
-  );
-}
-
-/**
- * Byte authority for a canonical JSON document. In this exact order: fatal UTF-8 decode, so
- * malformed input throws rather than producing replacement characters; `JSON.parse`;
- * `assertPlainJson`; re-render with `canonicalJsonBytes` and byte-compare against the input,
- * rejecting every noncanonical form — permuted keys, non-two-space indent, a missing or extra
- * trailing newline, or any other whitespace difference. Duplicate object keys need no special
- * rule: `JSON.parse` keeps the last, so the re-render is shorter and fails the comparison.
- * `digest` covers the original bytes, which the comparison has proven byte-identical to the
- * canonical form, so the two possible readings coincide by construction.
- */
-export function parseCanonicalDocument<T extends PlainJsonValue>(
-  bytes: Uint8Array,
-  label = "JSON document"
-): CanonicalDocument<T> {
-  if (!(bytes instanceof Uint8Array)) throw new TypeError(`${label} must be bytes`);
-  let text: string;
-  try {
-    text = decoder.decode(bytes);
-  } catch (error) {
-    throw new TypeError(`${label} is not valid UTF-8: ${(error as Error).message}`);
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch (error) {
-    throw new TypeError(`${label} is not valid JSON: ${(error as Error).message}`);
-  }
-  assertPlainJson(value, label);
-  const expected = canonicalJsonBytes(value);
-  if (!bytesEqual(bytes, expected)) {
-    throw new TypeError(`${label} is not canonical JSON`);
-  }
-  return Object.freeze({ bytes, value: value as T, digest: sha256Bytes(bytes) });
 }

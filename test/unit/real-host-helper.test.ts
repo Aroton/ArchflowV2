@@ -5,18 +5,15 @@ import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  benchmarkEnabled,
   realHostsAvailable,
   realHostsEnabled,
   requireRealHostsAvailable,
   resetRealHostsCacheForTesting,
   REAL_HOST_OPT_IN_ENV,
-  REVIEW_BENCHMARK_OPT_IN_ENV,
 } from "../helpers/real-host.js";
 
 const originalPath = process.env.PATH;
 const originalRealHosts = process.env[REAL_HOST_OPT_IN_ENV];
-const originalBenchmark = process.env[REVIEW_BENCHMARK_OPT_IN_ENV];
 const temporaryRoots: string[] = [];
 
 function restore(name: string, value: string | undefined): void {
@@ -27,7 +24,6 @@ function restore(name: string, value: string | undefined): void {
 afterEach(() => {
   restore("PATH", originalPath);
   restore(REAL_HOST_OPT_IN_ENV, originalRealHosts);
-  restore(REVIEW_BENCHMARK_OPT_IN_ENV, originalBenchmark);
   delete process.env.PROBE_LOG;
   resetRealHostsCacheForTesting();
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -110,15 +106,6 @@ describe("real-host gate", () => {
     expect(realHostsAvailable()).toBe(true);
     expect(readFileSync(log, "utf8").trim().split("\n").map((line) => line.split(" ").slice(1).join(" ")))
       .toEqual(["--version", "auth status", "--version", "login status"]);
-  });
-
-  it("requires both opt-ins for the benchmark", () => {
-    process.env[REVIEW_BENCHMARK_OPT_IN_ENV] = "1";
-    delete process.env[REAL_HOST_OPT_IN_ENV];
-    expect(benchmarkEnabled()).toBe(false);
-
-    process.env[REAL_HOST_OPT_IN_ENV] = "1";
-    expect(benchmarkEnabled()).toBe(true);
   });
 
   it("accepts the current Codex login success line from stderr", () => {

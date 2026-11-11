@@ -1,6 +1,6 @@
 ---
 id: human-approval-for-workflow-control-plane
-version: 2
+version: 3
 status: active
 ---
-The workflow authority files are the trust boundary every task pins its policy from, and a change there alters what all future work must satisfy. A result that changes .archflow/workflow.yaml, .archflow/config.yaml, or .archflow/constitution/ complies only when the change is declared as a reviewed output of its phase and every governing document it amends is updated in the same result; a task never amends the pinned constitution that governs itself.
+`.archflow/config.yaml` and `.archflow/constitution/` are the policy boundary: they decide what all future work must satisfy and when a human must decide. A change to either complies only when it is declared in the reviewed change as an intended policy change and every plan or document it amends is updated in the same change; work never quietly amends the policy that governs its own review.

@@ -6,26 +6,8 @@
       "producer_family": "claude",
       "expected_verdict": "review-raised",
       "output": {
-        "task_id": "mcp-integration",
-        "phase_instance": "phase-impl-14",
-        "step": "counter_review",
-        "role": "counter-review",
-        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "producer_family": "claude",
-        "findings": [
-          {
-            "finding_id": "seeded-defect",
-            "claim_type": "defect",
-            "confidence": "certain",
-            "falsifier": "Inspect the artifact for DEFECT-SEED and settle whether it remains.",
-            "summary": "The seeded defect remains.",
-            "evidence": "The artifact contains DEFECT-SEED.",
-            "suggested_resolution": "Remove DEFECT-SEED."
-          }
-        ],
-        "matched_rule_versions": []
+        "outcome": "issues_found",
+        "feedback": "The artifact contains DEFECT-SEED, so the seeded defect remains. Remove DEFECT-SEED."
       }
     },
     {
@@ -33,16 +15,8 @@
       "producer_family": "claude",
       "expected_verdict": "pass",
       "output": {
-        "task_id": "mcp-integration",
-        "phase_instance": "phase-impl-14",
-        "step": "counter_review",
-        "role": "counter-review",
-        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "producer_family": "claude",
-        "findings": [],
-        "matched_rule_versions": []
+        "outcome": "no_issues_found",
+        "feedback": "The artifact contains no seeded defect."
       }
     },
     {
@@ -50,26 +24,8 @@
       "producer_family": "codex",
       "expected_verdict": "review-raised",
       "output": {
-        "task_id": "mcp-integration",
-        "phase_instance": "phase-impl-14",
-        "step": "counter_review",
-        "role": "counter-review",
-        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "producer_family": "codex",
-        "findings": [
-          {
-            "finding_id": "seeded-defect",
-            "claim_type": "defect",
-            "confidence": "certain",
-            "falsifier": "Inspect the artifact for DEFECT-SEED and settle whether it remains.",
-            "summary": "The seeded defect remains.",
-            "evidence": "The artifact contains DEFECT-SEED.",
-            "suggested_resolution": "Remove DEFECT-SEED."
-          }
-        ],
-        "matched_rule_versions": []
+        "outcome": "issues_found",
+        "feedback": "The artifact contains DEFECT-SEED, so the seeded defect remains. Remove DEFECT-SEED."
       }
     },
     {
@@ -77,16 +33,8 @@
       "producer_family": "codex",
       "expected_verdict": "pass",
       "output": {
-        "task_id": "mcp-integration",
-        "phase_instance": "phase-impl-14",
-        "step": "counter_review",
-        "role": "counter-review",
-        "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "input_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "rubric_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "producer_family": "codex",
-        "findings": [],
-        "matched_rule_versions": []
+        "outcome": "no_issues_found",
+        "feedback": "The artifact contains no seeded defect."
       }
     }
   ]

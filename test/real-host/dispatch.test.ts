@@ -1,26 +1,23 @@
 import { execFileSync } from "node:child_process";
-import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import reviewOutputSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
-import { createRawAdjudicationV2Schema, parseAndDeriveAdjudicationV2 } from "../../src/contracts/adjudication.js";
-import { canonicalJsonDigest, sha256Bytes } from "../../src/contracts/canonical.js";
+import { createRawAdjudicationV2Schema } from "../../src/contracts/adjudication.js";
 import { parseConfigYaml } from "../../src/contracts/config.js";
-import { parseSafeId, parseSafeInteger } from "../../src/contracts/evidence.js";
-import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
+import { reviewReportOutputSchema } from "../../src/contracts/review.js";
 import { parseRubricV1 } from "../../src/contracts/rubric.js";
-import { createJsonSchemaValidator } from "../helpers/json-schema.js";
-import { mintAdjudicationObservation, mintReviewObservation, serializeDispatch } from "../../src/dispatch/cli.js";
-import { createDispatchCoordinator } from "../../src/dispatch/coordinator.js";
-import { resolveDispatchRoute } from "../../src/dispatch/routing.js";
-import { buildAdjudicationEnvelope, buildReviewEnvelope } from "../../src/review/envelopes.js";
+import { serializeDispatchAll } from "../../src/dispatch/cli.js";
+import { createReviewDispatcher } from "../../src/dispatch/coordinator.js";
+import { configuredRoute } from "../helpers/dispatch-routes.js";
+import { sealDispatchInput } from "../../src/review/envelopes.js";
+import { dispatchInputRecord } from "../../src/review/inputs.js";
 import { reviewAssignment } from "../../src/review/rubrics.js";
-import { REAL_HOST_TEST_TIMEOUT_MS, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
-import { createTaskWorkspace } from "../helpers/task-workspace.js";
+import { REAL_HOST_TEST_TIMEOUT_MS, failedAttemptObserver, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
+import { createReviewRepository } from "../helpers/review-repository.js";
+import { standaloneReviewFields } from "../helpers/standalone-review-input.js";
 
 const REAL_HOSTS_AVAILABLE = realHostsAvailable();
 requireRealHostsAvailable(REAL_HOSTS_AVAILABLE);
@@ -54,9 +51,6 @@ const rubric = parseRubricV1({
     blocking: true,
   }],
 });
-const rubricDigest = canonicalJsonDigest(rubric as unknown as PlainJsonValue);
-const PHASE = parsePhaseInstanceId("prd");
-const validateReview = createJsonSchemaValidator<Record<string, unknown>>(reviewOutputSchema);
 
 const directions = Object.freeze([
   Object.freeze({
@@ -90,18 +84,6 @@ type HostObservation = Readonly<{
   stdout: string;
   stderr: string;
 }>;
-
-async function attemptRecords(root: string, taskId: string): Promise<readonly Readonly<{ bytes: Buffer; value: Record<string, unknown> }>[]> {
-  const directory = join(root, ".archflow", "runtime", "tasks", taskId, "diagnostics", "attempts", "prd");
-  const names = await readdir(directory).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  });
-  return Promise.all(names.map(async (name) => {
-    const bytes = await readFile(join(directory, name));
-    return { bytes, value: JSON.parse(decoder.decode(bytes)) as Record<string, unknown> };
-  }));
-}
 
 async function withObservedHost<T>(command: "claude" | "codex", work: (read: () => Promise<HostObservation>) => Promise<T>): Promise<T> {
   const executable = execFileSync("which", [command], { encoding: "utf8" }).trim();
@@ -176,7 +158,7 @@ function adjudicationSemanticDiagnostic(value: unknown): string {
 
 describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
   for (const direction of directions) {
-    it(`returns schema-valid, server-attested review evidence for ${direction.name}`, async () => {
+    it(`returns a schema-valid standalone review report for ${direction.name}`, async () => {
       const saved = {
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
@@ -187,15 +169,10 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
       process.env.ANTHROPIC_API_KEY = SENTINELS[3];
       process.env.ARCHFLOW_CREDENTIAL_CANARY = SENTINELS[0];
       process.env.ARCHFLOW_ROUTING_SENTINEL = SENTINELS[1];
-      const workspace = await createTaskWorkspace({
-        taskId: direction.task,
-        label: direction.task,
-        operation: "real-dispatch",
-        configBytes: encoder.encode(direction.configSource),
-      });
+      const workspace = await createReviewRepository({ label: direction.task, configBytes: encoder.encode(direction.configSource) });
       try {
         const config = parseConfigYaml(direction.configSource, `${direction.name} config`);
-        const route = resolveDispatchRoute(config, "phase-impl", "counter-reviewer");
+        const route = configuredRoute(config, "phase-impl", "counter-reviewer");
         expect(route).toEqual({
           adapter: direction.adapter,
           family: direction.reviewer,
@@ -203,42 +180,21 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
           effort: direction.effort,
         });
         const artifact = "A local parser accepts UTF-8 JSON and rejects malformed JSON before changing state.";
-        const subject = {
-          task_id: workspace.taskId,
-          phase_instance: PHASE,
-          role: "counter-review" as const,
-          step: "counter_review" as const,
-          attempt: parseSafeInteger(1),
-          subject_digest: sha256Bytes(encoder.encode(artifact)),
-          input_fingerprint: canonicalJsonDigest({ direction: direction.name }),
-          rubric_digest: rubricDigest,
-          producer_family: direction.producer,
-          invocation_id: parseSafeId(`invocation-${direction.task}`),
-          result_id: parseSafeId(`result-${direction.task}`),
-        };
-        const assignment = reviewAssignment(
-          "general",
-          "general",
-          "prd",
-          rubric,
-          { expected_upstream_digests: [] },
-        );
-        const envelope = buildReviewEnvelope({ artifact, rubric, assignment, context: [], subject });
-        const dispatch = createDispatchCoordinator({
-          authority: workspace.services.authority,
-          dependencies: workspace.services.dependencies,
+        const assignment = reviewAssignment("counter-reviewer-1", "general", "phase-impl", rubric);
+        const envelope = sealDispatchInput("review", { ...standaloneReviewFields({ subject: artifact }), assignment, rubric });
+        const observer = failedAttemptObserver();
+        const dispatch = createReviewDispatcher({
           host: direction.producer,
           repository_root: workspace.root,
-          phase_instance: PHASE,
           signal: new AbortController().signal,
           cancellation_source: "client",
-        });
+        }, observer.observe);
         const command = route.adapter === "claude-cli" ? "claude" : "codex";
         const result = await withObservedHost(command, async (readObservation) => {
           try {
-            const succeeded = await serializeDispatch(() => dispatch(route, envelope, reviewOutputSchema as PlainJsonValue));
+            const [succeeded] = await serializeDispatchAll([() => dispatch(route, envelope, dispatchInputRecord(envelope).response_schema!)]);
             const [observation, attempts] = await Promise.all([
-              readObservation(), attemptRecords(workspace.root, workspace.taskId),
+              readObservation(), Promise.resolve(observer.attempts),
             ]);
             expect(observation.wrapper_pid).not.toBe(process.pid);
             expect(observation.child_pid).not.toBe(process.pid);
@@ -249,14 +205,13 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
             return { succeeded, observation };
           } catch (error) {
             const [observation, attempts] = await Promise.all([
-              readObservation(), attemptRecords(workspace.root, workspace.taskId),
+              readObservation(), Promise.resolve(observer.attempts),
             ]);
             expect(attempts).toHaveLength(1);
             const attempt = attempts[0]!;
             expect(observation.wrapper_pid).not.toBe(process.pid);
             expect(observation.child_pid).not.toBe(process.pid);
-            expect(attempt.value).toMatchObject({
-              status: "failed",
+            expect(attempt).toMatchObject({
               adapter: route.adapter,
               cli_version: expect.stringMatching(/^\d+\.\d+\.\d+$/u),
             });
@@ -269,34 +224,12 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
             );
           }
         });
-        const rawOutput = JSON.parse(decoder.decode(result.succeeded.extracted_output_bytes)) as unknown;
-        validateReview.assert(rawOutput, `${direction.name} output`);
-        const observed = mintReviewObservation({
-          subject,
-          adapter: route.adapter,
-          cli_version: result.succeeded.cli_version,
-          route,
-          repositories: [{
-            name: "primary",
-            repository_identity_digest: workspace.initialization.repository_identity_digest,
-            commit: workspace.initialization.code_baseline_commit,
-          }],
-          assignment: { ...assignment, routing_role: "counter-reviewer" },
-          envelope_input_digest: envelope.digest,
-          extracted_output_bytes: result.succeeded.extracted_output_bytes,
-        });
-        expect(observed.evidence).toMatchObject({
-          assurance: "server-attested",
-          adapter: direction.adapter,
-          model_family: direction.reviewer,
-          model: direction.model,
-          effort: direction.effort,
-          cli_version: expect.stringMatching(/^\d+\.\d+\.\d+$/u),
-        });
+        const rawOutput = JSON.parse(decoder.decode(result.succeeded!.extracted_output_bytes)) as unknown;
+        expect(reviewReportOutputSchema.strict().safeParse(rawOutput).success, `${direction.name} output`).toBe(true);
+        expect(result.succeeded!.cli_version).toMatch(/^\d+\.\d+\.\d+$/u);
 
         const returnedAndPersisted = Buffer.concat([
-          Buffer.from(result.succeeded.extracted_output_bytes),
-          Buffer.from(JSON.stringify(observed.evidence)),
+          Buffer.from(result.succeeded!.extracted_output_bytes),
           Buffer.from(result.observation.stdout),
           Buffer.from(result.observation.stderr),
         ]);
@@ -312,7 +245,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
       }
     }, REAL_HOST_TEST_TIMEOUT_MS);
 
-    it(`returns schema-valid, server-attested adjudication evidence for ${direction.name}`, async () => {
+    it(`returns schema-valid constitution judgments for ${direction.name}`, async () => {
       const taskId = `${direction.task}-adjudicate`;
       const saved = {
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
@@ -324,57 +257,33 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
       process.env.ANTHROPIC_API_KEY = SENTINELS[3];
       process.env.ARCHFLOW_CREDENTIAL_CANARY = SENTINELS[0];
       process.env.ARCHFLOW_ROUTING_SENTINEL = SENTINELS[1];
-      const workspace = await createTaskWorkspace({
-        taskId,
-        label: taskId,
-        operation: "real-adjudication",
-        configBytes: encoder.encode(direction.configSource),
-      });
+      const workspace = await createReviewRepository({ label: taskId, configBytes: encoder.encode(direction.configSource) });
       try {
         const config = parseConfigYaml(direction.configSource, `${direction.name} adjudication config`);
-        const route = resolveDispatchRoute(config, "phase-impl", "adjudicator");
+        const route = configuredRoute(config, "phase-impl", "adjudicator");
         const artifact = "The implementation preserves explicit human approval before every commit.";
-        const sourceEvidenceSetDigest = canonicalJsonDigest({ source: direction.name });
-        const subject = {
-          task_id: workspace.taskId,
-          phase_instance: PHASE,
-          role: "adjudication" as const,
-          step: "adjudicate" as const,
-          subject_digest: sha256Bytes(encoder.encode(artifact)),
-          input_fingerprint: canonicalJsonDigest({ adjudication: direction.name }),
-          pinned_constitution_digest: canonicalJsonDigest({ constitution: "pinned-test" }),
-          source_review_envelope_digest: sourceEvidenceSetDigest,
-          invocation_id: parseSafeId(`invocation-${taskId}`),
-          result_id: parseSafeId(`result-${taskId}`),
-        };
         const ruleSlots = [{ slot: "slot-1", rule_id: "human-approval", rule_version: 1 }] as const;
-        const envelope = buildAdjudicationEnvelope({
-          artifact,
+        const envelope = sealDispatchInput("adjudication", {
+          ...standaloneReviewFields({ subject: artifact }),
           rules: [{
             slot: "slot-1",
             text: "A commit requires explicit human approval.",
             enforced_by: [],
           }],
-          source_review_envelope_digest: sourceEvidenceSetDigest,
-          subject,
         });
-        const dispatch = createDispatchCoordinator({
-          authority: workspace.services.authority,
-          dependencies: workspace.services.dependencies,
+        const observer = failedAttemptObserver();
+        const dispatch = createReviewDispatcher({
           host: direction.producer,
           repository_root: workspace.root,
-          phase_instance: PHASE,
           signal: new AbortController().signal,
           cancellation_source: "client",
-        });
+        }, observer.observe);
         const command = route.adapter === "claude-cli" ? "claude" : "codex";
         const result = await withObservedHost(command, async (readObservation) => {
           try {
-            const succeeded = await serializeDispatch(() =>
-              dispatch(route, envelope, JSON.parse(JSON.stringify(createRawAdjudicationV2Schema(ruleSlots)
-                .toJSONSchema({ target: "draft-2020-12" }))) as PlainJsonValue));
+            const [succeeded] = await serializeDispatchAll([() => dispatch(route, envelope, dispatchInputRecord(envelope).response_schema!)]);
             const [observation, attempts] = await Promise.all([
-              readObservation(), attemptRecords(workspace.root, workspace.taskId),
+              readObservation(), Promise.resolve(observer.attempts),
             ]);
             expect(observation.wrapper_pid).not.toBe(process.pid);
             expect(observation.child_pid).not.toBe(process.pid);
@@ -382,12 +291,12 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
             return { succeeded, observation };
           } catch (error) {
             const [observation, attempts] = await Promise.all([
-              readObservation(), attemptRecords(workspace.root, workspace.taskId),
+              readObservation(), Promise.resolve(observer.attempts),
             ]);
             expect(attempts).toHaveLength(1);
             const attempt = attempts[0]!;
-            expect(attempt.value).toMatchObject({
-              status: "failed", adapter: route.adapter,
+            expect(attempt).toMatchObject({
+              adapter: route.adapter,
               cli_version: expect.stringMatching(/^\d+\.\d+\.\d+$/u),
             });
             const code = error instanceof Error && "project_error" in error
@@ -399,34 +308,13 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
             );
           }
         });
-        const rawOutput = JSON.parse(decoder.decode(result.succeeded.extracted_output_bytes)) as unknown;
-        try {
-          parseAndDeriveAdjudicationV2(rawOutput, ruleSlots);
-        } catch (error) {
-          throw new Error(`${direction.name} adjudication failed normative post-validation: ${adjudicationSemanticDiagnostic(rawOutput)}`, { cause: error });
+        const rawOutput = JSON.parse(decoder.decode(result.succeeded!.extracted_output_bytes)) as unknown;
+        if (!createRawAdjudicationV2Schema(ruleSlots).safeParse(rawOutput).success) {
+          throw new Error(`${direction.name} adjudication failed normative post-validation: ${adjudicationSemanticDiagnostic(rawOutput)}`);
         }
-        const observed = mintAdjudicationObservation({
-          subject,
-          adapter: route.adapter,
-          cli_version: result.succeeded.cli_version,
-          route,
-          repositories: [{
-            name: "primary",
-            repository_identity_digest: workspace.initialization.repository_identity_digest,
-            commit: workspace.initialization.code_baseline_commit,
-          }],
-          envelope_input_digest: envelope.digest,
-          extracted_output_bytes: result.succeeded.extracted_output_bytes,
-          rule_slots: ruleSlots,
-        });
-        expect(observed.evidence).toMatchObject({
-          assurance: "server-attested", adapter: route.adapter,
-          model_family: direction.reviewer, model: direction.model, effort: direction.effort,
-          cli_version: expect.stringMatching(/^\d+\.\d+\.\d+$/u),
-        });
+        expect(result.succeeded!.cli_version).toMatch(/^\d+\.\d+\.\d+$/u);
         const returnedAndPersisted = Buffer.concat([
-          Buffer.from(result.succeeded.extracted_output_bytes),
-          Buffer.from(JSON.stringify(observed.evidence)),
+          Buffer.from(result.succeeded!.extracted_output_bytes),
           Buffer.from(result.observation.stdout),
           Buffer.from(result.observation.stderr),
         ]);
@@ -445,7 +333,7 @@ describe.skipIf(!REAL_HOSTS_AVAILABLE)("real-host production dispatch", () => {
 
   it("accepts an explicitly configured same-family counter-reviewer route", () => {
     const config = parseConfigYaml(CODEX_PRODUCER_CONFIG, "same-family real-host config");
-    expect(resolveDispatchRoute(config, "phase-impl", "counter-reviewer"))
+    expect(configuredRoute(config, "phase-impl", "counter-reviewer"))
       .toMatchObject({ adapter: "claude-cli", family: "claude" });
   }, REAL_HOST_TEST_TIMEOUT_MS);
 });

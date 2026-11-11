@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import {
-  ContractValidationError,
-  PlainJsonError,
-  assertPlainJson,
-  isPlainJsonValue
-} from "../../src/contracts/index.js";
+import { ContractValidationError } from "../helpers/json-schema.js";
+import { PlainJsonError, assertPlainJson } from "../../src/contracts/plain-json.js";
 import { assertZodAgreement, createJsonSchemaValidator } from "../helpers/json-schema.js";
 
 describe("plain JSON preflight", () => {
@@ -15,7 +11,6 @@ describe("plain JSON preflight", () => {
     const before = structuredClone(value);
     assertPlainJson(value, "fixture");
     expect(value).toEqual(before);
-    expect(isPlainJsonValue(value)).toBe(true);
   });
 
   it.each([

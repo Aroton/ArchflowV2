@@ -2,26 +2,20 @@ import { realpath } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 
 import {
-  canonicalJsonBytes,
-  parseGitOid,
-  repositoryCandidateDigest,
-  sha256Bytes,
-  type GitOid,
+  repositoryCandidateDigest
 } from "../contracts/canonical.js";
 import {
   createProjectError,
   type ProjectError,
   type ProjectResult,
 } from "../contracts/errors.js";
-import type { SafeCode, Sha256Digest, TaskSlug } from "../contracts/evidence.js";
+import type { SafeCode } from "../contracts/evidence.js";
 import {
   GitInvocationError,
   projectErrorForGitFailure,
   type ExpectedAbsence,
-  type GitCommandSpec,
-  type GitEnvironment,
-  type GitRunner,
-  type RepositoryOperationContext,
+  type GitCommandSpec, type GitRunner,
+  type RepositoryOperationContext
 } from "./git.js";
 
 export interface WorktreeLocation {
@@ -67,26 +61,8 @@ export function isRootBoundGitRunner(runner: unknown): runner is RootBoundGitRun
   );
 }
 
-export interface RepositoryIdentity {
-  readonly schema_version: "1";
-  readonly object_format: "sha1";
-  /** Ordinal-sorted, one entry per root commit. */
-  readonly root_commits: readonly GitOid[];
-  /** `sha256(canonicalJsonBytes({ object_format, root_commits }))`. */
-  readonly digest: Sha256Digest;
-}
-
-export interface TaskIdentity {
-  readonly schema_version: "1";
-  readonly task_id: TaskSlug;
-  readonly repository_identity_digest: Sha256Digest;
-  readonly digest: Sha256Digest;
-}
-
 const LOCATION_OPERATION = "git-rev-parse-location" as SafeCode;
 const GIT_DIR_OPERATION = "git-rev-parse-git-dir" as SafeCode;
-const HEAD_OPERATION = "git-rev-parse-head" as SafeCode;
-const ROOTS_OPERATION = "git-rev-list-roots" as SafeCode;
 
 /**
  * Absence declared per command, never inferred from a bare exit 128. Outside any repository
@@ -98,14 +74,6 @@ const NOT_A_REPOSITORY: readonly ExpectedAbsence[] = [
   { code: 128, stderrIncludes: "not a git repository" },
   { code: 128, stderrIncludes: "must be run in a work tree" },
 ];
-
-/**
- * `git rev-parse --verify --quiet` exits 1 and writes nothing when the revision does not resolve,
- * which for `HEAD^{commit}` is exactly the unborn-HEAD case. The empty `stderrIncludes` is
- * deliberate and scoped to this one command: `--quiet` suppresses the diagnostic, so there is no
- * substring to match, and the distinguishing signal is the exit code 1 that no fatal path uses.
- */
-const UNBORN_HEAD: readonly ExpectedAbsence[] = [{ code: 1, stderrIncludes: "" }];
 
 function ok<T>(value: T): ProjectResult<T> {
   return Object.freeze({ schema_version: "1", ok: true, value });
@@ -131,19 +99,6 @@ function ioError(context: RepositoryOperationContext): ProjectError {
 function isErrnoException(error: unknown): boolean {
   return error instanceof Error && typeof (error as { code?: unknown }).code === "string";
 }
-
-function ordinal(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-const MAX_REPOSITORY_IDENTITIES = 256;
-const repositoryIdentityCache = new Map<string, RepositoryIdentity>();
-
-export function resetRepositoryIdentityCacheForTesting(): void {
-  repositoryIdentityCache.clear();
-}
-
-
 
 /**
  * The runner interface exposes no way to change the cwd it closed over, so binding prefixes every
@@ -181,8 +136,6 @@ function bindToRoot(runner: GitRunner, location: WorktreeLocation): RootBoundGit
  *
  * All of those flags are answered by a single `rev-parse` invocation (see the body for the
  * line-count rule its superproject flag imposes).
- *
- * Unborn HEAD is refused by `resolveRepositoryIdentity`, where the root-commit query lives.
  *
  * `--git-dir` and `--git-common-dir` return the relative path `.git` at the top of the main
  * worktree but an absolute path from a linked worktree, so raw output is never concatenated — it is
@@ -263,111 +216,4 @@ export async function discoverWorktree(
     if (isErrnoException(error)) return fail(ioError(context));
     throw error;
   }
-}
-
-/**
- * Repository identity is `sha256(canonicalJsonBytes({ object_format, root_commits }))` over the
- * ordinal-sorted output of `git rev-list --max-parents=0 HEAD`. Multiple root commits are normal in
- * repositories formed with `--allow-unrelated-histories`, so the whole sorted set is hashed and the
- * first line is never taken alone. The identity contains no filesystem path, so it survives
- * relocation and is shared by every linked worktree of the same repository.
- *
- * Orphan branches are a documented limitation, not a compensated one: checking out an orphan branch
- * changes HEAD's root set, and computing over `--all` would only trade one instability for another
- * (any new unrelated branch would move the identity). Identity is recorded at task initialization
- * and compared thereafter, so a change surfaces as `REPOSITORY_MISMATCH` — the correct behaviour.
- */
-export async function resolveRepositoryIdentity(
-  runner: RootBoundGitRunner,
-  environment: GitEnvironment,
-  context: RepositoryOperationContext
-): Promise<ProjectResult<RepositoryIdentity>> {
-  try {
-    const head = await runner.runText({
-      argv: ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
-      operation: HEAD_OPERATION,
-      expectedAbsence: UNBORN_HEAD,
-    });
-    if (head === "") return fail(repositoryNotFound(runner));
-
-    const cacheKey = `${runner.location.worktreeRoot}\0${head}\0${environment.object_format}`;
-    const cached = repositoryIdentityCache.get(cacheKey);
-    if (cached !== undefined) {
-      repositoryIdentityCache.delete(cacheKey);
-      repositoryIdentityCache.set(cacheKey, cached);
-      return ok(cached);
-    }
-
-    const output = await runner.runText({
-      argv: ["rev-list", "--max-parents=0", "HEAD"],
-      operation: ROOTS_OPERATION,
-    });
-    const rootCommits = output
-      .split("\n")
-      .filter((line) => line !== "")
-      .map((line) => parseGitOid(line))
-      .sort(ordinal);
-    if (rootCommits.length === 0) return fail(repositoryNotFound(runner));
-
-    const digest = sha256Bytes(
-      canonicalJsonBytes({
-        object_format: environment.object_format,
-        root_commits: rootCommits.map((oid) => oid as string),
-      })
-    );
-    const identity: RepositoryIdentity = Object.freeze({
-      schema_version: "1",
-      object_format: environment.object_format,
-      root_commits: Object.freeze(rootCommits),
-      digest,
-    });
-
-    if (repositoryIdentityCache.size >= MAX_REPOSITORY_IDENTITIES) {
-      const oldestKey = repositoryIdentityCache.keys().next().value;
-      if (oldestKey !== undefined) repositoryIdentityCache.delete(oldestKey);
-    }
-    repositoryIdentityCache.set(cacheKey, identity);
-
-    return ok<RepositoryIdentity>(identity);
-  } catch (error) {
-    if (error instanceof GitInvocationError) {
-      return fail(projectErrorForGitFailure(error, runner, context));
-    }
-    if (isErrnoException(error)) return fail(ioError(context));
-    throw error;
-  }
-}
-
-/** Compares a recorded repository identity digest against a freshly observed one. */
-export function verifyRepositoryIdentity(
-  expected: Sha256Digest,
-  observed: RepositoryIdentity
-): ProjectResult<RepositoryIdentity> {
-  if (expected === observed.digest) return ok(observed);
-  return fail(
-    createProjectError("REPOSITORY_MISMATCH", {
-      expected_digest: expected,
-      observed_digest: observed.digest,
-    })
-  );
-}
-
-/** Bare return: a pure derivation over already-parsed inputs, per the failure convention. */
-export function computeTaskIdentity(
-  taskId: TaskSlug,
-  repository: RepositoryIdentity
-): TaskIdentity {
-  const repositoryIdentityDigest = repository.digest;
-  return Object.freeze({
-    schema_version: "1",
-    task_id: taskId,
-    repository_identity_digest: repositoryIdentityDigest,
-    digest: sha256Bytes(
-      canonicalJsonBytes({
-        schema_version: "1",
-        task_id: taskId as string,
-        repository_identity_digest: repositoryIdentityDigest as string,
-      })
-    ),
-  });
 }

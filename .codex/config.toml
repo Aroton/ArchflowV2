@@ -1,8 +1,0 @@
-# >>> archflow managed MCP server >>>
-[mcp_servers.archflow]
-command = "bash"
-args = ["scripts/dev-mcp-launcher.sh"]
-env = { ARCHFLOW_DEV = "1" }
-startup_timeout_sec = 30
-tool_timeout_sec = 3600
-# <<< archflow managed MCP server <<<

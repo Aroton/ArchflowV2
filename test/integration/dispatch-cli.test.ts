@@ -69,7 +69,7 @@ describe("CLI adapter preflight", () => {
       : selectCliAdapter("claude");
     const envelope: DispatchEnvelope = Object.freeze({
       result_kind: "review",
-      bytes: Buffer.from('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'),
+      bytes: Buffer.from('{"schema_version":"1","subject":{"stage":"plan"},"rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'),
       digest: "d".repeat(64) as never,
       byte_count: 23,
     });

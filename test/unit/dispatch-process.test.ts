@@ -152,7 +152,7 @@ describe("dispatch process runner", () => {
     expect([...result.final_output!]).toEqual([0, 255, 1]);
   });
 
-  it("distinguishes timeout from InvocationContext-signal-compatible cancellation", async () => {
+  it("distinguishes timeout from signal cancellation", async () => {
     const cwd = await temporaryDirectory();
     const source = "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);";
     const timedOut = await projectFailure(runDispatchChild(nodeSpec(cwd, source, { timeout_ms: 30 })));
@@ -164,14 +164,14 @@ describe("dispatch process runner", () => {
     const controller = new AbortController();
     const running = runDispatchChild(nodeSpec(cwd, source, {
       signal: controller.signal,
-      cancellation_source: "transport",
+      cancellation_source: "client",
       timeout_ms: 5_000,
     }));
     setTimeout(() => controller.abort(), 30);
     const cancelled = await projectFailure(running);
     expect(cancelled.project_error).toMatchObject({
       code: "CANCELLED",
-      diagnostic: { parameters: { source: "transport", attempt: 1 } },
+      diagnostic: { parameters: { source: "client", attempt: 1 } },
     });
   });
 

@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, cp, mkdtemp, mkdir, readFile, rm, stat, symlink } from "node:fs/promises";
+import { constants } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const fixturesRoot = resolve(repositoryRoot, "test/fixtures/mcp/runtime");
-const guardSource = resolve(repositoryRoot, "test/fixtures/release/hostile-runtime-guard.cjs");
-const timeoutMs = 10_000;
+const timeoutMs = 30_000;
 
 function usage(message) {
   const error = new Error(message);
@@ -32,19 +31,14 @@ function canonicalJson(value) {
   return JSON.stringify(value);
 }
 
-async function runChild({ argv, cwd, env, input }) {
-  const child = spawn(process.execPath, argv, {
-    cwd,
-    env,
-    stdio: ["pipe", "pipe", "pipe", "pipe"],
-  });
+// Input-free commands must answer without stdin, so the child gets an open pipe it never sees closed
+// until it exits; a command that waits on stdin times out here instead of passing.
+async function runChild({ argv, cwd, env }) {
+  const child = spawn(process.execPath, argv, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
   const stdout = [];
   const stderr = [];
-  const oracle = [];
   child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
   child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
-  child.stdio[3].on("data", (chunk) => oracle.push(Buffer.from(chunk)));
-  child.stdin.end(input);
   let timer;
   try {
     const exit = await Promise.race([
@@ -53,272 +47,98 @@ async function runChild({ argv, cwd, env, input }) {
         child.once("exit", (code, signal) => resolveExit({ code, signal }));
       }),
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error("release smoke child timed out")), timeoutMs);
+        timer = setTimeout(() => reject(new Error(`release smoke child timed out: ${argv.slice(1).join(" ")}`)), timeoutMs);
       }),
     ]);
-    return {
-      ...exit,
-      oracle: Buffer.concat(oracle),
-      stderr: Buffer.concat(stderr),
-      stdout: Buffer.concat(stdout),
-    };
+    return { ...exit, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") };
   } finally {
     clearTimeout(timer);
+    child.stdin.destroy();
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   }
 }
 
-function minimalEnvironment(ambientRoot) {
-  return {
-    HOME: resolve(ambientRoot, "unusable-home"),
-    LANG: "C.UTF-8",
-    LC_ALL: "C.UTF-8",
-    NPM_CONFIG_CACHE: resolve(ambientRoot, "unusable-npm-cache"),
-    PATH: dirname(process.execPath),
-    TMPDIR: resolve(ambientRoot, "empty-tmp"),
-    XDG_CACHE_HOME: resolve(ambientRoot, "unusable-xdg-cache"),
-    XDG_CONFIG_HOME: resolve(ambientRoot, "unusable-xdg-config"),
-    XDG_DATA_HOME: resolve(ambientRoot, "unusable-xdg-data"),
-  };
-}
-
-async function assertGuardNegative({ cwd, env, guard }) {
-  const dns = await runChild({
-    argv: ["--require", guard, "--eval", "require('node:dns').lookup('archflow.invalid',()=>{})"],
-    cwd,
-    env,
-    input: Buffer.alloc(0),
-  });
-  assert.notEqual(dns.code, 0, "DNS negative control must be stopped by the guard");
-  assert.match(dns.oracle.toString("utf8"), /"surface":"node:dns"/u);
-
-  const websocket = await runChild({
-    argv: ["--require", guard, "--eval", "new WebSocket('ws://archflow.invalid')"],
-    cwd,
-    env,
-    input: Buffer.alloc(0),
-  });
-  assert.notEqual(websocket.code, 0, "WebSocket negative control must be stopped by the guard");
-  assert.match(websocket.oracle.toString("utf8"), /"operation":"WebSocket"/u);
-
-  const repositoryCanary = await runChild({
-    argv: ["--require", guard, "--eval", "require('node:fs').readFileSync('../repository-canary/SECRET')"],
-    cwd,
-    env,
-    input: Buffer.alloc(0),
-  });
-  assert.equal(repositoryCanary.code, 0, "repository canary observation control must complete normally");
-  assert.match(repositoryCanary.oracle.toString("utf8"), /"type":"canary-attempt"/u);
-  assert.equal(repositoryCanary.stdout.toString("utf8"), "", "repository canary control must not print its contents");
-}
-
-function jsonLine(value) {
-  return `${JSON.stringify(value)}\n`;
-}
-
-function assertCleanExit(result, label) {
-  assert.deepEqual(result.stderr, Buffer.alloc(0), `${label} emitted diagnostics`);
-  assert.deepEqual(result.oracle, Buffer.alloc(0), `${label} wrote to the guard oracle`);
-  assert.deepEqual({ code: result.code, signal: result.signal }, { code: 0, signal: null }, `${label} did not exit cleanly`);
-}
-
-function assertCallTranscript(bytes, initialize, calls) {
-  const lines = bytes.toString("utf8").trimEnd().split("\n").map((line) => JSON.parse(line));
-  assert.equal(lines.length, 7, "complete initialize/calls sequence must emit seven frames");
-  assert.deepEqual(lines[0], initialize.malformed_response);
-  assert.deepEqual(lines[1], initialize.response);
-  assert.deepEqual(lines[2]?.jsonrpc, "2.0");
-  assert.deepEqual(lines[2]?.id, calls.list.id);
-  assert.deepEqual(lines[2]?.result?.tools?.map((tool) => tool.name), [
-    "archflow_status",
-    "archflow_apply",
-    "archflow_review",
-  ]);
-  assert.deepEqual(lines[3], {
-    jsonrpc: "2.0",
-    id: calls.unknown.id,
-    error: {
-      code: -32001,
-      message: "TOOL_NOT_FOUND",
-      data: {
-        schema_version: "1",
-        code: "TOOL_NOT_FOUND",
-        owner: "protocol",
-        retryable: false,
-        diagnostic: {
-          template_id: "TOOL_NOT_FOUND",
-          parameters: { tool_name_digest: createHash("sha256").update(calls.unknown.params.name).digest("hex") },
-        },
-        next_action: "call-advertised-tool",
-      },
-    },
-  });
-  // The SDK's wire schema rejects non-object arguments synchronously, so that
-  // response lands before the handler-path response to the earlier call.
-  const nonObject = lines[4];
-  assert.equal(nonObject.id, calls.non_object_arguments.id);
-  assert.equal(nonObject.error?.code, -32602);
-  assert.match(nonObject.error?.message ?? "", /^Invalid tools\/call request:/u);
-  const missing = lines[5];
-  assert.equal(missing.id, calls.missing_arguments.id);
-  assert.equal(missing.result?.isError, true);
-  assert.equal(missing.result?.structuredContent?.ok, false);
-  // The semantic input classifier answers a missing-arguments call; the durable
-  // "input-not-object" issue code retired with the legacy request validation.
-  assert.deepEqual(missing.result?.structuredContent?.error, {
-    code: "CONTRACT_INVALID",
-    message: "unsupported undefined value at archflow status input",
-    retryable: false,
-    recovery: {
-      kind: "correct-input",
-      instruction: "Correct the named submission fields and resubmit through the current offer. Omit submission when expected_submission is none.",
-    },
-  });
-  assert.equal(missing.result?.content?.[0]?.text, JSON.stringify(missing.result.structuredContent));
-  // The semantic boundary projects repository discovery failures as its own error
-  // shape; the durable project-error envelope with the candidate digest retired
-  // with the legacy request validation.
-  const projectError = {
-    code: "REPOSITORY_NOT_FOUND", message: "repository not found.", retryable: false,
-    recovery: {
-      kind: "repair",
-      instruction: "Reconnect the server in the task's original repository/worktree, then request status for the same task.",
-    },
-  };
-  const structuredContent = { schema_version: "1", ok: false, error: projectError };
-  assert.deepEqual(lines[6], {
-    jsonrpc: "2.0", id: calls.valid_disabled.id,
-    result: { content: [{ type: "text", text: JSON.stringify(structuredContent) }], isError: true, structuredContent },
-  });
-}
-
-async function exerciseProtocolFixtures({ copiedBundle, copiedPayload, env, guard, initialize, calls, adversarial }) {
-  const callInput = Buffer.from([
-    jsonLine(initialize.malformed_request),
-    jsonLine(initialize.request),
-    jsonLine(initialize.initialized),
-    ...Object.values(calls).map(jsonLine),
-  ].join(""));
-  const exact = await runChild({ argv: [copiedBundle], cwd: copiedPayload, env, input: callInput });
-  assertCleanExit(exact, "exact copied payload call sequence");
-  assertCallTranscript(exact.stdout, initialize, calls);
-
-  const guarded = await runChild({
-    argv: ["--require", guard, copiedBundle],
-    cwd: copiedPayload,
-    env,
-    input: callInput,
-  });
-  assertCleanExit(guarded, "guarded copied payload call sequence");
-  assert.deepEqual(guarded.stdout, exact.stdout, "guarded complete call transcript is not byte-exact");
-
-  const expectedParseError = Buffer.from(adversarial.parse_error_frame_utf8, "base64");
-  let exactTranscriptBytes = exact.stdout.length;
-  let guardedTranscriptBytes = guarded.stdout.length;
-  for (const [fixture, expectedCode, expectedDiagnostic] of [
-    ["malformed_json_utf8", 0, ""],
-    ["partial_json_utf8", 0, ""],
-    ["invalid_utf8", 1, "ARCHFLOW_MCP_TRANSPORT_ERROR\n"],
-  ]) {
-    const input = Buffer.from(adversarial[fixture], "base64");
-    const unguardedResult = await runChild({ argv: [copiedBundle], cwd: copiedPayload, env, input });
-    const guardedResult = await runChild({ argv: ["--require", guard, copiedBundle], cwd: copiedPayload, env, input });
-    for (const [mode, result] of [["exact", unguardedResult], ["guarded", guardedResult]]) {
-      assert.deepEqual(result.stdout, expectedParseError, `${mode} ${fixture} stdout drifted`);
-      assert.deepEqual(result.stderr, Buffer.from(expectedDiagnostic), `${mode} ${fixture} diagnostics drifted`);
-      assert.deepEqual(result.oracle, Buffer.alloc(0), `${mode} ${fixture} wrote to fd 3`);
-      assert.deepEqual({ code: result.code, signal: result.signal }, { code: expectedCode, signal: null });
+async function findExecutable(name) {
+  for (const directory of (process.env.PATH ?? "").split(delimiter)) {
+    if (directory === "") continue;
+    const candidate = join(directory, name);
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Keep searching PATH.
     }
-    exactTranscriptBytes += unguardedResult.stdout.length;
-    guardedTranscriptBytes += guardedResult.stdout.length;
-    assert.deepEqual(guardedResult.stdout, unguardedResult.stdout, `${fixture} modes were not byte-exact`);
   }
-  assert.equal(guardedTranscriptBytes, exactTranscriptBytes, "protocol transcript byte counts differ between modes");
-  return { guarded, guardedTranscriptBytes };
+  throw new Error(`release smoke needs ${name} on PATH`);
 }
 
-async function proveModuleCanaryIsolation({ copiedPayload, ambientRoot, env, guard }) {
-  const canaryModuleRoot = resolve(ambientRoot, "node_modules");
-  const canaryEntry = resolve(canaryModuleRoot, "archflow-release-canary/index.js");
-  const control = await runChild({
-    argv: ["--eval", "process.stdout.write(require.resolve('archflow-release-canary')+'\\n'+require('archflow-release-canary'))"],
-    cwd: copiedPayload,
-    env: { ...env, NODE_PATH: canaryModuleRoot },
-    input: Buffer.alloc(0),
-  });
-  assert.deepEqual({ code: control.code, signal: control.signal }, { code: 0, signal: null });
-  const [resolvedCanary, canaryContents] = control.stdout.toString("utf8").split("\n");
-  assert.equal(resolve(resolvedCanary), canaryEntry, "module canary must resolve on the control lookup path");
-  assert.equal(canaryContents, "ARCHFLOW_MODULE_CANARY", "control child must read the resolved module canary");
-  assert.deepEqual(control.oracle, Buffer.alloc(0));
-
-  assert.equal(Object.hasOwn(env, "NODE_PATH"), false, "hostile environment must scrub NODE_PATH");
-  const hostile = await runChild({
-    argv: ["--require", guard, "--eval", "require('archflow-release-canary')"],
-    cwd: copiedPayload,
-    env,
-    input: Buffer.alloc(0),
-  });
-  assert.notEqual(hostile.code, 0, "scrubbed hostile launch unexpectedly resolved the module canary");
-  assert.match(hostile.stderr.toString("utf8"), /Cannot find module 'archflow-release-canary'/u);
-  assert.match(hostile.oracle.toString("utf8"), /"operation":"unresolved","surface":"module-canary"/u);
-  return "resolved-via-NODE_PATH";
+/** Lays the payload out the way install.sh does: <bundle>/dist plus the manifest's runtime assets. */
+async function installCopy(payloadRoot, bundleRoot) {
+  await cp(payloadRoot, join(bundleRoot, "dist"), { recursive: true, verbatimSymlinks: true });
+  const manifest = JSON.parse(await readFile(join(payloadRoot, "manifest.json"), "utf8"));
+  for (const record of manifest.runtime_assets) {
+    const bytes = await readFile(resolve(repositoryRoot, record.path));
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), record.digest, `runtime asset differs: ${record.path}`);
+    await mkdir(dirname(join(bundleRoot, record.path)), { recursive: true });
+    await cp(resolve(repositoryRoot, record.path), join(bundleRoot, record.path));
+  }
+  return manifest.runtime_assets.map((record) => record.path);
 }
 
 export async function smokeReleasePayload(payloadRoot) {
-  const bundle = resolve(payloadRoot, "archflow-mcp.mjs");
-  const localBundle = resolve(payloadRoot, "archflow-local.mjs");
-  assert.equal((await stat(bundle)).isFile(), true, "payload must contain archflow-mcp.mjs");
-  assert.equal((await stat(localBundle)).isFile(), true, "payload must contain archflow-local.mjs");
-  const temporaryRoot = await mkdtemp(resolve(tmpdir(), "archflow-release-hostile-"));
+  assert.equal((await stat(join(payloadRoot, "archflow-local.mjs"))).isFile(), true, "payload must contain archflow-local.mjs");
+  const temporaryRoot = await mkdtemp(resolve(tmpdir(), "archflow-release-smoke-"));
   try {
-    const copiedPayload = resolve(temporaryRoot, "payload");
-    const ambientRoot = resolve(temporaryRoot, "ambient");
-    const guard = resolve(copiedPayload, "hostile-runtime-guard.cjs");
-    await cp(payloadRoot, copiedPayload, { recursive: true, verbatimSymlinks: true });
-    await cp(guardSource, guard);
-    await mkdir(resolve(ambientRoot, "empty-tmp"), { recursive: true });
-    await mkdir(resolve(temporaryRoot, "repository-canary"), { recursive: true });
-    await mkdir(resolve(ambientRoot, "node_modules/archflow-release-canary"), { recursive: true });
-    await writeFile(resolve(temporaryRoot, "repository-canary/SECRET"), "ARCHFLOW_REPOSITORY_CANARY\n");
-    await writeFile(resolve(ambientRoot, "node_modules/archflow-release-canary/index.js"), "module.exports = 'ARCHFLOW_MODULE_CANARY'\n");
+    const bundleRoot = join(temporaryRoot, "bundle");
+    const runtimeAssets = await installCopy(payloadRoot, bundleRoot);
+    const bundle = join(bundleRoot, "dist", "archflow-local.mjs");
 
-    const initialize = JSON.parse(await readFile(resolve(fixturesRoot, "initialize.json"), "utf8"));
-    const calls = JSON.parse(await readFile(resolve(fixturesRoot, "calls.json"), "utf8"));
-    const adversarial = JSON.parse(await readFile(resolve(fixturesRoot, "adversarial-bytes.json"), "utf8"));
-    const env = minimalEnvironment(ambientRoot);
-    const copiedBundle = resolve(copiedPayload, "archflow-mcp.mjs");
-    const copiedLocalBundle = resolve(copiedPayload, "archflow-local.mjs");
-    const { guarded, guardedTranscriptBytes } = await exerciseProtocolFixtures({
-      copiedBundle,
-      copiedPayload,
-      env,
-      guard,
-      initialize,
-      calls,
-      adversarial,
-    });
-    for (const canary of ["ARCHFLOW_REPOSITORY_CANARY", "ARCHFLOW_MODULE_CANARY_READ"]) {
-      assert.equal(Buffer.concat([guarded.stdout, guarded.stderr]).includes(Buffer.from(canary)), false);
+    // Only node and git are reachable: no host CLIs, no ambient module path, no inherited options.
+    const bin = join(temporaryRoot, "bin");
+    await mkdir(bin);
+    await symlink(process.execPath, join(bin, "node"));
+    await symlink(await findExecutable("git"), join(bin, "git"));
+    const home = join(temporaryRoot, "home");
+    await mkdir(home);
+    const env = {
+      HOME: home,
+      LANG: "C.UTF-8",
+      LC_ALL: "C.UTF-8",
+      PATH: bin,
+      TMPDIR: tmpdir(),
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_SYSTEM: "/dev/null",
+    };
+
+    const help = await runChild({ argv: [bundle, "--help"], cwd: temporaryRoot, env });
+    assert.deepEqual({ code: help.code, signal: help.signal }, { code: 0, signal: null }, help.stderr);
+    assert.equal(help.stderr, "", "help emitted diagnostics");
+    assert.match(help.stdout, /usage: archflow-local <command>/u);
+    assert.match(help.stdout, /^ {2}init {2,}no payload$/mu);
+    assert.match(help.stdout, /^ {2}review {2,}payload /mu);
+
+    const repository = join(temporaryRoot, "repository");
+    await mkdir(repository);
+    const initialized = spawnSync("git", ["init", "-q"], { cwd: repository, env, encoding: "utf8" });
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const init = await runChild({ argv: [bundle, "init"], cwd: repository, env });
+    assert.deepEqual({ code: init.code, signal: init.signal }, { code: 0, signal: null }, init.stderr);
+    const report = JSON.parse(init.stdout);
+    assert.equal(report.ok, true, init.stdout);
+    for (const path of [".archflow/.gitignore", ".archflow/config.yaml", ".archflow/constitution/README.md"]) {
+      assert.ok(report.value.assets.created.includes(path), `init did not create ${path}`);
     }
-
-    const moduleCanary = await proveModuleCanaryIsolation({ copiedPayload, ambientRoot, env, guard });
-    const localHelp = await runChild({ argv: ["--require", guard, copiedLocalBundle, "--help"], cwd: copiedPayload, env, input: Buffer.alloc(0) });
-    assertCleanExit(localHelp, "guarded local helper help");
-    const localHelpText = localHelp.stdout.toString("utf8");
-    assert.match(localHelpText, /usage: archflow-local <command>/u);
-    assert.match(localHelpText, /^ {2}render {2,}payload \{"kind":"review"\|"adjudication"/mu);
-    assert.match(localHelpText, /^ {2}manual-status {2,}no payload; --task required/mu);
-    assert.match(localHelpText, /^ {2}upgrade-adopt {2,}no payload; --task required/mu);
-    await assertGuardNegative({ cwd: copiedPayload, env, guard });
+    assert.deepEqual(
+      await readFile(join(repository, ".archflow", "config.yaml")),
+      await readFile(join(bundleRoot, "assets", "config.template.yaml")),
+      "init must scaffold the bundled config template",
+    );
     return {
-      bundles: ["archflow-mcp.mjs", "archflow-local.mjs"],
-      fixture_sequences: ["initialize-and-calls", "malformed-json", "partial-json", "invalid-utf8"],
-      guarded_transcript_bytes: guardedTranscriptBytes,
-      modes: ["exact-copy", "guarded-copy"],
-      module_canary_control: moduleCanary,
-      network_oracle_bytes: guarded.oracle.length,
+      bundles: ["archflow-local.mjs"],
+      commands: ["help", "init"],
+      init_created: report.value.assets.created.length,
       payload_root: payloadRoot,
+      runtime_assets: runtimeAssets.length,
     };
   } finally {
     await rm(temporaryRoot, { force: true, recursive: true });

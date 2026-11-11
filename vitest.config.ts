@@ -10,7 +10,7 @@ export default defineConfig({
     name: "bundled-review-yaml",
     enforce: "pre",
     load(id) {
-      if (/[/\\]assets[/\\]review-(inputs|documents)\.yaml$/u.test(id)) {
+      if (/[/\\]assets[/\\]review-inputs\.yaml$/u.test(id)) {
         return `export default ${JSON.stringify(readFileSync(id, "utf8"))};`;
       }
       return undefined;
@@ -49,15 +49,6 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["test/integration/**/*.test.ts"],
-          exclude: ["test/integration/release-offline.test.ts"],
-          maxWorkers: responsiveCoreCount
-        }
-      },
-      {
-        extends: true,
-        test: {
-          name: "crash",
-          include: ["test/crash/**/*.test.ts"],
           maxWorkers: responsiveCoreCount
         }
       },

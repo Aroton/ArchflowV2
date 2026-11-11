@@ -1,143 +1,111 @@
 # OVERVIEW
 
-**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** the whole repository
+**Explored:** 2026-11-11 · **Commit:** `f1fe689` · **Covers:** `src/local/`, `src/review/`, `src/dispatch/`, `src/init/`, `src/contracts/`, `src/repository/`, `assets/`, `skills/`, `install.sh`, `scripts/`
 
-Fresh reviews return readable reports to the working AI, which chooses finish, revision with selected verification reviewers, a localized minor correction without repeat review, or human escalation. Minor corrections may clarify established intent; coordinated rewrites and new requirements need fresh review. Applicable automated checks, constitution requirements, and final-byte human and commit approval remain in force.
+ArchFlow gives an AI coding agent a second opinion from a different model, and a repository-owned set of rules that opinion is checked against. The agent writes a plan or finishes some work; ArchFlow hands that plan or those changed files to reviewers from another model family, and returns what they found. Nothing more. The agent (and the human it works for) still decides what to do with the findings.
 
-ArchFlow is a governed development workflow for AI coding agents. An initialized *task* moves through fixed stages — PRD → design → per-phase design → per-phase implementation — and at every stage the agent must produce an artifact, review it, and survive an adversarial review dispatched to an independent reviewer CLI (the **other model family** by default, with Claude, Codex, and Antigravity routes available by configuration). Project `approval_rules` decide which clean PRD, design, phase-design, or phase-implementation subjects stop for a human; changed-path content triggers add phase-implementation-only waits. Policy findings over those same reviewed bytes fold into that position's ordinary approval boundary, while distinct safety and recovery remedies remain separate unconditional gates. The system's core belief, stated plainly:
+This page is the map. It describes the system as built, for humans auditing it. Caps-named pages under `docs/` are the maintained set, refreshed by `/archflow-explore`; `docs/validation/` is separate point-in-time evidence that is not kept current.
 
-> **Nothing an agent says is trusted until the server has re-derived it.** The only authority is durable state on disk, written and verified by the server.
-
-For smaller work, `archflow-simple` completes plan → one MCP review and fixes → implementation → one MCP review and fixes in the same session. Test and constitution review remain; workflow state, implementation-agent advice, reviewer iteration, and automatic commits are absent. This path can use shipped routing and policy defaults without repository initialization. Explicit human decisions remain conversational, so the durable-authority guarantees below apply to initialized workflows.
-
-For large jobs, `archflow-run` drops the server-held workflow state altogether. The human approves one plan. A fresh orchestrator session then works through it in batches, with per-task sub-agents in git worktrees. Each task gets an in-model review plus the cross-family counter-review, run through `archflow-local review`. State is markdown in `.archflow/runs/<name>/` plus one commit per task, and humans step in at declared STOPs. See [workflow/SKILLS.md](workflow/SKILLS.md#orchestrated-runs).
-
-This documentation set describes the system as built, aimed at humans auditing and iterating on the workflow. Caps-named files (like this one) are the maintained, human-readable documentation, produced and refreshed by `/archflow-explore`. The one exception is `docs/validation/`: point-in-time validation evidence and benchmark data, not kept current by explore.
+> **A review reports on the bytes it inspected. It never authorizes, approves, or advances anything.** There is no stored workflow state to trust or corrupt: each review reads the repository, asks the reviewers, and prints one JSON document.
 
 ## The three surfaces
 
-The system is one codebase with three faces. Understanding which face does what dissolves most confusion:
-
-| Surface | What it is | What it's trusted with |
+| Surface | What it is | What it is trusted with |
 |---|---|---|
-| **Skills** (`skills/archflow-*`) | Prose playbooks the agent follows (`/archflow-prd`, `/archflow-phase-impl`, …) | Nothing. They are instructions, not enforcement. |
-| **`archflow-local` CLI** (`src/local/`) | Narrow local adapters: repository bootstrap, legacy-upgrade staging and atomic adoption, diagnostics, degraded human status, and a versioned read-only controller observation | Deriving mechanical fields correctly. Its writes are bounded recovery and diagnostics; automation status is strictly observational. |
-| **`archflow-mcp` MCP server** (`src/mcp/`, `src/state/`, …) | A stdio MCP server advertising two semantic workflow tools and a stateless review tool | Everything. It is the sole writer of durable state and the sole judge of validity. |
+| **Skills** (`skills/archflow-*`) | Prose playbooks the agent follows: `archflow-init`, `archflow-constitution`, `archflow-explore`, `archflow-run`. | Nothing. They are instructions, not enforcement. |
+| **`archflow-local` CLI** (`src/local/`) | One bundled program with two commands: `review` and `init`. | Reading the repository and its config, running reviewer processes, printing a result. `init` writes only the scaffold files and removes old registrations it can prove it wrote. |
+| **Reviewer CLIs** (`claude`, `codex`, `agy`) | The external model command lines the CLI launches as child processes. | Producing review text. Every output is parsed against a strict schema before it counts. |
 
-A subtlety worth naming immediately: the `archflow-mcp` binary has **no CLI mode** — it is always a stdio MCP server. The word "CLI" appears in two other senses: `archflow-local` (the helper above), and `src/dispatch/cli.ts`, which spawns the *external* `claude`, `codex`, and `agy` command-line tools as child processes to run counter-reviews.
+Two senses of "CLI" are worth keeping apart: `archflow-local` is ArchFlow's own program; `src/dispatch/cli.ts` is the code that *launches* the other tools.
 
-## How the pieces connect
+Details of the commands are in [cli/COMMANDS.md](cli/COMMANDS.md); the skills are in [workflow/SKILLS.md](workflow/SKILLS.md).
+
+## `archflow-local review`
+
+A caller (a skill, a script, a human) builds a small JSON payload: the `stage`, the `ask`, the `plan`, the `base_commit` (HEAD must still equal it), the `paths` the work touches, and for an implementation review the `verification` it ran. It passes `--producer claude|codex|antigravity` to say which client is asking, and the payload either through `--input <file>` or on stdin.
+
+There are two stages:
+
+- **`plan`**: the reviewers judge a proposed plan against the ask and the current code.
+- **`implementation`**: the reviewers judge the changed files against the baseline commit, plus the verification evidence.
 
 ```mermaid
 flowchart TB
-    Human([Human])
-    Agent["Agent session<br/>(Claude Code, Codex, or Antigravity)<br/>following a skill"]
-    Local["archflow-local CLI<br/>bootstrap, upgrade adapter,<br/>degraded + automation status"]
-    MCP["archflow-mcp server<br/>2 advertised tools"]
-    State[("tracked .archflow authority<br/>state, decisions, manifests,<br/>canonical documents")]
-    Work[("ignored .archflow/runtime<br/>cache, diagnostics, import staging")]
-    Child["Reviewer child process<br/>configured CLI (opposite family<br/>by default), sealed envelope +<br/>read-only checkout"]
+    Caller(["Caller: skill, script, or human"])
+    Payload["Review payload<br/>stage, ask, plan, base_commit,<br/>paths, verification"]
+    Capture["Capture the subject<br/>HEAD must equal base_commit;<br/>changed + untracked + declared files,<br/>config and constitution, as digests"]
+    Route["Choose reviewers<br/>counter-reviewer(s), test-reviewer,<br/>and a constitution reviewer when<br/>active rules exist"]
+    View["Disposable read-only workspace<br/>primary view = the work<br/>baseline view = the same repo at base_commit"]
+    Child["Reviewer child processes<br/>claude / codex / agy<br/>run in parallel"]
+    Check["Re-check that nothing moved<br/>files, HEAD, branch, policy"]
+    Result[("One JSON result on stdout<br/>reports, constitution judgments,<br/>human_review_reasons, failures")]
 
-    Human <-->|"triggered and safety gates:<br/>approve, revise, waive"| Agent
-    Agent -->|"upgrade staging / adopt,<br/>degraded status"| Local
-    Controller["External controller"] -->|"poll automation-status<br/>launch returned descriptor"| Local
-    Local -->|"reads"| State
-    Local -->|"stages ignored import bytes"| Work
-    Agent -->|"semantic tool calls<br/>(archflow_status / archflow_apply)"| MCP
-    MCP -->|"writes & verifies"| State
-    MCP -->|"owns ignored runtime cache"| Work
-    MCP -->|"dispatches counter-review<br/>and constitution review"| Child
-    Child -->|"reports and policy judgments"| MCP
+    Caller --> Payload --> Capture --> Route --> View --> Child --> Check --> Result --> Caller
 ```
 
-One client loop serves every workflow. PRD, task design, phase design, phase implementation, status reporting, and legacy adoption all use `archflow_status` for one reconciled, read-only view and `archflow_apply` for exactly one server-offered action. The offer hides revisions, digests, gate bindings, and request composition while keeping the client responsible for authored production and triage submissions. The one purpose-specific local adapter is the legacy upgrade: preview, stage, and atomic adoption run through `archflow-local upgrade` because the task does not exist yet at adoption time; everything after adoption is ordinary semantic surface. Git also remains client-owned: the semantic view returns exact authorized commit facts — plural path set, message, target ref, and baseline. Those facts already derive from either matching human approval or authenticated no-wait rule authority. The client verifies and stages exactly them, inspects the staged diff and message, creates the commit without another approval question, and asks read-only status to observe proof. The server never stages or commits repository bytes.
+### What the reviewers see
 
-External controllers use a still smaller read-only view: `archflow-local automation-status --task <task>`. It projects the same reconciled semantic snapshot without an invocation, so it cannot mint an offer. The strict document identifies one actor—current skill, human, successor-launching orchestrator, repairing operator, or none—and supplies canonical task/phase arguments without asking the controller to infer phase order. The controller keeps at most one producer alive, returns human conversation to that owning session, and treats observation IDs only as freshness hints. Raw state and semantic decision tokens never become controller APIs; the complete contract is [`contracts/AUTOMATION.md`](contracts/AUTOMATION.md).
+The subject is every file git reports as changed against HEAD, every untracked file, and every path the payload declares, read from the working tree (so uncommitted work is reviewed, and a worktree reviews itself). A path that traverses a symlinked parent, or names a directory or other non-file entry, is refused; a path that is itself a symlink is reviewed as a symlink (its link text), never followed. The snapshot is capped at 25 MiB. Reviewers get a disposable temporary directory holding two read-only checkouts made with `git archive`: `primary` (the base commit with the changed files applied on top) and `baseline` (the base commit alone). The real repository path is never given to the child.
 
-The boundary is intentionally exact. Generic `archflow_status` is a common read-only view and mints no mutation offer. A producing invocation can own only its current position, document or implementation phase, except that the exact server-named successor skill may finish an authenticated hand-off. One `archflow_apply` call executes one bounded offered action and returns a fresh view; it never chooses or loops into the next action.
+The prompt each reviewer receives is built from `assets/review-inputs.yaml` and a rubric file in `assets/rubrics/`. Readable prompts for each role are checked in under `test/fixtures/review-prompts/`.
 
-Milestone proof and the current workflow baseline are separate facts. The server proves an authorized design or implementation milestone at the first commit after its bound baseline on the authorized target's first-parent history; ordinary descendant commits therefore do not erase completion or inherit the original review authority. Separately, projected bytes are reconciled against the current worktree. Eligible ordinary drift can be adopted or restored, but adoption is only acceptance of the current workflow baseline: it performs no review and grants no commit authority. Changed governing planning documents must instead be restored or re-enter their owning review boundary before dependent work can continue.
+### Who reviews
 
-When history no longer proves the milestone, the server either retains the narrow unchanged no-wait design refresh, offers a same-position significant production/review recovery when a real committable delta exists, or returns an actionable inspection for corrupt evidence and content-preserving rewritten history. A stale baseline decision gets a server-owned refresh that replaces only its disposable interface and records no human choice. Both recovery actions are opaque, replay-safe, no-submission offers; clients never infer them from Git.
+| Role | Runs | Judges |
+|---|---|---|
+| `counter-reviewer` | always (one per configured route) | the general rubric criteria |
+| `test-reviewer` | always | only the test-owned criteria (the plan's test strategy; an implementation's verification evidence and test quality) |
+| `adjudicator` (the *constitution reviewer*) | only when active constitution rules exist | each rule: compliance, and whether its `review_trigger` matched |
 
-## The evidence pipeline
+Each role's routes come from `.archflow/config.yaml`, most specific first: `producers.<producer>`, then `overrides.phase-design` (plan) or `overrides.phase-impl` (implementation), then `roles`, with a built-in `gpt-6.1-sol`/low fallback for the test reviewer. A payload may also carry a per-call `review_routes` entry, which replaces the configured routes for that role. A route can name a cc-switch `provider`, which launches the claude CLI through cc-switch so non-Claude models can run behind it.
 
-Every gated stage runs the same three-step pipeline until it reaches a fixed point — current review evidence, an explicit producer response, and no unresolved blocking boundary:
+"The other model family" is a property of the shipped template (a Claude producer is reviewed by GPT, a Codex producer by Claude), not a check. Nothing stops a repository from configuring a same-family reviewer; see [LIMITATIONS.md](LIMITATIONS.md).
 
-```mermaid
-flowchart LR
-    P[produce] --> CR["counter-review reports<br/>and active constitution rules"]
-    CR --> T["working AI interprets feedback"]
-    T -->|revise with selected verification| P
-    T -->|finish| R["evaluate policy and approval rules"]
-    T -->|escalate| G{{Human gate}}
-    R -->|human decision required| G
-    R -->|authenticated autonomous authority| A[advance]
-    G -->|approved or waived| A
-    G -->|revision requested| P
-```
+### What comes back
 
-The counter_review step is one semantic action that runs the configured rubric reviewers and, when active rules exist, the constitution reviewer. The children share sealed repository views and their results commit atomically. For implementation, declared outputs, co-produced documents, and their current behavior are the subject; unchanged files and context-only repositories are supporting evidence, not a general review target. Every finding must tie a material defect to behavior introduced, exposed, or worsened by the current change.
+The result lists each reviewer's report (an explicit `issues_found` or `no_issues_found` plus feedback text), the constitution judgments, any `failures` (a reviewer that could not complete), and `human_review_reasons`. A human-review reason appears when a configured `approval_rules` entry matches (a subject rule for the whole stage, or a content rule whose path globs match a path the payload declares, see [LIMITATIONS.md](LIMITATIONS.md)) or when the constitution reviewer says a rule's `review_trigger` matched. Reasons are advice to the caller: the caller must ask the human; the CLI cannot.
 
-Design subjects may be compound so planning can correct their parents: task design binds `design.md` with current `prd.md`, and phase design binds its phase document with current `design.md` and `prd.md`. The working AI interprets reports, checks consequential concerns proportionally, and chooses whether to revise, finish, or ask the human. The server binds that response to the current reviewed work; it does not enforce a finding taxonomy or unanimous agreement.
+If any required reviewer fails, `ok` is `false` with `REVIEW_INCOMPLETE`, and the reports that did arrive are still returned. The process exits non-zero and prints `review failed: <CODE>` on stderr. Before returning, the review re-reads the files, HEAD, branch and policy; if any moved during the review the whole result is replaced by `SUBJECT_CHANGED`, because the reports would no longer describe the current work.
 
-The working AI’s response chooses `finish`, `revise`, or `escalate` and gives its rationale. Revision names previous reviewers and concrete verification requests; subsequent review can retain complete prior reports while asking those reviewers to check the revised work. Finish is not approval: the server still evaluates constitution findings, configured triggers, drift, and commit authority. Fresh review does not require finding dispositions or reviewer unanimity. Strict taxonomy, editorial-disposition, and ledger readers remain for historical evidence, not as instructions for new reports. Constitution verdicts remain a separate authenticated boundary.
+## `archflow-local init`
 
-Human gates are deliberately not protocol consoles. The server derives a title, plain-language summary, direct question, structured reason envelope, material evidence, and labeled choices; skills present that conversationally and keep IDs, hashes, JSON, paths, and error codes in the diagnostic layer. Each reason is classified `configured-approval` or `exception`, and one exceptional reason makes the whole boundary exceptional. The archived gate request—not the skill-authored summary or mutable live config—is the source for configured trigger provenance, policy findings, and legacy fallback. A skill-authored `gate-summary` opens the nonblocking presentation, and the human's selected choice and reason return through the offered semantic action, which archives the decision immutably and settles it in a separate substep — a retried call after an interruption converges without recording the decision twice. The server-dispatched review has already run automatically before the gate. If the human changes the work, the producer classifies the resulting diff: a simple wording or formatting change may reuse review evidence for one hop but still needs approval of the final bytes; a significant change resets the attempt counter and automatically starts a fresh counter-review and constitution-review cycle. The human can override either classification, with the override recorded.
+Input-free (it never reads stdin; `--force` is its only flag). From the repository root it:
 
-Two narrowly scoped exceptions make failure honest without pretending it succeeded. A phase-implementation producer that cannot run named checks may fail its work result and request a `validation-override` gate. The server records the exact sorted list as **not run**, binds it to the current implementation input and approved phase design, and asks the human to grant, deny, or cancel. Every outcome returns to the failed producer boundary; only a grant adds durable validation-exception history. It creates neither an approval nor a waiver and cannot skip review, policy, drift, ordinary approval, or commit authorization.
+1. removes the exact MCP registrations older versions wrote (an `archflow` server in `.mcp.json` whose command is `archflow-mcp`, and the marked block in `.codex/config.toml`), leaving anything it cannot prove it owns;
+2. scaffolds `.archflow/config.yaml`, `.archflow/constitution/` (`default/` shipped rules, `custom/` repository rules) and `.archflow/.gitignore`;
+3. runs diagnostics (Node version, `claude` and `codex` versions and login, managed-policy files, ancestor git-ignore rules hiding the scaffold).
 
-Separately, an `attempts-exhausted` gate may offer `push-through-review` only after at least two distinct completed review rounds produced a complete authenticated set of still-accepted finding occurrences. That decision advances through the ordinary gate effect and therefore records the normal approval reference, plus a specialized push-through record naming the exact review-evidence digest and finding ID for every occurrence. It closes only that review-loop obstacle: constitution failures, matched triggers, material drift, configured approvals, and exact commit authority are evaluated afterward as usual.
+If a scaffold file already differs from the shipped one, init refuses with `scaffold-diverged`; `--force` overwrites shipped files but preserves `custom/`. Review does not need init: with no `.archflow/config.yaml` or constitution it uses the shipped template and rules from the installed bundle.
 
-Approval and rule evaluation are intentionally separate durable facts. The triage-settle transaction reads and evaluates live task config once and records a settlement at either a clean fixed point or a policy-adjudication fixed point. Every fresh ordinary gate carries an `approval_trigger`: normally it copies and identifies that exact settlement and its authenticated or unavailable rule authority; after a human-requested simple revision it instead binds the prior decision plus predecessor and final subject digests. Policy findings and exact eligible waivers travel in the same `artifact-approval`, `design-approval`, or `commit-authorization` context. A matching authenticated ordinary approval always outranks a coexisting `wait:false` settlement in commit, recovery, and phase-exit consumers; no-wait authority is autonomous only when no matching approval exists. Historical pre-trigger requests remain strictly readable and reconstructible without weakening fresh writers.
+## Installation and shape on disk
 
-Editing the artifact changes its digest, which automatically invalidates every downstream review — you cannot sneak an edit past a stale approval. That mechanism (digests as identity) is the engine of the whole trust model; see `contracts/CONTRACTS.md`.
+`install.sh` copies one bundle, `dist/archflow-local.mjs`, with an `assets/` directory beside it, writes an `archflow-local` launcher, and copies the skills for Claude Code, Codex and Antigravity. The CLI finds its assets as siblings of the bundle; from a source checkout it finds `assets/` two levels up. The build (`scripts/`, `npm run release:*`) is described in [DEPENDENCIES.md](DEPENDENCIES.md).
 
-## Why each subsystem exists
+In a repository, ArchFlow owns only `.archflow/config.yaml`, `.archflow/constitution/`, `.archflow/.gitignore` (which ignores `/runtime/`) and, for the orchestrated workflow, `.archflow/runs/<name>/`. There is no database and no workflow state file.
 
-- **Skills** — encode the workflow and its human gates as instructions any capable agent can follow. See `workflow/SKILLS.md`.
-- **Workflow lifecycle & gates** — the phase graph, the eleven gate kinds, and where a human must decide. See `workflow/LIFECYCLE.md`.
-- **MCP server** — validates every request, owns all writes, and treats even the MCP SDK as untrusted for framing and output fidelity. See `mcp/SERVER.md`.
-- **Dispatch** — runs the configured reviewer (opposite family by default, optionally through a cc-switch provider) as a locked-down child process so review evidence is something the producer *cannot author*. See `mcp/DISPATCH.md`.
-- **Local CLI** — the retained adapters: repository bootstrap, legacy-upgrade staging and atomic adoption, diagnostics, the degraded human classifier, and the strict read-only automation observation. Every workflow action itself is composed server-side from one semantic offer, so the CLI never derives a durable request by hand. See `cli/COMMANDS.md` and `contracts/AUTOMATION.md`.
-- **Review & constitution checks** — readable prompts and complete referenced files, authenticated server-side bindings, constitution review, waivers. See `review/COUNTER-REVIEW.md`.
-- **Integration** — the current host/client contract, semantic loop, and controller responsibilities. See `INTEGRATION.md`.
-- **Contracts** — canonical JSON, digests, plain-JSON validation, trust brands: the vocabulary everything else is written in. See `contracts/CONTRACTS.md`.
-- **Durable state** — the `.archflow/` layout, the state machine, transactions, and recovery. See `state/DURABLE-STATE.md`.
-- **Complexity audit** — where the heaviest machinery lives and what could be simplified, per subsystem. See `COMPLEXITY.md`.
+## The orchestrated workflow
+
+`archflow-run` is the one workflow skill. A human approves a single plan; a fresh Claude Code session then works through it in batches with per-task sub-agents in git worktrees. Each task gets an in-model review and the cross-family review, called through `skills/archflow-run/scripts/counter-review.sh`, which builds the payload from a directory's changed files and runs `archflow-local review`. State is markdown under `.archflow/runs/<name>/` plus one commit per task. Its stops and halt rules live in the skill, not in the CLI. See [workflow/SKILLS.md](workflow/SKILLS.md).
+
+## Page map
+
+- [cli/COMMANDS.md](cli/COMMANDS.md): the two commands, flags, input and output.
+- [review/COUNTER-REVIEW.md](review/COUNTER-REVIEW.md): prompts, rubrics, routing, constitution review, result shape.
+- [mcp/DISPATCH.md](mcp/DISPATCH.md): reviewer child processes, adapters, workspace, failure handling.
+- [workflow/SKILLS.md](workflow/SKILLS.md): the four skills.
+- [COMPLEXITY.md](COMPLEXITY.md): per-subsystem simplification audit.
+- [PATTERNS.md](PATTERNS.md): code idioms and conventions, with file references.
+- [DEPENDENCIES.md](DEPENDENCIES.md): runtime and toolchain surface, external CLIs, release.
+- [TESTING.md](TESTING.md): vitest projects, npm scripts, where tests go.
+- [LIMITATIONS.md](LIMITATIONS.md): what the system does not guarantee.
 
 ## Glossary
 
-- **Task** — one unit of work under `.archflow/tasks/<task>/`, fully isolated from other tasks.
-- **Phase instance** — where a task is: `prd`, `design`, `phase-design-N`, or `phase-impl-N`.
-- **Gate** — a durable, recorded human decision point. Eleven kinds exist; approval is never inferred from conversation.
-- **Digest / fingerprint** — SHA-256 identities. A *subject digest* names an artifact's exact bytes; an *input fingerprint* names everything a step depended on. Stale identity = invalid evidence.
-- **Request digest** (`src/local/call-envelope.ts`) — the internal authentication wrapper around one composed durable request; semantic offers bind the same derivation without exposing it to the caller.
-- **Dispatch envelope** (`src/review/envelopes.ts`) — the sealed, byte-capped evidence package handed to a child reviewer. *Same word, unrelated concepts* — a known naming collision.
-- **Constitution** — versioned repository policy rules (`.archflow/constitution/default/` plus repository additions or ID-based replacements in `custom/`) that the constitution review — dispatched inside the offered review action when active rules exist — judges every artifact against, pinned per task at an approved commit.
-- **Waiver** — a human-granted exemption from one rule version, for one subject digest, for one task. Evaporates if the artifact or the rule changes.
-- **Validation override** — a human decision that exact named phase-implementation checks may remain not run. It is never a pass, approval, or waiver.
-- **Archived review push-through** — an attempts-exhausted decision over exact accepted finding occurrences after at least two completed review rounds. It settles review repetition, not policy or commit authority.
-- **Degraded mode** — the read-only stance when the MCP server is unavailable: `manual-status` reports where the task stands and the answer is to wait; no offline recording exists, and it is never a shortcut around gates.
-- **Automation observation** — the versioned, side-effect-free controller projection returned by `automation-status`; it names one responsible actor and is never mutation or approval authority.
-
-## Durable authority versus local runtime
-
-Git sees only the durable side of `.archflow/`: task documents, `state.json`, adopted initialization, current result manifests under `authority/results/`, and state-referenced gate decisions under `authority/decisions/`. The shipped `.archflow/.gitignore` contains only `/runtime/`; payload duplicates, rendered reviews and gate UI, verification transcripts, import staging, locks, transaction receipts, and attempts all live below that ignored root.
-
-Repeated review rounds replace the current authority for a `(phase, step)` instead of accumulating tracked files. Automatic cleanup runs after successful writes and phase boundaries; `archflow-local clean --task <id>` retries it manually. Cleanup failure is non-blocking and appears as `workspace.cleanup_pending` in full status (and in brief status only while pending).
-
-Fresh review keeps general and test focus as guidance and retains server-owned provenance for readable reports. The working AI selects previous reviewers for verification. Constitution review still independently evaluates active rules, and archived evidence remains readable.
-
-Phase-design review has one additional best-effort child: the configurable effort reviewer. It assesses reasoning remaining after design as routine, bounded, hard, or exceptional, with a concrete explanation. File count, copying volume, security labels, and expensive tests alone do not raise difficulty. Optional repository hazards are context, not automatic floors. The server then chooses an implementation model deterministically from enabled profiles, Terminal-Bench v4.0 scores, and subscription-cost priorities.
-
-The task's `implementation` config controls enabled profiles, cheapest-first cost priority, minimum score (19%), and difficulty thresholds (19/30/40/50%). Defaults enable GPT, GLM, Gemini, and Claude (Fable and Opus) and select GLM 5.3 Flash for routine/bounded reasoning, GLM 5.3 max for hard work, and GPT-6.1 Sol high for exceptional work. The editable catalog in `assets/implementation-models.yaml` also retains an opt-in Muse profile. Reviewer failure uses bounded reasoning; a capability shortfall recommends the best enabled score above the minimum with an explanation, while unusable selection data or no eligible model produces unavailable advice. Captured evidence fixes existing recommendations; settings changes affect future assessments. Advice never changes the server-derived action or records the actual producer route.
-
-This split defines recovery honestly. A fresh clone reconstructs status, current result validation, and gate UI from tracked authority, verified projections, and recorded Git blobs. It recovers the last checked-in durable boundary, not uncommitted implementation or cache bytes. Durable `.archflow` files exist only on the working branch for resumability and are removed before the final product PR.
-
-
-## Automation responsibility
-
-A producer invocation normally runs through review, remediation and its authenticated commit. The user launches the next skill at the explicit handoff. Automation v3 distinguishes that handoff from configured plan/SQL/database approvals and custom repository triggers and genuine exceptions; transient dispatch retries and five completed review rounds have separate budgets.
-
-Review inputs are inspectable in the build-owned `assets/review-inputs.yaml` and `assets/review-documents.yaml`. The former configures reviewer instructions, rubric selection, input lists, and file-use guidance; the latter explicitly distinguishes each stage’s primary subject from approved governing documents. Readable final prompt fixtures live in `test/fixtures/review-prompts/`. `archflow-local review-preview` renders authenticated current-task inputs without invoking a model. See [counter-review](review/COUNTER-REVIEW.md).
+- **Producer**: the client session asking for a review (`claude`, `codex`, `antigravity`). It is chosen with `--producer`, needs no routing config of its own, and selects which reviewers run.
+- **Stage**: `plan` or `implementation`. Internally they run on the recipes named `phase-design` and `phase-impl`; those names survive in config keys for compatibility.
+- **Subject digest**: a SHA-256 over the stage, ask, plan, base commit, declared paths, verification and the content of every file reviewed. It identifies exactly what was inspected.
+- **Policy digest**: a SHA-256 over the config and constitution. An implementation review can carry the plan review's digest as `expected_policy_digest`; a mismatch stops the review with `POLICY_CHANGED`.
+- **Constitution**: versioned rules in `.archflow/constitution/` (`default/` shipped, `custom/` the repository's own). Every active rule receives an automated compliance judgment; a rule with a `review_trigger` can also name a reason for human review.
+- **Approval rule**: a `config.yaml` entry (`subjects` or content path globs) that adds a human-review reason to the result.
+- **Dispatch envelope**: the sealed, digested package handed to the child-launching code (`src/review/envelopes.ts`).
+- **Workspace**: the disposable temporary directory a reviewer child runs in; deleted when the review ends.

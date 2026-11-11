@@ -5,23 +5,16 @@ import {
   canonicalJsonBytes as canonicalJsonBytesJs,
   sha256 as sha256Js
 } from "../../scripts/release-support.mjs";
-import {
-  canonicalJsonBytes,
-  parseTaskPathClaim,
-  sha256Bytes,
-  type PlainJsonValue
-} from "../../src/contracts/index.js";
+import { canonicalJsonBytes, sha256Bytes } from "../../src/contracts/canonical.js";
+import { parseRepositoryPathClaim } from "../../src/contracts/path-claims.js";
+import { type PlainJsonValue } from "../../src/contracts/plain-json.js";
 
 /**
  * `scripts/release-support.mjs` is plain JavaScript that TypeScript cannot import, so Phase 6
  * re-derives its canonical primitives in `src/contracts/canonical.ts`. The duplication is
  * deliberate; this suite is what keeps the two copies from drifting.
  *
- * Only the two importable primitives are covered here. The containment predicate is the third
- * duplicated primitive, but release-support's `isInside` is module-private, so its parity is
- * asserted behaviourally in `test/integration/repository-paths.test.ts` against `src/repository/paths.ts`
- * — including the one recorded divergence, that `isInside` requires `rel !== ""` and so rejects the
- * root itself while Phase 6 containment accepts `rel === ""`.
+ * Only the two importable primitives are covered here.
  */
 
 const CORPUS: ReadonlyArray<readonly [string, PlainJsonValue]> = [
@@ -67,7 +60,7 @@ describe("canonicalJsonBytes parity with scripts/release-support.mjs", () => {
 });
 
 /**
- * `assertPortablePath` and `parseTaskPathClaim` are the same lexical predicate in two languages:
+ * `assertPortablePath` and `parseRepositoryPathClaim` are the same lexical predicate in two languages:
  * relative, forward-slash, no drive or UNC prefix, no empty/`.`/`..` segment.
  */
 const PORTABLE_PATHS = [
@@ -110,12 +103,12 @@ const verdict = (run: () => unknown): "accept" | "reject" => {
 describe("portable path parity with scripts/release-support.mjs", () => {
   it.each(PORTABLE_PATHS)("both accept %s", (value) => {
     expect(verdict(() => assertPortablePathJs(value))).toBe("accept");
-    expect(verdict(() => parseTaskPathClaim(value))).toBe("accept");
+    expect(verdict(() => parseRepositoryPathClaim(value))).toBe("accept");
   });
 
   it.each(UNPORTABLE_PATHS)("both reject %s", (value) => {
     expect(verdict(() => assertPortablePathJs(value))).toBe("reject");
-    expect(verdict(() => parseTaskPathClaim(value))).toBe("reject");
+    expect(verdict(() => parseRepositoryPathClaim(value))).toBe("reject");
   });
 
   // Two rules exist only on the contract side, and the asymmetry is intentional rather than drift:
@@ -124,7 +117,7 @@ describe("portable path parity with scripts/release-support.mjs", () => {
     "the contract schema is deliberately stricter for %s",
     (value) => {
       expect(verdict(() => assertPortablePathJs(value))).toBe("accept");
-      expect(verdict(() => parseTaskPathClaim(value))).toBe("reject");
+      expect(verdict(() => parseRepositoryPathClaim(value))).toBe("reject");
     }
   );
 });

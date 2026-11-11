@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { parseConfigV1, parseConfigYaml } from "../../src/contracts/config.js";
 import { PlainJsonError } from "../../src/contracts/plain-json.js";
-import { parseWorkflowV1, parseWorkflowYaml, WORKFLOW_V1 } from "../../src/contracts/workflow.js";
 
 const fixture = (path: string) => readFile(new URL(`../fixtures/foundation/${path}`, import.meta.url), "utf8");
 
@@ -31,23 +30,6 @@ function expectPreflightedBoundary(
   expect(() => parser(dangerous)).toThrow(PlainJsonError);
   expect(() => parser({ ...structuredClone(valid), unsupported: 1n })).toThrow(PlainJsonError);
 }
-
-describe("fixed workflow", () => {
-  it("accepts the shipped graph and keeps Explore graph-only", async () => {
-    const workflow = parseWorkflowYaml(await readFile(new URL("../../assets/workflow.yaml", import.meta.url), "utf8"));
-    expect(workflow.phases.map(({ id }) => id)).toEqual(["explore", "prd", "design", "phase-design", "phase-impl"]);
-    expect(workflow.phases[0]).toMatchObject({ pipeline: ["produce"], gate: "never", optional: true });
-  });
-
-  it("rejects graph mutations", async () => {
-    const source = await fixture("workflow/invalid-mutated-gate.yaml");
-    expect(() => parseWorkflowYaml(source)).toThrow(/fixed ArchFlow v1 graph/);
-  });
-
-  it("plain-JSON preflights the direct unknown boundary without invoking getters", () => {
-    expectPreflightedBoundary(parseWorkflowV1, structuredClone(WORKFLOW_V1) as unknown as Record<string, unknown>, "phases");
-  });
-});
 
 describe("model routing configuration", () => {
   it("accepts only role and phase model/effort selection", async () => {

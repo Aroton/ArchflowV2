@@ -110,17 +110,3 @@ export function assertPlainJson(value: unknown, label = "value"): asserts value 
   }
   inspect(value, label, new WeakSet());
 }
-
-export function isPlainJsonValue(value: unknown): value is PlainJsonValue {
-  try {
-    assertPlainJson(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function parsePlainJson(value: unknown, label = "value"): PlainJsonValue {
-  assertPlainJson(value, label);
-  return value;
-}

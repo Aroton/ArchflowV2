@@ -1,10 +1,9 @@
 import { readFile, readdir } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-import { parseConstitutionRuleFiles, parseConstitutionRuleMarkdown, validateConstitutionEvolution, type ConstitutionRuleV1 } from "../../src/contracts/constitution.js";
+import { parseConstitutionRuleFiles, parseConstitutionRuleMarkdown, type ConstitutionRuleV1 } from "../../src/contracts/constitution.js";
 import { parseConstitutionRuleV1 } from "../../src/contracts/constitution.js";
 import { PlainJsonError } from "../../src/contracts/plain-json.js";
-import { SUPPORTED_RULE_ACCEPTANCE_PROFILE_V4 } from "../../src/state/constitution.js";
 
 const rule = (overrides: Partial<ConstitutionRuleV1> = {}): ConstitutionRuleV1 => ({ id: "stable-rule", version: 1, status: "active", text: "Preserve the invariant.", ...overrides });
 
@@ -31,45 +30,21 @@ describe("constitution Markdown", () => {
     ]);
   });
 
-  it("ships byte-identical live and seed rules for the exact supported v4 profile", async () => {
-    const seedDirectory = new URL("../../assets/constitution/default/", import.meta.url);
-    const liveDirectory = new URL("../../.archflow/constitution/default/", import.meta.url);
-    const selectedFiles = ["00-process.md", "10-architecture.md"] as const;
-    const sources: Record<string, string> = {};
-
-    for (const path of selectedFiles) {
-      const seed = await readFile(new URL(path, seedDirectory), "utf8");
-      const live = await readFile(new URL(path, liveDirectory), "utf8");
-      expect(live).toBe(seed);
-      sources[path] = seed;
+  it("ships the human-boundary rules at their current versions without blanket triggers", async () => {
+    const directory = new URL("../../assets/constitution/default/", import.meta.url);
+    for (const path of ["40-authentication.md", "45-public-contracts.md", "50-cryptography.md", "60-control-plane.md"]) {
+      const current = parseConstitutionRuleMarkdown(await readFile(new URL(path, directory), "utf8"), path);
+      expect(current).toMatchObject({ version: 3, status: "active" });
+      expect(current.review_trigger).toBeUndefined();
     }
-
-    const registry = parseConstitutionRuleFiles(sources);
-    const normalized = SUPPORTED_RULE_ACCEPTANCE_PROFILE_V4.map(({ id }) => {
-      const parsed = registry.get(id);
-      expect(parsed).toBeDefined();
-      return {
-        ...parsed!,
-        review_trigger: parsed!.review_trigger ?? "",
-        enforced_by: [...new Set(parsed!.enforced_by ?? [])].sort(),
-      };
-    }).sort((left, right) => left.id.localeCompare(right.id));
-    expect(normalized).toEqual(SUPPORTED_RULE_ACCEPTANCE_PROFILE_V4);
   });
 
-  it("keeps live policy identical to the seeds and evolves the former blanket triggers", async () => {
+  it("describes shipped rules in the run model without removed workflow mechanics", async () => {
     const directory = new URL("../../assets/constitution/default/", import.meta.url);
     const paths = (await readdir(directory)).filter((path) => /^\d\d-.*\.md$/u.test(path));
     for (const path of paths) {
-      const seed = await readFile(new URL(path, directory), "utf8");
-      expect(await readFile(new URL(`../../.archflow/constitution/default/${path}`, import.meta.url), "utf8")).toBe(seed);
-    }
-    for (const path of ["40-authentication.md", "45-public-contracts.md", "50-cryptography.md", "60-control-plane.md"]) {
-      const current = parseConstitutionRuleMarkdown(await readFile(new URL(path, directory), "utf8"), path);
-      expect(current).toMatchObject({ version: 2, status: "active" });
-      expect(current.review_trigger).toBeUndefined();
-      const prior = { ...current, version: 1, review_trigger: "Previous category-based approval." };
-      expect(validateConstitutionEvolution(new Map([[prior.id, prior]]), [current]).get(current.id)).toEqual(current);
+      const source = await readFile(new URL(path, directory), "utf8");
+      expect(source, path).not.toMatch(/workflow\.yaml|phase|PRD|\bgates?\b|pinned|authenticated before-and-after/iu);
     }
   });
 
@@ -105,24 +80,5 @@ describe("constitution Markdown", () => {
     Object.defineProperty(dangerous, "prototype", { enumerable: true, value: "forbidden" });
     expect(() => parseConstitutionRuleV1(dangerous)).toThrow(PlainJsonError);
     expect(() => parseConstitutionRuleV1({ ...structuredClone(valid), unsupported: undefined })).toThrow(PlainJsonError);
-  });
-});
-
-describe("constitution evolution", () => {
-  const prior = new Map([["stable-rule", rule()]]);
-
-  it("permits append, versioned edit, and versioned deprecation", () => {
-    expect(validateConstitutionEvolution(prior, [rule(), rule({ id: "new-rule", text: "New invariant." })]).size).toBe(2);
-    expect(validateConstitutionEvolution(prior, [rule({ version: 2, text: "Clarified invariant." })]).get("stable-rule")?.version).toBe(2);
-    expect(validateConstitutionEvolution(prior, [rule({ version: 2, status: "deprecated" })]).get("stable-rule")?.status).toBe("deprecated");
-  });
-
-  it("rejects deletion, ID reuse, reactivation, and version errors", () => {
-    expect(() => validateConstitutionEvolution(prior, [])).toThrow(/cannot be deleted/);
-    expect(() => validateConstitutionEvolution(prior, [rule({ id: "replacement" })])).toThrow(/cannot be deleted/);
-    expect(() => validateConstitutionEvolution(prior, [rule({ text: "Changed." })])).toThrow(/increment/);
-    expect(() => validateConstitutionEvolution(prior, [rule({ version: 2 })])).toThrow(/retain/);
-    const deprecated = new Map([["stable-rule", rule({ version: 2, status: "deprecated" })]]);
-    expect(() => validateConstitutionEvolution(deprecated, [rule({ version: 3, status: "active" })])).toThrow(/reactivated/);
   });
 });

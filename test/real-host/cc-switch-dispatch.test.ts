@@ -2,20 +2,17 @@ import { spawnSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
-import { sha256Bytes } from "../../src/contracts/canonical.js";
-import type { Sha256Digest } from "../../src/contracts/evidence.js";
-import { parseSafeId, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
-import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { parsePhaseInstanceId } from "../../src/contracts/phase-instance.js";
-import { parseAndDeriveReview } from "../../src/contracts/review.js";
+import { reviewReportOutputSchema } from "../../src/contracts/review.js";
 import { parseRubricV1 } from "../../src/contracts/rubric.js";
-import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { selectCliAdapter } from "../../src/dispatch/cli.js";
 import { runDispatchChild } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import { createDispatchWorkspace } from "../../src/dispatch/workspace.js";
-import { buildReviewEnvelope } from "../../src/review/envelopes.js";
+import { sealDispatchInput } from "../../src/review/envelopes.js";
+import { dispatchInputRecord } from "../../src/review/inputs.js";
+import { reviewAssignment } from "../../src/review/rubrics.js";
 import { REAL_HOST_TEST_TIMEOUT_MS, realHostsAvailable, requireRealHostsAvailable } from "../helpers/real-host.js";
+import { standaloneReviewFields } from "../helpers/standalone-review-input.js";
 
 const REAL_HOSTS_AVAILABLE = realHostsAvailable();
 requireRealHostsAvailable(REAL_HOSTS_AVAILABLE);
@@ -37,8 +34,6 @@ function providerConfigured(): boolean {
   });
   return probe.status === 0 && probe.stdout.includes(PROVIDER);
 }
-
-const DIGEST = (seed: string) => sha256Bytes(new TextEncoder().encode(seed)) as Sha256Digest;
 
 describe.skipIf(!providerConfigured())("cc-switch provider dispatch", () => {
   it("launches the real claude child through the configured provider and returns a valid review", {
@@ -64,25 +59,14 @@ describe.skipIf(!providerConfigured())("cc-switch provider dispatch", () => {
           blocking: true,
         }],
       });
-      const envelope = buildReviewEnvelope({
-        artifact: "# Smoke artifact\n\nNothing to review — this exists only to prove the dispatch pipeline reaches a real model through cc-switch.\n",
+      const envelope = sealDispatchInput("review", {
+        ...standaloneReviewFields({
+          subject: "# Smoke artifact\n\nNothing to review — this exists only to prove the dispatch pipeline reaches a real model through cc-switch.\n",
+        }),
+        assignment: reviewAssignment("counter-reviewer-1", "general", "phase-impl", rubric),
         rubric,
-        context: [],
-        subject: {
-          task_id: parseTaskSlug("cc-switch-dispatch"),
-          phase_instance: parsePhaseInstanceId("prd"),
-          role: "counter-review",
-          step: "counter_review",
-          attempt: parseSafeInteger(1),
-          subject_digest: DIGEST("subject"),
-          input_fingerprint: DIGEST("fingerprint"),
-          rubric_digest: DIGEST("rubric"),
-          producer_family: "claude",
-          invocation_id: parseSafeId("cc-switch-invocation"),
-          result_id: parseSafeId("cc-switch-result"),
-        },
       });
-      const invocation = await adapter.buildInvocation(envelope, route, workspace, reviewSchema as PlainJsonValue);
+      const invocation = await adapter.buildInvocation(envelope, route, workspace, dispatchInputRecord(envelope).response_schema!);
 
       // The wrap is exactly `cc-switch start claude <provider> -- <lockdown argv…>`, the requested
       // model rides through it, and the child PATH can reach the cc-switch binary.
@@ -105,11 +89,9 @@ describe.skipIf(!providerConfigured())("cc-switch provider dispatch", () => {
       expect(result.stderr.toString("utf8")).toContain(`"model":"${MODEL}"`);
 
       // A complete, schema-valid review came back through the provider: the structured output
-      // parses, satisfies the bound child schema, and carries the echoed subject identity.
+      // parses and satisfies the standalone review report contract.
       const extracted = adapter.parseOutput(result);
-      const review = parseAndDeriveReview(JSON.parse(new TextDecoder().decode(extracted)));
-      expect(review.role).toBe("counter-review");
-      expect(review.producer_family).toBe("claude");
+      expect(reviewReportOutputSchema.strict().safeParse(JSON.parse(new TextDecoder().decode(extracted))).success).toBe(true);
     } finally {
       await workspace.dispose();
     }

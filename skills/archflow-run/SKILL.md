@@ -1,13 +1,13 @@
 ---
 name: archflow-run
-description: Plan a large piece of work once, get human approval, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, in-model review plus cross-model counter-review, and markdown state instead of MCP workflow state.
+description: Plan a large piece of work once, get human approval, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, in-model review plus cross-model counter-review, and markdown state.
 ---
 
 # Orchestrated Run
 
 Treat the first argument as the run name (a short kebab-case slug) and anything after it as the ask. The run lives in `.archflow/runs/<name>/`. This session is the orchestrator: it plans, writes task packets, spawns sub-agents, decides on findings, merges, commits, keeps the ledger, and talks to the human. Sub-agents write the code and the reviews.
 
-This is a markdown-driven workflow. State lives in the run's files and in git, not in a server: do not call `archflow_status` or `archflow_apply`, and do not create `.archflow/tasks/` state. It is not a bypass for an initialized ArchFlow task; work that already belongs to one continues there. Read `PROTOCOL.md` in this skill directory before planning or executing: it holds the per-task loop, the sub-agent contract, the findings format, and the handoff rules. Scaffolds live under `templates/`.
+This is a markdown-driven workflow. State lives in the run's files and in git. Read `PROTOCOL.md` in this skill directory before planning or executing: it holds the per-task loop, the sub-agent contract, the findings format, and the handoff rules. Scaffolds live under `templates/`.
 
 The orchestration relies on Claude Code: generated agents in `.claude/agents/`, sub-agents in isolated worktrees, and per-spawn model routing. The counter-review itself is host-neutral. In another client, tell the human that `/archflow-run` currently needs Claude Code as the orchestrator, and stop.
 

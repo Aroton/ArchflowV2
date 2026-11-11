@@ -1,4 +1,3 @@
-import { renderReviewPreview } from "./review-preview.js";
 import { readFile } from "node:fs/promises";
 import process from "node:process";
 import { parseArgs } from "node:util";
@@ -10,17 +9,15 @@ import { INPUT_FREE_COMMANDS, LOCAL_COMMAND_CONTRACTS, LOCAL_COMMANDS, runLocalC
 
 function usageText(): string {
   return [
-    "usage: archflow-local <command> [--task <task>] [--repository <secondary>] [--input <json-file>] [--force]",
+    "usage: archflow-local <command> [--producer <claude|codex|antigravity>] [--input <json-file>] [--force]",
     "       init --force refreshes shipped defaults and other scaffold files (including config.yaml), preserves custom/, and migrates flat constitution rules",
     "       payload commands read JSON from --input <json-file>, or from stdin when --input is omitted",
     "       input-free commands never read stdin",
-    "       review-preview --task <task> --producer <claude|codex|antigravity> [--reviewer <id>] [--format text|json]",
     "       review --producer <claude|codex|antigravity> [--input <json-file>] runs the standalone counter-review of the current working directory (worktrees included)",
-    "commands (payload; --task):",
+    "commands:",
     ...LOCAL_COMMANDS.map((command) => {
       const contract = LOCAL_COMMAND_CONTRACTS[command];
-      const payload = contract.payload === null ? "no payload" : `payload ${contract.payload}`;
-      return `  ${command.padEnd(29)}${payload}; --task ${contract.task}`;
+      return `  ${command.padEnd(29)}${contract.payload === null ? "no payload" : `payload ${contract.payload}`}`;
     }),
     "",
   ].join("\n");
@@ -50,41 +47,29 @@ async function readInput(command: LocalCommand, path: string | undefined): Promi
 async function main(): Promise<void> {
   const parsed = parseArgs({
     args: process.argv.slice(2), allowPositionals: true, strict: true,
-    options: { producer: { type: "string" }, reviewer: { type: "string" }, format: { type: "string" }, task: { type: "string" }, repository: { type: "string" }, input: { type: "string" }, force: { type: "boolean" }, help: { type: "boolean", short: "h" } },
+    options: { producer: { type: "string" }, input: { type: "string" }, force: { type: "boolean" }, help: { type: "boolean", short: "h" } },
   });
   if (parsed.values.help || parsed.positionals.length === 0) {
     process.stdout.write(usageText());
     return;
   }
-  // `upgrade adopt` is the one two-token command form: the skill-facing shape of the input-free
-  // adoption adapter registered as `upgrade-adopt`.
-  const upgradeAdoptForm = parsed.positionals.length === 2 &&
-    parsed.positionals[0] === "upgrade" && parsed.positionals[1] === "adopt";
-  if (!upgradeAdoptForm && (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0] as LocalCommand))) {
+  if (parsed.positionals.length !== 1 || !LOCAL_COMMANDS.includes(parsed.positionals[0] as LocalCommand)) {
     throw new TypeError(`unknown archflow-local command "${parsed.positionals.join(" ")}"; run archflow-local --help for the command list`);
   }
-  const command = (upgradeAdoptForm ? "upgrade-adopt" : parsed.positionals[0]) as LocalCommand;
-  if (LOCAL_COMMAND_CONTRACTS[command].task === "required" && parsed.values.task === undefined) {
-    throw new TypeError(`${command} requires --task <task>`);
-  }
+  const command = parsed.positionals[0] as LocalCommand;
   if (INPUT_FREE_COMMANDS.has(command) && parsed.values.input !== undefined) {
     throw new TypeError(`${command} accepts no input payload; omit --input`);
-  }
-  if (parsed.values.repository !== undefined && command !== "restore") {
-    throw new TypeError(`--repository is supported only by restore`);
   }
   if (parsed.values.force === true && command !== "init") {
     throw new TypeError(`--force is supported only by init`);
   }
-  if (command !== "review-preview" && command !== "review" && parsed.values.producer !== undefined) throw new TypeError("--producer is supported only by review and review-preview");
-  if (command !== "review-preview" && [parsed.values.reviewer, parsed.values.format].some(value => value !== undefined)) throw new TypeError("--reviewer and --format are supported only by review-preview");
+  if (command !== "review" && parsed.values.producer !== undefined) throw new TypeError("--producer is supported only by review");
   if (command === "review" && !["claude", "codex", "antigravity"].includes(parsed.values.producer ?? "")) throw new TypeError("review requires --producer claude|codex|antigravity to resolve the cross-family review routes");
-  if (parsed.values.format !== undefined && !["text", "json"].includes(parsed.values.format)) throw new TypeError("--format must be text or json");
   const value = INPUT_FREE_COMMANDS.has(command) ? undefined : await readInput(command, parsed.values.input);
   // Cancel reviewer children and dispose the review workspace on interrupt instead of dying mid-dispatch.
   const controller = new AbortController();
   if (command === "review") for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => controller.abort());
-  const result = await runLocalCommand({ command, working_directory: process.cwd(), signal: controller.signal, ...(parsed.values.producer === undefined ? {} : { producer: parsed.values.producer }), ...(parsed.values.reviewer === undefined ? {} : { reviewer: parsed.values.reviewer }), ...(parsed.values.task === undefined ? {} : { task_id: parsed.values.task }), ...(parsed.values.repository === undefined ? {} : { repository_name: parsed.values.repository }), ...(value === undefined ? {} : { value }), ...(parsed.values.force === true ? { force: true } : {}) });
+  const result = await runLocalCommand({ command, working_directory: process.cwd(), signal: controller.signal, ...(parsed.values.producer === undefined ? {} : { producer: parsed.values.producer }), ...(value === undefined ? {} : { value }), ...(parsed.values.force === true ? { force: true } : {}) });
   assertPlainJson(result, "local command result");
   if (result !== null && typeof result === "object" && !Array.isArray(result) && (result as Record<string, unknown>).ok === false) {
     process.exitCode = 1;
@@ -94,7 +79,7 @@ async function main(): Promise<void> {
       : "PROJECT_ERROR";
     process.stderr.write(`${command} failed: ${code}\n`);
   }
-  process.stdout.write(command === "review-preview" && parsed.values.format !== "json" ? renderReviewPreview(result) : canonicalJsonBytes(result as PlainJsonValue));
+  process.stdout.write(canonicalJsonBytes(result as PlainJsonValue));
 }
 
 function failureMessage(error: unknown): string {

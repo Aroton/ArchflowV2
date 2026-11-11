@@ -16,7 +16,6 @@ export interface ConstitutionRuleV1 {
 export type ConstitutionRegistry = ReadonlyMap<string, ConstitutionRuleV1>;
 
 export const CONSTITUTION_RULE_NAME = /^[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
-export const CONSTITUTION_RULE_PATH = /^\.archflow\/constitution\/(?:(?:default|custom)\/)?[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.md$/u;
 
 const frontmatterSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
@@ -82,17 +81,4 @@ export function parseConstitutionRuleFiles(files: Readonly<Record<string, string
   const defaults = registryFromRules(layers.default);
   const custom = registryFromRules(layers.custom);
   return new Map([...defaults, ...custom]);
-}
-
-export function validateConstitutionEvolution(previous: ConstitutionRegistry, candidate: readonly ConstitutionRuleV1[]): ConstitutionRegistry {
-  const next = registryFromRules(candidate);
-  for (const [id, prior] of previous) {
-    const current = next.get(id);
-    if (!current) throw new Error(`Constitution rule ${id} cannot be deleted or reused`);
-    if (prior.status === "deprecated" && current.status === "active") throw new Error(`Deprecated constitution rule ${id} cannot be reactivated`);
-    const contentChanged = prior.status !== current.status || prior.text !== current.text || prior.review_trigger !== current.review_trigger || JSON.stringify(prior.enforced_by) !== JSON.stringify(current.enforced_by);
-    if (contentChanged && current.version <= prior.version) throw new Error(`Changed constitution rule ${id} must increment its version`);
-    if (!contentChanged && current.version !== prior.version) throw new Error(`Unchanged constitution rule ${id} must retain its version`);
-  }
-  return next;
 }

@@ -1,185 +1,82 @@
 # DEPENDENCIES
 
-**Explored:** 2026-09-16 · **Commit:** `d795fee` · **Covers:** `package.json`, `tsconfig.json`, `scripts/`, `src/init/`, `src/contracts/config.ts`, `src/state/config-change.ts`, `src/state/fingerprint.ts`, `src/state/read.ts`, `src/dispatch/`, release tooling
+**Explored:** 2026-11-11 · **Commit:** `f1fe689` · **Covers:** `package.json`, `package-lock.json`, `tsconfig.json`, `vitest.config.ts`, `src/dispatch/`, `src/init/`, `src/review/simple-context.ts`, `scripts/`, `release/legal/`, `notices/`, `THIRD_PARTY_NOTICES.md`, `install.sh`, `skills/archflow-run/scripts/`
+
+What ArchFlow needs in order to run and to be built, what it launches, what it reads, and what it never touches. The shipped program has two direct dependencies; almost everything else here is the machine it runs on.
 
 ## Runtime and package baseline
 
-`package.json` defines a private ESM package, `archflow-mcp-server@0.0.0`, with a Node runtime floor and major-line cap of `^24.15.0`. `package-lock.json` is the exact npm lock (`lockfileVersion: 3`); direct dependencies use exact versions rather than ranges.
+- **Node `^24.15.0`** (`engines` in `package.json`; `install.sh` checks it). The package is private, ES-module only (`"type": "module"`), and ships as a single bundled file.
+- **Two direct runtime dependencies**, pinned to exact versions and bundled into `dist/archflow-local.mjs` (the bundle imports only Node built-ins):
 
-`tsconfig.json` targets ES2024 with `NodeNext` modules and resolution. Type checking is deliberately strict: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, and `skipLibCheck: false`; `noEmit` means esbuild, not TypeScript, produces artifacts.
+| Package | Used for |
+|---|---|
+| `yaml` 2.9.0 | Parsing `config.yaml`, constitution frontmatter and the bundled review-input configuration, in strict single-document, no-alias, no-merge-key mode (`src/contracts/yaml.ts`). |
+| `zod` 4.4.3 | Every schema: review payload and result, config, rubric, constitution rule, reviewer outputs, project errors. Also generates JSON Schema for reviewer output (`toJSONSchema`). |
 
-### Direct runtime dependencies
+- **Development dependencies** (none ships): `typescript` 7.0.2 (`tsc --noEmit` only), `vitest` 4.1.10 with `vite` 7.3.6, `esbuild` 0.28.1 (the release bundler), `ajv` 8.20.0 with `ajv-formats` 3.0.1 (validating generated schemas and release manifests in tests and release checks), `@types/node` 24.13.3.
+- **Nothing is installed for the user at runtime.** There is no network access at startup, no package fetch and no telemetry.
 
-| Package | Pin | Concrete use |
-| --- | --- | --- |
-| `@modelcontextprotocol/server` | `2.0.0` | The public-root SDK boundary in `src/mcp/sdk-adapter.ts`: `Server`, `ProtocolError`, `specTypeSchemas`, and MCP types. It resolves `@modelcontextprotocol/core@2.0.0` transitively. |
-| `zod` | `4.4.3` | The single runtime shape authority: strict parsing for agent-facing, durable, and in-memory contracts throughout `src/contracts/`, and the source for 42 generated JSON Schemas (`npm run generate:schemas`). Together with the hand-written release-manifest schema, the committed directory contains 43 schemas. |
-| `yaml` | `2.9.0` | `src/contracts/yaml.ts` implements strict, single-document YAML parsing used by `config.yaml` and `workflow.yaml`. |
-| `@secretlint/core` | `13.0.4` | `src/state/secret-scan.ts` calls `lintSource` before retaining implementation output. |
-| `@secretlint/secretlint-rule-preset-recommend` | `13.0.4` | Supplies the production detector set; the filter-comments rule is removed before scanning. |
-| `@secretlint/profiler` | `13.0.4` | `@secretlint/core`'s own profiler, promoted to a direct dependency because `src/state/secret-scan.ts` has to empty it. Core marks the performance timeline on every `lintSource` call and never releases what it collects, and the profiler rescans its retained list for each later mark — so scanning degrades quadratically and nothing ever reads the measurements. The adapter drains it through `getEntries`/`getMeasures` after each scan. It deliberately leaves the process-wide mark registry alone: marks are recorded before their observer callback runs, so clearing them races a callback that measures against a just-removed mark, which throws and takes the process down. |
-| `write-file-atomic` | `8.0.0` | Declared but currently has **no production import**. `src/state/atomic.ts` now implements exclusive creation and atomic replacement with Node `open`/`link`/`rename`; `src/types/write-file-atomic.d.ts` is a residual narrow declaration. Do not assume the package protects current state writes. |
+## Programs ArchFlow launches
 
-`@secretlint/types` is transitive and imported type-only by `src/state/secret-scan.ts`. Production code otherwise relies heavily on Node built-ins (`fs`, `path`, `crypto`, `child_process`, `stream`, `os`, `async_hooks`, timers, and related modules).
+| Program | Why | Minimum version (checked at preflight) |
+|---|---|---|
+| `claude` | Claude reviewer route; also the launcher for any cc-switch provider route | 2.1.205 |
+| `codex` | Codex (GPT) reviewer route | 0.122.0 |
+| `agy` | Antigravity (Gemini) reviewer route | 1.0.0 |
+| `cc-switch` | Optional: `cc-switch start claude <provider> -- …` runs the claude CLI against another provider's models. Only used when a route names a `provider`. | none |
+| `git` | `rev-parse`, `diff`, `ls-files`, `check-ignore` against the reviewed repository; `git archive` for read-only checkouts | any |
+| `tar` | Extracts the `git archive` stream into the review workspace | any |
 
-### Development dependencies
+Each reviewer CLI is probed before its first use in a review: version, then login state, then whether managed-policy files are present (`src/dispatch/cli.ts`). Failures surface as `CLI_MISSING`, `CLI_VERSION_UNSUPPORTED` or `AUTH_UNAVAILABLE` with a fixed next action, never as a guess at a fix. These CLIs are version-coupled: ArchFlow passes flags that suppress project instructions, user configuration, skills and tools, and a new CLI release can rename or drop one. The exact argv for each is covered by fixtures; see [mcp/DISPATCH.md](mcp/DISPATCH.md) and [LIMITATIONS.md](LIMITATIONS.md).
 
-| Package | Pin | Use |
-| --- | --- | --- |
-| `typescript` | `7.0.2` | `npm run typecheck` / `tsc --noEmit`. |
-| `@types/node` | `24.13.3` | Node 24 type declarations. |
-| `vitest` | `4.1.10` | Unit, integration, contract, crash, and opt-in real-host tests. `vitest.config.ts` uses the Node environment and includes `test/**/*.test.ts`. |
-| `vite` | `7.3.6` | Vitest runtime and the child-process fixture loader used by crash tests. |
-| `esbuild` | `0.28.1` | Temporary bundles in `scripts/build-temp-helper.mjs` and release bundles in `scripts/release-support.mjs`. |
-| `ajv` | `8.20.0` | Dev-only since 2026-08-11: strict compilation of committed JSON Schemas in tests (`test/helpers/json-schema.ts`) and the release manifest in `scripts/release-support.mjs`. Production validates through Zod and never compiles a schema, so Ajv's transitive `fast-uri` also left the runtime dependency closure. |
-| `ajv-formats` | `3.0.1` | Format support for the dev-only Ajv compiler. |
-| `@secretlint/secretlint-rule-aws` | `13.0.4` | Dev-only rule used to exercise secret-scanning behavior. |
+The `archflow-run` helper scripts (`skills/archflow-run/scripts/counter-review.sh`, `wait.sh`) additionally need `bash` and `jq`.
 
-There is no ESLint, Prettier, Biome, dotenv loader, web framework, database client, ORM, or telemetry SDK.
+## Filesystem and git
 
-## MCP and host integrations
+- **Reads:** the repository under review (changed, untracked and declared files), `.archflow/config.yaml`, `.archflow/constitution/`, and the installed bundle's `assets/`. The bundle finds `assets/` beside `dist/`; a source checkout finds it two levels up.
+- **Writes:** `init` writes only the scaffold under `.archflow/` and edits or removes the legacy MCP registrations in `.mcp.json` and `.codex/config.toml`. `review` writes nothing into the repository except, when one reviewer's dispatch fails unexpectedly, an appended stack in `.archflow/runtime/diagnostics/internal-errors.log` (only if `.archflow/` already exists). It creates one temporary directory per review, outside the repository, and removes it.
+- **A per-dispatch usage record** (a small JSON file: duration, model, token counts the CLI reported, failure stage) goes to `<ARCHFLOW_HOME>/usage/` for an installed bundle, and records older than seven days are deleted on the next dispatch. A source run does not write it.
+- **Never written by tests, and by the CLI only through the usage log under `<ARCHFLOW_HOME>/usage/` (installed bundles only):** `~/.claude`, `~/.agents`, `~/.gemini`, `~/.archflow`, `~/.local/bin`. Otherwise only `install.sh`, run by a person, writes there (the reviewer CLIs themselves may refresh credentials in their own homes).
 
-### Stdio MCP runtime
+## Environment variables
 
-`src/main.ts` is the `archflow-mcp` entry point. It accepts no payload arguments and connects `stdin`, `stdout`, and `stderr` to `src/mcp/process-runner.ts` and `src/mcp/sdk-adapter.ts`.
+| Variable | Read by | Effect |
+|---|---|---|
+| `HOME`, `CODEX_HOME`, `CLAUDE_CONFIG_DIR` | `src/dispatch/workspace.ts` | Where each reviewer CLI finds its login. Passed through unchanged so a token refresh persists in the CLI's own store. |
+| `PATH`, `USER`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS` | the same | Forwarded to reviewer children. Everything else, including API keys and provider variables, is dropped. |
+| `ARCHFLOW_HOME`, `ARCHFLOW_BIN` | `install.sh` | Install root (default `~/.archflow`) and launcher directory (default `~/.local/bin`). |
+| `ARCHFLOW_LOCAL` | `counter-review.sh` | Overrides the command, e.g. `node dist/archflow-local.mjs`. |
+| `ARCHFLOW_REAL_HOSTS=1` | `test/helpers/real-host.ts` | Opt in to tests that call real, authenticated model hosts. |
+| `ARCHFLOW_CC_SWITCH_PROVIDER`, `ARCHFLOW_CC_SWITCH_MODEL` | `test/real-host/cc-switch-dispatch.test.ts` | Provider and model for the opt-in cc-switch test. |
+| `ARCHFLOW_WRITE_PROMPT_SNAPSHOTS=1` | `test/unit/standalone-review-prompt-snapshots.test.ts` | Rewrites the rendered-prompt fixtures. |
 
-- The transport is newline-delimited JSON-RPC over stdio. `src/mcp/framing.ts` and `src/mcp/send-queue.ts` own framing and ordered output/backpressure; the pinned SDK owns JSON-RPC dispatch and validation (see `mcp/SERVER.md`). The SDK's `StdioServerTransport` is not used; `sdk-adapter.ts` provides a local `Transport` so output remains under the repository's queue and its canonical result-xor-error egress check.
-- The server identifies itself as `archflow-mcp@0.0.0` and supports MCP protocol `2025-11-25` (`PROTOCOL_VERSION` in `src/mcp/sdk-adapter.ts`).
-- The only SDK import in production is the public root in `src/mcp/sdk-adapter.ts`. `scripts/check-mcp-sdk-boundary.mjs` enforces that boundary; `scripts/test-mcp-sdk-boundary-policy.mjs` mutation-tests the checker.
-- `scripts/probe-mcp-sdk-compatibility.mjs` verifies the installed SDK/core public and behavioral surfaces the adapter relies on.
-- `src/mcp/tools.ts` advertises exactly two purpose-described tools. `archflow_status` and `archflow_apply` use the generated semantic-workflow schema; the four low-level names remain durable-record vocabulary in `TOOL_NAMES` for existing state, but nothing advertises or dispatches them.
+## Network and authentication boundary
 
-Host identity is derived from MCP `clientInfo.name` in `src/contracts/hosts.ts`: `claude-code` maps to Claude, `codex-mcp-client` maps to Codex, `antigravity-client` / `antigravity` / `agy` maps to Antigravity, and any unrecognized name maps to `unknown`. Recorded versions are evidence fixtures, not a prefix-based identity fallback.
+ArchFlow opens no sockets and calls no API itself. All network traffic belongs to the reviewer CLIs under the developer's own login, and their cost and rate limits are the developer's. ArchFlow neither reads nor stores credentials; a review's only trace of a call is the usage file above. Authentication stays in each CLI's canonical home on purpose; the consequences are in [LIMITATIONS.md](LIMITATIONS.md).
 
-### Host and project registration
+## Build, test, and release tooling
 
-Initialization (`src/init/index.ts` and `src/init/registration.ts`) integrates with supported hosts:
+`package.json` scripts (the full list and what each is for is in [TESTING.md](TESTING.md)):
 
-Before host registration, `src/init/assets.ts` copies `assets/archflow.gitignore` to `.archflow/.gitignore` byte-for-byte. Its sole `/runtime/` rule keeps transient/cache/diagnostic bytes out of Git without taking ownership of the project root `.gitignore`; diagnostics use Git itself to verify the ignore match and enumerate any already tracked runtime paths.
+- `typecheck`, `test*`, `check`, `check:deep`: the development loop.
+- `generate:schemas` / `check:schemas`: regenerate or byte-compare the JSON Schemas under `src/contracts/schemas/v1/` from the zod definitions (`scripts/generate-schemas.mjs`, which bundles the generator with esbuild).
+- `release:stage|check|reproduce|write|smoke|mutations`, `check:release`: build and verify the tracked `dist/` payload with esbuild (`scripts/release-support.mjs`). The payload is `archflow-local.mjs`, `manifest.json`, `metafile.json` and `legal/`; the manifest records every input digest and the runtime asset files (`assets/config.template.yaml`, `assets/archflow.gitignore`, the two rubrics, and `assets/constitution/`). `assets/review-inputs.yaml` is compiled into the bundle as text (esbuild's `.yaml` loader; `vitest.config.ts` does the same under test) rather than shipped as a file.
+- `check:notices` / `test:notices-policy`: check `THIRD_PARTY_NOTICES.md` against `package-lock.json`.
 
-- Claude Code: `claude mcp add --scope project archflow -- archflow-mcp`, followed by `claude mcp get archflow`. The project descriptor is `.mcp.json`; the registered stdio command is `archflow-mcp` with a 3,600,000 ms timeout. Human project approval can remain pending.
-- Codex: ArchFlow atomically maintains only its marked block in `.codex/config.toml`, then checks it with `codex mcp get archflow --json`. The block sets `startup_timeout_sec = 30` and `tool_timeout_sec = 3600`. Repository trust remains a human action; initialization never writes `trust_level`.
-- Antigravity: ArchFlow atomically maintains its server configuration in `~/.gemini/config/mcp_config.json`, then checks it with `agy mcp list` when the CLI is present. The entry sets `timeoutSeconds: 3600`; without it `agy` aborts an MCP tool call after three minutes, which cancels any review dispatch still running. Other keys on an existing entry are left alone.
-- All registration paths detect foreign configuration and command collisions instead of overwriting unrelated host settings.
+`release:write` promotes an explicitly staged payload into `dist/`; it never installs anything machine-wide. Rebuilding `dist/` is a release step of its own, not part of ordinary feature work.
 
-The repository itself contains current examples in `.mcp.json` and `.codex/config.toml`.
+### Legal material
 
-## Model dispatch integrations
+`THIRD_PARTY_NOTICES.md` is generated from the lockfile and lists every locked package with its SPDX license, including optional platform packages. Retained notice text lives in `notices/` (TypeScript's NOTICE). `release/legal/upstream/installed-yaml-2.9.0/` and `installed-zod-4.4.3/` hold the license files for the two packages that are bundled into the shipped program, and they are copied into `dist/legal/`. Licensing is handled as ordinary package metadata and notices, in line with `CLAUDE.md`; there is no per-file license audit.
 
-`src/dispatch/` launches authenticated first-party `claude` or `codex` CLIs to perform the independent rubric and constitution reviews. It does not call provider HTTP APIs directly.
+### Install
 
-`src/dispatch/routing.ts` consumes the strictly parsed live task-local YAML configuration and maps model prefixes to adapters (`claude-*` to `claude-cli`, `gpt-*` to `codex-cli`, and `gemini-*` to `antigravity-cli`; a cc-switch provider uses the Claude adapter, but cannot accompany GPT or Gemini routes). Config describes four dispatched roles: one or more general `counter-reviewer` routes, the phase-design/implementation `test-reviewer`, the phase-design `effort-reviewer`, and the constitution `adjudicator`; the producer is the connected host and is never dispatched. Astra at `max` is explicitly rejected; supported effort values also depend on the adapter. Both specialist roles fall back to the shipped `gpt-5.6-luna`/`xhigh` route when applicable and unconfigured. The active template keeps producer-specific general routes and uses Gemini adjudication. `.archflow/config.yaml` is the repository seed copied into each task. Optional per-workflow overrides exist for `explore`, `prd`, `design`, `phase-design`, and `phase-impl`.
-
-`src/dispatch/cli.ts` defines the concrete adapters:
-
-- Minimum versions are Claude Code `2.1.205` and Codex CLI `0.122.0`, checked with exact `--version` output patterns.
-- Authentication preflight runs `claude auth status` or `codex login status`. Authentication comes from the user's first-party CLI credential store, not API keys.
-- Claude runs in print/safe mode with tools and slash commands disabled, an empty strict MCP config, no session persistence or setting sources, and a projected JSON output schema.
-- Codex runs `exec --ephemeral` with user config/rules ignored, read-only sandboxing, strict config, a generated output schema/file, and shell, browser, computer, image, apps, plugins, hooks, skill search, and multi-agent features disabled.
-- Antigravity checks authentication with `agy models`, passes bounded Markdown instructions and local file references on argv with empty stdin, and loads the schema from a workspace file. Its invocation disables slash commands and uses `--dangerously-skip-permissions`; it does not share Claude or Codex’s full lockdown flags.
-- `src/dispatch/process.ts` uses `spawn` without a shell, caps total output at 8 MiB, times out after 15 minutes by default (a real review of the pinned checkout is legitimately multi-minute), and terminates the process group on non-Windows.
-- A process-wide FIFO in `src/dispatch/cli.ts` limits one MCP server process to one resource-intensive reviewer at a time. Semantic review holds that FIFO around its entire replay/dispatch/commit operation and calls a direct counter-review inner seam, so it cannot deadlock by entering the same queue twice. Credential concurrency remains the first-party CLI's responsibility; the FIFO does not coordinate separate MCP server or interactive processes.
-
-`src/dispatch/workspace.ts` creates a disposable working directory outside the repository but deliberately does not create a disposable authentication home:
-
-- All adapters receive the caller's canonical `HOME`.
-- Claude also receives `CLAUDE_CONFIG_DIR` when the caller configured it.
-- Codex receives the caller's `CODEX_HOME`, or the canonical `$HOME/.codex` default.
-- `TMPDIR`, repository views, schemas, and outputs remain under the disposable workspace.
-- Forwarded only when present: `USER`, `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS`.
-- Provider keys such as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, plus all other caller environment variables, are intentionally dropped.
-
-Canonical authentication is a correctness requirement, not a containment gap to repair with links or copies. Both CLIs may atomically replace their credential file when rotating OAuth tokens; redirecting that path through a disposable symlink can replace the link, preserve a consumed token in the real store, and then delete the only fresh token during cleanup. Claude safe mode and Codex's user-config/rule suppressions keep review instructions isolated without relocating mutable authentication.
-
-Managed-policy presence is reported from fixed Claude paths under `/etc/claude-code/` and `/Library/Application Support/ClaudeCode/`, and Codex paths under `/etc/codex/`; it is diagnostic evidence, not permission to bypass host policy.
-
-## Filesystem, Git, and durable storage
-
-There is no server or cloud database. Durable authority is ordinary tracked repository content under `.archflow/tasks/<task>/`, while transient/cache/diagnostic data is rooted below ignored `.archflow/runtime/tasks/<task>/`; both path families are defined in `src/state/layout.ts` and resolved with containment, symlink, and task-isolation checks in `src/repository/paths.ts`.
-
-- `src/repository/git.ts` invokes `git` with `execFile`, never a shell. Defaults are an 8 MiB output buffer and 30-second timeout; binary stdin is bounded at 25 MiB. Git must be at least 2.25 and use SHA-1 object format.
-- Repository readers use commands such as `rev-parse`, `rev-list`, `status`, `ls-tree`, `ls-files`, `diff`, `merge-base`, `cat-file`, `hash-object`, and `check-attr`. Absence is accepted only through command-specific exit-code/diagnostic pairs.
-- `src/state/lock.ts` uses a task-local `mkdir` lock and `AsyncLocalStorage`; no external lock library participates in this path.
-- `src/state/atomic.ts` uses exclusive temporary files, hard links, renames, and symlinks for immutable creation and projection. Paths are resolved and classed before mutation; `.archflow/**` is constrained to ordinary non-executable Git blobs.
-- `.gitattributes` marks `.archflow/** -text merge=binary` so byte-addressed state is not changed by line-ending conversion or conflict-marker insertion. It also fixes LF handling for generated `dist/` text and preserves retained license bytes.
-
-## Configuration and environment variables
-
-Runtime workflow configuration is file-backed:
-
-- `assets/config.template.yaml` is copied to `.archflow/config.yaml`, then copied again to `.archflow/tasks/<task>/config.yaml` when a task is created. That task-local copy remains live and editable: every config-observing transaction or dispatch strictly parses its current bytes, and invalid or unsupported YAML fails closed rather than falling back to an older snapshot.
-- Successful config-observing transactions record the normalized parsed shape as `TaskStateV1.last_seen_config`. Read-only status compares that snapshot with the current parsed file and reports informational leaf-level `config_change` entries; a valid edit does not by itself stale an open gate or retained evidence.
-- `assets/archflow.gitignore` is copied exactly to `.archflow/.gitignore`; its sole `/runtime/` rule owns only ArchFlow's nested workspace ignore boundary.
-- Initialization also scaffolds `.archflow/hazards.yaml` as optional effort-selection context and the expanded repository constitution. Existing divergent scaffold bytes are refused unless the caller explicitly uses `init --force`; force refreshes shipped defaults and other scaffold files while preserving `constitution/custom/`. Rubrics remain bundle assets, not repository scaffold files.
-- `assets/workflow.yaml` defines the workflow graph and remains digest-pinned by task state; `assets/constitution/default/` supplies shipped policy documents, copied into the repository beside preserved `custom/` rules whose selected Git identities remain pinned to the task policy base. Live config editability does not relax either pin.
-- `assets/rubrics/` holds five server-owned counter-review rubrics (`prd.yaml`, `design.yaml`, `phase-design.yaml`, `simple-plan.yaml`, `implementation.yaml`). Architecture, phase implementation-readiness, and standalone plan review have distinct criteria; standalone and phase implementation share the implementation rubric. They are install-bundle assets, never scaffolded into repositories: the MCP server reads and strictly parses the selected file fresh on every review and status call, a missing or invalid file fails closed with `CONFIG_INVALID`, and the parsed rubric's digest folds into review input fingerprints and evidence. A running bundle reads its own rubric assets; updating a checkout does not change an installed bundle. Machine-global installation requires a separate explicit user request.
-- `src/contracts/config.ts` validates `schema_version: "1"`, role routes, optional phase-kind overrides, optional positive `max_attempts` (default behavior is five completed review rounds), and optional `approval_rules` with subject triggers plus phase-implementation changed-path triggers. The retired `producer` route is a narrow read-compatibility field; it is ignored when config-change snapshots are normalized.
-- The task state's `config_digest` remains the creation-time provenance for the copied config, and a rule settlement separately records the live config digest it evaluated. Config is not part of the current input-fingerprint subject, so valid edits do not invalidate gates or evidence through fingerprint churn.
-- `src/state/fingerprint.ts` has one bounded read-compatibility retry for pre-cutover evidence: only an exact expected old fingerprint can be matched using that task state's creation `config_digest`. It never uses live config for the retry, rewrites evidence, or migrates arbitrary old state.
-
-Environment inputs are narrow and purpose-specific:
-
-| Variable | Consumer | Meaning |
-| --- | --- | --- |
-| `HOME` | `src/dispatch/workspace.ts`, `install.sh` | Locates first-party credentials and default install destinations. Dispatch preserves its canonical location for child authentication. |
-| `USER`, `PATH`, `LANG`, `LC_ALL`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_EXTRA_CA_CERTS` | `src/dispatch/workspace.ts` | Explicit dispatch-child allowlist. `USER` is required for the Claude CLI keychain credential lookup on macOS. |
-| `ARCHFLOW_HOME` | `install.sh` | Overrides the installed bundle root; default is `$HOME/.archflow`. |
-| `ARCHFLOW_BIN` | `install.sh` | Overrides launcher destination; default is `$HOME/.local/bin`. |
-| `ARCHFLOW_RELEASE_FAULT_AFTER` | `scripts/release-support.mjs` | Test-only crash injection for tracked-release replacement. |
-
-`src/init/registration.ts` can accept an explicit environment object from its caller; otherwise its host registration subprocesses inherit `process.env`. There is no `.env` convention.
-
-## Network and authentication boundaries
-
-Production `src/` contains no `fetch`, HTTP client, listening socket, database driver, auth-provider SDK, or telemetry integration. URL strings in schemas are identifiers and local `$ref` authorities; nothing fetches them.
-
-Network access can still occur at two outer boundaries:
-
-1. The spawned Claude/Codex CLIs communicate with their own providers using existing subscription/login credentials. ArchFlow treats these CLIs as external processes and post-validates structured output.
-2. Release reproduction accesses npm to run an isolated `npm ci --ignore-scripts --no-audit --no-fund` with a temporary home/cache.
-
-There are no application-managed users, sessions, OAuth flows, API tokens, or authorization database. Human authority is represented by durable ArchFlow gate/waiver records rather than an auth service.
-
-## Build, test, policy, and release tooling
-
-### Local commands
-
-Important `package.json` scripts:
-
-- `typecheck`: strict TypeScript validation.
-- `test`, `test:unit`, `test:contracts`: the fast Vitest project and its two directory-focused views.
-- `test:extended`, `test:integration`, and `test:crash`: explicit deeper projects for exhaustive schemas, real Git/process journeys, and fault injection.
-- `test:real-host` and `bench:review`: opt-in serialized tests requiring installed/authenticated host CLIs.
-- `build:temp`: esbuild smoke bundles under a unique temporary directory.
-- `check:notices` and `test:notices-policy`: lockfile-to-notice reconciliation and mutation tests.
-- `check:mcp-sdk-boundary` and `test:mcp-sdk-boundary-policy`: production SDK import isolation and mutation tests.
-- `release:stage`, `release:check`, `release:reproduce`, `release:write`, `release:smoke`, and `release:mutations`: deterministic release construction, validation, promotion, smoke tests, and hostile mutations.
-- `check`: the ordinary local/CI pipeline; `check:deep` explicitly composes every local deep tier and release validation. After the ordinary check, schema, policy, extended-test, and release branches run concurrently; crash and integration projects then run sequentially.
-
-No formatter or source linter is configured. Formatting/import style is convention-backed; correctness gates are strict TypeScript, tests, contract agreement checks, notice consistency, SDK boundary checks, and release integrity checks.
-
-### Release payload and installer
-
-`scripts/release-support.mjs` bundles two Node 24 ESM executables with esbuild:
-
-- `src/main.ts` -> `dist/archflow-mcp.mjs` (`mcp-stdio`).
-- `src/local/main.ts` -> `dist/archflow-local.mjs` (`local-cli`).
-
-The release is not published by automation. `dist/` is tracked and validated against `dist/manifest.json`, `dist/metafile.json`, dependency provenance, the repository `THIRD_PARTY_NOTICES.md`, and retained upstream license texts. The release copies notices and licenses directly, hashes every payload artifact, and verifies source-to-payload byte equality. Dependency provenance uses exact directory-entry casing so macOS builds do not record duplicate license paths that fail on Linux. Reproduction materializes a clean source set, performs isolated `npm ci`, rebuilds, and byte-compares the candidate.
-
-`install.sh` verifies the tracked payload, installs it beneath `${ARCHFLOW_HOME:-$HOME/.archflow}/bundle`, writes `archflow-mcp` and `archflow-local` launchers beneath `${ARCHFLOW_BIN:-$HOME/.local/bin}`, and copies skills to `~/.claude/skills/`, `~/.agents/skills/`, and/or `~/.gemini/config/skills/`. It requires Node in `^24.15.0` and requires the launcher directory to be on `PATH`.
-
-**Developing ArchFlow inside this repository** never requires installing: the project-scoped `.mcp.json` routes through `scripts/dev-mcp-launcher.sh`, which serves this checkout's tracked `dist/` bundle when `ARCHFLOW_DEV=1` (optionally `ARCHFLOW_DEV_DIST` to point elsewhere) and otherwise falls through to the installed `archflow-mcp` launcher. A dev session started with `ARCHFLOW_DEV=1` therefore exercises the branch's own bytes — regenerate `dist/` with the release loop after source changes — while the machine-global install stays untouched for everyone else.
-
-### Automation
-
-The repository has no hosted CI/CD workflow. Maintainers run `npm run check` for the SDK compatibility probe, typecheck, fast tests, temporary build smoke, notice inventory, and SDK import boundary. `npm run check:deep` adds schema drift, exhaustive contracts, integration/crash suites, policy mutations, and release integrity/reproduction only for broad changes. Authenticated real-host tests and benchmarks are always separate. There is no automated deployment, package publication, container build, or artifact upload.
+`install.sh` copies the verified bundle plus `assets/` into `<ARCHFLOW_HOME>/bundle/`, writes a two-line `archflow-local` launcher (`exec node …/dist/archflow-local.mjs "$@"`) into the launcher directory, and copies `skills/` into the Claude Code, Codex and Antigravity skill directories. It also removes artifacts older installs left behind (the `archflow-mcp` launcher and retired skills, owner-checked, and the old Antigravity MCP entry). Installing is always an explicit human action, never part of a task or a test.
 
 ## Change checklist
 
-- Dependency changes update the exact pins in `package.json`, `package-lock.json`, and the ordinary third-party notice content as applicable.
-- Keep all production `@modelcontextprotocol/*` imports isolated to `src/mcp/sdk-adapter.ts` and public package roots.
-- The executable authorities for the dependency surface are `package.json`, `package-lock.json`, and the release provenance derived from the build — not narrative documents.
-- Real-host tests are capability probes that can spend provider quota and depend on installed CLI login state; they are not part of ordinary `npm test` or `npm run check`.
-
-Review instructions and local file references travel in a bounded argv prompt with empty stdin. Complete documents, diffs, and evidence stay in the review workspace; server-only bindings never become CLI payloads. The process layer rejects oversized individual arguments before spawning; this protects all three adapters from Linux’s per-argument limit. See [Dispatch](mcp/DISPATCH.md) for each transport.
+- Adding a runtime dependency: it is bundled into a shipped file, so it needs a pinned version, a license file under `release/legal/upstream/`, an entry in `THIRD_PARTY_NOTICES.md`, and a regenerated `dist/`.
+- Bumping a reviewer CLI's supported version: update the minimum in `src/dispatch/cli.ts`, the argv fixtures, and run the opt-in real-host tests.
+- Changing a shipped asset: update the runtime asset list in `scripts/release-support.mjs`, or it will be missing from `dist/` and from the installed bundle.
+- Changing config or review schemas: run `npm run generate:schemas`.

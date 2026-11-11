@@ -1,42 +1,23 @@
 # ArchFlow
 
-A lightweight, human-centered development workflow for Claude Code and Codex. Nine portable Agent Skills turn an idea into reviewed requirements, designs, and implementations.
+A lightweight, human-centered development workflow for Claude Code, Codex, and Google Antigravity. ArchFlow gives an AI coding agent an independent second opinion from a different model family, checked against rules your repository owns, and uses it to run large jobs without a human approving every step.
 
 ## What It Does
 
-ArchFlow guides you through a structured development process:
+ArchFlow has three parts:
 
-```
-/archflow-init          Initialize repository assets and MCP registration
-       |
-/archflow-constitution  Explain or configure repository policy (optional)
-       |
-/archflow-explore       Understand an existing codebase
-       |
-/archflow-prd my-feature    Define what you're building (PRD)
-       |
-/archflow-design my-feature Design how to build it (architecture + phases)
-       |
-/archflow-phase-design my-feature 1   Design phase 1 (automated review)
-/archflow-phase-impl my-feature 1     Implement phase 1 (fresh session)
-/archflow-phase-design my-feature 2   ...until done
-```
+- **`archflow-local review`**: the counter-review. The agent that wrote a plan or finished a change sends it here; reviewers of another model family read it against the repository and its constitution and report what they found. The agent triages the reports; a human is brought in when a constitution rule's trigger or one of the `approval_rules` in `.archflow/config.yaml` matches (by default: SQL/database changes and material changes to an approved plan), and the caller must honor every returned human-review reason.
+- **`archflow-local init`**: scaffolds what the review reads: `.archflow/config.yaml` (reviewer routing) and `.archflow/constitution/` (repository policy rules).
+- **`/archflow-run`**: the workflow. You plan a large job once and approve it; the orchestrating session then hands each task to a sub-agent in its own worktree, reviews every task (in-model review plus the cross-model counter-review), and keeps its state in markdown and git.
 
-An in-flight legacy task takes an explicit side path into a new task, then rejoins the ordinary PRD and design flow:
+Four skills put these in front of you:
 
-```
-/archflow-upgrade .archflow/tasks/legacy-task new-task
-       |
-/archflow-prd new-task
-       |
-/archflow-design new-task
-```
-
-By default, you review the PRD, overall design, material changes to their approved decisions, and SQL/database changes—including embedded queries, ORM operations, and migrations. Other phase work runs through automated review, fixes, verification, and commits. You still launch each successor skill. Custom constitution rules can require human review, and unresolved blockers still escalate.
-
-Every active constitution rule receives automated compliance review. Its optional `review_trigger` specifically adds **human review** when a condition matches; removing that field does not disable AI review.
-
-The phase skills drive the MCP-backed workflow and stop whenever the server requires human approval. Before work advances, an independent counter-review, triage, and any constitution review must reach a fixed point. The review runs before the gate; there is no optional supplemental gate review.
+| Skill | What it does |
+|-------|--------------|
+| `/archflow-init` | Runs `archflow-local init` and explains the result |
+| `/archflow-constitution` | Explains and configures the repository's constitution rules |
+| `/archflow-explore` | Maps a codebase into a maintained `docs/` set |
+| `/archflow-run <name> [ask]` | Plans a large job, then orchestrates it across fresh sessions |
 
 ## Install
 
@@ -46,192 +27,63 @@ cd ArchflowV2
 ./install.sh
 ```
 
-This verifies the tracked offline payload, installs the server and local-helper bundle under
-`${ARCHFLOW_HOME:-$HOME/.archflow}/bundle/`, creates `archflow-mcp` and `archflow-local`
-launchers under `${ARCHFLOW_BIN:-$HOME/.local/bin}/`, and installs all skill integrations:
+This verifies the tracked offline payload, installs the bundle under
+`${ARCHFLOW_HOME:-$HOME/.archflow}/bundle/`, creates the `archflow-local` launcher under
+`${ARCHFLOW_BIN:-$HOME/.local/bin}/`, and installs the four skills:
 
 - Claude Code skills in `~/.claude/skills/`
 - Codex skills in `~/.agents/skills/`
 - Antigravity skills in `~/.gemini/config/skills/`
 
 The launcher directory must already be on `PATH`; otherwise the installer prints the exact
-`export PATH=...` line and stops. Install just one skill integration with
+`export PATH=...` line and stops. Install just one client's skills with
 `./install.sh --claude`, `./install.sh --codex`, or `./install.sh --antigravity`. Restart Codex after installing if the skills
-are not listed yet.
+are not listed yet. Reviewer CLIs (Claude, Codex, Antigravity) must be installed and authenticated for the clients your routes use.
 
-From the repository you want to initialize, run `/archflow-init` in Claude Code / Antigravity or
-`$archflow-init` in Codex. Initialization scaffolds the repository-owned ArchFlow assets and
-project MCP registrations, then reports the host approval/trust steps that still require you.
-It also creates `.archflow/.gitignore` with the single `/runtime/` rule and diagnoses whether that
-workspace is ignored and free of tracked files. It never edits the project root `.gitignore`.
-The init command creates no task or commit. The skill commits the requested scaffolded repository files automatically and reports any host trust steps that still require you.
-
-Use `/archflow-constitution` (or `$archflow-constitution` in Codex) to understand or configure the repository-wide rules in `.archflow/constitution/`. Shipped rules live in `default/`; repository-specific rules and same-ID replacements live in `custom/`. `archflow-local init --force` refreshes defaults while preserving custom rules, and also resets other scaffold files including repository config. It migrates older flat constitutions by refreshing known shipped filenames and moving additional rules into `custom/`. Configure policy on the repository's policy/base branch before starting affected tasks; existing tasks remain bound to the constitution at their pinned policy-base commit.
-
-> **Self-hosting note:** Phase 19 ships and proves the legacy upgrade path, while this repository deliberately finishes its own `mcp-integration` task under the legacy system. For any in-flight legacy task, either finish it with the legacy tooling or run `archflow-upgrade` into a distinct new task. ArchFlow never performs a silent in-place conversion.
+In Codex, invoke skills with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-explore`. `/archflow-run` is installed for every client but currently needs Claude Code as its orchestrator.
 
 ## Usage
 
 ### 1. Initialize
 
-From the repository you want ArchFlow to manage:
+From the repository you want ArchFlow to review:
 
 ```
 /archflow-init
 ```
 
-In Codex, run `$archflow-init`. The skill checks and commits the requested repository assets before a task uses them as its policy base. It preserves custom policy and unrelated changes; replacing a diverged scaffold and completing host trust steps still require your decision.
+This runs `archflow-local init`, which scaffolds `.archflow/config.yaml`, `.archflow/constitution/` (shipped rules in `default/`, yours in `custom/`), and `.archflow/.gitignore`. It writes nothing outside the repository and never edits the project root `.gitignore`. If a scaffold file differs from the shipped template, init refuses and names the file; keep your version, or re-run `archflow-local init --force` to replace every diverged scaffold file (this also resets `config.yaml`, while `constitution/custom/` is always preserved). Review reads the working tree, so the next review uses whatever is there; commit the files to share the policy.
 
-### 2. Configure Constitution Rules (optional)
+### 2. Configure constitution rules (optional)
 
 ```
 /archflow-constitution
 ```
 
-Explains the constitution, inspects the current numbered rule files, and helps add, revise, or deprecate repository policy. It edits Markdown configuration: a requested policy change includes its scoped commit, while explanation and inspection remain read-only. There is no constitution CLI. In Codex, run `$archflow-constitution`.
+Explains the constitution, inspects the current numbered rule files, and helps add, revise, or deprecate repository policy. Every active rule gets automated compliance review; a rule's optional `review_trigger` additionally requires a human decision when its condition matches. A requested policy change includes its scoped commit; explanation and inspection are read-only.
 
-### 3. Upgrade an In-Flight Legacy Task
-
-Choose this path instead of silently converting an existing task:
-
-```
-/archflow-upgrade .archflow/tasks/legacy-task new-task
-```
-
-In Codex, run `$archflow-upgrade .archflow/tasks/legacy-task new-task`. The source and destination must be in the same repository, and the destination must be a distinct task. The skill stages the selected legacy bytes without modifying the source, initializes the new task, reruns the canonical PRD and design approval pipelines, opens the migration audit, and resumes at the phase derived from imported implementation logs. Use its explicit exclusion list when you intend to redo the last implemented phase. Legacy documents and reviews remain historical material, never approval evidence.
-
-### 4. Explore (optional)
-
-Map an existing codebase before starting work:
+### 3. Explore (optional)
 
 ```
 /archflow-explore
 /archflow-explore authentication    # focus on a specific area
 ```
 
-In Codex, replace the leading `/` with `$`; for example, `$archflow-explore`.
+Produces or refreshes the maintained documentation set in `docs/`, each page stamped with its date, commit and covered paths so a refresh re-explores only what changed.
 
-Produces `.archflow/context/` reference docs that all other skills use.
+### 4. Review directly
 
-### 5. Define Requirements
+Any agent can ask for a counter-review without the workflow:
 
-```
-/archflow-prd my-feature
-```
-
-Creates or revises `.archflow/tasks/my-feature/prd.md`, then drives its review evidence and explicit artifact-approval gate.
-
-### 6. Design Architecture
-
-```
-/archflow-design my-feature
+```bash
+archflow-local review --producer claude --input review.json
 ```
 
-Creates or revises the technical design and phase plan at `.archflow/tasks/my-feature/design.md`, then drives its review evidence and explicit artifact-approval gate. Finite plans use consecutive exact `### Phase N: Name` headings starting at 1. Each phase normally describes one coherent repository-ready increment: one primary outcome, a valid completion state, stable inputs from its predecessors, and one understandable verification story. Architecture design explicitly checks adjacent phases for both bad splits and bad merges. A broader or smaller phase is retained only when its concrete value is explained; an intentionally open-ended plan likewise needs a genuine reason and uses `<!-- archflow:phase-plan:open-ended -->` with no phase headings. Malformed or ambiguous plans cannot be approved.
+The payload carries the ask, the stage (`plan` before work starts, `implementation` for the finished change) and the paths the work touches; the result lists each reviewer's report. See [docs/cli/COMMANDS.md](docs/cli/COMMANDS.md) for the payload, result, and error codes.
 
-### 7. Design Each Phase
+### 5. Orchestrated runs
 
-```
-/archflow-phase-design my-feature 1
-```
-
-Creates or revises `.archflow/tasks/my-feature/phases/1/design.md` and drives review, triage, adjudication, and any required human gate. It reports `DESIGNED` only when durable state proves the fixed point is closed.
-
-The numbered phase design makes one bounded fit check against that outcome-shaped boundary. Work chunks help organize implementation but do not automatically become phases, and a phase may cross repository layers when those changes belong to the same outcome. If the check exposes a harmful split, merge, or sequencing problem, the technical design is corrected through its existing reviewed parent and server authority before implementation.
-
-### 8. Implement Each Phase
-
-```
-/archflow-phase-impl my-feature 1
-```
-
-Run this in a **fresh session** so the whole phase gets a clean context. It implements the approved phase, verifies the result, and records `.archflow/tasks/my-feature/phases/1/impl-notes.md`. It stages or commits nothing until an explicit commit-authorization decision is bound to the current diff.
-
-Later phases read the up-to-date `design.md` and prior `impl-notes.md` so they build on current decisions and interfaces.
-
-### 9. Check Status
-
-```
-/archflow-status
-/archflow-status my-feature
-```
-
-See reconciled durable state and exactly one next action for each task.
-
-## File Structure
-
-ArchFlow keeps tracked workflow authority and ignored local runtime data together under `.archflow/`:
-
-```
-.archflow/
-  .gitignore                         # Contains only: /runtime/
-  config.yaml                       # Repository task-config template
-  workflow.yaml                     # Canonical phase graph
-  constitution/                     # Repository-owned policy rules
-    default/                        # Explicitly refreshed shipped rules
-    custom/                         # Preserved additions and ID-based replacements
-  tasks/
-    my-feature/                     # One directory per task
-      config.yaml                   # Versioned task configuration
-      state.json                    # Durable workflow authority
-      prd.md                        # Product requirements
-      design.md                     # Technical design + phase plan
-      phases/
-        1/
-          design.md                 # Phase design
-          impl-notes.md             # Implementation notes
-        2/
-          design.md
-          impl-notes.md
-      authority/
-        initialization.json         # Adopted initialization authority
-        results/<digest>.json       # Current immutable result manifests
-        decisions/<gate-id>/        # State-referenced requests and decisions
-  runtime/                          # Entire ignored, reconstructible workspace
-    tasks/my-feature/
-      transient/                    # Intent receipts, transaction lock
-      cache/                        # Payloads, rendered reviews/gates, verification, imports
-      diagnostics/attempts/         # Current-phase failed dispatch evidence
-```
-
-Durable documents and authority are tracked on the working branch during development to preserve
-the last checked-in workflow boundary across sessions and fresh clones. The ignored `runtime/` tree is
-only a cache and may be regenerated or cleaned with `archflow-local clean --task <id>`. Remove
-`.archflow/` before creating the final product PR, as before.
-
-## Key Design Decisions
-
-- **Human-in-the-loop**: The agent does the labor, including verification; you decide at every returned human gate
-- **Durable review fixed point**: The server dispatches the configured counter-review and any constitution review, then durable triage resolves the findings before work advances
-- **Change-bounded implementation review**: Phase review covers declared outputs and their current behavior. Unchanged repository files are supporting evidence, not a general code-review backlog.
-- **Outcome-sized checkpoints**: A phase normally lands one coherent, repository-ready outcome with a valid stopping point and a verification story a human can understand. These checkpoints make review, recovery, and later changes easier to reason about. Phase sizing remains engineering judgment, not a deterministic rule based on file count, layer count, phase count, or context-window arithmetic.
-- **Inter-phase learning**: Each phase writes `impl-notes.md` with decisions, patterns, gotchas, and interfaces. The technical design absorbs deviations so later phases read current truth; durable conventions get promoted to the project's CLAUDE.md.
-- **Plan stays accurate**: After each phase, `design.md` and `prd.md` are updated to reflect what actually happened, not just what was planned.
-- **Resumable**: If you lose context mid-phase, re-run the skill and it picks up where you left off.
-- **Task isolation**: Each task is independent. Deleting one has zero impact on others.
-
-## Detailed Process Documentation
-
-See [docs/OVERVIEW.md](docs/OVERVIEW.md) for the maintained documentation set — the whole-system map, the workflow lifecycle and gates (`docs/workflow/`), and per-subsystem pages for the MCP server, CLI, review pipeline, contracts, and durable state.
-
-## Simple tasks
-
-Use `$archflow-simple <ask>` in Codex or `/archflow-simple <ask>` in Claude Code and Antigravity for a small change completed in one session:
-
-```mermaid
-flowchart LR
-  A[Ask → plan] --> B[MCP review → plan fixes]
-  B --> C[Implement → verify]
-  C --> D[MCP review → fixes → verify]
-```
-
-Each review pass includes the configured counter-reviewer, a test reviewer, and constitution review when active rules exist. There are no reviewer re-checks, workflow records, implementation-agent recommendations, or automatic commits. Explicit policy triggers still require a human answer in conversation. The final summary distinguishes reviewed work from later fixes.
-
-Connect the ArchFlow MCP server; repository initialization is unnecessary. With no repository configuration, reviewer routing comes from `assets/config.template.yaml` and the connected client identity. Codex defaults to Claude counter-review; test and constitution routes use their shipped settings. Reviewer CLIs still need installation and authentication. Optional `--counter-reviewer`, `--test-reviewer`, and `--adjudicator` flags select routes for that invocation. A missing required reviewer blocks completion rather than silently falling back.
-
-## Orchestrated runs
-
-Use `/archflow-run <name> <ask>` in Claude Code, which it currently needs as the orchestrator, for a large job you want to approve once and then let run:
+Use `/archflow-run <name> <ask>` in Claude Code for a large job you want to approve once and then let run:
 
 ```mermaid
 flowchart LR
@@ -246,4 +98,46 @@ flowchart LR
 - **Everything is tracked in markdown.** Progress, decisions and reviews live in `.archflow/runs/<name>/`. Every few tasks the orchestrator writes a handoff, and you restart it in a fresh session with the same command.
 - **You are involved only when it matters.** That means plan approval, the STOPs you declare, and halts for unresolved critical findings, scope or decision changes, and irreversible actions.
 
-It needs the `archflow-local` launcher and authenticated reviewer CLIs, but no MCP server or task initialization.
+It needs the `archflow-local` launcher and authenticated reviewer CLIs. The run directory and its generated agents (`.claude/agents/`) are working files: delete them before opening a PR.
+
+## File Structure
+
+```
+.archflow/
+  .gitignore                        # Contains only: /runtime/
+  config.yaml                       # Reviewer routing
+  constitution/                     # Repository-owned policy rules
+    default/                        # Shipped rules, refreshed only by init --force
+    custom/                         # Preserved additions and ID-based replacements
+  runs/
+    my-run/                         # One directory per orchestrated run
+      PLAN.md                       # Requirements, architecture, invariants, task table, STOPs
+      PROGRESS.md                   # Status line, task log, session handoffs
+      DECISIONS.md                  # Decisions and waivers
+      reviews/                      # Per-task findings
+```
+
+## Key Design Decisions
+
+- **Human-in-the-loop**: The agent does the labor, including verification; you approve the plan and every declared STOP, and are asked about anything irreversible.
+- **Independent review**: The session that wrote the work does not review it. By default reviewers come from the opposite model family, and every task in a run gets a cross-model counter-review before it merges.
+- **Repository-owned policy**: The constitution lives in your repository and is judged on every review; human decisions come from the rules' triggers and the configuration's `approval_rules` — the shipped defaults ask a human about SQL/database changes and material changes to an approved plan — and you can add, replace or retire them.
+- **Plain markdown state**: A run's progress lives in files and git, so a lost session is resumed by running the skill again with the same name.
+
+## Detailed Documentation
+
+See [docs/OVERVIEW.md](docs/OVERVIEW.md) for the maintained documentation set: the whole-system map, the CLI, the review flow, child-reviewer dispatch, and the skills.
+
+## Cleaning up older installs and repositories
+
+Earlier versions of ArchFlow shipped an MCP server (`archflow-mcp`) and a gated task workflow with more skills. They are gone; what remains is above. Nothing breaks if you leave the old pieces in place, and most are cleaned up for you.
+
+**An old install.** Re-running `./install.sh` removes what it provably wrote earlier:
+
+- the `archflow-mcp` launcher in `${ARCHFLOW_BIN:-$HOME/.local/bin}/`, when it is exactly the two-line launcher an earlier install wrote;
+- the retired skills `archflow-phase`, `archflow-prd`, `archflow-design`, `archflow-phase-design`, `archflow-phase-impl`, `archflow-status`, `archflow-upgrade` and `archflow-simple`, from each skill directory it installs into, only when the directory's `SKILL.md` names that skill;
+- the `archflow` entry in `~/.gemini/config/mcp_config.json`, only when its command is `archflow-mcp` and the Antigravity skills are being installed (the default).
+
+Anything that does not match is kept and reported. If you registered an `archflow` MCP server in a host's own settings, remove that entry by hand.
+
+**An old repository.** Run `archflow-local init` (or `/archflow-init`) once. It removes the `archflow` server that older inits registered in `.mcp.json` (when its command is `archflow-mcp`) and the marked ArchFlow block in `.codex/config.toml`, then scaffolds. Since the shipped templates have changed, it will usually then refuse at a diverged scaffold file: your existing `.archflow/config.yaml` keeps working for review as it is (keys it no longer uses are ignored), so keeping it is safe; `archflow-local init --force` refreshes the config and the shipped default rules, preserving `constitution/custom/`. Leftover `.archflow/tasks/`, `workflow.yaml` and `hazards.yaml` are no longer read by anything; delete them by hand when you no longer need the history. Older inits also added the line `.archflow/** -text merge=binary` to the repository's root `.gitattributes`. Nothing needs it now, and it makes git refuse to merge `/archflow-run` notes line by line, so remove that line by hand; init leaves `.gitattributes` alone.

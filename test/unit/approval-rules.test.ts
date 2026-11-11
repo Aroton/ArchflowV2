@@ -2,25 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { ConfigV1, WorkflowSubject } from "../../src/contracts/config.js";
 import { parseConfigV1, WORKFLOW_SUBJECTS } from "../../src/contracts/config.js";
-import { ruleSettlementV1Schema, type TaskStateV1 } from "../../src/contracts/durable-state.js";
-import { parseGitOid } from "../../src/contracts/canonical.js";
-import { parseSha256Digest, parseTaskSlug } from "../../src/contracts/evidence.js";
-import type { CurrentProduceSubject } from "../../src/state/produce-subject.js";
 import {
-  approvalRuleGateSummary,
-  approvalRuleContext,
   approvalRuleMatchSummary,
-  buildRuleSettlement,
-  describeMatchedPath,
   evaluateApprovalRules,
   globPatternMatches,
-  subjectGateKind,
-} from "../../src/state/approval-rules.js";
+} from "../../src/review/approval-rules.js";
 
 /**
- * The pure approval-rule evaluator: subject triggers, phase-impl-only content rules, the pinned
- * glob semantics, the subject-to-gate-kind mapping (including the phase-impl force rule), the
- * shared context assembly. Everything here is pure — no filesystem, no fixtures on disk.
+ * The pure approval-rule evaluator: subject triggers, content rules over changed paths, the pinned
+ * glob semantics, and the human-facing trigger summary. Everything here is pure — no filesystem,
+ * no fixtures on disk.
  */
 
 const SUBJECTS: readonly WorkflowSubject[] = [...WORKFLOW_SUBJECTS];
@@ -75,15 +66,6 @@ describe("approvalRuleMatchSummary — human-facing trigger evidence", () => {
     );
   });
 
-  it("says what a matched governing-document path means", () => {
-    expect(approvalRuleMatchSummary({ kind: "content", paths: [".archflow/tasks/demo/design.md", ".archflow/tasks/demo/prd.md"] })).toBe(
-      "Approval rule trigger: these changed paths matched the project's content rules:\n" +
-      "- .archflow/tasks/demo/design.md (this phase changed the architecture design)\n" +
-      "- .archflow/tasks/demo/prd.md (this phase changed the PRD)",
-    );
-    expect(describeMatchedPath(".archflow/tasks/demo/phases/2/design.md")).toBe(".archflow/tasks/demo/phases/2/design.md");
-  });
-
   it("lists the exact persisted content-match paths without consulting config", () => {
     expect(approvalRuleMatchSummary({ kind: "content", paths: ["db/a.sql", "db/deep/b.sql"] })).toBe(
       "Approval rule trigger: these changed paths matched the project's content rules:\n" +
@@ -91,48 +73,14 @@ describe("approvalRuleMatchSummary — human-facing trigger evidence", () => {
       "- db/deep/b.sql",
     );
   });
-
-  it("bounds a large gate summary while preserving exact path examples and an omitted count", () => {
-    const first = `db/${"x".repeat(1000)}.sql`;
-    const paths = [first, ...Array.from({ length: 200 }, (_, index) => `db/migration-${index}.sql`)];
-    const summary = approvalRuleGateSummary("S".repeat(4096), { kind: "content", paths });
-
-    expect(summary.length).toBeLessThanOrEqual(4096);
-    expect(summary).toContain("Gate summary truncated to preserve the approval-rule trigger");
-    expect(summary).toContain(`- ${first}`);
-    expect(summary).toMatch(/additional matched paths omitted; exact paths remain in durable settlement evidence\./u);
-  });
-
-  it("keeps a bounded subject trigger intact after maximum-length caller prose", () => {
-    const summary = approvalRuleGateSummary("S".repeat(4096), {
-      kind: "subject", subject: "phase-design",
-    });
-    expect(summary.length).toBeLessThanOrEqual(4096);
-    expect(summary).toContain(
-      'Approval rule trigger: this project requires human approval for the "phase-design" subject.',
-    );
-  });
 });
 
 describe("evaluateApprovalRules — content rules match the changed paths any subject reports", () => {
   const content = configWithRules({ subjects: [], content: [{ paths: ["**/*.md"] }, { paths: ["db/**"] }] });
 
-  it("a document subject that reports no changed governing document stays autonomous", () => {
-    expect(evaluateApprovalRules(content, "design", [])).toEqual(autonomous);
+  it("a review that reports no changed paths stays autonomous", () => {
     expect(evaluateApprovalRules(content, "phase-design", [])).toEqual(autonomous);
-    expect(evaluateApprovalRules(content, "prd", [])).toEqual(autonomous);
-  });
-
-  it("a document subject that changed a governing document meets the content rules for it", () => {
-    const governing = configWithRules({
-      subjects: [], content: [{ paths: [".archflow/tasks/*/design.md", ".archflow/tasks/*/prd.md"] }],
-    });
-    expect(evaluateApprovalRules(governing, "phase-design", [".archflow/tasks/demo/design.md"]))
-      .toEqual(contentMatch(".archflow/tasks/demo/design.md"));
-    expect(evaluateApprovalRules(governing, "phase-design", [".archflow/tasks/demo/phases/3/design.md"]))
-      .toEqual(autonomous);
-    expect(evaluateApprovalRules(governing, "phase-impl", [".archflow/tasks/demo/prd.md", "src/index.ts"]))
-      .toEqual(contentMatch(".archflow/tasks/demo/prd.md"));
+    expect(evaluateApprovalRules(content, "phase-impl", [])).toEqual(autonomous);
   });
 
   it("matches the phase-impl subject when any changed path hits any rule's globs", () => {
@@ -148,29 +96,10 @@ describe("evaluateApprovalRules — content rules match the changed paths any su
       .toEqual(autonomous);
   });
 
-  it("matches repository-relative secondary paths and retains structured attribution", () => {
-    expect(evaluateApprovalRules(content, "phase-impl", ["src/index.ts"], [{
-      repository: "api" as never,
-      paths: ["db/migrate.sql", "src/index.ts"],
-    }])).toEqual({
-      wait: true,
-      match: {
-        kind: "content",
-        paths: [],
-        secondary_paths: [{ repository: "api", paths: ["db/migrate.sql"] }],
-      },
-    });
-    expect(approvalRuleMatchSummary({
-      kind: "content",
-      paths: [],
-      secondary_paths: [{ repository: "api" as never, paths: ["db/migrate.sql"] }],
-    })).toContain("- api/db/migrate.sql");
-  });
-
   it("a phase-impl subject trigger forces its wait regardless of content rules", () => {
     const forced = configWithRules({ subjects: ["phase-impl"], content: [{ paths: ["**/*.sql"] }] });
     // No content rule matches, yet the subject trigger still waits — and reports itself as the
-    // match, so the gate kind is the subject mapping's commit-authorization, not a content gate.
+    // match, so the human review reason names the subject rule rather than a content rule.
     expect(evaluateApprovalRules(forced, "phase-impl", ["src/index.ts"])).toEqual(subjectMatch("phase-impl"));
     expect(evaluateApprovalRules(forced, "phase-impl", ["db/a.sql"])).toEqual(subjectMatch("phase-impl"));
   });
@@ -214,172 +143,5 @@ describe("globPatternMatches — the pinned whole-path semantics", () => {
     ["Makefile", "makefile", false],
   ])("%s against %s is %s", (pattern, path, expected) => {
     expect(globPatternMatches(pattern, path)).toBe(expected);
-  });
-});
-
-describe("subjectGateKind — the subject-to-gate-kind mapping", () => {
-  it("maps each subject to its pinned gate kind", () => {
-    expect({ ...subjectGateKind }).toEqual({
-      prd: "artifact-approval",
-      design: "design-approval",
-      "phase-design": "design-approval",
-      "phase-impl": "commit-authorization",
-    });
-  });
-
-  it("covers every workflow subject exactly", () => {
-    expect([...Object.keys(subjectGateKind)].sort()).toEqual([...SUBJECTS].sort());
-  });
-});
-
-describe("approvalRuleContext — the shared assembly", () => {
-  // The builder reads only the phase instance off the state and the artifact off the subject, so
-  // minimal literals stand in for the full durable shapes.
-  const state = (phaseInstance: string): TaskStateV1 => ({ phase_instance: phaseInstance } as unknown as TaskStateV1);
-  const implementationSubject = (...outputs: ReadonlyArray<Record<string, unknown>>): CurrentProduceSubject =>
-    ({ artifact: { artifact_kind: "implementation-output", outputs } }) as unknown as CurrentProduceSubject;
-  const documentSubject = (): CurrentProduceSubject =>
-    ({ artifact: { artifact_kind: "document" } }) as unknown as CurrentProduceSubject;
-
-  it("derives the subject from the state's phase instance", () => {
-    expect(approvalRuleContext(state("prd"), undefined, undefined).subject).toBe("prd");
-    expect(approvalRuleContext(state("phase-design-3"), undefined, noRules()).subject).toBe("phase-design");
-    expect(approvalRuleContext(state("phase-impl-2"), undefined, undefined).subject).toBe("phase-impl");
-  });
-
-  it("collects implementation output paths, including rename previous paths, sorted and deduplicated", () => {
-    const subject = implementationSubject(
-      { path: "src/new.ts", operation: "modify" },
-      { path: "src/gone.ts", operation: "delete" },
-      { path: "src/moved.ts", operation: "rename", previous_path: "src/old.ts" },
-      { path: "src/other.ts", operation: "modify" },
-    );
-    expect(approvalRuleContext(state("phase-impl-1"), subject, undefined).changedPaths).toEqual([
-      "src/gone.ts",
-      "src/moved.ts",
-      "src/new.ts",
-      "src/old.ts",
-      "src/other.ts",
-    ]);
-  });
-
-  it("carries the measured changed governing documents for a document subject only", () => {
-    const changed = [".archflow/tasks/demo/prd.md", ".archflow/tasks/demo/design.md"];
-    expect(approvalRuleContext(state("phase-design-2"), documentSubject(), undefined, changed).changedPaths)
-      .toEqual([".archflow/tasks/demo/design.md", ".archflow/tasks/demo/prd.md"]);
-    expect(approvalRuleContext(state("phase-design-2"), documentSubject(), undefined).changedPaths).toEqual([]);
-    expect(approvalRuleContext(state("phase-design-2"), undefined, undefined, changed).changedPaths).toEqual([]);
-    expect(approvalRuleContext(
-      state("phase-impl-1"), implementationSubject({ path: "src/a.ts", operation: "modify" }), undefined, changed,
-    ).changedPaths).toEqual(["src/a.ts"]);
-  });
-
-  it("collects changed secondary paths as repository-attributed sections", () => {
-    const subject = ({ artifact: {
-      artifact_kind: "implementation-output",
-      outputs: [],
-      secondary_repositories: [{
-        repository: "api",
-        outputs: [
-          { path: "src/moved.ts", operation: "rename", previous_path: "src/old.ts" },
-          { path: "db/migrate.sql", operation: "add" },
-        ],
-      }],
-    } }) as unknown as CurrentProduceSubject;
-    expect(approvalRuleContext(state("phase-impl-1"), subject, undefined).secondaryChangedPaths).toEqual([{
-      repository: "api",
-      paths: ["db/migrate.sql", "src/moved.ts", "src/old.ts"],
-    }]);
-  });
-
-  it("carries no changed paths for document subjects or an unloaded produce subject", () => {
-    expect(approvalRuleContext(state("design"), documentSubject(), noRules()).changedPaths).toEqual([]);
-    expect(approvalRuleContext(state("design"), undefined, noRules()).changedPaths).toEqual([]);
-  });
-
-  it("passes the parsed config through unchanged", () => {
-    const config = configWithRules({ subjects: ["design"], content: [] });
-    expect(approvalRuleContext(state("design"), undefined, config).config).toBe(config);
-    expect(approvalRuleContext(state("design"), undefined, undefined).config).toBeUndefined();
-  });
-
-  it("round-trips through the evaluator: the context is the evaluation input", () => {
-    const context = approvalRuleContext(
-      state("phase-impl-1"),
-      implementationSubject({ path: "db/a.sql", operation: "modify" }),
-      configWithRules({ subjects: [], content: [{ paths: ["**/*.sql"] }] }),
-    );
-    expect(evaluateApprovalRules(context.config, context.subject, context.changedPaths, context.secondaryChangedPaths))
-      .toEqual(contentMatch("db/a.sql"));
-  });
-});
-
-describe("planning milestone settlement baseline", () => {
-  const digest = parseSha256Digest("a".repeat(64));
-  const configDigest = parseSha256Digest("b".repeat(64));
-  const baseline = parseGitOid("c".repeat(40));
-  const targetHead = parseGitOid("d".repeat(40));
-  const target = { ref: "refs/heads/main", head: targetHead } as const;
-  const state = (phaseInstance: string): TaskStateV1 => ({
-    task_id: parseTaskSlug("settlement-task"),
-    phase_instance: phaseInstance,
-    step: "triage",
-    revision: 4,
-  } as unknown as TaskStateV1);
-
-  it.each(["prd", "design", "phase-design-2"])("requires and retains a baseline for %s wait:false", (phase) => {
-    const settlement = buildRuleSettlement(
-      state(phase), digest, configDigest, { wait: false, match: null }, baseline, target,
-    );
-    expect(settlement.milestone_baseline_commit).toBe(baseline);
-    expect(settlement).toMatchObject({ milestone_target_ref: target.ref, milestone_target_head: target.head });
-    expect(ruleSettlementV1Schema.parse(settlement)).toEqual(settlement);
-    expect(() => buildRuleSettlement(
-      state(phase), digest, configDigest, { wait: false, match: null },
-    )).toThrow(/milestone baseline is required/u);
-  });
-
-  it("forbids milestone facts on waiting settlements and requires them for implementation no-wait", () => {
-    const waiting = {
-      ...buildRuleSettlement(
-        state("design"), digest, configDigest,
-        { wait: true, match: { kind: "subject", subject: "design" } },
-      ),
-      milestone_baseline_commit: baseline,
-    };
-    expect(ruleSettlementV1Schema.safeParse(waiting).success).toBe(false);
-    expect(() => buildRuleSettlement(
-      state("phase-impl-2"), digest, configDigest, { wait: false, match: null }, baseline,
-    )).toThrow(/milestone target facts are required/u);
-    const implementation = buildRuleSettlement(
-      state("phase-impl-2"), digest, configDigest, { wait: false, match: null }, baseline, target,
-    );
-    expect(ruleSettlementV1Schema.parse(implementation)).toEqual(implementation);
-  });
-
-  it("refuses secondary no-wait milestones on a waiting implementation conclusion", () => {
-    const secondaryMilestone = [{
-      repository: "api",
-      repository_identity_digest: digest,
-      baseline_commit: baseline,
-      target_ref: target.ref,
-      target_head: target.head,
-      paths: ["src/api.ts"],
-      commit_message: "ArchFlow: Implement api",
-      diff_digest: digest,
-      snapshot_digest: digest,
-    }] as never;
-    expect(() => buildRuleSettlement(
-      state("phase-impl-2"), digest, configDigest,
-      { wait: true, match: { kind: "content", paths: [], secondary_paths: [{ repository: "api", paths: ["src/api.ts"] }] } },
-      undefined, undefined, secondaryMilestone,
-    )).toThrow(/secondary milestones are allowed only/u);
-
-    const waiting = buildRuleSettlement(
-      state("phase-impl-2"), digest, configDigest,
-      { wait: true, match: { kind: "content", paths: [], secondary_paths: [{ repository: "api", paths: ["src/api.ts"] }] } },
-    );
-    expect(waiting).not.toHaveProperty("secondary_milestones");
-    expect(ruleSettlementV1Schema.parse(waiting)).toEqual(waiting);
   });
 });

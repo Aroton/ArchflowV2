@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseRawAdjudicationV2 } from "../../src/contracts/adjudication.js";
-import { antigravityOutputDiagnostics, readAntigravityOutput } from "../../src/dispatch/antigravity-output.js";
+import { createRawAdjudicationV2Schema } from "../../src/contracts/adjudication.js";
+import { readAntigravityOutput } from "../../src/dispatch/antigravity-output.js";
 import { CliAdapterError, selectCliAdapter } from "../../src/dispatch/cli.js";
-import { classifiedDispatchFailure } from "../../src/dispatch/failure-observation.js";
+import { classifiedDispatchFailure } from "../../src/dispatch/failure-classification.js";
 import type { DispatchChildResult } from "../../src/dispatch/process.js";
-import { capacityError, judgmentSlots, nativeStream, recoveredCapacityEvents, syntheticJudgments, type NativeEvent } from "../helpers/antigravity-output.js";
+import { judgmentSlots, nativeStream, recoveredCapacityEvents, syntheticJudgments, type NativeEvent } from "../helpers/antigravity-output.js";
 
 const adapter = selectCliAdapter("claude", {
   adapter: "antigravity-cli", family: "gemini", model: "gemini-3.8-flash-high", effort: "high",
@@ -18,7 +18,7 @@ describe("Antigravity completed output after capacity errors", () => {
     const result = child();
     expect(adapter.classifyFailure(result)).toBeUndefined();
     const output: unknown = JSON.parse(Buffer.from(adapter.parseOutput(result)).toString("utf8"));
-    expect(parseRawAdjudicationV2(output, judgmentSlots)).toEqual(syntheticJudgments());
+    expect(createRawAdjudicationV2Schema(judgmentSlots).parse(output)).toEqual(syntheticJudgments());
     expect(readAntigravityOutput(result.stdout)).toMatchObject({
       recovered_capacity_error: true, last_error_step_index: 1, completed_finish_step_index: 3,
     });
@@ -73,7 +73,7 @@ describe("Antigravity completed output after capacity errors", () => {
     delete invalid.judgments["slot-10"];
     events[4]!.result!.structured_output = invalid;
     const extracted = JSON.parse(Buffer.from(adapter.parseOutput(child(events))).toString("utf8")) as unknown;
-    expect(() => parseRawAdjudicationV2(extracted, judgmentSlots)).toThrow();
+    expect(() => createRawAdjudicationV2Schema(judgmentSlots).parse(extracted)).toThrow();
   });
 
   it("classifies unrecovered native capacity errors for the existing retry policy", () => {
@@ -86,17 +86,5 @@ describe("Antigravity completed output after capacity errors", () => {
     expect(classifiedDispatchFailure(new CliAdapterError(failure!))).toEqual({
       code: "PROCESS_FAILED", message: "The reviewer service was temporarily unavailable or its connection was interrupted.",
     });
-  });
-
-  it("preserves terminal error details when schema metadata fills the stdout tail", () => {
-    const result = child();
-    expect(result.stdout.subarray(-4096).toString()).not.toContain(capacityError);
-    expect(antigravityOutputDiagnostics(result.stdout)).toEqual({
-      terminal_status: "ERROR", error_message: capacityError, has_structured_output: true,
-      last_error_step_index: 1, completed_finish_step_index: 3,
-    });
-    const events = recoveredCapacityEvents();
-    events[4]!.result!.error = "x".repeat(10_000);
-    expect(String(antigravityOutputDiagnostics(nativeStream(events)).error_message)).toHaveLength(4096);
   });
 });

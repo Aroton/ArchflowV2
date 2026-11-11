@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import type { ConfigV1 } from "../../src/contracts/config.js";
+import { parseConfigV1, type ConfigV1 } from "../../src/contracts/config.js";
 import { EFFORT_VALUES } from "../../src/contracts/review.js";
-import { classifiedDispatchFailure } from "../../src/dispatch/failure-observation.js";
-import { DispatchRoutingError, resolveDispatchRoute, resolveDispatchRoutes, routeFromConfiguredRoute, selectDispatchRoute, type RoutingRole } from "../../src/dispatch/routing.js";
+import { classifiedDispatchFailure } from "../../src/dispatch/failure-classification.js";
+import { DispatchRoutingError, routeFromConfiguredRoute, type RoutingRole } from "../../src/dispatch/routing.js";
+import { configuredRoute, configuredRoutes, selectedRoutes } from "../helpers/dispatch-routes.js";
 
 const config = (roles: ConfigV1["roles"], overrides?: ConfigV1["overrides"]): ConfigV1 => ({
   schema_version: "1",
   roles,
   ...(overrides === undefined ? {} : { overrides }),
 });
+
+/** The single route a role selects (the first candidate), with its provenance. */
+const selectRoute = (...args: Parameters<typeof selectedRoutes>) => selectedRoutes(...args)[0]!;
 
 function expectRoutingError(run: () => unknown, code: DispatchRoutingError["project_error"]["code"], parameters: unknown): void {
   try {
@@ -25,13 +29,12 @@ function expectRoutingError(run: () => unknown, code: DispatchRoutingError["proj
 }
 
 describe("dispatch routing", () => {
-  it("rejects Astra max in configured, invocation, and substitution routes", () => {
+  it("rejects Astra max in configured and invocation routes", () => {
     const forbidden = { model: "gpt-6-astra", effort: "max" } as const;
     const allowed = config({ "counter-reviewer": { model: "gpt-5.6-sol", effort: "medium" } });
     for (const run of [
-      () => selectDispatchRoute(config({ "counter-reviewer": forbidden }), "design", "counter-reviewer"),
-      () => selectDispatchRoute(allowed, "design", "counter-reviewer", forbidden),
-      () => selectDispatchRoute(allowed, "design", "counter-reviewer", undefined, forbidden),
+      () => selectRoute(config({ "counter-reviewer": forbidden }), "phase-design", "counter-reviewer"),
+      () => selectRoute(allowed, "phase-design", "counter-reviewer", forbidden),
     ]) {
       expectRoutingError(run, "CONFIG_INVALID", { issue_code: "astra-max-disallowed" });
       try { run(); } catch (error) {
@@ -43,19 +46,32 @@ describe("dispatch routing", () => {
     }
   });
   it("derives family and adapter from configured full model slugs", () => {
-    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } }), "design", "counter-reviewer"))
+    expect(configuredRoute(config({ "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } }), "phase-design", "counter-reviewer"))
       .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "high" });
-    expect(resolveDispatchRoute(config({ adjudicator: { model: "claude-opus-4-6", effort: "max" } }), "prd", "adjudicator"))
+    expect(configuredRoute(config({ adjudicator: { model: "claude-opus-4-6", effort: "max" } }), "phase-impl", "adjudicator"))
       .toEqual({ adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" });
   });
 
   it("prefers a phase-kind override and falls back to the base role", () => {
     const value = config(
       { "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } },
-      { design: { "counter-reviewer": { model: "gpt-5.4", effort: "xhigh" } } },
+      { "phase-design": { "counter-reviewer": { model: "gpt-5.4", effort: "xhigh" } } },
     );
-    expect(resolveDispatchRoute(value, "design", "counter-reviewer").model).toBe("gpt-5.4");
-    expect(resolveDispatchRoute(value, "prd", "counter-reviewer").model).toBe("gpt-5.3-codex");
+    expect(configuredRoute(value, "phase-design", "counter-reviewer").model).toBe("gpt-5.4");
+    expect(configuredRoute(value, "phase-impl", "counter-reviewer").model).toBe("gpt-5.3-codex");
+  });
+
+  it("parses the legacy explore, prd, and design overrides and never routes through them", () => {
+    const legacy = { "counter-reviewer": { model: "gpt-legacy", effort: "high" }, "test-reviewer": { model: "gpt-legacy", effort: "high" } };
+    const value = parseConfigV1({
+      schema_version: "1",
+      roles: { "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } },
+      overrides: { explore: legacy, prd: legacy, design: legacy },
+    });
+    for (const phaseKind of ["phase-design", "phase-impl"] as const) {
+      expect(configuredRoute(value, phaseKind, "counter-reviewer").model).toBe("gpt-5.3-codex");
+      expect(configuredRoute(value, phaseKind, "test-reviewer").model).toBe("gpt-6.1-sol");
+    }
   });
 
   it("routes the optional test reviewer with producer and phase precedence", () => {
@@ -69,37 +85,39 @@ describe("dispatch routing", () => {
         "phase-impl": { "test-reviewer": { model: "gpt-5.6-luna-impl", effort: "max" } },
       },
     };
-    expect(resolveDispatchRoute(value, "phase-design", "test-reviewer", "codex").model)
+    expect(configuredRoute(value, "phase-design", "test-reviewer", "codex").model)
       .toBe("gpt-5.6-luna-fast");
-    expect(resolveDispatchRoute(value, "phase-impl", "test-reviewer", "codex").model)
+    expect(configuredRoute(value, "phase-impl", "test-reviewer", "codex").model)
       .toBe("gpt-5.6-luna-fast");
-    expect(resolveDispatchRoute(value, "phase-impl", "test-reviewer", "claude").model)
+    expect(configuredRoute(value, "phase-impl", "test-reviewer", "claude").model)
       .toBe("gpt-5.6-luna-impl");
-    expect(resolveDispatchRoute(value, "phase-design", "test-reviewer", "claude").model)
+    expect(configuredRoute(value, "phase-design", "test-reviewer", "claude").model)
       .toBe("gpt-5.6-luna");
   });
 
-  it("uses the built-in test reviewer only after configured precedence for applicable phases", () => {
-    const value = config({});
-    expect(resolveDispatchRoute(value, "phase-design", "test-reviewer"))
-      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6.1-sol", effort: "low" });
-    expect(resolveDispatchRoute(value, "phase-impl", "test-reviewer"))
-      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6.1-sol", effort: "low" });
-    expectRoutingError(
-      () => resolveDispatchRoute(value, "design", "test-reviewer"),
-      "CONFIG_INVALID",
-      { issue_code: "route-missing" },
-    );
-  });
-
-  it("uses the built-in GPT-6 Luna effort reviewer when no route is configured", () => {
-    expect(resolveDispatchRoute(config({}), "phase-design", "effort-reviewer"))
-      .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-6-luna", effort: "xhigh" });
+  it("falls back to the built-in test reviewer when no test-reviewer route is configured", () => {
+    const builtIn = { adapter: "codex-cli", family: "codex", model: "gpt-6.1-sol", effort: "low" };
+    const otherRolesOnly: ConfigV1 = {
+      schema_version: "1",
+      roles: { "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } },
+      producers: { claude: { adjudicator: { model: "claude-opus-4-6", effort: "high" } } },
+      overrides: { "phase-impl": { "counter-reviewer": { model: "gpt-5.4", effort: "high" } } },
+    };
+    for (const value of [config({}), otherRolesOnly]) {
+      for (const phaseKind of ["phase-design", "phase-impl"] as const) {
+        for (const host of [undefined, "claude", "codex", "antigravity"] as const) {
+          expect(selectRoute(value, phaseKind, "test-reviewer", undefined, host)).toMatchObject({
+            route: builtIn,
+            source: { provenance: "configured" },
+          });
+        }
+      }
+    }
   });
 
   it("classifies an absent dispatched role without returning a route", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(config({}), "phase-impl", "counter-reviewer"),
+      () => configuredRoute(config({}), "phase-impl", "counter-reviewer"),
       "CONFIG_INVALID",
       { issue_code: "route-missing" },
     );
@@ -107,16 +125,16 @@ describe("dispatch routing", () => {
 
   it("rejects Claude ultra effort before dispatch", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(config({ adjudicator: { model: "claude-opus-4-6", effort: "ultra" } }), "design", "adjudicator"),
+      () => configuredRoute(config({ adjudicator: { model: "claude-opus-4-6", effort: "ultra" } }), "phase-design", "adjudicator"),
       "CONFIG_INVALID",
       { issue_code: "effort-unsupported" },
     );
   });
 
   it.each(EFFORT_VALUES)("accepts Codex %s effort", (effort) => {
-    expect(resolveDispatchRoute(
+    expect(configuredRoute(
       config({ adjudicator: { model: "gpt-5.4", effort } }),
-      "design",
+      "phase-design",
       "adjudicator",
     ).effort).toBe(effort);
   });
@@ -124,7 +142,7 @@ describe("dispatch routing", () => {
   it("rejects an unsupported Codex effort before dispatch", () => {
     const invalid = config({ adjudicator: { model: "gpt-5.4", effort: "bogus" as never } });
     expectRoutingError(
-      () => resolveDispatchRoute(invalid, "design", "adjudicator"),
+      () => configuredRoute(invalid, "phase-design", "adjudicator"),
       "CONFIG_INVALID",
       { issue_code: "effort-unsupported" },
     );
@@ -132,9 +150,9 @@ describe("dispatch routing", () => {
 
   it("does not conflate routing counter-reviewer with evidence counter-review", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(
+      () => configuredRoute(
         config({ "counter-reviewer": { model: "gpt-5.4", effort: "high" } }),
-        "design",
+        "phase-design",
         "counter-review" as RoutingRole,
       ),
       "CONFIG_INVALID",
@@ -143,25 +161,25 @@ describe("dispatch routing", () => {
   });
 
   it("accepts an explicitly configured same-family counter-reviewer", () => {
-    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } }), "design", "counter-reviewer"))
+    expect(configuredRoute(config({ "counter-reviewer": { model: "claude-opus-4-6", effort: "high" } }), "phase-design", "counter-reviewer"))
       .toEqual({ adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high" });
   });
 
   it("accepts an explicitly configured same-family adjudicator", () => {
-    expect(resolveDispatchRoute(config({ adjudicator: { model: "gpt-5.4", effort: "high" } }), "design", "adjudicator"))
+    expect(configuredRoute(config({ adjudicator: { model: "gpt-5.4", effort: "high" } }), "phase-design", "adjudicator"))
       .toEqual({ adapter: "codex-cli", family: "codex", model: "gpt-5.4", effort: "high" });
   });
 
   it("routes a cc-switch provider through the claude CLI regardless of model name", () => {
-    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "glm-5.3", effort: "high", provider: "zai" } }), "design", "counter-reviewer"))
+    expect(configuredRoute(config({ "counter-reviewer": { model: "glm-5.3", effort: "high", provider: "zai" } }), "phase-design", "counter-reviewer"))
       .toEqual({ adapter: "claude-cli", family: "claude", model: "glm-5.3", effort: "high", provider: "zai" });
-    expect(resolveDispatchRoute(config({ "counter-reviewer": { model: "claude-opus-4-6", effort: "high", provider: "zai" } }), "design", "counter-reviewer"))
+    expect(configuredRoute(config({ "counter-reviewer": { model: "claude-opus-4-6", effort: "high", provider: "zai" } }), "phase-design", "counter-reviewer"))
       .toEqual({ adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "high", provider: "zai" });
   });
 
   it("refuses a cc-switch provider paired with a codex model", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(config({ adjudicator: { model: "gpt-5.4", effort: "high", provider: "zai" } }), "design", "adjudicator"),
+      () => configuredRoute(config({ adjudicator: { model: "gpt-5.4", effort: "high", provider: "zai" } }), "phase-design", "adjudicator"),
       "CONFIG_INVALID",
       { issue_code: "provider-unsupported" },
     );
@@ -169,19 +187,19 @@ describe("dispatch routing", () => {
 
   it("guards error construction for unsafe and unsupported configured models", () => {
     expectRoutingError(
-      () => resolveDispatchRoute(config({ adjudicator: { model: "openai/gpt-5", effort: "high" } }), "design", "adjudicator"),
+      () => configuredRoute(config({ adjudicator: { model: "openai/gpt-5", effort: "high" } }), "phase-design", "adjudicator"),
       "CONFIG_INVALID",
       { issue_code: "model-not-safe-id" },
     );
     expectRoutingError(
-      () => resolveDispatchRoute(config({ adjudicator: { model: "mistral-large", effort: "high" } }), "design", "adjudicator"),
+      () => configuredRoute(config({ adjudicator: { model: "mistral-large", effort: "high" } }), "phase-design", "adjudicator"),
       "CONFIG_MODEL_UNSUPPORTED",
       { model: "mistral-large" },
     );
   });
 
   it("resolves gemini models to antigravity-cli adapter and gemini family", () => {
-    expect(resolveDispatchRoute(config({ adjudicator: { model: "gemini-3.7-flash-high", effort: "high" } }), "design", "adjudicator"))
+    expect(configuredRoute(config({ adjudicator: { model: "gemini-3.7-flash-high", effort: "high" } }), "phase-design", "adjudicator"))
       .toEqual({ adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" });
   });
 
@@ -212,22 +230,22 @@ describe("dispatch routing", () => {
     };
 
     // Claude host producer
-    expect(resolveDispatchRoutes(fullConfig, "design", "counter-reviewer", "claude"))
+    expect(configuredRoutes(fullConfig, "phase-design", "counter-reviewer", "claude"))
       .toEqual([{ adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "high" }]);
 
     // Antigravity host producer (multiple parallel reviewers)
-    expect(resolveDispatchRoutes(fullConfig, "design", "counter-reviewer", "antigravity"))
+    expect(configuredRoutes(fullConfig, "phase-design", "counter-reviewer", "antigravity"))
       .toEqual([
         { adapter: "codex-cli", family: "codex", model: "gpt-5.6-sol", effort: "high" },
         { adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "medium" },
       ]);
 
     // Codex host producer
-    expect(resolveDispatchRoutes(fullConfig, "design", "counter-reviewer", "codex"))
+    expect(configuredRoutes(fullConfig, "phase-design", "counter-reviewer", "codex"))
       .toEqual([{ adapter: "claude-cli", family: "claude", model: "claude-fable-5", effort: "medium" }]);
 
     // Adjudicator for all hosts
-    expect(resolveDispatchRoute(fullConfig, "design", "adjudicator", "antigravity"))
+    expect(configuredRoute(fullConfig, "phase-design", "adjudicator", "antigravity"))
       .toEqual({ adapter: "antigravity-cli", family: "gemini", model: "gemini-3.7-flash-high", effort: "high" });
   });
 });
@@ -257,16 +275,16 @@ describe("role-level route selection provenance", () => {
   });
 
   it("uses configuration when no higher-precedence route is declared", () => {
-    expect(selectDispatchRoute(configured, "design", "counter-reviewer")).toMatchObject({
+    expect(selectRoute(configured, "phase-design", "counter-reviewer")).toMatchObject({
       route: { model: "gpt-configured", effort: "high" },
       source: { provenance: "configured" },
     });
   });
 
   it("selects invocation routing independently per role and records raw configured displacement", () => {
-    expect(selectDispatchRoute(
+    expect(selectRoute(
       configured,
-      "design",
+      "phase-design",
       "adjudicator",
       { model: "glm-5-3", effort: "high", provider: "invocation-provider" },
     )).toMatchObject({
@@ -281,45 +299,26 @@ describe("role-level route selection provenance", () => {
         },
       },
     });
-    expect(selectDispatchRoute(configured, "design", "counter-reviewer").source.provenance).toBe("configured");
+    expect(selectRoute(configured, "phase-design", "counter-reviewer").source.provenance).toBe("configured");
   });
 
-  it("gives a human override precedence while retaining the normally selected invocation route", () => {
-    expect(selectDispatchRoute(
-      configured,
-      "design",
-      "counter-reviewer",
-      { model: "gpt-invocation", effort: "xhigh" },
-      { model: "claude-human", effort: "high" },
-    )).toMatchObject({
-      route: { model: "claude-human", effort: "high" },
-      source: {
-        provenance: "route-override",
-        displaced: { source: "invocation-declared", model: "gpt-invocation", effort: "xhigh" },
-      },
-    });
-  });
-
-  it("permits invocation or human routing when the configured role is missing", () => {
+  it("permits invocation routing when the configured role is missing", () => {
     const missing = config({});
-    expect(selectDispatchRoute(missing, "phase-impl", "counter-reviewer", { model: "gpt-invocation", effort: "high" }).source)
+    expect(selectRoute(missing, "phase-impl", "counter-reviewer", { model: "gpt-invocation", effort: "high" }).source)
       .toEqual({ provenance: "invocation-declared" });
-    expect(selectDispatchRoute(missing, "phase-impl", "counter-reviewer", undefined, { model: "claude-human", effort: "high" }).source)
-      .toEqual({ provenance: "route-override" });
   });
 
   it("validates only the selected route and never falls back after an invalid invocation", () => {
     expectRoutingError(
-      () => selectDispatchRoute(configured, "design", "counter-reviewer", { model: "unsupported-model", effort: "high" }),
+      () => selectRoute(configured, "phase-design", "counter-reviewer", { model: "unsupported-model", effort: "high" }),
       "CONFIG_MODEL_UNSUPPORTED",
       { model: "unsupported-model" },
     );
-    expect(selectDispatchRoute(
+    expect(selectRoute(
       config({ "counter-reviewer": { model: "unsupported-config", effort: "high" } }),
-      "design",
+      "phase-design",
       "counter-reviewer",
-      undefined,
-      { model: "gpt-human", effort: "high" },
-    ).route.model).toBe("gpt-human");
+      { model: "gpt-invocation", effort: "high" },
+    ).route.model).toBe("gpt-invocation");
   });
 });

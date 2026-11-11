@@ -6,11 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { canonicalJsonBytes } from "../../src/contracts/canonical.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { parseGeneralReviewOutputV3, reviewReportOutputSchema } from "../../src/contracts/review.js";
+import { reviewReportOutputSchema } from "../../src/contracts/review.js";
 import { createAdjudicationOutputSchema } from "../../src/contracts/adjudication.js";
-import adjudicationSchema from "../../src/contracts/schemas/v1/adjudication.schema.json" with { type: "json" };
-import effortReviewSchema from "../../src/contracts/schemas/v1/effort-review.schema.json" with { type: "json" };
-import reviewSchema from "../../src/contracts/schemas/v1/review.schema.json" with { type: "json" };
 import { createJsonSchemaValidator } from "../helpers/json-schema.js";
 import type { HostIdentity } from "../../src/contracts/hosts.js";
 import { MAX_ARGV_ELEMENT_BYTES, type DispatchChildResult } from "../../src/dispatch/process.js";
@@ -18,12 +15,11 @@ import {
   CliAdapterError,
   projectCliOutputSchema,
   selectCliAdapter,
-  serializeDispatch,
+  serializeDispatchAll,
 } from "../../src/dispatch/cli.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
 import type { DispatchWorkspace } from "../../src/dispatch/workspace.js";
 import type { DispatchEnvelope } from "../../src/review/envelopes.js";
-import validReview from "../fixtures/contracts/review/valid.json" with { type: "json" };
 
 const reviewOutputSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" })));
 const adjudicationOutputSchema = JSON.parse(JSON.stringify(createAdjudicationOutputSchema(["rule-1"]).toJSONSchema({ target: "draft-2020-12" })));
@@ -38,7 +34,7 @@ const result = (value: Partial<DispatchChildResult> = {}): DispatchChildResult =
 });
 const envelope: DispatchEnvelope = Object.freeze({
   result_kind: "review",
-  bytes: bytes('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"subject":{}}\n'),
+  bytes: bytes('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]},"subject":{"stage":"plan"}}\n'),
   digest: "d".repeat(64) as never,
   byte_count: 36,
 });
@@ -79,7 +75,7 @@ describe("dispatch serialization", () => {
     let active = 0;
     let maximumActive = 0;
     const releases: Array<() => void> = [];
-    const operation = (id: number): Promise<number> => serializeDispatch(async () => {
+    const operation = (id: number): Promise<number> => serializeDispatchAll([async () => {
       events.push(`start-${id}`);
       active += 1;
       maximumActive = Math.max(maximumActive, active);
@@ -87,7 +83,7 @@ describe("dispatch serialization", () => {
       active -= 1;
       events.push(`end-${id}`);
       return id;
-    });
+    }]).then(([value]) => value!);
 
     const first = operation(1);
     const second = operation(2);
@@ -107,18 +103,19 @@ describe("dispatch serialization", () => {
   it("preserves rejection identity and does not poison later operations", async () => {
     const failure = new Error("dispatch failed");
     const events: string[] = [];
-    const rejected = serializeDispatch(async () => {
+    const rejected = serializeDispatchAll([async () => {
       events.push("reject");
       throw failure;
-    });
+    }]);
     const recoveredValue = Object.freeze({ ok: true });
-    const recovered = serializeDispatch(async () => {
+    const recovered = serializeDispatchAll([async () => {
       events.push("recover");
       return recoveredValue;
-    });
+    }]);
 
     await expect(rejected).rejects.toBe(failure);
-    await expect(recovered).resolves.toBe(recoveredValue);
+    await expect(recovered).resolves.toEqual([recoveredValue]);
+    expect((await recovered)[0]).toBe(recoveredValue);
     expect(events).toEqual(["reject", "recover"]);
   });
 });
@@ -185,7 +182,7 @@ describe("CLI invocation construction", () => {
 
   it("runs the Claude child inside the repository view with only read-only tools", async () => {
     const target = await workspace();
-    const viewed: DispatchWorkspace = Object.freeze({ ...target, review_root: join(target.root, "review"), repository_view_root: join(target.root, "review", "repositories", "primary") });
+    const viewed: DispatchWorkspace = Object.freeze({ ...target, review_root: join(target.root, "review") });
     const route: DispatchRoute = { adapter: "claude-cli", family: "claude", model: "claude-opus-4-6", effort: "max" };
     const adapter = selectCliAdapter("codex");
 
@@ -207,7 +204,7 @@ describe("CLI invocation construction", () => {
 
   it("points the Codex sandbox at the repository view while outputs stay outside it", async () => {
     const target = await workspace();
-    const viewed: DispatchWorkspace = Object.freeze({ ...target, review_root: join(target.root, "review"), repository_view_root: join(target.root, "review", "repositories", "primary") });
+    const viewed: DispatchWorkspace = Object.freeze({ ...target, review_root: join(target.root, "review") });
     const route: DispatchRoute = { adapter: "codex-cli", family: "codex", model: "gpt-5.3-codex", effort: "high" };
     const adapter = selectCliAdapter("claude");
 
@@ -248,7 +245,7 @@ describe("CLI invocation construction", () => {
     const parsed = JSON.parse(schemaText) as Record<string, unknown>;
 
     expect(schemaText).not.toMatch(/(?:"\$schema"|"\$id"|"allOf"|"x-archflow-)/u);
-    expect(parsed).toEqual(projectCliOutputSchema(adjudicationOutputSchema as PlainJsonValue, "adjudication", id));
+    expect(parsed).toEqual(projectCliOutputSchema(adjudicationOutputSchema as PlainJsonValue, id));
     expect(parsed).toMatchObject({
       type: "object",
       additionalProperties: false,
@@ -268,101 +265,64 @@ describe("CLI invocation construction", () => {
     }
   });
 
-  it("projects review schema keywords without mutating or inventing an unbound review identity", () => {
-    const before = structuredClone(reviewSchema);
-    const projected = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "codex-cli") as Record<string, unknown>;
-    const properties = projected.properties as Record<string, unknown>;
-
-    expect(reviewSchema).toEqual(before);
-    expect(JSON.stringify(projected)).not.toMatch(/(?:"\$schema"|"\$id"|"allOf"|"x-archflow-)/u);
-    expect(projected).toMatchObject({
+  it("projects host-unsupported keywords away without mutating the contract", () => {
+    // Exercises every projection rule on one contract: metadata, x-archflow extensions and allOf are
+    // stripped for every host; Claude drops numeric, length, count and format bounds; Codex drops
+    // uniqueItems, rewrites oneOf to anyOf, and requires every declared property.
+    const contract = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "urn:example:contract",
       type: "object",
+      "x-archflow-note": "internal",
+      allOf: [{ required: ["name"] }],
+      properties: {
+        name: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z]+$", format: "hostname" },
+        count: { type: "integer", minimum: 0, maximum: 9, multipleOf: 1 },
+        tags: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3, uniqueItems: true },
+        choice: { oneOf: [{ const: "a" }, { const: "b" }] },
+      },
+      required: ["name"],
       additionalProperties: false,
-      // Codex strict mode requires every declared root property. Role unions remain below the
-      // root; an assigned envelope replaces this publication schema with one exact role branch.
-      required: Object.keys(properties),
-    });
-    expect(projected).not.toHaveProperty("oneOf");
-    expect(projected).not.toHaveProperty("anyOf");
-    expect(properties).toMatchObject({
-      step: { const: "counter_review" },
-      role: { type: "string", enum: ["counter-review"] },
-    });
-    const definitions = projected.$defs as Record<string, Record<string, unknown>>;
-    expect(definitions.taskSlug).toMatchObject({
-      type: "string",
-      pattern: "^[a-z0-9][a-z0-9._-]{0,63}$",
-    });
-    expect(definitions.id).toMatchObject({ pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" });
-    const finding = definitions.finding!;
-    expect(finding).toMatchObject({ type: "object", additionalProperties: false });
-    expect(finding.required).toEqual(Object.keys(finding.properties as Record<string, unknown>));
-    expect(finding.properties).toMatchObject({
-      claim_type: { enum: ["defect", "risk", "gap", "preference"] },
-      confidence: { enum: ["certain", "likely", "suspicion"] },
-      falsifier: { maxLength: 4096 },
-    });
-    expect(JSON.stringify(projected)).toMatch(/"pattern"/u);
-    expect(JSON.stringify(projected)).toMatch(/"maxLength":4096/u);
-  });
-
-  it("binds host-visible review identity fields to the server-derived envelope subject", () => {
-    const subject = Object.fromEntries([
-      "task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "rubric_digest", "producer_family",
-    ].map((key) => [key, validReview[key as keyof typeof validReview]])) as Record<string, PlainJsonValue>;
-    const projected = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "claude-cli", subject) as Record<string, unknown>;
-    const properties = projected.properties as Record<string, Record<string, unknown>>;
-
-    for (const [key, value] of Object.entries(subject)) expect(properties[key]).toEqual({ const: value });
+    } as const;
+    const before = structuredClone(contract);
+    const claude = projectCliOutputSchema(contract as unknown as PlainJsonValue, "claude-cli") as Record<string, any>;
+    const codex = projectCliOutputSchema(contract as unknown as PlainJsonValue, "codex-cli") as Record<string, any>;
+    const antigravity = projectCliOutputSchema(contract as unknown as PlainJsonValue, "antigravity-cli") as Record<string, any>;
+    expect(contract).toEqual(before);
+    for (const projected of [claude, codex, antigravity]) {
+      expect(JSON.stringify(projected)).not.toMatch(/(?:"\$schema"|"\$id"|"allOf"|"x-archflow-)/u);
+      expect(projected).toMatchObject({ type: "object", additionalProperties: false });
+      expect(projected.properties.name.pattern).toBe("^[a-z]+$");
+    }
+    expect(JSON.stringify(claude)).not.toMatch(/"(?:minimum|maximum|multipleOf|minLength|maxLength|format|minItems|maxItems|uniqueItems)"/u);
+    expect(claude.properties.choice).toHaveProperty("oneOf");
+    expect(claude.required).toEqual(["name"]);
+    expect(codex.properties.name).toMatchObject({ minLength: 1, maxLength: 64, format: "hostname" });
+    expect(codex.properties.tags).toMatchObject({ minItems: 1, maxItems: 3 });
+    expect(codex.properties.tags).not.toHaveProperty("uniqueItems");
+    expect(codex.properties.choice).not.toHaveProperty("oneOf");
+    expect(codex.properties.choice.anyOf).toEqual([{ const: "a", type: "string" }, { const: "b", type: "string" }]);
+    expect(codex.required).toEqual(["name", "count", "tags", "choice"]);
+    expect(antigravity.properties.tags).toMatchObject({ minItems: 1, maxItems: 3, uniqueItems: true });
+    expect(antigravity.properties.choice).toHaveProperty("oneOf");
   });
 
   it.each(["claude-cli", "codex-cli", "antigravity-cli"] as const)(
     "projects a simple readable report root for %s",
     (adapter) => {
-      const projected = projectCliOutputSchema(
-        reviewSchema as PlainJsonValue,
-        "review",
-        adapter,
-        {},
-        { reviewer_id: "test", focus: "tests", criterion_ids: ["verification-evidence", "test-quality"] },
-      ) as Record<string, unknown>;
+      const projected = projectCliOutputSchema(reviewOutputSchema, adapter) as Record<string, unknown>;
       expect(projected).toMatchObject({ type: "object", additionalProperties: false });
       expect(projected).not.toHaveProperty("oneOf");
       expect(projected).not.toHaveProperty("anyOf");
       const properties = projected.properties as Record<string, Record<string, unknown>>;
       expect(Object.keys(properties)).toEqual(["outcome", "feedback"]);
       expect(properties.feedback).toMatchObject({ type: "string" });
+      const validate = createJsonSchemaValidator<Record<string, unknown>>(projected);
+      expect(validate.validate({ outcome: "issues_found", feedback: "The guard is missing." })).toBe(true);
+      expect(validate.validate({ outcome: "issues_found", feedback: "The guard is missing.", findings: [] })).toBe(false);
+      expect(validate.validate({ outcome: "pass", feedback: "Fine." })).toBe(false);
     },
   );
-
-  it("projects present zero-upstream alignment and confirmation-only responsibilities", () => {
-    const alignment = projectCliOutputSchema(
-      reviewSchema as PlainJsonValue,
-      "review",
-      "codex-cli",
-      {},
-      { reviewer_id: "general", focus: "general", criterion_ids: [], expected_upstream_digests: [] },
-    ) as Record<string, unknown>;
-    const alignmentProperties = alignment.properties as Record<string, Record<string, unknown>>;
-    expect(alignmentProperties).toMatchObject({ outcome: { enum: ["issues_found", "no_issues_found"] }, feedback: { type: "string" } });
-
-    const confirmation = projectCliOutputSchema(
-      reviewSchema as PlainJsonValue,
-      "review",
-      "codex-cli",
-      {},
-      {
-        reviewer_id: "test",
-        focus: "tests",
-        criterion_ids: [],
-        legacy_confirmations: [{ finding_id: "old-finding", criterion_ids: ["test-quality"] }],
-      },
-    ) as Record<string, unknown>;
-    const confirmationProperties = confirmation.properties as Record<string, Record<string, unknown>>;
-    expect(confirmationProperties.feedback).toMatchObject({ type: "string" });
-    expect(confirmationProperties).not.toHaveProperty("legacy_confirmations");
-    expect(confirmationProperties).not.toHaveProperty("upstream_alignment");
-  });
 
   it.each(["claude-cli", "codex-cli", "antigravity-cli"] as const)(
     "preserves exact constitution judgment slots below a plain root for %s",
@@ -392,12 +352,7 @@ describe("CLI invocation construction", () => {
         required: ["schema_version", "judgments"],
         additionalProperties: false,
       } as const;
-      const projected = projectCliOutputSchema(
-        schema,
-        "adjudication",
-        adapter,
-        { task_id: "must-not-be-added", subject_digest: "a".repeat(64) },
-      ) as Record<string, unknown>;
+      const projected = projectCliOutputSchema(schema, adapter) as Record<string, unknown>;
       expect(projected).toMatchObject({ type: "object", additionalProperties: false });
       expect(projected).not.toHaveProperty("oneOf");
       expect(projected).not.toHaveProperty("anyOf");
@@ -407,145 +362,6 @@ describe("CLI invocation construction", () => {
         .toEqual(["rule-slot-1", "rule-slot-2"]);
     },
   );
-
-  it.each(["claude-cli", "codex-cli"] as const)(
-    "binds the effort selector output identities for %s",
-    (adapter) => {
-      const values = {
-        task_id: "effort-review",
-        phase_instance: "phase-design-1",
-        subject_digest: "1".repeat(64),
-        input_fingerprint: "2".repeat(64),
-        policy_id: "implementation-agent-selector-v4",
-      } as const;
-      const subject: Record<string, PlainJsonValue> = {
-        task_id: values.task_id,
-        phase_instance: values.phase_instance,
-        subject_digest: values.subject_digest,
-        input_fingerprint: values.input_fingerprint,
-        policy_id: values.policy_id,
-      };
-      const projected = projectCliOutputSchema(
-        effortReviewSchema as PlainJsonValue,
-        "effort-review",
-        adapter,
-        subject,
-      ) as Record<string, unknown>;
-      const properties = projected.properties as Record<string, Record<string, unknown>>;
-      for (const [key, value] of Object.entries(values)) {
-        expect(properties[key], key).toMatchObject({ const: value });
-      }
-    },
-  );
-
-  it("projects a strict effort selector schema with advisory rationale for Codex", () => {
-    const projected = projectCliOutputSchema(
-      effortReviewSchema as PlainJsonValue,
-      "effort-review",
-      "codex-cli",
-    ) as Record<string, unknown>;
-
-    // Must not contain oneOf anywhere (OpenAI Structured Outputs restriction)
-    expect(JSON.stringify(projected)).not.toContain('"oneOf"');
-    // Must not contain any external URN references
-    expect(JSON.stringify(projected)).not.toContain("urn:archflow:");
-    // Definitions must include simplified taskSlug
-    const definitions = projected.$defs as Record<string, Record<string, unknown>>;
-    expect(definitions.taskSlug).toMatchObject({ pattern: "^[a-z0-9][a-z0-9._-]{0,63}$" });
-
-    const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
-    const sampleOutput = {
-      schema_version: "3",
-      task_id: "test-task",
-      phase_instance: "phase-design-1",
-      step: "effort_review",
-      role: "effort-reviewer",
-      subject_digest: "a".repeat(64),
-      input_fingerprint: "b".repeat(64),
-      policy_id: "implementation-agent-selector-v5",
-      difficulty: "exceptional",
-      rationale: "The coupled cancellation mechanism still requires deep implementation reasoning.",
-    };
-    expect(() => validateProjected.assert(sampleOutput, "sample effort review")).not.toThrow();
-
-    expect(() => validateProjected.assert({ ...sampleOutput, rationale: "" }, "missing explanation")).toThrow();
-    expect(() => validateProjected.assert({ ...sampleOutput, scores: [] }, "extra selector work")).toThrow();
-  });
-
-  it("keeps Claude-supported simple patterns while simplifying only the task-slug lookahead", () => {
-    const projected = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "claude-cli") as Record<string, unknown>;
-    const definitions = projected.$defs as Record<string, Record<string, unknown>>;
-    expect(definitions.id).toMatchObject({ pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" });
-    expect(definitions.digest).toMatchObject({ pattern: "^[0-9a-f]{64}$" });
-    expect(definitions.nonBlank).toMatchObject({ pattern: "\\S" });
-    expect(definitions.phaseInstance).toMatchObject({ pattern: "^(?:prd|design|phase-(?:design|impl)-[1-9][0-9]*)$" });
-    expect(definitions.taskSlug).toMatchObject({ pattern: "^[a-z0-9][a-z0-9._-]{0,63}$" });
-    expect(JSON.stringify(projected)).not.toContain("(?!");
-    const finding = definitions.finding!;
-    expect(finding).toMatchObject({ type: "object", additionalProperties: false });
-    expect(finding.required).toEqual(Object.keys(finding.properties as Record<string, unknown>));
-    expect(finding.properties).toMatchObject({
-      claim_type: { enum: ["defect", "risk", "gap", "preference"] },
-      confidence: { enum: ["certain", "likely", "suspicion"] },
-      falsifier: expect.not.objectContaining({ maxLength: expect.anything() }),
-    });
-
-    const validateProjected = createJsonSchemaValidator<Record<string, unknown>>(projected);
-    const invalid = structuredClone(validReview) as Record<string, unknown>;
-    const findings = invalid.findings as Array<Record<string, unknown>>;
-    findings[0]!.finding_id = "Invalid Finding Id";
-    expect(() => validateProjected.assert(invalid, "Claude projected finding id")).toThrow();
-    findings[0]!.finding_id = "valid-finding-id";
-    findings[0]!.severity = "major";
-    expect(() => validateProjected.assert(invalid, "Claude projected legacy finding field")).toThrow();
-  });
-
-  it("keeps normative semantic rejection after the host transport projection", () => {
-    const projectedReview = projectCliOutputSchema(reviewSchema as PlainJsonValue, "review", "codex-cli");
-    const validateProjectedReview = createJsonSchemaValidator<Record<string, unknown>>(projectedReview as Record<string, unknown>);
-    const invalidFinding = structuredClone(validReview) as Record<string, unknown>;
-    const invalidFindingItems = invalidFinding.findings as Array<Record<string, unknown>>;
-    invalidFindingItems[0]!.blocking = false;
-    expect(() => validateProjectedReview.assert(invalidFinding, "projected review finding")).toThrow();
-    delete invalidFindingItems[0]!.blocking;
-    invalidFindingItems[0]!.finding_id = "Invalid Finding Id";
-    expect(() => validateProjectedReview.assert(invalidFinding, "projected review finding id")).toThrow();
-
-    const assignment = {
-      reviewer_id: "general",
-      focus: "general",
-      criterion_ids: ["substantive-correctness"],
-    } as const;
-    const invalidReview = {
-      schema_version: "3",
-      task_id: "mcp-integration",
-      phase_instance: "phase-impl-2",
-      step: "counter_review",
-      role: "counter-review",
-      subject_digest: "a".repeat(64),
-      input_fingerprint: "b".repeat(64),
-      rubric_digest: "c".repeat(64),
-      producer_family: "claude",
-      findings: [{
-        finding_id: "unsafe-path",
-        criterion_id: "substantive-correctness",
-        claim_type: "defect",
-        confidence: "certain",
-        falsifier: "x".repeat(4097),
-        summary: "Path is unsafe.",
-        evidence: "The path escapes its task.",
-        suggested_resolution: "Reject traversal.",
-      }],
-    };
-    const projectedClaudeReview = projectCliOutputSchema(
-      reviewSchema as PlainJsonValue, "review", "claude-cli", undefined, assignment,
-    );
-    const validateProjectedClaudeReview = createJsonSchemaValidator<Record<string, unknown>>(projectedClaudeReview as Record<string, unknown>);
-    expect(() => validateProjectedClaudeReview.assert({ outcome: "issues_found", feedback: JSON.stringify(invalidReview) }, "projected review")).not.toThrow();
-    expect(() => parseGeneralReviewOutputV3(invalidReview, {
-      criterion_ids: assignment.criterion_ids,
-    })).toThrow();
-  });
 });
 
 describe("CLI output contracts and failure classification", () => {
@@ -729,7 +545,7 @@ describe("CLI output contracts and failure classification", () => {
     const adapter = selectCliAdapter("claude", route);
     const large: DispatchEnvelope = Object.freeze({
       ...envelope,
-      bytes: bytes(JSON.stringify({ schema_version: "1", subject: {}, rubric: { criteria: [{ id: "correctness", text: "Check correctness", blocking: true }] }, artifact: "x".repeat(300 * 1024) })),
+      bytes: bytes(JSON.stringify({ schema_version: "1", subject: { stage: "plan" }, rubric: { criteria: [{ id: "correctness", text: "Check correctness", blocking: true }] }, plan: "x".repeat(300 * 1024) })),
       byte_count: 300 * 1024 + 48,
     });
     const inv = await adapter.buildInvocation(

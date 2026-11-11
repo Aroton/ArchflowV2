@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSingleYamlDocument } from "../../src/contracts/index.js";
+import { parseSingleYamlDocument } from "../../src/contracts/yaml.js";
 
 describe("safe YAML parsing", () => {
   it("parses one YAML 1.2 document into a plain JSON value", () => {

@@ -1,5 +1,4 @@
 import { createAdjudicationOutputSchema } from "../contracts/adjudication.js";
-import { rawEffortSelectionV3Schema } from "../contracts/effort-review.js";
 import { assertPlainJson, type PlainJsonValue } from "../contracts/plain-json.js";
 import { reviewReportOutputSchema } from "../contracts/review.js";
 import type { DispatchEnvelope } from "./envelopes.js";
@@ -10,19 +9,11 @@ export function createReviewResponseSchema(
   record: Readonly<Record<string, PlainJsonValue>>,
 ): PlainJsonValue {
   const contract = kind === "review" ? reviewReportOutputSchema
-    : kind === "effort-review" ? rawEffortSelectionV3Schema
     : createAdjudicationOutputSchema((record.rules as { slot: string }[]).map(rule => rule.slot));
   // Zod's non-enumerable Standard Schema helper is not part of the JSON document.
   const schema: unknown = JSON.parse(JSON.stringify(contract.toJSONSchema({ target: "draft-2020-12" })));
   assertPlainJson(schema, "review response schema");
-  const result = structuredClone(schema) as Record<string, PlainJsonValue>;
-  if (kind === "effort-review") {
-    const properties = result.properties as Record<string, PlainJsonValue>;
-    for (const key of ["task_id", "phase_instance", "step", "role", "subject_digest", "input_fingerprint", "policy_id"]) {
-      if (record[key] !== undefined) properties[key] = { const: structuredClone(record[key]) };
-    }
-  }
-  return result;
+  return structuredClone(schema);
 }
 
 /** Current reviewer contracts contain closed objects, fixed bindings, enums, and free text. */

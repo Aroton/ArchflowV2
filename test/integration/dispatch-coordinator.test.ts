@@ -11,11 +11,8 @@ const adjudicationSchema = JSON.parse(JSON.stringify(createAdjudicationOutputSch
 import { reviewReportOutputSchema } from "../../src/contracts/review.js";
 const reviewSchema = JSON.parse(JSON.stringify(reviewReportOutputSchema.toJSONSchema({ target: "draft-2020-12" })));
 import { parseGitOid } from "../../src/contracts/canonical.js";
-import { connectionContextFactory, createInvocationContext } from "../../src/contracts/contexts.js";
-import { parseSafeCode, parseSafeInteger, parseTaskSlug } from "../../src/contracts/evidence.js";
-import { encodePhaseInstance, parsePositiveSafePhaseNumber } from "../../src/contracts/phase-instance.js";
 import type { PlainJsonValue } from "../../src/contracts/plain-json.js";
-import { createDispatchCoordinator, createReviewDispatcher } from "../../src/dispatch/coordinator.js";
+import { createReviewDispatcher } from "../../src/dispatch/coordinator.js";
 import { resetMemoizedCliPreflight } from "../../src/dispatch/cli.js";
 import { capacityError, nativeStream, recoveredCapacityEvents } from "../helpers/antigravity-output.js";
 import {
@@ -24,26 +21,10 @@ import {
 } from "../../src/dispatch/workspace.js";
 import { DispatchProcessError, scanDispatchOutput } from "../../src/dispatch/process.js";
 import type { DispatchRoute } from "../../src/dispatch/routing.js";
-import { createGitRunner, preflightGit, readHeadCommit, type RepositoryOperationContext } from "../../src/repository/git.js";
-import { discoverWorktree } from "../../src/repository/identity.js";
-import type { ResolvedTaskWorkspacePath } from "../../src/repository/paths.js";
 import type { DispatchEnvelope } from "../../src/review/envelopes.js";
-import { mapHandlerErrors } from "../../src/mcp/handlers/errors.js";
-import { createToolBoundary } from "../../src/mcp/server.js";
-import { createAtomicWriter, createProjectionWriter } from "../../src/state/atomic.js";
-import { createInternalTransactionAuthority } from "../../src/state/authority.js";
-import type { TransactionDependencies } from "../../src/state/transaction.js";
 
 const roots: string[] = [];
 
-function semanticView() {
-  return {
-    schema_version: "1", task_id: TASK, condition: "ready", headline: "Ready", detail: "Continue.",
-    resources: [], next_action: { kind: "inspect", instruction: "Inspect status." },
-  };
-}
-const TASK = parseTaskSlug("dispatch-coordinator");
-const PHASE = encodePhaseInstance({ kind: "phase-impl", phase: parsePositiveSafePhaseNumber(15) });
 const ROUTE: DispatchRoute = Object.freeze({
   adapter: "codex-cli",
   family: "codex",
@@ -58,7 +39,7 @@ const CLAUDE_ROUTE: DispatchRoute = Object.freeze({
 });
 const ENVELOPE: DispatchEnvelope = Object.freeze({
   result_kind: "review",
-  bytes: Buffer.from('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'),
+  bytes: Buffer.from('{"schema_version":"1","subject":{"stage":"plan"},"rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'),
   digest: "d".repeat(64) as DispatchEnvelope["digest"],
   byte_count: 23,
 });
@@ -83,7 +64,6 @@ async function harness(
     "-c", "user.name=ArchFlow Test", "-c", "user.email=test@example.invalid",
     "commit", "-q", "-m", "root",
   ], { cwd: repository });
-  await mkdir(join(repository, ".archflow", "tasks", TASK), { recursive: true });
 
   const executable = join(bin, "codex");
   const childStarted = join(root, "child-started");
@@ -127,37 +107,22 @@ if (argv.length === 1 && argv[0] === "--version") {
   }
   await chmod(executable, 0o755);
 
-  const context: RepositoryOperationContext = {
-    task_id: TASK,
-    phase_instance: PHASE,
-    operation: parseSafeCode("dispatch-coordinator-test"),
-    attempt: parseSafeInteger(1),
-  };
-  const discovered = await discoverWorktree(createGitRunner({ cwd: repository }), context);
-  if (!discovered.ok) throw new Error("worktree discovery failed");
-  const environment = await preflightGit(discovered.value, context);
-  if (!environment.ok) throw new Error("git preflight failed");
-  const authority = await createInternalTransactionAuthority({
-    runner: discovered.value,
-    environment: environment.value,
-    task_id: TASK,
-    context,
-  });
-  if (!authority.ok) throw new Error("authority creation failed");
+  const commit = parseGitOid(execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" }).trim());
+  return { root, repository, bin, sourceHome, childStarted, usageDirectory: join(root, "usage"), commit };
+}
 
-  const dependencies: TransactionDependencies = {
-    runner: discovered.value,
-    environment: environment.value,
-    atomic: createAtomicWriter(),
-    projection_writer: createProjectionWriter(),
-    lock: { runExclusive: async <T>(_taskRoot: ResolvedTaskWorkspacePath, work: () => Promise<T>) => work() },
-    resolve_input_fingerprint: async () => { throw new Error("not used"); },
-    read_state: async () => ({ kind: "missing" }),
-    read_config: async () => ({ kind: "missing" }),
-    read_receipt: async () => ({ kind: "missing" }),
-  };
-  const headCommit = await readHeadCommit(discovered.value);
-  return { root, repository, bin, sourceHome, childStarted, authority: authority.value, dependencies, commit: headCommit };
+type Harness = Awaited<ReturnType<typeof harness>>;
+
+/** The standalone review's dispatcher, logging each dispatch to the harness's own usage directory. */
+function dispatcher(h: Harness, input: Partial<Parameters<typeof createReviewDispatcher>[0]> = {}) {
+  return createReviewDispatcher({
+    host: "claude",
+    repository_root: h.repository,
+    signal: new AbortController().signal,
+    cancellation_source: "client",
+    usage_directory: h.usageDirectory,
+    ...input,
+  });
 }
 
 /**
@@ -181,29 +146,32 @@ async function withDispatchEnvironment<T>(
   }
 }
 
-async function attemptRecord(repository: string): Promise<Record<string, unknown>> {
-  const directory = join(repository, ".archflow", "runtime", "tasks", TASK, "diagnostics", "attempts", PHASE);
-  const names = await readdir(directory);
+/** The single usage record one dispatch wrote. */
+async function usageRecord(h: Harness): Promise<Record<string, unknown>> {
+  const names = await readdir(h.usageDirectory);
   expect(names).toHaveLength(1);
-  return JSON.parse(await readFile(join(directory, names[0]!), "utf8")) as Record<string, unknown>;
+  return JSON.parse(await readFile(join(h.usageDirectory, names[0]!), "utf8")) as Record<string, unknown>;
 }
 
-async function attemptsAbsent(repository: string): Promise<void> {
-  await expect(readdir(join(repository, ".archflow", "runtime", "tasks", TASK, "diagnostics", "attempts")))
-    .rejects.toMatchObject({ code: "ENOENT" });
+/** Dispatch never writes telemetry or state into the reviewed repository. */
+function expectRepositoryUntouched(h: Harness): void {
+  expect(existsSync(join(h.repository, ".archflow"))).toBe(false);
 }
 
-function primaryViews(repository: string, commit: ReturnType<typeof parseGitOid>): DispatchRepositoryViewPlan {
-  return Object.freeze([Object.freeze({
-    name: "primary",
-    member_kind: "primary",
-    repository_root: repository,
-    repository_identity_digest: "0".repeat(64) as never,
-    commit,
-  })]);
+/** The view plan the standalone review builds: the work as `primary`, the starting commit as `baseline`. */
+function reviewViews(repository: string, commit: ReturnType<typeof parseGitOid>): DispatchRepositoryViewPlan {
+  const member = { repository_root: repository, repository_identity_digest: "0".repeat(64) as never, commit };
+  return Object.freeze([
+    Object.freeze({ name: "primary", member_kind: "primary", ...member }),
+    Object.freeze({ name: "baseline", member_kind: "secondary", ...member }),
+  ]);
 }
 
-describe("createDispatchCoordinator", () => {
+/** The repository views directory of a shared workspace. */
+const repositoriesOf = async (shared: ReturnType<typeof shareRepositoryViewWorkspace>): Promise<string> =>
+  join((await shared.acquire()).review_root!, "repositories");
+
+describe("createReviewDispatcher", () => {
   beforeEach(() => resetMemoizedCliPreflight());
 
   it.each([false, true])("captures Claude usage even when output validation fails (%s)", async invalid => {
@@ -219,23 +187,16 @@ else if (args[0] === "auth") console.log('{"loggedIn":true}');
 else { process.stdin.resume(); process.stdin.on("end", () => console.log(${JSON.stringify(JSON.stringify(wrapper))})); }
 `);
     await chmod(executable, 0o755);
-    const usageDirectory = join(h.bin, "..", "usage");
-    const coordinator = createDispatchCoordinator({ authority: h.authority, dependencies: h.dependencies,
-      host: "codex", repository_root: h.repository, phase_instance: PHASE, usage_directory: usageDirectory,
-      signal: new AbortController().signal, cancellation_source: "client" });
-    const dispatch = withDispatchEnvironment(h, () => coordinator({ adapter: "claude-cli", family: "claude",
+    const dispatch = withDispatchEnvironment(h, () => dispatcher(h, { host: "codex" })({ adapter: "claude-cli", family: "claude",
       model: "claude-opus-5", effort: "medium" }, ENVELOPE, reviewSchema as PlainJsonValue));
     if (invalid) await expect(dispatch).rejects.toMatchObject({ project_error: { code: "MODEL_OUTPUT_INVALID" } });
     else expect((await dispatch).usage).toMatchObject({ output_tokens: 30, thinking_tokens: 20, num_turns: 2 });
-    const record = await attemptRecord(h.repository);
-    expect(record).toMatchObject({ status: invalid ? "failed" : "succeeded",
+    const central = await usageRecord(h);
+    expect(central).toMatchObject({ status: invalid ? "failed" : "succeeded",
+      repository: h.repository, envelope_digest: ENVELOPE.digest,
       usage: { input_tokens: 10, output_tokens: 30, thinking_tokens: 20, total_cost_usd: 0.001 } });
-    if (!invalid) { expect(record).not.toHaveProperty("stdout_tail"); expect(record).not.toHaveProperty("stderr_tail"); }
-    const files = await readdir(usageDirectory);
-    expect(files).toHaveLength(1);
-    const central = JSON.parse(await readFile(join(usageDirectory, files[0]!), "utf8"));
-    expect(central).toMatchObject({ status: invalid ? "failed" : "succeeded", task_id: TASK, phase_instance: PHASE,
-      repository: h.repository, envelope_digest: ENVELOPE.digest, usage: { output_tokens: 30, thinking_tokens: 20 } });
+    if (invalid) expect(central).toMatchObject({ failure_stage: "output-parse", failure_code: "MODEL_OUTPUT_INVALID" });
+    else expect(central).not.toHaveProperty("failure_code");
     expect(central).not.toHaveProperty("stdout_tail");
     expect(central).not.toHaveProperty("stderr_tail");
     expect(JSON.stringify(central)).not.toContain("Reviewed; no actionable issues");
@@ -243,20 +204,15 @@ else { process.stdin.resume(); process.stdin.on("end", () => console.log(${JSON.
 
   it("logs standalone dispatches with unknown token usage without inventing task identity", async () => {
     const h = await harness("success");
-    const usageDirectory = join(h.bin, "..", "usage");
-    const dispatch = createReviewDispatcher({ host: "claude", repository_root: h.repository,
-      signal: new AbortController().signal, cancellation_source: "client", usage_directory: usageDirectory });
-    await withDispatchEnvironment(h, () => dispatch(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
-    const files = await readdir(usageDirectory);
-    expect(files).toHaveLength(1);
-    const logged = JSON.parse(await readFile(join(usageDirectory, files[0]!), "utf8"));
+    await withDispatchEnvironment(h, () => dispatcher(h)(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
+    const logged = await usageRecord(h);
     expect(logged).toMatchObject({ status: "succeeded", adapter: "codex-cli", repository: h.repository, result_kind: "review" });
     expect(logged).not.toHaveProperty("task_id");
     expect(logged).not.toHaveProperty("usage");
     expect(logged.duration_ms).toBeGreaterThanOrEqual(0);
   });
 
-  it("persists the native terminal error separately from a schema-heavy stdout tail", async () => {
+  it("classifies an unrecovered Antigravity capacity error as a transient transport failure", async () => {
     const h = await harness("success");
     const events = recoveredCapacityEvents();
     events.splice(3, 1); // No completed finish: this capacity error must remain a failure.
@@ -268,60 +224,39 @@ else if (args[0] === "models") process.stdout.write("gemini-3.8-flash-high\\n");
 else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.write(${JSON.stringify(nativeStream(events).toString())})); }
 `);
     await chmod(executable, 0o755);
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority, dependencies: h.dependencies, host: "claude",
-      repository_root: h.repository, phase_instance: PHASE,
-      signal: new AbortController().signal, cancellation_source: "client",
-    });
-    await expect(withDispatchEnvironment(h, () => coordinator({
+    await expect(withDispatchEnvironment(h, () => dispatcher(h)({
       adapter: "antigravity-cli", family: "gemini", model: "gemini-3.8-flash-high", effort: "high",
-    }, ENVELOPE, reviewSchema as PlainJsonValue))).rejects.toMatchObject({ project_error: { code: "PROCESS_FAILED" } });
-    const record = await attemptRecord(h.repository);
-    expect(record).toMatchObject({
-      exit_class: "exit-0", failure_exit_class: "transient-transport", failure_stage: "child-failure-classification",
-      adapter_result: { terminal_status: "ERROR", error_message: capacityError, has_structured_output: true, last_error_step_index: 1 },
+    }, ENVELOPE, reviewSchema as PlainJsonValue))).rejects.toMatchObject({
+      project_error: { code: "PROCESS_FAILED", diagnostic: { parameters: { exit_class: "transient-transport" } } },
     });
-    expect(record.stdout_tail).not.toContain(capacityError);
+    const record = await usageRecord(h);
+    expect(record).toMatchObject({
+      status: "failed", failure_stage: "child-failure-classification", failure_code: "PROCESS_FAILED",
+    });
+    expect(JSON.stringify(record)).not.toContain(capacityError);
   });
 
-  it("runs preflight and dispatch, disposes its workspace, and writes no attempt telemetry on success", async () => {
+  it("runs preflight and dispatch and writes nothing into the repository on success", async () => {
     const h = await harness("success");
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-    });
 
     const result = await withDispatchEnvironment(h, () =>
-      coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
+      dispatcher(h)(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
 
     expect(result.cli_version).toBe("0.146.0");
     expect(JSON.parse(Buffer.from(result.extracted_output_bytes).toString("utf8"))).toEqual({ schema_version: "1" });
-    await attemptsAbsent(h.repository);
+    expect(await usageRecord(h)).toMatchObject({ status: "succeeded", cli_version: "0.146.0" });
+    expectRepositoryUntouched(h);
   });
 
-  it("shares one materialized repository view across the coordinators of one review", async () => {
+  it("shares one materialized repository view across the dispatches of one review", async () => {
     const h = await harness("success");
     const commit = h.commit;
-    const shared = shareRepositoryViewWorkspace(primaryViews(h.repository, commit), h.repository);
+    const shared = shareRepositoryViewWorkspace(reviewViews(h.repository, commit), h.repository);
     let view: string | undefined;
-    const coordinate = () => createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-      shared_workspace: shared,
-    });
+    const coordinate = () => dispatcher(h, { shared_workspace: shared });
     const siblingEnvelope: DispatchEnvelope = Object.freeze({
       result_kind: "review",
-      bytes: Buffer.from('{"schema_version":"1","rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'),
+      bytes: Buffer.from('{"schema_version":"1","subject":{"stage":"plan"},"rubric":{"criteria":[{"id":"correctness","text":"Check correctness","blocking":true}]}}\n'),
       digest: "e".repeat(64) as DispatchEnvelope["digest"],
       byte_count: 23,
     });
@@ -333,7 +268,7 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
     await withDispatchEnvironment(h, async () => {
       // Acquire inside the dispatch environment: the workspace captures PATH at creation, so
       // creating it under the ambient PATH would leak the real CLIs into child resolution.
-      view = (await shared.acquire()).repository_view_root!;
+      view = await repositoriesOf(shared);
       await Promise.all([
         coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue),
         coordinate()(ROUTE, siblingEnvelope, reviewSchema as PlainJsonValue),
@@ -358,20 +293,11 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
     const h = await harness("fail-child-once");
     await writeFile(join(h.root, "child-down"), "down");
     const commit = h.commit;
-    const shared = shareRepositoryViewWorkspace(primaryViews(h.repository, commit), h.repository);
-    const coordinate = () => createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-      shared_workspace: shared,
-    });
+    const shared = shareRepositoryViewWorkspace(reviewViews(h.repository, commit), h.repository);
+    const coordinate = () => dispatcher(h, { shared_workspace: shared });
     let view: string | undefined;
     await withDispatchEnvironment(h, async () => {
-      view = (await shared.acquire()).repository_view_root!;
+      view = await repositoriesOf(shared);
       await expect(coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue)).rejects.toThrow();
       expect(existsSync(view!)).toBe(true);
       await rm(join(h.root, "child-down"));
@@ -383,18 +309,9 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
 
   it("memoizes the CLI preflight per adapter for the process", async () => {
     const h = await harness("success");
-    const coordinate = () => createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-    });
     await withDispatchEnvironment(h, async () => {
-      const first = await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
-      const second = await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      const first = await dispatcher(h)(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      const second = await dispatcher(h)(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
       expect(second.cli_version).toBe(first.cli_version);
     });
     const preflight = await readFile(join(h.root, "preflight.log"), "utf8");
@@ -405,73 +322,40 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
   it("re-runs a failed preflight instead of memoizing it", async () => {
     const h = await harness("fail-auth-once");
     await writeFile(join(h.root, "auth-down"), "down");
-    const coordinate = () => createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-    });
     await withDispatchEnvironment(h, async () => {
-      await expect(coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue)).rejects.toThrow();
+      await expect(dispatcher(h)(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue)).rejects.toThrow();
       await rm(join(h.root, "auth-down"));
-      const second = await coordinate()(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      const second = await dispatcher(h)(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
       expect(second.cli_version).toBe("0.146.0");
     });
     const preflight = await readFile(join(h.root, "preflight.log"), "utf8");
     expect(preflight.split("\n").filter((line) => line === "login status")).toHaveLength(2);
   });
 
-  it("dispatches from a Codex host through the assembled Claude CLI coordinator", async () => {
+  it("dispatches from a Codex host through the assembled Claude CLI dispatcher", async () => {
     const h = await harness("success");
     const claude = join(h.bin, "claude");
     await copyFile(join(process.cwd(), "test", "fixtures", "dispatch", "fake-claude.mjs"), claude);
     await chmod(claude, 0o755);
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "codex",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-    });
 
     const result = await withDispatchEnvironment(h, () =>
-      coordinator(CLAUDE_ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
+      dispatcher(h, { host: "codex" })(CLAUDE_ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
 
     expect(result.cli_version).toBe("2.1.220");
     expect(JSON.parse(Buffer.from(result.extracted_output_bytes).toString("utf8"))).toEqual({ schema_version: "1" });
-    await attemptsAbsent(h.repository);
+    expectRepositoryUntouched(h);
   });
 
   it("materializes a read-only repository view for review dispatch and targets the child at it", async () => {
     const h = await harness("success");
-    const head = h.commit;
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-      repository_views: primaryViews(h.repository, head),
-    });
+    const shared = shareRepositoryViewWorkspace(reviewViews(h.repository, h.commit), h.repository);
+    const coordinator = dispatcher(h, { shared_workspace: shared });
 
-    const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
-    // The materialization pipeline spawns real git and tar, so the full ambient PATH stays behind
-    // the fixture bin instead of the minimal node-only PATH the other cases use.
-    process.env.PATH = `${h.bin}${delimiter}${saved.PATH ?? dirname(process.execPath)}`;
-    process.env.HOME = h.sourceHome;
     try {
-      const result = await coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue);
+      const result = await withDispatchEnvironment(h, () => coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
       expect(result.cli_version).toBe("0.146.0");
     } finally {
-      if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
-      if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;
+      await shared.dispose();
     }
 
     const observed = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as {
@@ -483,30 +367,17 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
 
   it("materializes the explicitly configured sealed repository view for adjudication dispatch", async () => {
     const h = await harness("success");
-    const head = h.commit;
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-      repository_views: primaryViews(h.repository, head),
-    });
+    const shared = shareRepositoryViewWorkspace(reviewViews(h.repository, h.commit), h.repository);
+    const coordinator = dispatcher(h, { shared_workspace: shared });
 
-    const saved = { PATH: process.env.PATH, HOME: process.env.HOME };
-    process.env.PATH = `${h.bin}${delimiter}${saved.PATH ?? dirname(process.execPath)}`;
-    process.env.HOME = h.sourceHome;
     try {
-      await coordinator(
+      await withDispatchEnvironment(h, () => coordinator(
         ROUTE,
         { ...ENVELOPE, result_kind: "adjudication" },
         adjudicationSchema as PlainJsonValue,
-      );
+      ));
     } finally {
-      if (saved.PATH === undefined) delete process.env.PATH; else process.env.PATH = saved.PATH;
-      if (saved.HOME === undefined) delete process.env.HOME; else process.env.HOME = saved.HOME;
+      await shared.dispose();
     }
 
     const observed = JSON.parse(await readFile(join(h.root, "observed-invocation.json"), "utf8")) as {
@@ -516,65 +387,45 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
     expect(observed.view).toEqual({ tracked: true, git: false, tasks: false });
   });
 
-  it("records the stage and safe exception detail when repository materialization fails", async () => {
+  it("records the stage when repository materialization fails", async () => {
     const h = await harness("success");
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-      repository_views: primaryViews(h.repository, "f".repeat(40) as never),
-    });
+    const shared = shareRepositoryViewWorkspace(reviewViews(h.repository, "f".repeat(40) as never), h.repository);
+    const coordinator = dispatcher(h, { shared_workspace: shared });
 
     await expect(coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue))
       .rejects.toMatchObject({ project_error: { code: "REPOSITORY_VIEW_UNAVAILABLE" } });
-    expect(await attemptRecord(h.repository)).toMatchObject({
+    await shared.dispose();
+    expect(await usageRecord(h)).toMatchObject({
       status: "failed",
       failure_stage: "repository-view-materialization",
       failure_code: "REPOSITORY_VIEW_UNAVAILABLE",
     });
   });
 
-  it("cancels during version preflight and still finalizes a failed attempt", async () => {
+  it("cancels during version preflight and still records the failed dispatch", async () => {
     const h = await harness("hang-version");
     const controller = new AbortController();
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: controller.signal,
-      cancellation_source: "transport",
-    });
+    const coordinator = dispatcher(h, { signal: controller.signal });
 
     const pending = withDispatchEnvironment(h, () =>
       coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
     setTimeout(() => controller.abort(), 100).unref();
     await expect(pending).rejects.toBeInstanceOf(DispatchProcessError);
-    expect(await attemptRecord(h.repository)).toMatchObject({
+    await expect(pending).rejects.toMatchObject({
+      project_error: { code: "CANCELLED", diagnostic: { parameters: { source: "client" } } },
+    });
+    expect(await usageRecord(h)).toMatchObject({
       adapter: "codex-cli",
       status: "failed",
+      failure_stage: "cli-preflight",
       failure_code: "CANCELLED",
-      cancellation_source: "transport",
     });
   });
 
-  it("cancels after the dispatch child starts and retains only failed-attempt telemetry", async () => {
+  it("cancels after the dispatch child starts and records only the failed dispatch", async () => {
     const h = await harness("hang-child");
     const controller = new AbortController();
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: controller.signal,
-      cancellation_source: "client",
-    });
+    const coordinator = dispatcher(h, { signal: controller.signal });
 
     const pending = withDispatchEnvironment(h, () =>
       coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
@@ -586,104 +437,50 @@ else { process.stdin.resume(); process.stdin.on("end", () => process.stdout.writ
     controller.abort();
 
     await expect(pending).rejects.toBeInstanceOf(DispatchProcessError);
-    expect(await attemptRecord(h.repository)).toMatchObject({
+    await expect(pending).rejects.toMatchObject({
+      project_error: { code: "CANCELLED", diagnostic: { parameters: { source: "client" } } },
+    });
+    expect(await usageRecord(h)).toMatchObject({
       adapter: "codex-cli",
       status: "failed",
+      failure_stage: "child-run",
       failure_code: "CANCELLED",
-      cancellation_source: "client",
       cli_version: "0.146.0",
     });
-    await expect(readdir(join(h.repository, ".archflow", "tasks", TASK, "results")))
-      .rejects.toMatchObject({ code: "ENOENT" });
+    expectRepositoryUntouched(h);
   });
 
-  it("persists exit class and bounded channel tails when the dispatch child fails", async () => {
+  it("records a failed child's classification without retaining its output channels", async () => {
     const h = await harness("fail-child");
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      host: "claude",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-    });
 
     const pending = withDispatchEnvironment(h, () =>
-      coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
+      dispatcher(h)(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue));
     await expect(pending).rejects.toMatchObject({
-      project_error: { code: "PROCESS_FAILED" },
+      project_error: { code: "PROCESS_FAILED", diagnostic: { parameters: { exit_class: "exit-3" } } },
     });
-    const persistedAttempt = await attemptRecord(h.repository);
-    expect(persistedAttempt).toMatchObject({
+    const record = await usageRecord(h);
+    expect(record).toMatchObject({
       schema_version: "1",
-      task_id: TASK,
-      phase_instance: PHASE,
       adapter: "codex-cli",
       status: "failed",
+      failure_stage: "child-failure-classification",
       failure_code: "PROCESS_FAILED",
-      exit_class: "exit-3",
-      stderr_tail: "stream error: exceeded retry limit\n",
       cli_version: "0.146.0",
-      managed_policy_present: expect.any(Boolean),
-      managed_policy_paths: expect.any(Array),
       started_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
       duration_ms: expect.any(Number),
     });
-    expect(persistedAttempt).not.toHaveProperty("cancellation_source");
-    expect(persistedAttempt).not.toHaveProperty("stdout_tail");
+    expect(JSON.stringify(record)).not.toContain("stream error");
     const canaries = ["credential-canary-7429", "routing-sentinel-1836"];
-    const persistedDiagnostics = Buffer.from(JSON.stringify(persistedAttempt));
+    const persistedDiagnostics = Buffer.from(JSON.stringify(record));
     expect(scanDispatchOutput({ stdout: persistedDiagnostics, stderr: Buffer.alloc(0) }, canaries)).toEqual([]);
   });
 
-  it("preserves a real coordinator classification through the live tool boundary", async () => {
+  it("refuses an unknown host before any workspace or child launch", async () => {
     const h = await harness("success");
-    const coordinator = createDispatchCoordinator({
-      authority: h.authority,
-      dependencies: h.dependencies,
-      // Adapter selection refuses an unknown host before any workspace or child
-      // launch, so the classification is deterministic with no CLI involved.
-      host: "unknown",
-      repository_root: h.repository,
-      phase_instance: PHASE,
-      signal: new AbortController().signal,
-      cancellation_source: "client",
-    });
-    const boundary = createToolBoundary({
-      // The semantic envelope is the only surface a coordinator classification crosses now:
-      // the handler maps the project failure into the semantic failure summary, as the
-      // retained dispatch seam inside the semantic apply handler does.
-      archflow_status: async (_input, context) => {
-        const classified = await mapHandlerErrors<"archflow_state">(
-          context.invocation_id,
-          async () => coordinator(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue) as never,
-        );
-        return classified.ok
-          ? { schema_version: "1", ok: true, value: semanticView() }
-          : { schema_version: "1", ok: false, error: { code: classified.error.code, message: classified.error.code, retryable: false } };
-      },
-    });
-    const connection = connectionContextFactory.captureStartup({
-      connection_id: "coordinator-boundary",
-      startup_repository_candidate: { working_directory: h.repository },
-    }).initialize({
-      client: { name: "codex-mcp-client", version: "0.146.0" },
-      host: "codex",
-      protocol_version: "2025-11-25",
-    });
-    const context = createInvocationContext(connection, {
-      invocation_id: "coordinator-boundary-call",
-      transport_metadata: { request_id: "request-1", operation: "tools/call" },
-    }, new AbortController().signal);
-
-    const outcome = await boundary.invoke("archflow_status", {
-      schema_version: "1", task_id: TASK,
-    }, context);
-
-    expect(outcome.kind).toBe("semantic-result");
-    if (outcome.kind === "semantic-result") {
-      expect(outcome.result).toMatchObject({ ok: false, error: { code: "UNSUPPORTED_HOST" } });
-    }
+    // Adapter selection refuses an unknown host before any workspace or child launch, so the
+    // classification is deterministic with no CLI involved.
+    await expect(dispatcher(h, { host: "unknown" })(ROUTE, ENVELOPE, reviewSchema as PlainJsonValue))
+      .rejects.toMatchObject({ project_error: { code: "UNSUPPORTED_HOST" } });
+    expect(existsSync(join(h.root, "preflight.log"))).toBe(false);
   });
 });

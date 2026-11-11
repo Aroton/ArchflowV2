@@ -2,12 +2,6 @@ import { isDeepStrictEqual } from "node:util";
 import { Ajv2020, type AnySchema, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import * as formatsModule from "ajv-formats";
 import type { FormatsPlugin } from "ajv-formats";
-import {
-  ContractValidationError,
-  hasUniqueObjectPropertyValues,
-  isSortedUniqueBy,
-  tupleKey,
-} from "../../src/contracts/validators.js";
 import { assertPlainJson, type PlainJsonValue } from "../../src/contracts/plain-json.js";
 
 /**
@@ -17,11 +11,17 @@ import { assertPlainJson, type PlainJsonValue } from "../../src/contracts/plain-
  * strict external validator accepts, and lets tests exercise what the published document enforces.
  *
  * The registered keywords are exactly the `x-archflow-*` keywords still present in committed
- * schemas: the `.meta`-emitted `x-archflow-mcp-semantics` on the generated `mcp-tools` document,
- * the set keywords carried by the hand-written release manifest, and the byte/NFC pair the
- * error group re-emits. Retired keywords are deliberately not registered — a regeneration that
- * resurrected one would fail strict compilation here.
+ * schemas: the set keywords carried by the hand-written release manifest. Retired keywords are
+ * deliberately not registered — a regeneration that resurrected one would fail strict compilation
+ * here.
  */
+
+export class ContractValidationError extends TypeError {
+  public constructor(message: string, public readonly details?: unknown) {
+    super(message);
+    this.name = "ContractValidationError";
+  }
+}
 
 export type JsonSchemaValidator<T> = {
   readonly validate: ValidateFunction<T>;
@@ -37,46 +37,34 @@ function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
   return errors.map((error) => `${error.instancePath || "/"} ${error.message ?? error.keyword}`).join("; ");
 }
 
-function hasBoundedUtf8Length(maximumBytes: number, data: string): boolean {
-  return Buffer.byteLength(data, "utf8") <= maximumBytes;
-}
-
-/** Unicode NFC is not expressible as a JSON Schema `pattern`, so the keyword carries it. */
-function isUnicodeNormalized(_enabled: true, data: string): boolean {
-  return data.normalize("NFC") === data;
-}
-
-const record = (value: unknown): Record<string, unknown> | undefined => typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-const ruleKey = (value: unknown): string => { const item = record(value); return `${String(item?.rule_id)}:${String(item?.rule_version)}`; };
-
-function hasGateContextSemantics(kind: unknown, contextValue: unknown): boolean {
-  const context = record(contextValue);
-  if (context === undefined) return true;
-  if (kind === "review-trigger" || kind === "adjudication-failure") {
-    const primary = kind === "review-trigger" ? context.matched_rules : context.failed_rules;
-    if (!isSortedUniqueBy(primary, ruleKey) || !isSortedUniqueBy(context.uncertain_rules, ruleKey) || !isSortedUniqueBy(context.eligible_waiver_rules, ruleKey)) return false;
-    const available = new Set([...(primary as unknown[]), ...(context.uncertain_rules as unknown[])].map(ruleKey));
-    if ((context.eligible_waiver_rules as unknown[]).some((item) => !available.has(ruleKey(item)))) return false;
-    if (kind === "adjudication-failure" && available.size === 0) return false;
-    return record(context.waiver_scope)?.operation === kind;
+/** `x-archflow-unique-by`: no two items share the same own-data values for the named properties. */
+function hasUniqueObjectPropertyValues(properties: string | readonly string[], data: unknown[]): boolean {
+  const propertyNames = typeof properties === "string" ? [properties] : properties;
+  const seen: unknown[][] = [];
+  for (const item of data) {
+    if (typeof item !== "object" || item === null) continue;
+    const values: unknown[] = [];
+    for (const property of propertyNames) {
+      const descriptor = Object.getOwnPropertyDescriptor(item, property);
+      if (descriptor === undefined) {
+        values.push(undefined);
+        continue;
+      }
+      if (!descriptor.enumerable || !("value" in descriptor)) return false;
+      values.push(descriptor.value);
+    }
+    if (seen.some((candidate) => isDeepStrictEqual(candidate, values))) return false;
+    seen.push(values);
   }
-  if (kind === "attempts-exhausted") return typeof context.attempts === "number" && typeof context.maximum_attempts === "number" && context.attempts >= context.maximum_attempts;
-  if (kind === "material-drift") return isSortedUniqueBy(context.affected_claim_ids);
-  if (kind === "commit-authorization") return isSortedUniqueBy(context.current_artifact_digests) && isSortedUniqueBy(context.parent_document_digests);
   return true;
 }
 
-function hasExactCurrentEvidence(value: unknown): boolean {
-  const current = record(value); if (current === undefined || !Array.isArray(current.slots)) return false;
-  const slots = current.slots.map(record); if (slots.some((slot) => slot === undefined) || (slots.length !== 1 && slots.length !== 2)) return false;
-  if (slots.length !== 1 || slots[0]!.role !== "counter-review") return false;
-  if (slots.some((slot) => slot!.producer_family === slot!.reviewer_family)) return false;
-  return new Set(slots.map((slot) => slot!.evidence_digest)).size === slots.length;
-}
-
-function hasMcpSemantics(_enabled: true, data: Record<string, unknown>): boolean {
-  if ("kind" in data && "current_evidence" in data) return hasExactCurrentEvidence(data.current_evidence) && hasGateContextSemantics(data.kind, data.context);
-  if ("origin" in data) return record(data.origin)?.task_id === data.task_id;
+/** `x-archflow-sorted-unique`: strictly increasing by string value, which implies uniqueness. */
+function isSortedUnique(items: unknown): boolean {
+  if (!Array.isArray(items)) return false;
+  for (let i = 1; i < items.length; i++) {
+    if (String(items[i - 1]) >= String(items[i])) return false;
+  }
   return true;
 }
 
@@ -106,36 +94,12 @@ function createAjvEngine(): Ajv2020 {
     validate: hasUniqueObjectPropertyValues
   });
   ajv.addKeyword({
-    keyword: "x-archflow-max-utf8-bytes",
-    schemaType: "number",
-    metaSchema: { type: "integer", minimum: 0 },
-    type: "string",
-    errors: false,
-    validate: hasBoundedUtf8Length
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-nfc",
-    schemaType: "boolean",
-    metaSchema: { const: true },
-    type: "string",
-    errors: false,
-    validate: isUnicodeNormalized
-  });
-  ajv.addKeyword({
     keyword: "x-archflow-sorted-unique",
     schemaType: "boolean",
     metaSchema: { const: true },
     type: "array",
     errors: false,
-    validate: (_enabled: true, data: unknown) => isSortedUniqueBy(data)
-  });
-  ajv.addKeyword({
-    keyword: "x-archflow-mcp-semantics",
-    schemaType: "boolean",
-    metaSchema: { const: true },
-    type: "object",
-    errors: false,
-    validate: hasMcpSemantics
+    validate: (_enabled: true, data: unknown) => isSortedUnique(data)
   });
   return ajv;
 }
