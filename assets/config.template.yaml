@@ -17,7 +17,7 @@ roles:
     model: gpt-6.1-sol
     effort: low
   adjudicator:
-    model: gemini-3.8-flash-high
+    model: gemini-4-hydrogen-high
     effort: high
 
 # Client-specific counter-review and constitution review routing
@@ -27,7 +27,7 @@ producers:
       model: gpt-6.1-sol
       effort: high
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: gemini-4-hydrogen-high
       effort: high
   antigravity:
     counter-reviewers:
@@ -36,14 +36,14 @@ producers:
       - model: claude-opus-5-5
         effort: medium
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: gemini-4-hydrogen-high
       effort: high
   codex:
     counter-reviewer:
       model: claude-opus-5-5
       effort: medium
     adjudicator:
-      model: gemini-3.8-flash-high
+      model: gemini-4-hydrogen-high
       effort: high
 
 # Routes accept an optional `provider`: a cc-switch provider id (claude routes

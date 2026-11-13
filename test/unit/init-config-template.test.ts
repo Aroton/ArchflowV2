@@ -19,7 +19,7 @@ describe("config template", () => {
       adapter: "codex-cli",
     });
     expect(configuredRoute(config, "phase-impl", "adjudicator", "claude")).toMatchObject({
-      model: "gemini-3.8-flash-high",
+      model: "gemini-4-hydrogen-high",
       effort: "high",
       family: "gemini",
       adapter: "antigravity-cli",
@@ -31,7 +31,7 @@ describe("config template", () => {
       { model: "claude-opus-5-5", effort: "medium", family: "claude", adapter: "claude-cli" },
     ]);
     expect(configuredRoute(config, "phase-impl", "adjudicator", "antigravity")).toMatchObject({
-      model: "gemini-3.8-flash-high",
+      model: "gemini-4-hydrogen-high",
       effort: "high",
       family: "gemini",
       adapter: "antigravity-cli",
@@ -45,7 +45,7 @@ describe("config template", () => {
       adapter: "claude-cli",
     });
     expect(configuredRoute(config, "phase-impl", "adjudicator", "codex")).toMatchObject({
-      model: "gemini-3.8-flash-high",
+      model: "gemini-4-hydrogen-high",
       effort: "high",
       family: "gemini",
       adapter: "antigravity-cli",
@@ -94,7 +94,7 @@ describe("config template", () => {
     const routes = (config: ConfigV1) => (["phase-design", "phase-impl"] as const).flatMap((stage) =>
       ([undefined, "claude", "codex", "antigravity"] as const).flatMap((host) =>
         ROUTING_ROLES.map((role) => ({ stage, host, role, routes: configuredRoutes(config, stage, role, host) }))));
-    // The constitution reviewer's shipped route moved to Gemini Flash after the fixture was written; a repository
+    // The constitution reviewer's shipped route moved to Gemini 4 Hydrogen after the fixture was written; a repository
     // that still has the earlier template keeps the route it names. Every other role resolves identically.
     const unchanged = (config: ConfigV1) => routes(config).filter((entry) => entry.role !== "adjudicator");
     expect(unchanged(legacy)).toEqual(unchanged(current));
