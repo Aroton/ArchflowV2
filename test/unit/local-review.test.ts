@@ -62,6 +62,7 @@ describe("archflow-local review", () => {
     // The template as shipped before review dropped the task workflow's keys (implementation, repositories,
     // max_attempts, the effort-reviewer role, and the prd/design approval subjects).
     await copyFile(new URL("../fixtures/foundation/config/legacy-template.yaml", import.meta.url), join(root, ".archflow/config.yaml"));
+    // The fixture still names Sol 6.1; a repository keeps the routes its config names when the template moves on.
     const sol = { model: "gpt-6.1-sol", adapter: "codex-cli" };
     const opus = { model: "claude-opus-5-5", adapter: "claude-cli" };
     const counter: Record<string, Array<Record<string, string>>> = {

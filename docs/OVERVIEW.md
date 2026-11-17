@@ -57,7 +57,7 @@ The prompt each reviewer receives is built from `assets/review-inputs.yaml` and 
 | `test-reviewer` | always | only the test-owned criteria (the plan's test strategy; an implementation's verification evidence and test quality) |
 | `adjudicator` (the *constitution reviewer*) | only when active constitution rules exist | each rule: compliance, and whether its `review_trigger` matched |
 
-Each role's routes come from `.archflow/config.yaml`, most specific first: `producers.<producer>`, then `overrides.phase-design` (plan) or `overrides.phase-impl` (implementation), then `roles`, with a built-in `gpt-6.1-sol`/low fallback for the test reviewer. A payload may also carry a per-call `review_routes` entry, which replaces the configured routes for that role. A route can name a cc-switch `provider`, which launches the claude CLI through cc-switch so non-Claude models can run behind it.
+Each role's routes come from `.archflow/config.yaml`, most specific first: `producers.<producer>`, then `overrides.phase-design` (plan) or `overrides.phase-impl` (implementation), then `roles`, with a built-in `gpt-6.2-sol`/low fallback for the test reviewer. A payload may also carry a per-call `review_routes` entry, which replaces the configured routes for that role. A route can name a cc-switch `provider`, which launches the claude CLI through cc-switch so non-Claude models can run behind it.
 
 "The other model family" is a property of the shipped template (a Claude producer is reviewed by GPT, a Codex producer by Claude), not a check. Nothing stops a repository from configuring a same-family reviewer; see [LIMITATIONS.md](LIMITATIONS.md).
 

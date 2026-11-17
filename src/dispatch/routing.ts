@@ -154,7 +154,7 @@ function configuredRoutes(
   // invocation-declared routes take precedence; this built-in is only the final fallback when the
   // optional configured role was omitted.
   if (role === "test-reviewer") {
-    return [Object.freeze({ model: "gpt-6.1-sol", effort: "low" as const })];
+    return [Object.freeze({ model: "gpt-6.2-sol", effort: "low" as const })];
   }
 
   return [];

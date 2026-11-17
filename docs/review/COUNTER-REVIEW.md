@@ -73,7 +73,7 @@ For each role the first available source wins:
 2. `producers.<producer>` in `.archflow/config.yaml`, keyed by the asking client;
 3. `overrides.phase-design` for a plan review or `overrides.phase-impl` for an implementation review;
 4. the top-level `roles`;
-5. for the test reviewer only, the built-in `gpt-6.1-sol` at `low`.
+5. for the test reviewer only, the built-in `gpt-6.2-sol` at `low`.
 
 A role with no route at all is `CONFIG_INVALID`. A `counter-reviewers` list produces several counter-reviewers, which run side by side as `counter-reviewer-1`, `counter-reviewer-2`, and so on; the shipped template does this for Antigravity sessions.
 

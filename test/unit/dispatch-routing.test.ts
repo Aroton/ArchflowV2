@@ -70,7 +70,7 @@ describe("dispatch routing", () => {
     });
     for (const phaseKind of ["phase-design", "phase-impl"] as const) {
       expect(configuredRoute(value, phaseKind, "counter-reviewer").model).toBe("gpt-5.3-codex");
-      expect(configuredRoute(value, phaseKind, "test-reviewer").model).toBe("gpt-6.1-sol");
+      expect(configuredRoute(value, phaseKind, "test-reviewer").model).toBe("gpt-6.2-sol");
     }
   });
 
@@ -96,7 +96,7 @@ describe("dispatch routing", () => {
   });
 
   it("falls back to the built-in test reviewer when no test-reviewer route is configured", () => {
-    const builtIn = { adapter: "codex-cli", family: "codex", model: "gpt-6.1-sol", effort: "low" };
+    const builtIn = { adapter: "codex-cli", family: "codex", model: "gpt-6.2-sol", effort: "low" };
     const otherRolesOnly: ConfigV1 = {
       schema_version: "1",
       roles: { "counter-reviewer": { model: "gpt-5.3-codex", effort: "high" } },

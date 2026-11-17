@@ -24182,7 +24182,7 @@ function configuredRoutes(config2, phaseKind, role2, host) {
     return [baseRoles.adjudicator];
   }
   if (role2 === "test-reviewer") {
-    return [Object.freeze({ model: "gpt-6.1-sol", effort: "low" })];
+    return [Object.freeze({ model: "gpt-6.2-sol", effort: "low" })];
   }
   return [];
 }

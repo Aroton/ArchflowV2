@@ -8,13 +8,13 @@ schema_version: "1"
 # Fallback roles used only when the asking client is not listed under `producers` below:
 roles:
   counter-reviewer:
-    model: gpt-6.1-sol
+    model: gpt-6.2-sol
     effort: high
   # Reviews the tests and verification. Configs without this role receive this
-  # Sol 6.1/low route as the final fallback; general reviewers never inherit the
+  # Sol 6.2/low route as the final fallback; general reviewers never inherit the
   # test-owned criteria.
   test-reviewer:
-    model: gpt-6.1-sol
+    model: gpt-6.2-sol
     effort: low
   adjudicator:
     model: gemini-4-hydrogen-high
@@ -24,14 +24,14 @@ roles:
 producers:
   claude:
     counter-reviewer:
-      model: gpt-6.1-sol
+      model: gpt-6.2-sol
       effort: high
     adjudicator:
       model: gemini-4-hydrogen-high
       effort: high
   antigravity:
     counter-reviewers:
-      - model: gpt-6.1-sol
+      - model: gpt-6.2-sol
         effort: high
       - model: claude-opus-5-5
         effort: medium

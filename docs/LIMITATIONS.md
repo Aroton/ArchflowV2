@@ -98,7 +98,7 @@ A route given in a payload's `review_routes` is validated like a configured one 
 
 ### Same-family and low-effort routes are legal
 
-"The other model family" describes the shipped template: a Claude producer is reviewed by GPT, a Codex producer by Claude, an Antigravity producer by both. Nothing checks it: a repository may route any role to the producer's own family or a low effort, and the template's own test reviewer is `gpt-6.1-sol` at low effort for every producer. Each report carries its route, so a human relying on a review can see who gave it. A same-family or low-effort reviewer is a legitimate operator choice (outages, cost, domain fit), and enforcing a family rule would recreate the outage dead end an explicit override exists to avoid.
+"The other model family" describes the shipped template: a Claude producer is reviewed by GPT, a Codex producer by Claude, an Antigravity producer by both. Nothing checks it: a repository may route any role to the producer's own family or a low effort, and the template's own test reviewer is `gpt-6.2-sol` at low effort for every producer. Each report carries its route, so a human relying on a review can see who gave it. A same-family or low-effort reviewer is a legitimate operator choice (outages, cost, domain fit), and enforcing a family rule would recreate the outage dead end an explicit override exists to avoid.
 
 ### The dispatch timeout is fixed
 

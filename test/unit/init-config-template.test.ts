@@ -13,7 +13,7 @@ describe("config template", () => {
 
     // Claude host
     expect(configuredRoute(config, "phase-impl", "counter-reviewer", "claude")).toMatchObject({
-      model: "gpt-6.1-sol",
+      model: "gpt-6.2-sol",
       effort: "high",
       family: "codex",
       adapter: "codex-cli",
@@ -27,7 +27,7 @@ describe("config template", () => {
 
     // Antigravity host (multi-reviewer)
     expect(configuredRoutes(config, "phase-impl", "counter-reviewer", "antigravity")).toEqual([
-      { model: "gpt-6.1-sol", effort: "high", family: "codex", adapter: "codex-cli" },
+      { model: "gpt-6.2-sol", effort: "high", family: "codex", adapter: "codex-cli" },
       { model: "claude-opus-5-5", effort: "medium", family: "claude", adapter: "claude-cli" },
     ]);
     expect(configuredRoute(config, "phase-impl", "adjudicator", "antigravity")).toMatchObject({
@@ -53,11 +53,11 @@ describe("config template", () => {
 
     // Fallback roles
     expect(configuredRoute(config, "phase-impl", "counter-reviewer")).toMatchObject({
-      model: "gpt-6.1-sol",
+      model: "gpt-6.2-sol",
       effort: "high",
     });
     expect(configuredRoute(config, "phase-impl", "test-reviewer")).toMatchObject({
-      model: "gpt-6.1-sol",
+      model: "gpt-6.2-sol",
       effort: "low",
       family: "codex",
       adapter: "codex-cli",
@@ -94,10 +94,15 @@ describe("config template", () => {
     const routes = (config: ConfigV1) => (["phase-design", "phase-impl"] as const).flatMap((stage) =>
       ([undefined, "claude", "codex", "antigravity"] as const).flatMap((host) =>
         ROUTING_ROLES.map((role) => ({ stage, host, role, routes: configuredRoutes(config, stage, role, host) }))));
-    // The constitution reviewer's shipped route moved to Gemini 4 Hydrogen after the fixture was written; a repository
-    // that still has the earlier template keeps the route it names. Every other role resolves identically.
-    const unchanged = (config: ConfigV1) => routes(config).filter((entry) => entry.role !== "adjudicator");
+    // After the fixture was written, the constitution reviewer's shipped route moved to Gemini 4 Hydrogen and the GPT
+    // reviewers moved from Sol 6.1 to Sol 6.2; a repository that still has the earlier template keeps the routes it
+    // names. Apart from the Sol model version, every other role resolves identically.
+    const unchanged = (config: ConfigV1) => routes(config).filter((entry) => entry.role !== "adjudicator").map((entry) => ({
+      ...entry,
+      routes: entry.routes.map((route) => route.model === "gpt-6.1-sol" ? { ...route, model: "gpt-6.2-sol" } : route),
+    }));
     expect(unchanged(legacy)).toEqual(unchanged(current));
+    expect(configuredRoute(legacy, "phase-impl", "counter-reviewer", "claude")).toMatchObject({ model: "gpt-6.1-sol", effort: "high" });
     expect(configuredRoute(legacy, "phase-impl", "adjudicator", "claude")).toMatchObject({ model: "claude-opus-5-5", effort: "high" });
   });
 });

@@ -1,7 +1,7 @@
 {
   "artifacts": [
     {
-      "digest": "cd3f918520c5e2fc9818e49bbbe92084788c25bfe0e5a862f100b44a4b88e2af",
+      "digest": "e927591d45981a01372808a066828a3ae3ab34a54f82de771d0fe67e7bd33167",
       "path": "archflow-local.mjs",
       "role": "executable",
       "size": 989306
@@ -44,7 +44,7 @@
       "role": "local-cli"
     }
   ],
-  "bundle_digest": "cd3f918520c5e2fc9818e49bbbe92084788c25bfe0e5a862f100b44a4b88e2af",
+  "bundle_digest": "e927591d45981a01372808a066828a3ae3ab34a54f82de771d0fe67e7bd33167",
   "bundle_inputs": [
     {
       "bytes_in_output": 8885,
@@ -2070,7 +2070,7 @@
     },
     {
       "bytes_in_output": 5566,
-      "digest": "4fe3c9f829596f559c4c8e0611085266e4ddab0740763946da59b9863f4d6720",
+      "digest": "ccf3d93bbb6080a6c4bbf65561157bbf508738b8af243e4996eeddc06d745d37",
       "key": "src/dispatch/routing.ts",
       "origin": {
         "kind": "repository",
@@ -2759,7 +2759,7 @@
       ],
       "entry_point": "src/local/main.ts",
       "id": "local-cli",
-      "output_digest": "cd3f918520c5e2fc9818e49bbbe92084788c25bfe0e5a862f100b44a4b88e2af",
+      "output_digest": "e927591d45981a01372808a066828a3ae3ab34a54f82de771d0fe67e7bd33167",
       "output_path": "archflow-local.mjs"
     }
   ],
@@ -2787,7 +2787,7 @@
       "size": 10
     },
     {
-      "digest": "7d811e775a84d695fcc3b9d7662e7a03a757b96c20fcb70f73d1f092685c620c",
+      "digest": "007a271d5da7521686353bab4bc93869dc75d2e9abf30a8efadd7058b758ab7d",
       "path": "assets/config.template.yaml",
       "size": 2827
     },
@@ -2989,7 +2989,7 @@
       "size": 10
     },
     {
-      "digest": "7d811e775a84d695fcc3b9d7662e7a03a757b96c20fcb70f73d1f092685c620c",
+      "digest": "007a271d5da7521686353bab4bc93869dc75d2e9abf30a8efadd7058b758ab7d",
       "path": "assets/config.template.yaml",
       "size": 2827
     },
