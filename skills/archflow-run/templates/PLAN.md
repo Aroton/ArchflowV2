@@ -41,14 +41,14 @@ skill's `scripts/wait.sh`, which keeps a waiting agent's prompt cache warm and l
 across all worktrees, so parallel tasks cannot overload the machine.
 
 ## 6. Agents and routing
-The agent follows the kind of work; the model and effort follow how hard the task is.
+The agent follows the kind of work. The model follows the run's routing: implementers write on the cheaper model, reviewers judge on the stronger one, and a task leaves that only through a hatch named below.
 
 ### Agents
 | Agent (`subagent_type`) | Covers | Why it is its own agent | Default model / effort |
 |---|---|---|---|
-| `<name>-<domain>-implementer` | <the domain and its paths> | <what its guidance holds that the rest of the run does not: its reference, how it is validated, how it goes wrong> | `opus` / `high` |
+| `<name>-<domain>-implementer` | <the domain and its paths> | <what its guidance holds that the rest of the run does not: its reference, how it is validated, how it goes wrong> | `sonnet` / `high` |
 | `<name>-<domain>-reviewer` | task-review, merge, fix-verify and verify for that domain's tasks | <the lenses that work is reviewed through> | `opus` / `high` |
-| `<name>-implementer` | tasks outside every domain | general; the packet carries what a task needs | `sonnet` / `medium` |
+| `<name>-implementer` | tasks outside every domain | general; the packet carries what a task needs | `sonnet` / `high` |
 | `<name>-reviewer` | reviews of those tasks; deferral, plan review, gate lenses | general | `opus` / `high` |
 
 <One implementer and reviewer pair per domain, sized by the protocol's "Run agents". When the whole run is one kind of
@@ -60,19 +60,22 @@ work, keep only the general pair and give it that guidance.>
 | Orchestrate | this session | `opus` / `high` |
 | Explore during planning | general-purpose + override | `haiku` / `xhigh` |
 | Write the plan; detail a later milestone; a significant plan revision | general-purpose + override | `fable` / `high` (always the strongest model) |
-| Implement: <plumbing, mechanical, tightly specified> | the task's implementer agent + override | `sonnet` / `medium` |
-| Implement: <core, correctness-critical, interface-defining> | the task's implementer agent | `opus` / `high` |
-| Implement: <subtle and hard to review: name the tasks> | the task's implementer agent + override | `fable` / `high` |
-| Fix | the task's implementer agent, fix mode + override | as the task was implemented; `sonnet` / `medium` for small mechanical findings |
-| Task review of a `full` task; fix verify | the domain's reviewer | `opus` / `high` (`fable` for `fable`-routed work) |
-| Task review of a `light` task | the domain's reviewer + override | `sonnet` / `medium` |
-| Counter-review merge | the domain's reviewer + override | `sonnet` / `medium` |
-| Verify | the domain's reviewer + override | `opus` / `high` |
-| Deferral pass | `<name>-reviewer` + override | `opus` / `high` |
+| Implement; fix | the task's implementer agent | `sonnet` / `high` |
+| Task review, `full` or `light`; fix verify; verify | the domain's reviewer | `opus` / `high` |
+| Counter-review merge; check of a purely mechanical fix | the domain's reviewer + override | `sonnet` / `medium` |
+| Deferral pass | `<name>-reviewer` | `opus` / `high` |
 | Plan review; fidelity and architecture lenses | `<name>-reviewer` + override | `fable` / `high` |
+| Dogfood and runtime lenses | `<name>-reviewer` | `opus` / `high` |
 
-Defaults from the protocol's "Model routing"; adjust to this run, and name both model and effort in every row. The
-task table's `agent` column names the implementer agent, with `model/effort` when a task departs from its default.
+Defaults from the protocol's "Model routing"; adjust to this run, and name both model and effort in every row.
+
+### Escape hatches
+Tasks that leave those defaults (see "Escape hatches" in the protocol). Each hatch's reason is on its task row: an
+`opus/high` implementer for a task that is hard to write, a `fable` review for one whose errors would hide. At run time
+the orchestrator opens others on what a review shows, and reports them at each handoff.
+
+<Total: n `opus` implementers, n `fable` reviews, of n tasks. "None" is a good answer when the rows carry their own
+checks.>
 
 ## 7. Milestones and STOPs
 | Milestone | Goal | Detail | Gate lenses | STOP |
@@ -89,10 +92,14 @@ counter-review. `light` is for work whose mistakes are cheap and easy to see (do
 formatting, regenerated files, a rename the typecheck proves): in-model review only, covered across models by the
 milestone counter-review. <Name any kind of task in this run that is `light` for a reason not listed here.>
 
+The constitution is judged on the plan and at each milestone gate, not on every task. <Name any rule whose trigger
+the human asked to have checked as each task lands.>
+
 ### M1
 | id | goal | files | acceptance tests | depends on | size | agent | review | lane |
 |---|---|---|---|---|---|---|---|---|
 | M1-T1 | <goal> | <paths> | `<test file>`: • <assertion>; • <assertion> | — | S | `<name>-<domain>-implementer` | full | A |
+| M1-T2 | <goal> | <paths> | `<test file>`: • <the invariant, and the check that proves it> | M1-T1 | M | `<name>-<domain>-implementer` `opus/high`: <reason> | full, `fable` review: <reason> | A |
 
 ## 9. Risks
 <What could invalidate the plan, and how the run will notice early.>

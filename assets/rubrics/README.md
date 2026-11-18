@@ -18,7 +18,10 @@ or verification is missing. Extra coverage needs an identified undetected
 failure; equivalent behavioral evidence is sufficient. A test's cost is judged
 with its coverage: a test slower than what it proves requires, or one that
 repeats another's protection, is worth naming with its cheaper equivalent.
-Free-form reports need
+Structure is judged
+as well as behavior, as advice: a reviewer names a unit the change left doing
+two jobs, or state kept in two places, with what it costs the next change, and
+keeps such points apart from defects. Free-form reports need
 no finding taxonomy, special IDs, or agreement on every suggestion. The producer
 resolves supported material concerns and finishes when none remain.
 

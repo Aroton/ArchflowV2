@@ -38,15 +38,15 @@ Follow it with one sentence on where to resume.
 
 ## Model routing
 
-`PLAN.md` holds the routing: which generated agent, model and effort handle each task. The two are chosen separately. The agent follows the kind of work, because that decides what guidance the task needs (see "Run agents"). The model and effort follow how hard the task is: spend capability where an error is expensive and hard to detect, and save it where the work is well specified and a review will catch a slip.
+`PLAN.md` holds the routing: which generated agent, model and effort handle each task. The two are chosen separately. The agent follows the kind of work, because that decides what guidance the task needs (see "Run agents"). The model follows one rule: the cheapest model that can write the work writes it, and the stronger model is spent on reviewing it.
 
-Three roles split the run's cost:
+Three roles frame the run's cost:
 
-- **The orchestrator runs on `opus` at `high` effort.** Its context is re-read on every turn of a long session, so its model sets most of what a run costs. It keeps the judgment that needs the whole run in view: the requirements, the packets, the decision on each finding, merges, and the conversation with the human.
-- **The plan is written on the strongest model available (`fable` today), always.** An error in the plan is repeated in every task built on it, and writing it is one bounded spawn, not a session. So the planner is where the strongest model is the default, not the exception.
+- **The orchestrator runs on `opus` at `high` effort.** Its context is re-read on every turn of a long session, so its model sets a large part of what a run costs. It keeps the judgment that needs the whole run in view: the requirements, the packets, the decision on each finding, merges, and the conversation with the human.
+- **The plan is written on the strongest model available (`fable` today), always.** An error in the plan is repeated in every task built on it, and writing it is one bounded spawn, not a session. The planner is also how the strongest model's understanding reaches every cheaper agent: through the invariants, the interfaces and the checks it writes into the rows.
 - **Exploration runs on the cheapest model (`haiku`), at `xhigh` effort.** Locating code and describing what is there needs no strong model, but the planner builds on the notes, and Haiku is the one model that keeps gaining well past `high`. At its price the extra effort costs little; the planner reads the notes and looks up the rest itself.
 
-Other sub-agents do the reading and writing, most of them on a cheaper model than the orchestrator's. Defaults for the current Claude models, to adapt per run:
+**Sonnet writes, Opus reviews.** On the same model, writing a task costs about twice what reviewing it does. Every task is reviewed by an `opus` reviewer that did not write it, and every behavior change by another model family as well. That net is what lets a cheaper model write: most of what it gets wrong on a first pass comes back as findings, and a fix round on the cheap model costs little. Defaults for the current Claude models:
 
 | Work | Model | Effort |
 |---|---|---|
@@ -54,29 +54,50 @@ Other sub-agents do the reading and writing, most of them on a cheaper model tha
 | Explore during planning: locate code, map files, collect conventions and commands | `haiku` | `xhigh` |
 | Research that needs judgment: compare approaches, read a specification or a design | `sonnet` | `medium` |
 | Write the plan; detail a later milestone; a significant plan revision | `fable` | `high` |
-| Implement: plumbing, registries, mechanical or tightly specified changes | `sonnet` | `medium` |
-| Implement: core, algorithmic, correctness-critical, or interface-defining work | `opus` | `high` |
-| Implement: the few tasks where a subtle error is costly and a review is unlikely to catch it (concurrency, security boundaries, data migration, a novel algorithm) | `fable` | `high` |
-| Task review of a `full` task, and fix verify | `opus`; `fable` when the work under review was routed to `fable` | `high` |
-| Task review of a `light` task | `sonnet` | `medium` |
-| Merge a finished counter-review into the findings | `sonnet` | `medium` |
-| Verify a doubted finding | `opus` | `high` |
-| Deferral pass | `opus` | `high` |
+| Implement, and fix | `sonnet` | `high` |
+| Task review, of a `full` or a `light` task; fix verify; verify a doubted finding; deferral pass | `opus` | `high` |
+| Merge a finished counter-review into the findings; check a purely mechanical fix | `sonnet` | `medium` |
 | Plan review; fidelity and architecture gate lenses | `fable` | `high` |
 | Dogfood and runtime gate lenses | `opus` | `high` |
-| Fix | the model that implemented the task; `sonnet` for small, mechanical findings | as the implementer |
+
+### Escape hatches
+
+A task leaves those defaults only through a hatch. There are two kinds of reason, and they send a stronger model to different places:
+
+- **The task is hard to write.** A cheaper model would get it wrong or badly shaped, and review would catch it. The cost is rework: fix rounds, or a shape later tasks have already copied. The hatch is an **`opus` implementer**.
+- **The task is hard to check.** An error would pass its tests and both reviewers, because the tests come from the same reasoning as the code. The cost is a silent failure: lost data, a double charge, a broken access boundary. The hatch is a **`fable` reviewer**, with an `opus` implementer. The strongest model goes to the review because reviewing on it costs about half of implementing on it.
+
+**At plan time** the planner assigns hatches, since it sees the whole design before any code exists. It reaches for them in this order:
+
+1. **Write the check into the row.** State the invariant and the oracle that proves it: the reference values, the crash point after every commit compared with the uninterrupted run, the property that must hold for every input. A task with such an oracle is checkable whoever writes it, and often needs no stronger model at all.
+2. **Split or sharpen the row.** A row that seems to need a stronger writer is usually too large or leaves too much open.
+3. **Name an `opus` implementer** when the row still cannot be made small or tight enough: it defines an interface or a pattern that several later rows build on, so the shape should be right the first time; it leaves real design decisions to the implementer; or it integrates many units at once.
+4. **Name a `fable` reviewer** when the task is of the kind that fails silently: concurrency and idempotency, a security or access boundary, money, deleting or migrating data, a novel algorithm.
+
+Each hatch carries its reason in a clause on the task row, and the plan gives their total. The human sees the list at STOP 0 and approves it with the plan, so what the run spends above the defaults is known before it starts. Hatches the planner adds when it details a later milestone are listed, with reasons and the new total, under "Decisions to report". Hatches are typically a handful per milestone for `opus` and a few per run for `fable`; many more than that means step 1 or 2 was skipped. A `fable` implementer is not a planner's hatch: it happens only when the human names the task.
+
+**At run time** a hatch opens on what the first attempt shows, not on a prediction:
+
+- the first review finds a critical: that round's fixer runs on `opus`. A round has one fixer, on the model its hardest finding needs;
+- a fix fails its verify, or an implementer or fixer returns `blocked`: the next fresh agent runs one model up, at the same effort, and no higher than `opus`;
+- a critical is still open after two fix rounds on `opus`: one `fable` fixer takes the next round. Its fix gets the cross-model delta review as well as the verify, and a critical it leaves open is a halt for the human.
+
+Nothing else reaches `fable` at run time. A task that still fails on `opus` at `high` without a critical is rescoped, deferred or taken to the human, who may name a stronger model for it. Record a run-time hatch on the round's decision line.
 
 How to use the table:
 
 - **Always name the effort.** The models' own defaults differ (Opus runs at `medium` when none is given, Sonnet and Fable at `high`), so write `model` and `effort` into each generated agent's frontmatter and pass both on every spawn that differs from it. This skill asks for those per-spawn values; follow the plan's table.
-- **A reviewer is at least as strong as the work it reviews.** A generated reviewer serves several modes, so its frontmatter carries the task-review default and the other modes are per-spawn overrides.
-- **`high` is the floor for `opus` and `fable`.** A model usually loses a good deal between `high` and `medium`, so no route sends work to either below `high`. `medium` is for `sonnet` on work a review will catch.
-- **Raise the model before the effort.** Most of a model's gain arrives by `high`; `xhigh` and `max` cost many more tokens for an uneven gain. Haiku is the exception: it is cheap enough, and gains enough, to explore at `xhigh`. When an agent returns `blocked`, or a fix still fails its verify after two fix rounds, send the next fresh agent one model up at the same effort. Keep `xhigh` for a task that has already failed at `fable` and `high`.
-- **Cost scales with the tier:** per token, Opus costs about twice Sonnet and Fable about twice Opus, and Haiku costs a small fraction of Sonnet. A run with most tasks on `fable` usually means the tasks are too large or under-specified; split them or sharpen the packets instead.
-- **The plan-writing route does not move down.** The plan may adapt every other row, and a run may route more work to a cheaper model. Writing the plan stays on the strongest model.
-- **Size before routing.** If a task mixes levels of difficulty, split it, or route it to the more demanding one. A task that spans domains is split the same way (see "Run agents").
+- **A reviewer is at least as strong as the work it reviews.** The defaults give that, except for the verify of a `fable` fixer, which the delta review backs. A generated reviewer serves several modes, so its frontmatter carries the task-review default and the other modes are per-spawn overrides.
+- **Fixes and their checks are routed by the finding, not the task.** Most findings on a hard task are still small: a missing case, a test that cannot fail, a wrong clock read. A fix starts on `sonnet` whatever wrote the task, unless a run-time hatch applies. A fix verify is a closed question with a stated basis, so it stays on `opus` even for a task with a `fable` reviewer, and drops to `sonnet` at `medium` when every finding in the round is purely mechanical (a rename, a reindent, a moved import). When a fix's reasoning needs a second opinion, that is the cross-model delta review, not a stronger verifier from the same family.
+- **The strongest model is usually the scarcest.** On a subscription it has its own, smaller allowance, and a run can exhaust it while the other models have barely been used. It is spent on the plan and its review, the fidelity and architecture lenses, the reviews the plan names, and the rare `fable` fixer. When a `fable` spawn fails on the allowance, or the human says it is short, the named reviews fall back to `opus` first, then the lenses; record each fallback under "Decisions to report". Plan work waits for the allowance, or for the human to name another model.
+- **`high` is the floor for implementing, fixing and reviewing.** A model usually loses a good deal between `high` and `medium`. `medium` is for `sonnet` on mechanical work: merging a finished counter-review, checking a rename or a reindent.
+- **Raise the model before the effort.** Most of a model's gain arrives by `high`; `xhigh` and `max` cost many more tokens for an uneven gain. Haiku is the exception: it is cheap enough, and gains enough, to explore at `xhigh`. `xhigh` on `opus` or `fable` is the human's to name.
+- **Cost scales with the tier.** Per token, Opus costs about twice Sonnet and Fable about twice Opus, and Haiku costs a small fraction of Sonnet.
+- **The plan-writing route does not move down.** The plan may adapt every other row. Writing the plan stays on the strongest model.
+- **A task that spans domains is split** (see "Run agents"), as one that mixes levels of difficulty is.
+- **Report what the routing bought.** The task log records which model wrote each task and how many fix rounds it took, and each handoff totals them (see "Context hygiene"). That is how the human, and the planner of the next milestone, learn whether the cheaper writer is holding up or the hatches need to move.
 
-Model names age. When newer models exist, keep the shape (the cheapest model explores, a cheap one does well-specified work, a stronger one orchestrates and does core work and review, the strongest writes the plan and takes the rare hard task) and record the run's mapping in `PLAN.md`.
+Model names age. When newer models exist, keep the shape (the cheapest model explores, a cheap one writes, a stronger one orchestrates and reviews, the strongest writes the plan, judges each milestone and reviews the rare task whose errors hide) and record the run's mapping in `PLAN.md`.
 
 ## Planning agents
 
@@ -97,7 +118,7 @@ An explorer describes what is there. It does not propose a design, and it says s
 
 - **First plan.** Read the brief, this file, and `templates/`. Read the research, then look up in the code whatever the research leaves open; the research is a map, not a limit. Write `PLAN.md` from `templates/PLAN.md`, the consequential choices as ADRs in `DECISIONS.md` (marked `human` when the brief records the human's decision, `orchestrator` otherwise), the generated agents, and `BRIEF.md`.
 - **Revision.** The prompt carries the counter-review points the orchestrator accepted, or the human's revision. Change what they require in the plan, the ADRs, the agents and `BRIEF.md`, and keep the rest.
-- **Milestone detail.** For a milestone marked "detailed at start": read the plan, `PROGRESS.md` (handoffs, deferred findings, decisions) and `DECISIONS.md`, look at the merged code the milestone builds on, and write the milestone's task rows, each with its agent and review depth. Correct an architecture detail the run has shown to be wrong, and add or revise a domain's agents when the milestone opens a kind of work the roster does not cover; say so in the return.
+- **Milestone detail.** For a milestone marked "detailed at start": read the plan, `PROGRESS.md` (handoffs, deferred findings, decisions) and `DECISIONS.md`, look at the merged code the milestone builds on, and write the milestone's task rows, each with its agent, its review depth and any hatch with its reason (see "Escape hatches"). Correct an architecture detail the run has shown to be wrong, and add or revise a domain's agents when the milestone opens a kind of work the roster does not cover; say so in the return.
 
 `PLAN.md` holds:
 
@@ -107,7 +128,7 @@ An explorer describes what is there. It does not propose a design, and it says s
 - the commands, in the three tiers of "Where tests run": the task check that agents run on a task's own test files, the merge check, and full validation, with how long the full suite takes today;
 - the run's test policy, from the defaults under "What tests to write";
 - the agent roster, with what each agent covers and why it is its own agent (see "Run agents");
-- model and effort routing per level of difficulty, starting from the defaults under "Model routing";
+- model and effort routing, from the defaults under "Model routing", and the escape hatches: which rows get an `opus` implementer or a `fable` reviewer, each with its reason on the row, and their total;
 - milestones;
 - the task table, with a review depth on every row (see "Review depth");
 - declared STOPs.
@@ -244,11 +265,11 @@ Depth follows what the diff does, not what the row expected. Raise a task to `fu
 A change gets one open-ended review. A fresh reviewer asked to review again finds something every time, because it has no memory of the round before, so a second open-ended pass over the same work mostly re-judges what the first already judged. After a fix, the question is narrower, and it has an answer: is each finding fixed, and did the fix break anything? Steps 2–5 are the review; step 6 is that check.
 
 1. **Implement.**
-   - Spawn the implementer agent the task's row names, in implement mode, with worktree isolation. Its setup brings the fresh worktree to the base commit you name (`git reset --hard <sha>` is safe in a fresh worktree) and installs dependencies.
+   - Spawn the implementer agent the task's row names, in implement mode, with worktree isolation, on `opus` at `high` when the row carries that hatch. Its setup brings the fresh worktree to the base commit you name (`git reset --hard <sha>` is safe in a fresh worktree) and installs dependencies.
    - It writes code and tests, runs the plan's task check on the task's own test files until it passes, reports the command, the result and how long it took, writes `reviews/<id>-impl.md` in its worktree when a fixer or reviewer needs more than its short return, and never commits.
    - Run tasks in parallel only when their file sets do not overlap: typically a handful at once. `wait.sh` keeps their installs and checks from all running at the same moment, so a batch wider than the machine can check mostly waits in its queue.
 2. **Review, once.** When the implementer returns, start the task's reviews together. Other tasks keep moving while they run.
-   - Spawn a fresh reviewer: the reviewer agent of the task's domain, which also takes this task's later merge, fix-verify and verify spawns. Give it the worktree path, the base commit, the packet, the task's review depth, the implementer's `EXTRA` and reported check result, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It reviews the diff and its tests against the acceptance criteria by reading them, without repeating the task check, writes its findings table, and returns its verdict without waiting for the counter-review.
+   - Spawn a fresh reviewer: the reviewer agent of the task's domain, which also takes this task's later merge, fix-verify and verify spawns. It runs on `fable` when the row names a `fable` review. Give it the worktree path, the base commit, the packet, the task's review depth, the implementer's `EXTRA` and reported check result, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It reviews the diff and its tests against the acceptance criteria by reading them, without repeating the task check, writes its findings table, and returns its verdict without waiting for the counter-review.
    - For a `full` task, run the cross-model counter-review on its worktree yourself, in the background (see below). A `light` task has none.
 3. **Merge the counter-review** (`full` tasks). When both have finished and the counter-review produced any reports, spawn a fresh reviewer in merge mode, with the review file, the worktree path, the packet, and the counter-review's `summary.json`. It folds each counter-review point that matches an existing row into that row, adds a row for every other material point, adds each `human_review_reasons` entry as a row with source `human-review`, and updates the verdict. Then:
    - read only the verdict line and the table: `grep '^|' <review>`;
@@ -267,16 +288,17 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
      - it is a real bug, not a style point: wrong output in an edge case, lost data, a security or resource leak;
      - the fix is cheap now while the context is fresh, and expensive to rebuild later;
      - no later task touches that code, so deferring means nobody owns it.
+   - **A `structure` row** is decided the same way, and its knock-on effect is usually the whole question: fix it now when later tasks will build on that shape or copy it, because every one of them then pays for it and a later reorganization touches all of them. A small one goes to the fixer with the task's other findings. One that would reshape code other tasks are working in, or that was there before the task, becomes a task of its own, so the reorganization gets its own review and does not hide inside a behavior change. A run is meant to leave the code better organized than it found it, not only working.
    - **Defer** when it does not matter yet: it is cosmetic, a task that will rework that code anyway is the better place for it, or fixing it now would widen this task's scope. Record why in `PROGRESS.md` (see below).
    - **Dismiss** a finding that is wrong or not worth doing at all, with the reason in the review file.
    - Write each decision as a line under the round's table in the review file: `<row id>: fix | defer → <owner> | dismiss | keep | revert | decided | halt — <reason>`.
-   - Fix-now findings go to a **fresh** fixer: a new spawn of the task's implementer agent in fix mode, given the review file, the finding ids, the packet and the worktree path. Never resume the implementer for fixes.
+   - Fix-now findings go to a **fresh** fixer: a new spawn of the task's implementer agent in fix mode, given the review file, the finding ids, the packet and the worktree path. It runs on `sonnet` unless a run-time hatch under "Escape hatches" applies; say which on the decision line. Never resume the implementer for fixes.
    - Before spawning the fixer, record the worktree's current tree, so the fix can be checked on its own: `cd <worktree> && git add -A && git write-tree > <run dir>/packets/<id>-pre-r<k+1>.tree && git reset -q`. When the fixer returns, record the fixed tree the same way into `<id>-post-r<k+1>.tree`.
    - When nothing needs fixing now, the task goes straight to the merge.
    - Deferred findings go under "Deferred findings" in `PROGRESS.md`, each with a reason and the task that owns it, and into that task's packet.
    - You may make trivial fixups yourself, typically 10 lines or fewer, in the worktree. List one made after the review in the task's review file as not separately reviewed; the milestone counter-review covers it. Anything larger is a fix: it goes to a fixer and gets checked.
 6. **Check the fix.** Check what the fixer changed, not the task again.
-   - **Always: fix verify.** Spawn a fresh reviewer in fix-verify mode with the review file, the finding ids sent to the fixer, both tree IDs (the contents of the two `.tree` files), the packet, and the fixer's `EXTRA` and `ORACLE` lines and its reported check result. It appends round `r<k+1>` to the review file. For each finding it says whether the fix resolves it and on what basis:
+   - **Always: fix verify.** Spawn a fresh reviewer in fix-verify mode, on `opus`, or on `sonnet` at `medium` when every listed finding is purely mechanical, with the review file, the finding ids sent to the fixer, both tree IDs (the contents of the two `.tree` files), the packet, and the fixer's `EXTRA` and `ORACLE` lines and its reported check result. It appends round `r<k+1>` to the review file. For each finding it says whether the fix resolves it and on what basis:
      - `test`: a test exercises the finding's failure scenario, the fixer saw it fail before the fix and pass after, and its expected values do not come from the fixer's own computation;
      - `reference`: the verifier compared the result with the run's reference itself;
      - `reading`: neither; it could only read the code and judge it right.
@@ -292,7 +314,7 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
      | fixes a correctness finding in derived logic that only the cross-model reviewer raised, and the in-model reviewer missed or disputed | verify and delta review |
      | is a rework: it replaces the approach, or changes an interface other tasks build on | verify and delta review |
 
-     Lean toward the delta review for the tasks the plan routes as subtle and hard to review, whenever a fix touches their core logic. Write the row that applied on the round's decision line. When the kind of finding already settles it, run the delta review beside the verifier; otherwise decide from the verifier's result. See "Delta review of a fix" below for how to run one. Its points are merged into round `r<k+1>` by a fresh merge-mode reviewer and decided like any others.
+     Lean toward the delta review for the tasks the plan gives a `fable` reviewer, whenever a fix touches their core logic. Write the row that applied on the round's decision line. When the kind of finding already settles it, run the delta review beside the verifier; otherwise decide from the verifier's result. See "Delta review of a fix" below for how to run one. Its points are merged into round `r<k+1>` by a fresh merge-mode reviewer and decided like any others.
    - **Typically one delta review per task.** Its findings are fixed and verified. Run another only when that fix is again derived logic the verifier cannot confirm.
    - A finding the verifier reports as not resolved, or a regression, goes to another fresh fixer and another fix verify, with fresh tree IDs. A verify can only reopen what it was asked to check, so these rounds end.
    - Default limit: three fix rounds. After that, defer or dismiss what is left that is not critical, or rescope the task. A critical still unresolved is a halt for the human.
@@ -324,9 +346,12 @@ The human comes back to this repository long after the run. A worktree, branch o
 - a test reviewer;
 - a constitution reviewer when constitution rules exist.
 
-That is the first review of a change. The script's optional fifth argument names a subset of those roles (`counter-reviewer`, `test-reviewer`, `adjudicator` for the constitution reviewer, comma-separated), for a pass that should not repeat a concern that already ran:
+The script's optional fifth argument names a subset of those roles (`counter-reviewer`, `test-reviewer`, `adjudicator` for the constitution reviewer, comma-separated). Omitted, every applicable role runs. A run uses each role where it has something to say:
 
-- The test reviewer and the constitution reviewer run once per task. Once each has reported, do not run it again for that task: its findings are fixed and verified like any others, and the milestone counter-review sees the integrated result.
+- **A task's first review runs `counter-reviewer,test-reviewer`.** The test reviewer runs once per task. Once it has reported, do not run it again for that task: its findings are fixed and verified like any others, and the milestone counter-review sees the integrated result.
+- **The constitution reviewer runs on the plan and on each milestone's integrated result**, in the plan review and the whole-milestone counter-review, which name no roles. The plan review judges the rules for the whole run, and a task that follows its approved row gives the reviewer nothing new to judge. A trigger that matches therefore reaches you at the gate, for work already merged on the run branch and before any STOP, push or pull request; triage it there as "Human-review reasons" describes.
+- **Approval rules do not wait for the gate.** A path under `approval_rules` in `.archflow/config.yaml` is matched on every call whatever roles it names, so a task that touches one still reports it in its own review.
+- **Add `adjudicator` to a task's review** when the human asked at STOP 0 to hear about a rule's trigger as each task lands, or when the implementer's `EXTRA` shows a task departing from its approved row in a way a rule is about (access control, secrets, a public contract, database behavior). Record a standing choice in `PLAN.md`.
 - A delta review runs `counter-reviewer` alone.
 - A role whose dispatch failed has not reported. Retry that role alone.
 
@@ -337,7 +362,7 @@ out=<run dir>/packets/<id>-cr<k>; mkdir -p "$out"
 grep -E '^\| <id> \|' <run dir>/PLAN.md > "$out/ask.txt"   # the task row, acceptance tests included
 cat <run dir>/packets/<id>.md <run dir>/BRIEF.md > "$out/plan.txt"
 printf '%s\n' "<check command>: <result the implementer or fixer reported>, in <how long it took>" > "$out/verification.txt"
-bash <skill dir>/scripts/counter-review.sh <worktree> "$out" claude implementation
+bash <skill dir>/scripts/counter-review.sh <worktree> "$out" claude implementation counter-reviewer,test-reviewer
 ```
 
 Run the last command in the background; reviews often take several minutes. It prints one status line and writes `result.json`, `summary.json` and `exit` into `$out`. `--producer` is the client running the run (`claude` in Claude Code). The subject is every changed and untracked file in the worktree outside `.archflow/runs/`: the run's own ledger and notes are context for the reviewers, not work under review. The review requires the worktree HEAD to still be the base, which holds because implementers and fixers never commit.
@@ -408,13 +433,13 @@ Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds
 A milestone ends with full validation (see "Where tests run") and then the gate lenses `PLAN.md` declares, which judge a result already known to build and pass instead of running the suite again. A useful default set, each lens a fresh reviewer run in parallel:
 
 - **fidelity:** the result against the reference or requirements;
-- **architecture:** drift from the plan's architecture, and shortcuts that force rework;
+- **architecture:** drift from the plan's architecture, shortcuts that force rework, and the shape of the milestone's code taken together: responsibilities that spread across tasks, units that grew past one job as several tasks added to them, the same state or rule now owned in two places, patterns that diverged between lanes. The task reviews see one diff each; this lens is where the sum is judged, and what it finds becomes cleanup tasks. Give it a bounded reading list: the milestone's diff stat, the files that changed most, and the milestone's `structure` rows, not the whole codebase;
 - **dogfood:** use the result the way its consumer will, and report the friction;
 - **runtime:** run it end to end.
 
-Run the whole-milestone counter-review as well, by default, with every role. It is the cross-model coverage for `light` tasks, for fixes that were only verified, and for how the tasks fit together, and it is where the test and constitution reviewers see the integrated result. Skip it for a small milestone whose tasks were all `full` and whose fixes were small, and say so in the gate row.
+Run the whole-milestone counter-review as well, with every role. It is the cross-model coverage for `light` tasks, for fixes that were only verified, and for how the tasks fit together. It is where the test reviewer sees the integrated result, and it is the constitution review of the milestone's work, which the task reviews did not run. For a small milestone whose tasks were all `full` and whose fixes were small, narrow it to `adjudicator` alone instead of skipping it, and say so in the gate row; skip it entirely only when every task of the milestone already ran the constitution reviewer.
 
-Verdict: PASS, PASS-WITH-DEFERRALS, or FAIL. Any confirmed critical is a FAIL. A FAIL produces fix tasks, each with a review depth by the usual criteria. The one-review rule holds here too: a failed lens re-runs only to check that its own findings are fixed, and the milestone counter-review is not run again. Decide a gate's lesser findings the way the per-task loop does: one with knock-on effects for the next milestone becomes a fix task now.
+Verdict: PASS, PASS-WITH-DEFERRALS, or FAIL. Any confirmed critical is a FAIL. A FAIL produces fix tasks, each with a review depth by the usual criteria. The one-review rule holds here too: a failed lens re-runs only to check that its own findings are fixed, and the milestone counter-review is not run again. The fix tasks a gate produces are covered by the next milestone's counter-review; after the last milestone, run `adjudicator` once over them before the final STOP. Decide a gate's lesser findings the way the per-task loop does: one with knock-on effects for the next milestone becomes a fix task now.
 
 Record a gate row in `PROGRESS.md`. A gate is not a STOP unless the plan declares one there, so do not stop to report it: the human is not watching mid-run. Include the gate's result in the next message that ends a turn, whether a STOP report, a halt, or the session handoff.
 
@@ -446,10 +471,13 @@ Reviewers write one table per round:
 ```
 
 - `source` says where the row came from:
-  - `self`, `counter`, `tests`, `constitution`: a finding from that reviewer. A point two reviewers raised independently is one row naming both, such as `self+counter`: agreement between model families is strong evidence, and a `counter` row the in-model reviewer missed marks where that family may be blind;
-  - `carried`: a deferred finding this task was meant to pick up; the claim says whether it is fixed;
-  - `unplanned`: work in the diff that the task row did not ask for. The claim says what it is and whether the task needed it; the suggested fix is `keep`, `trim` or `revert`, with the reason;
+  - `self`, `counter`, `tests`, `constitution`: a finding from that reviewer. A structure point from the counter-reviewer alone keeps source `counter` and starts its claim with `Structure:`; it is `structure+counter` only when the in-model structure pass made the same point. A point two reviewers raised independently is one row naming both, such as `self+counter`: agreement between model families is strong evidence, and a `counter` row the in-model reviewer missed marks where that family may be blind;
+  - `structure`: the in-model reviewer's judgment of how the task leaves the code organized: a unit that now does two jobs, state or a rule kept in two places, a parallel pattern. The claim names what it costs the next change, and the suggested fix is the smallest reorganization that removes it;
+  - `carried`: the deferred findings this task was meant to pick up. Those that are fixed share one row, which names each with its evidence; one still open, or only partly fixed, gets its own row at its original severity;
+  - `unplanned`: work in the diff that the task row did not ask for. Sound work the reviewer would keep shares one row, an item to a clause. An item gets its own row only when the reviewer recommends `trim` or `revert`, when keeping it changes what a task row, a criterion or the architecture says, or when it has a concrete consequence;
   - `human-review`: a counter-review `human_review_reasons` entry, quoted in the claim, with the reviewer's check of whether the change it names is really in the diff.
+- The column holds one of those values and nothing else, or two reviewer sources joined with `+`. A plan that adds a row kind of its own names its value. Anything more about where a row came from goes in the claim, so the run can later count what each reviewer found.
+- Every row is one you decide and one you read on every later turn, so a reviewer writes a row only for something that needs a decision. What is merely true of the diff goes in the review's prose.
 - The suggested fix must be concrete enough for a fixer with no other context.
 - When a finding has knock-on effects, such as later tasks building on it or a pattern others will copy, the failure scenario says so. That is what decides fix now or defer.
 - Every material counter-review point is in the table, as its own row or folded into the row it matches. A reviewer that disagrees with one keeps the row and gives its evidence; you decide.
@@ -458,7 +486,7 @@ Reviewers write one table per round:
 Severity:
 
 - **critical:** wrong behavior or a crash in scope, a broken build or broken tests, an invariant violation, or a departure from the architecture that breaks something or that later tasks would build on wrongly;
-- **major:** a missing acceptance criterion, a fidelity error against the reference, or missing tests for core behavior;
+- **major:** a missing acceptance criterion, a fidelity error against the reference, missing tests for core behavior, or a `structure` problem later tasks will build on;
 - **minor:** every other defect;
 - **note:** not a defect, but a row you need to decide: sound unplanned work, a human-review reason, or a criterion or plan detail that the code shows to be wrong. Notes are not counted in the verdict.
 
@@ -474,9 +502,9 @@ Task table columns:
 | id | goal | files | acceptance tests | depends on | size | agent | review | lane |
 ```
 
-- **Agent** names the generated implementer agent that takes the task (see "Run agents"), followed by `model/effort` when the task departs from that agent's default.
-- **Review** is the task's depth, `full` or `light` (see "Review depth").
-- **Acceptance tests** name the test file and list concrete assertions.
+- **Agent** names the generated implementer agent that takes the task (see "Run agents"), followed by `opus/high` and the reason when the task has that hatch (see "Escape hatches").
+- **Review** is the task's depth, `full` or `light` (see "Review depth"), followed by `fable` review and the reason when the task has that hatch.
+- **Acceptance tests** name the test file and list concrete assertions. For a task whose errors would otherwise hide, they carry the oracle: the invariant, and the check that proves it.
 - **Dependencies**: `Tn` is a hard edge; `Tn (soft)` is a preference.
 - **Lanes** group tasks that touch disjoint files, so they can run in parallel.
 - **Carry-overs**: deferred findings a task must pick up are appended to its goal, citing their review id.
@@ -495,6 +523,7 @@ The session handoff in `PROGRESS.md` records:
 
 - tasks merged, as a count of done over total;
 - the merge checks and the full validation result, with how long the suite took;
+- what the routing bought: for each model that wrote tasks this session, how many it wrote, the findings their reviews raised by severity (structure rows counted apart: source `structure`, or a claim that starts `Structure:`), the fix rounds they took, and each run-time hatch with the task it opened on;
 - anything in flight;
 - decisions made, each with how to undo it;
 - the carry-over items the next tasks must take;

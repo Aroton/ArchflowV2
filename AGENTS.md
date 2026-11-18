@@ -6,6 +6,7 @@ A lightweight, human-centered development workflow for Claude Code, Codex, and G
 
 - `skills/` holds the portable Agent Skills, the single source of truth. The installer copies them to each client's skill-discovery directory.
 - `src/` holds the `archflow-local` CLI: `review` (the counter-review) and `init` (the repository scaffold). `dist/` is the tracked offline bundle the installer ships; `assets/` holds the shipped config template, constitution rules, and rubrics.
+- `PURPOSE.md` says what ArchFlow is trying to accomplish and how to measure it, with no mechanism. It is written by the maintainer, not produced by `/archflow-explore`.
 - `docs/` holds the maintained documentation set (see Documentation); `test/` holds the vitest suites.
 
 ## Skills
@@ -110,10 +111,12 @@ Working and maintainable beats perfect. Simplicity does not override the human t
 
 ArchFlow is written for models that keep improving. Skills must encode *intent and trust boundaries*, not workarounds for model weaknesses — workarounds become ceilings as models get better. When writing or editing any skill, apply this litmus test to every rule: **is it here because the model used to be bad at something, or because the human needs it?** Only the second kind gets "never/must/exact" language.
 
+**What ArchFlow is for is in `PURPOSE.md`: the best automated code for the least compute.** Read that page before reviewing or changing a skill or a workflow, and judge the change against its measures and its "Judging a change" questions. A change that adds a spawn, a reviewer or a stronger model says what it buys.
+
 Within a `/archflow-run`, these human trust boundaries are hard rules:
 
 - No implementation starts until the human explicitly approves the plan, and every declared STOP is approved explicitly; silence is not approval.
-- The plan is written by a planner sub-agent on the strongest model available, never by the orchestrating session and never on a cheaper model, unless the human names another model for it. The orchestrating session is meant to run on a cheaper model (`opus` at `high` effort today).
+- The plan is written by a planner sub-agent on the strongest model available, never by the orchestrating session and never on a cheaper model, unless the human names another model for it. The orchestrating session is meant to run on a cheaper model (`opus` at `high` effort today). A session on any other model, stronger or weaker, does no run work until the human explicitly says to continue on it.
 - Every task gets the cross-model counter-review. If it cannot run, report the blocker and do not merge the task; never substitute self-review. The human may explicitly waive it for a named task; record the waiver in the run's `DECISIONS.md`.
 - Never push, deploy, install into machine-global locations, or delete user data without the human asking.
 - Correspondence with the human is conversational and human-readable: what needs attention, why it matters, and the choices in plain language. Keep digests, JSON, internal paths, and protocol codes out of it unless asked for diagnostics.

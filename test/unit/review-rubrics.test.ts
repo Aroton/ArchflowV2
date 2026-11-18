@@ -14,7 +14,7 @@ import { loadTestRubric } from "../helpers/rubrics.js";
 // installed bundle.
 const PINNED_RUBRIC_DIGESTS = Object.freeze({
   "simple-plan-v1": "4d9d7e6673499cae4f3078fe05413de9b59690a12584b29d162acd8923e35f6a",
-  "implementation-v1": "a9850364b58197ad5a861ea99ce42b029417c19c25d6bf349e7d4dbf15692ebf",
+  "implementation-v1": "83382c80eaedb22f1bdece1d44757fa92f9b866992ad87b6a4ea94bfe24499c2",
 } satisfies Record<CanonicalRubricId, string>);
 
 const roots: string[] = [];

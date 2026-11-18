@@ -5,9 +5,10 @@
 #
 #   bash counter-review.sh <directory> <out-dir> <producer> <plan|implementation> [roles]
 #
-# [roles] is a comma-separated subset of counter-reviewer,test-reviewer,adjudicator. Omit it for the first review of a
-# change, which runs every applicable role. Name roles for a follow-up pass, so a concern that already ran is not
-# repeated: counter-reviewer alone for a review of a fix, or one failed role for a retry.
+# [roles] is a comma-separated subset of counter-reviewer,test-reviewer,adjudicator (the constitution reviewer). Omit it
+# to run every applicable role, as a plan review and a whole-milestone review do. A run names roles for its other calls, for
+# example counter-reviewer,test-reviewer for a task's first review, counter-reviewer alone for a review of a fix, or one
+# failed role for a retry.
 #
 # <out-dir> must hold ask.txt and plan.txt, plus verification.txt for an implementation review. The script writes
 # payload.json, result.json (the full review), summary.json (what a reviewer reads), and exit. It prints one line.

@@ -101,7 +101,7 @@ design-conformance
 
 ## text
 
-Use the supplied plan or design to understand intent and constraints. Report a discrepancy only when it causes a concrete problem in behavior, interfaces, or subsequent work; different file organization or wording alone is not a defect.
+Use the supplied plan or design to understand intent and constraints. Report a discrepancy only when it causes a concrete problem in behavior, interfaces, or subsequent work; a file layout or wording that differs from the plan is not by itself a defect.
 
 ## blocking
 
@@ -166,6 +166,18 @@ Report unused code or speculative extensions only when they cause a concrete beh
 ## blocking
 
 true
+
+## id
+
+structure
+
+## text
+
+Judge how the change leaves the code organized: whether each changed module, class, or function still has one clear responsibility, whether each piece of state and each rule has one owner, and whether the change follows the repository's existing patterns instead of adding a parallel one. Report a structural problem the change introduced or materially worsened, such as a unit that now mixes unrelated responsibilities, the same state or rule kept in two places, or logic placed where the next change will not look for it. Name the concrete cost to whoever changes this code next and the smallest reorganization that removes it. Mark these points as structure, apart from defects: they are advice on the shape of the code, not a claim that it misbehaves. Duplicated logic with a divergence risk stays under duplication. Naming, formatting, and personal style are not structure.
+
+## blocking
+
+false
 
 ## id
 

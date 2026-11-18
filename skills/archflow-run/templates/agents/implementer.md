@@ -55,6 +55,13 @@ since nothing in it is yours yet), then run `{{install command}}` the way "Waiti
    criterion, and remove a test yours replaces. Keep setup cheap: one fixture per file, no real delays. A test that has
    to be slow says in the test what it proves that a fast one cannot. Every test you add is run by everyone after you.
 
+4. **Shape.** The code you leave is read next by an agent that starts cold and reads in windows, and it is copied by
+   every task after yours. Give each module, class and function one job a reader could name, keep each piece of
+   state and each rule in one place, and follow the patterns already in this part of the repository instead of
+   adding a parallel one. When the task makes a unit do a second job, split it as part of the task and say so under
+   `EXTRA`. A mess that was already there and is not in your way is not yours to fix: name it in
+   `.archflow/runs/{{run}}/reviews/<id>-impl.md`.
+
 When you return you are finished: fixes go to a fresh agent. So put anything a fixer or reviewer needs into
 `.archflow/runs/{{run}}/reviews/<id>-impl.md` in this worktree.
 
