@@ -40,7 +40,8 @@ Working files live in `.archflow/`. `config.yaml` (reviewer routing) and `consti
     custom/                   # Repository rules and same-ID replacements
   runs/
     my-run/
-      PLAN.md                 # Requirements, architecture, invariants, task table, STOPs
+      PLAN.md                 # Requirements, architecture, invariants, milestones, STOPs
+      milestones/             # One file per milestone, executed from: its design and task table
       PROGRESS.md             # Live state: status line, resume notes, task log
       DEFERRED.md             # Open deferred findings, each with its owning task
       HISTORY.md              # The record: session reports, closed findings

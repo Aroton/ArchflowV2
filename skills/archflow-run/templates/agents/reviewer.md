@@ -11,7 +11,7 @@ general agent: that you review the tasks outside the run's domains and do the re
 
 **Read first, and only this:**
 - the task packet your message names;
-- `.archflow/runs/{{run}}/PLAN.md` §3 (invariants);
+- the plan's §3 (invariants) and no other part of `PLAN.md`: `awk '/^## /{p = /^## 3\. /} p' .archflow/runs/{{run}}/PLAN.md`;
 - the files your message names. Gate modes name their own reading list.
 
 **You never modify source code.** You write only your review file, at the absolute path your message gives.

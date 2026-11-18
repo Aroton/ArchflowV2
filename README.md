@@ -114,7 +114,8 @@ It needs the `archflow-local` launcher and authenticated reviewer CLIs. The run 
     custom/                         # Preserved additions and ID-based replacements
   runs/
     my-run/                         # One directory per orchestrated run
-      PLAN.md                       # Requirements, architecture, invariants, task table, STOPs
+      PLAN.md                       # Requirements, architecture, invariants, milestones, STOPs
+      milestones/                   # One file per milestone, executed from: its design and task table
       PROGRESS.md                   # Live state: status line, resume notes, task log
       DEFERRED.md                   # Open deferred findings, each with its owning task
       HISTORY.md                    # The record: session reports, closed findings

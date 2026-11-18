@@ -10,7 +10,8 @@ Planning has its own file, `PLANNING.md`: the planning agents, the run's generat
 
 ```
 .archflow/runs/<name>/
-  PLAN.md          requirements, architecture, invariants, commands, routing, milestones, task table, STOPs
+  PLAN.md          the whole run: requirements, architecture, invariants, commands, routing, milestones, STOPs
+  milestones/      M<n>.md, one per milestone: what it is executed from, its design and its task table
   PROGRESS.md      live state: status line, pending question, resume notes, milestone board, task log, decisions to report, gate log
   DEFERRED.md      the open deferred findings, each with the task that owns it; read by owner, and whole at a deferral pass
   HISTORY.md       the record: each session's report and every closed deferred finding; added to, not read at resume
@@ -36,7 +37,13 @@ Follow it with one sentence on where to resume.
 
 ## Resume (start of every execution session)
 
-1. Read `PROGRESS.md`. Read `PLAN.md` by section, not whole when it is large. Do not read `HISTORY.md` or, outside a deferral pass, the whole of `DEFERRED.md`, and do not read research or reference material yourself; sub-agents read it through packets.
+1. Read `PROGRESS.md` and the current milestone's file, `milestones/M<n>.md`: it is what the milestone is executed from. From `PLAN.md` read only the shared part, the sections whose heading ends in `(shared)`: requirements, invariants, commands, routing, milestones, the task conventions and risks. Select them by the mark instead of opening the file:
+
+   ```bash
+   awk '/^## /{shared = / \(shared\)$/} shared' <run dir>/PLAN.md
+   ```
+
+   The unmarked sections, the architecture and the reference, are the planner's: the milestone's file carries what its tasks need from them, and the planner is the one reader of the whole plan. Open one of them, or a finished milestone's row, only when a decision in front of you turns on it. Do not read `HISTORY.md` or, outside a deferral pass, the whole of `DEFERRED.md`, and do not read research or reference material yourself; sub-agents read it through packets.
    - Read `DECISIONS.md` as an index: `grep -n -A1 '^## ADR' <run dir>/DECISIONS.md` lists each decision's title with who made it. Open a decision in full when the work at hand touches its subject, and always before you decide something a decision marked `human` covers.
 2. Run `git status`, `git log --oneline -15` and `git worktree list`.
    - Each merged task has a commit whose subject starts with `<name> <id>:`. When the task log and git disagree, git wins: correct the log.
@@ -121,7 +128,7 @@ The run learns what its agents should have been told. When the same finding retu
 - the task row;
 - the goal and files of each dependency;
 - deferred findings this task carries: `grep -n '→ <id>' <run dir>/DEFERRED.md`;
-- the plan sections the row cites, and the plan's code-shape entries for the files the task touches;
+- the milestone design entries the row cites, and the code-shape entries for the files the task touches;
 - any external reference material the agent needs verbatim.
 
 Agent sandboxes may not reach the network, so fetch references into the packet instead of trusting an agent to fetch them. Agents read the packet instead of the design documents.
@@ -200,7 +207,7 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
    - **Unplanned work** (source `unplanned`, and the implementer's or fixer's `EXTRA`): keep, trim or revert it. This is your call, not the human's, unless keeping it would be a decision on the human's list.
      - Keep it when the task needed it, or when it is a correct fix that costs less to keep than to redo.
      - Trim or revert it when it widens the run without need, or move it to its own task when it deserves its own review.
-     - When keeping it changes what the task row, a criterion or the architecture says, correct `PLAN.md` and the packet, so later checks judge against the corrected row, and record the call as the skill's "Who decides" describes.
+     - When keeping it changes what the task row, a criterion or the architecture says, correct the plan (`PLAN.md`, or the row in its milestone file) and the packet, so later checks judge against the corrected row, and record the call as the skill's "Who decides" describes.
      - A reverted piece goes to the fixer with the other fix-now rows.
    - **A criterion or plan detail the code has shown to be wrong:** correct the plan instead of bending the code to it, on the same terms.
    - **Fix now** every confirmed critical, and any major or minor where leaving it costs more later:
@@ -279,7 +286,7 @@ For a `full` task's first review, write its inputs into `<run dir>/packets/<id>-
 
 ```bash
 out=<run dir>/packets/<id>-cr<k>; mkdir -p "$out"
-grep -E '^\| <id> \|' <run dir>/PLAN.md > "$out/ask.txt"   # the task row, acceptance tests included
+grep -hE '^\| <id> \|' <run dir>/milestones/*.md > "$out/ask.txt"   # the task row, acceptance tests included
 cat <run dir>/packets/<id>.md <run dir>/BRIEF.md > "$out/plan.txt"
 printf '%s\n' "<check command>: <result the implementer or fixer reported>, in <how long it took>" > "$out/verification.txt"
 bash <skill dir>/scripts/counter-review.sh <worktree> "$out" claude implementation counter-reviewer,test-reviewer
@@ -287,7 +294,7 @@ bash <skill dir>/scripts/counter-review.sh <worktree> "$out" claude implementati
 
 Run the last command in the background; reviews often take several minutes. It prints one status line and writes `result.json`, `summary.json` and `exit` into `$out`. `--producer` is the client running the run (`claude` in Claude Code). The subject is every changed and untracked file in the worktree outside `.archflow/runs/`: the run's own ledger and notes are context for the reviewers, not work under review. The review requires the worktree HEAD to still be the base, which holds because implementers and fixers never commit.
 
-The worktree holds the plan as it was at the base commit, so tell the reviewers what you have decided since. `ask.txt` is read from the current `PLAN.md`, which carries any row you corrected. When you decided to keep unplanned work, or directed work beyond the row in a fix round, add one line saying so to `ask.txt` (`Orchestrator decision: <what is now part of this task, and why>`). Reviewers then judge the work against the decision instead of reporting the difference again.
+The worktree holds the plan as it was at the base commit, so tell the reviewers what you have decided since. `ask.txt` is read from the current milestone file, which carries any row you corrected. When you decided to keep unplanned work, or directed work beyond the row in a fix round, add one line saying so to `ask.txt` (`Orchestrator decision: <what is now part of this task, and why>`). Reviewers then judge the work against the decision instead of reporting the difference again.
 
 A nonzero exit is not a pass. An `INPUT_INVALID` error names the input to correct. `SUBJECT_CHANGED` from a review that ran beside a reviewer means something wrote into the worktree meanwhile, usually a test the reviewer ran there: rerun the counter-review on its own. A failed reviewer route may be retried once, naming only that role; if it still fails:
 
@@ -307,7 +314,7 @@ c=$(git commit-tree "$pre" -p <base sha> -m "<id> before fix r<k>")
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/archflow-run-<name>.XXXXXX"); wt=$tmp/wt; git worktree add -q --detach "$wt" "$c"
 git diff --binary "$pre" "$post" | git -C "$wt" apply --index
 out=<run dir>/packets/<id>-cr<k>; mkdir -p "$out"
-{ grep -E '^\| <id> \|' <run dir>/PLAN.md
+{ grep -hE '^\| <id> \|' <run dir>/milestones/*.md
   printf '%s\n' "This is a review of a fix, not of the whole task. The baseline already holds the task's reviewed work; the subject is only what the fixer changed." \
     "Findings being fixed: <each id with its claim>." \
     "Judge whether each fix is correct and complete, and whether it breaks anything." \
@@ -346,11 +353,11 @@ git worktree add -q --detach "$wt" "$start"
 git diff --binary "$start" HEAD -- . ':!.archflow/runs' | git -C "$wt" apply --index
 ```
 
-Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds the milestone's goal and its task rows, `plan.txt` the plan's architecture and invariants plus `BRIEF.md`, and `verification.txt` the full build and suite result, how long the suite took, and its slowest test files when the runner reports them. Remove the worktree and its directory afterwards with `git worktree remove --force "$wt"; rm -rf "$tmp"`. A milestone over the review's 25 MiB snapshot limit is reviewed per lane instead.
+Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds the milestone's goal and its task rows, `plan.txt` the plan's architecture and invariants, the milestone file's "Design" section and `BRIEF.md`, and `verification.txt` the full build and suite result, how long the suite took, and its slowest test files when the runner reports them. Remove the worktree and its directory afterwards with `git worktree remove --force "$wt"; rm -rf "$tmp"`. A milestone over the review's 25 MiB snapshot limit is reviewed per lane instead.
 
 ## Milestones and gates
 
-A milestone ends with full validation (see "Where tests run") and then the gate lenses `PLAN.md` declares, which judge a result already known to build and pass instead of running the suite again. A useful default set, each lens a fresh reviewer run in parallel:
+A milestone is one complete set of work designed together, whose result can be judged whole; "What a milestone is" in `PLANNING.md` says where a plan draws the boundaries. A milestone ends with full validation (see "Where tests run") and then the gate lenses `PLAN.md` declares, which judge a result already known to build and pass instead of running the suite again. A useful default set, each lens a fresh reviewer run in parallel:
 
 - **fidelity:** the result against the reference and the requirements. It goes through the requirements the milestone was to meet one by one and names the evidence for each: a test, a behavior it observed, or nothing;
 - **architecture:** drift from the plan's architecture, shortcuts that force rework, and the shape of the milestone's code taken together: responsibilities that spread across tasks, units that grew past one job as several tasks added to them, the same state or rule now owned in two places, patterns that diverged between lanes. The task reviews see one diff each; this lens is where the sum is judged, and what it finds becomes cleanup tasks. Give it a bounded reading list: the plan's code shape, the milestone's diff stat, the files that changed most, the milestone's `structure` rows, and what implementers noted as already there (the `## Already there` sections of the milestone's `reviews/*-impl.md`), not the whole codebase;
@@ -379,8 +386,8 @@ At the last milestone nothing can carry. Every open entry is fixed or closed bef
 
 When the next milestone is "detailed at start":
 
-- have a fresh planner write its task rows from what the run has learned, each with its review depth (see "Planning agents" in `PLANNING.md`); you do not write them yourself;
-- review them once, with the plan-stage counter-review, `counter-reviewer` alone, before spawning any of them. Another model family reading rows the strongest model wrote adds more than a second pass on that model would, and spends none of its allowance;
+- have a fresh planner write its file, `milestones/M<n>.md`, from what the run has learned: the milestone's design and its task rows, each with its review depth (see "Planning agents" in `PLANNING.md`); you do not write them yourself;
+- review it once, with the plan-stage counter-review, `counter-reviewer` alone, before spawning any of its tasks. Its `plan.txt` is `PLAN.md` and the new file, not the earlier milestones' files. Another model family reading rows the strongest model wrote adds more than a second pass on that model would, and spends none of its allowance;
 - the rows need no human gate unless the milestone changes the requirements or a decision the human made;
 - fix supported findings;
 - record the result in `PROGRESS.md`.
@@ -417,7 +424,9 @@ Work is judged by what it does, not by whether the plan mentioned it. Doing more
 
 ## Task sizing and the plan table
 
-Agent cost grows faster than linearly with the length of the task. Keep each task reviewable in one pass. A typical ceiling is about 600 changed lines; split larger rows into `a`/`b` rows in `PLAN.md` before spawning, and commit the split on its own.
+Agent cost grows faster than linearly with the length of the task. Keep each task reviewable in one pass. A typical ceiling is about 600 changed lines; split larger rows into `a`/`b` rows in the milestone's file before spawning, and commit the split on its own.
+
+The task rows live in `milestones/M<n>.md`, one file per milestone, with the design those tasks need. Executing a milestone takes that file and the plan's sections marked `(shared)`; only the planner reads the whole plan. A plan kept in one file grows with every milestone detailed, and everything that executes the run reads around all of it: one run's plan went from 83 KB to 404 KB, 226 KB of it task rows and more than half of those already merged.
 
 Task table columns:
 
@@ -436,9 +445,10 @@ Task table columns:
 
 ## Context hygiene
 
-The orchestrator's cost per turn grows with its context:
+Every turn re-reads your whole context, so a session costs more per task the longer it runs:
 
-- Hand off after a batch, typically 8–10 merged tasks, or earlier when the context grows heavy.
+- Hand off by the size of your context, by default once it passes about 300k tokens. `bash <skill dir>/scripts/context.sh` prints the figure; append it to each task's commit command, so the check costs no turn of its own. Past the mark, spawn nothing new: let what is in flight finish, merge it, and hand off. The mark is not lower because every handoff needs the human to start the next session.
+- When the script cannot tell, it says so; hand off after a batch then, typically 8–10 merged tasks.
 - Prefer `grep -n` and bounded windows for large files, or delegate them.
 - Query JSON with `jq`.
 - Pipe long output through `tail`.

@@ -33,7 +33,7 @@ The general agent has no domain: keep only what holds for any task in the run.}}
 ## Implement mode
 **Read first, and only this:**
 - the task packet your message names: the task row, its dependencies, carried findings, and plan excerpts;
-- `.archflow/runs/{{run}}/PLAN.md` §3 (invariants), by section, not the whole plan.
+- the plan's §3 (invariants) and no other part of `PLAN.md`: `awk '/^## /{p = /^## 3\. /} p' .archflow/runs/{{run}}/PLAN.md`.
 
 Your message gives the base commit, setup, extra pointers, and output paths.
 
@@ -78,7 +78,7 @@ directory between commands, so begin every command with `cd <worktree> &&`.
 - the review file and finding ids your message names;
 - the task packet, if named, for the acceptance criteria;
 - the implementer's notes file, if named, for what it says about the work you are fixing;
-- `.archflow/runs/{{run}}/PLAN.md` §3 (invariants);
+- the plan's §3 (invariants) and no other part of `PLAN.md`: `awk '/^## /{p = /^## 3\. /} p' .archflow/runs/{{run}}/PLAN.md`;
 - `git diff HEAD --stat` in the worktree, then only the files the findings name.
 
 1. **Fix the listed findings.** Follow each suggested fix unless it is wrong; then fix the underlying

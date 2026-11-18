@@ -2,13 +2,21 @@
 
 Run: `<name>` · Branch: `<run branch>` · Planned: <date> · Approved at STOP 0: <date or pending>
 
-## 1. Requirements
+<!-- A section whose heading ends in `(shared)` is read by the agents that execute the run. They select those sections
+     by that mark and read nothing else of this file:
+       awk '/^## /{shared = / \(shared\)$/} shared' PLAN.md
+     Keep the mark on these headings, and keep every `## ` heading on one line. The unmarked sections are the
+     planner's: what an executing agent needs from them is carried in each milestone's file. -->
+
+## 1. Requirements (shared)
 <What the human gets, and what is out of scope. Size it to the work: a paragraph for a well-understood target,
 an interviewed requirements list for new product intent. These are the human's: the run does not drop, weaken or
 change one without asking. Number them (R1, R2, …): each gate and STOP report accounts for them one by one.>
 
 ## 2. Architecture
-<The decisions tasks depend on, numbered so packets can cite them (§2.1, §2.2, …). Record each consequential
+<The decisions the run depends on, numbered (§2.1, §2.2, …). The planner reads this section; the agents that
+execute a milestone do not, so each milestone's file carries, under "Design", what its tasks need from here. Record
+each consequential
 choice as an ADR in DECISIONS.md and link it here, marked `human` when the human chose it and `orchestrator`
 otherwise. The architecture is the approved means of meeting the requirements: the orchestrator corrects a detail
 the code shows to be wrong, updates this section, and reports it.>
@@ -18,7 +26,7 @@ extends, and the existing patterns it follows. Name any pattern in the touched c
 what to do instead. A line per unit is enough. Packets carry the entries for a task's files, and the structure review
 and the architecture lens judge against them.>
 
-## 3. Invariants
+## 3. Invariants (shared)
 <Rules every agent and every task follows. Number them; agents and reviews cite them as I1, I2, …>
 
 ## 4. Reference and validation
@@ -31,7 +39,7 @@ the layer each kind of behavior is tested at, which boundaries get a real integr
 test slow here and which group slow tests join, and how long the full suite takes today. Agents and `BRIEF.md` carry
 it too.>
 
-## 5. Commands
+## 5. Commands (shared)
 | Purpose | Command |
 |---|---|
 | Task check (implementers and fixers): the task's own test files, by name, plus typecheck such as `tsc --noEmit` or `cargo check`, and lint; never tests selected by what imports the changed files, a whole suite or a full build | `<command taking test files>` |
@@ -45,7 +53,7 @@ repeating it, and the orchestrator runs the merge check and full validation. Eve
 skill's `scripts/wait.sh`, which keeps a waiting agent's prompt cache warm and lets only a few commands run at once
 across all worktrees, so parallel tasks cannot overload the machine.
 
-## 6. Agents and routing
+## 6. Agents and routing (shared)
 The agent follows the kind of work. The model follows the run's routing: implementers write on the cheaper model, reviewers judge on the stronger one, and a task leaves that only through a hatch named below.
 
 ### Agents
@@ -82,16 +90,17 @@ the orchestrator opens others on what a review shows, and reports them at each h
 <Total: n `opus` implementers, n `fable` reviews, of n tasks. "None" is a good answer when the rows carry their own
 checks.>
 
-## 7. Milestones and STOPs
+## 7. Milestones and STOPs (shared)
 | Milestone | Goal | Detail | Gate lenses | STOP |
 |---|---|---|---|---|
-| M1 | <goal> | detailed now | <fidelity, architecture, …> | — |
+| M1 | <goal> | detailed now: `milestones/M1.md` | <fidelity, architecture, …> | — |
 | M2 | <goal> | detailed at start | <…> | STOP 1: <what the human does> |
 
-<The plan chooses each gate's lenses, except that the last milestone always runs fidelity, over every requirement in
-§1, and runtime.>
+<A milestone is one complete set of work that is designed together: what must be built and seen working before the
+rest can be designed well. See "What a milestone is" in the skill's `PLANNING.md`. The plan chooses each gate's lenses,
+except that the last milestone always runs fidelity, over every requirement in §1, and runtime.>
 
-## 8. Tasks
+## 8. Tasks (shared)
 Sizes: S ≤ ~200 changed lines, M ≤ ~450, L ≤ ~600 (split before spawning). `Tn` hard dependency, `Tn (soft)` preference.
 
 Review depth: `full` is the default, for any task that changes behavior (source, test logic, schemas, build or CI
@@ -103,11 +112,8 @@ milestone counter-review. <Name any kind of task in this run that is `light` for
 The constitution is judged on the plan and at each milestone gate, not on every task. <Name any rule whose trigger
 the human asked to have checked as each task lands.>
 
-### M1
-| id | goal | files | acceptance tests | depends on | size | agent | review | lane |
-|---|---|---|---|---|---|---|---|---|
-| M1-T1 | <goal> | <paths> | `<test file>`: • <assertion>; • <assertion> | — | S | `<name>-<domain>-implementer` | full | A |
-| M1-T2 | <goal> | <paths> | `<test file>`: • <the invariant, and the check that proves it> | M1-T1 | M | `<name>-<domain>-implementer` `opus/high`: <reason> | full, `fable` review: <reason> | A |
+The task rows are not in this file. Each milestone's rows, and the design only that milestone needs, are in
+`milestones/M<n>.md`, written from `templates/MILESTONE.md` when the milestone is detailed.
 
-## 9. Risks
+## 9. Risks (shared)
 <What could invalidate the plan, and how the run will notice early.>
