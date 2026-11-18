@@ -4,12 +4,24 @@
 
 Resume: run `/archflow-run <name>` in a fresh session on the orchestrator's model (`opus` at `high` effort unless the plan's routing says otherwise).
 
+<!-- Every session reads this file whole and carries it on every turn, so it holds only what a session needs in order
+     to act next. A record of what already happened (a session's report, a closed finding, the story of a review, a
+     check's result) goes to HISTORY.md or the task's review file, not into a new section here. Open deferred findings
+     are in DEFERRED.md, read for the task that owns them. -->
+
 ## Waiting on the human
 <!-- Empty unless the status is AWAITING USER. Written so a fresh session can ask again in full:
 - <what must be decided, and why it matters>
   - Choices: <each choice and what it leads to>
   - Recommendation: <choice, and why>
   - Blocked meanwhile: <tasks or none> -->
+
+## Resume here
+<!-- Rewritten at each handoff, not added to. The session's report goes to HISTORY.md.
+- In flight: <ids, worktrees, or nothing>
+- Environment: <what the next session must know to run things: a local stack, a path that changes per session, or nothing>
+- Carry-overs: <items the next tasks must take that DEFERRED.md does not already hold, or none>
+- Next: <ordered list> -->
 
 ## Milestone board
 | Milestone | Goal | Status | Gate | STOP |
@@ -22,27 +34,13 @@ Resume: run `/archflow-run <name>` in a fresh session on the orchestrator's mode
 
 ## Task log
 <!-- one line per merged task: - <id> — <short sha> — <full | light> — written on <model> — reviews/<id>-r<k>.md (critical/major/minor; structure n) <fix rounds; a run-time hatch if one opened; delta review if one ran; carried ids → owner> -->
+<!-- The line points at the review file. What the review found and what was done about it is told there, not here. -->
 
 ## Decisions to report
 <!-- Calls the orchestrator made on the human's behalf that they have not been told about yet. Reported in full in the
-     next message that ends a turn, then moved into that session's handoff.
+     next message that ends a turn, then moved into that session's report in HISTORY.md.
 - <ADR id or review row>: <what was decided, in plain words> — why: <reason> — undo: <how> -->
-
-## Deferred findings
-<!-- open:   - [ ] <review id>-<finding id> (<severity>): <claim> → <owning task> — deferred because <reason>
-     closed: - [x] ... — fixed <short sha> | closed: <already fixed | obsolete | won't fix: reason> -->
-<!-- A deferral pass after each milestone gate re-decides every open entry; none stay open past the final STOP. -->
 
 ## Gate log
 | Gate | Date | Lenses (c/M/m per lens) | Verdict |
 |---|---|---|---|
-
-## Session handoffs
-<!-- ### Session N handoff (<date>)
-- Merged: <ids> (<done>/<total>)
-- Merge checks / full validation: <result; how long the full suite took>
-- Routing: <per writing model: tasks, findings by severity (structure n), fix rounds; run-time hatches with their task>
-- In flight: <ids, worktrees>
-- Decisions: <each call the orchestrator made, with how to undo it, or none>
-- Carry-overs: <items next tasks must take>
-- Next: <ordered list> -->

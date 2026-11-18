@@ -42,7 +42,7 @@ Produces or refreshes the maintained documentation set (this directory): caps-na
 
 ## archflow-run
 
-The orchestrated workflow, for large jobs ("port this system", "build these fifty tasks") where approving each step would cost more than it is worth and one long session would run out of context. The run lives in `.archflow/runs/<name>/`: `PLAN.md` (requirements, architecture, invariants, commands, model routing, milestones, task table, declared STOPs), `PROGRESS.md` (a status line, task log, deferred findings, handoffs), `DECISIONS.md`, `BRIEF.md`, `reviews/`, and a gitignored `packets/`. Git is the record of what merged, and where the ledger and git disagree, git wins. A run pays for a plan, a plan review and a milestone gate before its first task merges, so the skill says so when an ask is plainly a handful of tasks and recommends doing it directly.
+The orchestrated workflow, for large jobs ("port this system", "build these fifty tasks") where approving each step would cost more than it is worth and one long session would run out of context. The run lives in `.archflow/runs/<name>/`: `PLAN.md` (requirements, architecture, invariants, commands, model routing, milestones, task table, declared STOPs), `PROGRESS.md` (the live state: a status line, resume notes, task log), `DEFERRED.md` (the open deferred findings, each with the task that owns it), `HISTORY.md` (the record: session reports and closed findings), `DECISIONS.md`, `BRIEF.md`, `reviews/`, and a gitignored `packets/`. Git is the record of what merged, and where the ledger and git disagree, git wins. A run pays for a plan, a plan review and a milestone gate before its first task merges, so the skill says so when an ask is plainly a handful of tasks and recommends doing it directly.
 
 ```mermaid
 flowchart LR
@@ -50,7 +50,7 @@ flowchart LR
   P --> R0["Cross-model plan review"]
   R0 --> S0{"STOP 0: human approves"}
   S0 --> B["Batch: packet, implementer in a worktree,<br/>one review: reviewer + cross-model review,<br/>decide findings, fixer, verify the fix,<br/>squash-merge, commit"]
-  B -->|"about 8-10 tasks"| H["Handoff in PROGRESS.md, fresh session"]
+  B -->|"about 8-10 tasks"| H["Handoff: resume notes in PROGRESS.md,<br/>session report in HISTORY.md, fresh session"]
   H --> B
   B --> G["Milestone gate lenses + whole-milestone<br/>counter-review, deferral pass"]
   G -->|declared STOP| S1{"Human STOP"}
@@ -69,6 +69,20 @@ flowchart LR
 - the human is assumed not to be watching. Every message that ends a turn stands on its own: it opens with where the run stands, and it restates each open question in full, with the choices and a recommendation, instead of pointing back at an earlier message. A halt between STOPs is also written into `PROGRESS.md` with the status `AWAITING USER (halt)`, so a fresh session can ask again in full. Results that are not a reason to stop, such as a milestone gate verdict, ride along in the next closing message.
 
 Everything else in the skill, its `PLANNING.md` and its `PROTOCOL.md` is a default whose numbers (batch size, fix rounds, task size) can be adapted and recorded in `DECISIONS.md`.
+
+**Why the progress file holds only live state.** Every session reads `PROGRESS.md` whole, the orchestrator then carries it on every turn of that session, and the planner reads it again for each milestone it details. The first template kept the run's record in the same file: every session's handoff was added below the last, and a deferred finding that closed was ticked and left in place. On one run that file reached 141 KB, roughly 35 to 40 thousand tokens, after seven sessions:
+
+| Part of the file | Size | What a later session used |
+|---|---|---|
+| Seven session handoffs | 72 KB | about 2 KB: the last one's in-flight work, carry-overs and next steps |
+| Open deferred findings, 99 of them | 31 KB | all of it, but each entry only when the task that owns it starts |
+| Task log | 28 KB | about 4 KB: the task ids and commits; the rest retold each review, which its review file already holds |
+| Merge-check results, one section per session | 4 KB | nothing |
+| Status, board, approvals, decisions to report, gate log | 6 KB | all of it |
+
+About two thirds of the file was record.
+
+So the file is split by who reads it. `PROGRESS.md` holds what the next session acts on, and its "Resume here" section is rewritten at each handoff instead of added to. `HISTORY.md` holds the record: each session's report and each closed finding, added at the end with a shell command and searched, not loaded, when a STOP report or a planner needs the past. Nothing is dropped, and no archive step exists to forget, because a record is written to its final place the first time. `DEFERRED.md` holds the open deferred findings. They are state, not record, but no turn needs all of them: the orchestrator searches the file for a task's entries when it writes that task's packet, and reads it whole at each milestone's deferral pass, which is what catches an entry its owner never picked up. Split this way, that run's `PROGRESS.md` comes to an estimated 15 KB. `DECISIONS.md` grows the same way (83 KB and 51 decisions on that run), so a session reads it as an index of titles with who made each decision, and opens a decision in full when the work touches its subject, always before deciding something a human's decision covers.
 
 **Why review is the part that stays tooled.** ArchFlow's counter-review is what this workflow lacked when it was run by hand. Routing, snapshot views and structured reports are worth reusing rather than re-prompting. When an implementer returns, the orchestrator runs `archflow-local review` on its worktree through `scripts/counter-review.sh` ([COMMANDS](../cli/COMMANDS.md#how-to-treat-the-result) describes the script). For a task, it dispatches the opposite-family counter-reviewer and the test reviewer; the constitution reviewer runs on the plan and at each milestone gate (below). At the same moment the orchestrator spawns a fresh reviewer sub-agent, which does its own acceptance check without waiting for the counter-review. When both finish, another fresh reviewer, in merge mode, folds the counter-review into the same findings table: a point both reviewers made becomes one row naming both, since agreement between model families is strong evidence. A counter-review that cannot run blocks the merge; it is never replaced by self-review.
 

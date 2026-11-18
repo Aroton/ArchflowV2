@@ -11,7 +11,9 @@ Planning has its own file, `PLANNING.md`: the planning agents, the run's generat
 ```
 .archflow/runs/<name>/
   PLAN.md          requirements, architecture, invariants, commands, routing, milestones, task table, STOPs
-  PROGRESS.md      status line, pending question, milestone board, task log, decisions to report, deferred findings, gate log, handoffs
+  PROGRESS.md      live state: status line, pending question, resume notes, milestone board, task log, decisions to report, gate log
+  DEFERRED.md      the open deferred findings, each with the task that owns it; read by owner, and whole at a deferral pass
+  HISTORY.md       the record: each session's report and every closed deferred finding; added to, not read at resume
   DECISIONS.md     ADR log: ## ADR-NNN <title> (decided by human | orchestrator, status, context, decision, consequences, how to undo)
   BRIEF.md         the reference-and-validation brief every counter-review receives
   research/        planning.md (the planner's brief) and the explorers' notes, one file per area
@@ -28,11 +30,14 @@ Planning has its own file, `PLANNING.md`: the planning agents, the run's generat
 
 Follow it with one sentence on where to resume.
 
+**`PROGRESS.md` holds only what a session needs in order to act next.** Every session reads it whole and then carries it on every turn, and the planner reads it again for each milestone it details, so each line in it is paid for many times. A record of what already happened goes to `HISTORY.md`: a session's report, a deferred finding that closed. The story of a review stays in its review file. `HISTORY.md` is added to at the end and never read whole; search it with `grep -n` when a question needs the past. The open deferred findings are state, but each is needed only when the task that owns it starts, so they live in `DEFERRED.md` and are read by owner. Left to collect both, one run's `PROGRESS.md` reached 141 KB in seven sessions, about two thirds of it text no later session acted on.
+
 **Removing the run.** These are working files: tracked on the run branch while the run is going, and removed before a pull request. `bash <skill dir>/scripts/cleanup.sh <repository root> <name>` removes them: the run directory, the run's generated agents, and any scratch review worktree the run left in the temp directory, in one local commit that `git revert` undoes. It refuses while a run or agent file has uncommitted changes, so nothing it deletes is lost. It keeps and reports anything it cannot prove is this run's, such as an agent file whose description names another run, and it lists the worktrees that remain without touching them or any branch. `--dry-run` shows what it would do. Run it when the human says to remove the run, at completion or to drop an abandoned run; see the skill's "STOPs and completion".
 
 ## Resume (start of every execution session)
 
-1. Read `PROGRESS.md` and `DECISIONS.md`. Read `PLAN.md` by section, not whole when it is large. Do not read research or reference material yourself; sub-agents read it through packets.
+1. Read `PROGRESS.md`. Read `PLAN.md` by section, not whole when it is large. Do not read `HISTORY.md` or, outside a deferral pass, the whole of `DEFERRED.md`, and do not read research or reference material yourself; sub-agents read it through packets.
+   - Read `DECISIONS.md` as an index: `grep -n -A1 '^## ADR' <run dir>/DECISIONS.md` lists each decision's title with who made it. Open a decision in full when the work at hand touches its subject, and always before you decide something a decision marked `human` covers.
 2. Run `git status`, `git log --oneline -15` and `git worktree list`.
    - Each merged task has a commit whose subject starts with `<name> <id>:`. When the task log and git disagree, git wins: correct the log.
    - Uncommitted changes or leftover agent worktrees mean a previous session died mid-task. Send them to a reviewer before spawning new work, then merge or discard them deliberately.
@@ -99,7 +104,7 @@ How to use the table:
 - **Cost scales with the tier.** Per token, Opus costs about twice Sonnet and Fable about twice Opus, and Haiku costs a small fraction of Sonnet.
 - **The plan-writing route does not move down.** The plan may adapt every other row. Writing the plan stays on the strongest model.
 - **A task that spans domains is split** (see "Run agents" in `PLANNING.md`), as one that mixes levels of difficulty is.
-- **Report what the routing bought.** The task log records which model wrote each task and how many fix rounds it took, and each handoff totals them (see "Context hygiene"). That is how the human, and the planner of the next milestone, learn whether the cheaper writer is holding up or the hatches need to move.
+- **Report what the routing bought.** The task log records which model wrote each task and how many fix rounds it took, and each session's report in `HISTORY.md` totals them (see "Context hygiene"). That is how the human, and the planner of the next milestone, learn whether the cheaper writer is holding up or the hatches need to move.
 
 Model names age. When newer models exist, keep the shape (the cheapest model explores, a cheap one writes, a stronger one orchestrates and reviews, the strongest writes the plan, judges each milestone and reviews the rare task whose errors hide) and record the run's mapping in `PLAN.md`.
 
@@ -115,7 +120,7 @@ The run learns what its agents should have been told. When the same finding retu
 
 - the task row;
 - the goal and files of each dependency;
-- deferred findings this task carries;
+- deferred findings this task carries: `grep -n '→ <id>' <run dir>/DEFERRED.md`;
 - the plan sections the row cites, and the plan's code-shape entries for the files the task touches;
 - any external reference material the agent needs verbatim.
 
@@ -204,13 +209,13 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
      - the fix is cheap now while the context is fresh, and expensive to rebuild later;
      - no later task touches that code, so deferring means nobody owns it.
    - **A `structure` row** is decided the same way, and its knock-on effect is usually the whole question: fix it now when later tasks will build on that shape or copy it, because every one of them then pays for it and a later reorganization touches all of them. A small one goes to the fixer with the task's other findings. One that would reshape code other tasks are working in, or that was there before the task, becomes a task of its own, so the reorganization gets its own review and does not hide inside a behavior change. A run is meant to leave the code better organized than it found it, not only working.
-   - **Defer** when it does not matter yet: it is cosmetic, a task that will rework that code anyway is the better place for it, or fixing it now would widen this task's scope. Record why in `PROGRESS.md` (see below).
+   - **Defer** when it does not matter yet: it is cosmetic, a task that will rework that code anyway is the better place for it, or fixing it now would widen this task's scope. Record why in `DEFERRED.md` (see below).
    - **Dismiss** a finding that is wrong or not worth doing at all, with the reason in the review file.
    - Write each decision as a line under the round's table in the review file: `<row id>: fix | defer → <owner> | dismiss | keep | revert | decided | halt — <reason>`.
    - Fix-now findings go to a **fresh** fixer: a new spawn of the task's implementer agent in fix mode, given the review file, the finding ids, the packet, the worktree path, and the implementer's notes file when there is one. It runs on `sonnet` unless a run-time hatch under "Escape hatches" applies; say which on the decision line. Never resume the implementer for fixes.
    - Before spawning the fixer, record the worktree's current tree, so the fix can be checked on its own: `cd <worktree> && git add -A && git write-tree > <run dir>/packets/<id>-pre-r<k+1>.tree && git reset -q`. When the fixer returns, record the fixed tree the same way into `<id>-post-r<k+1>.tree`.
    - When nothing needs fixing now, the task goes straight to the merge.
-   - Deferred findings go under "Deferred findings" in `PROGRESS.md`, each with a reason and the task that owns it, and into that task's packet.
+   - Deferred findings go into `DEFERRED.md`, one line each with a reason and the task that owns it, and into that task's packet. Name the owner on the line, since that is how the entry is found when the owner starts.
    - You may make trivial fixups yourself, typically 10 lines or fewer, in the worktree. List one made after the review in the task's review file as not separately reviewed. The milestone counter-review is what reads it, so a milestone that holds one runs that review with every role. Anything larger is a fix: it goes to a fixer and gets checked.
 6. **Check the fix.** Check what the fixer changed, not the task again.
    - **Always: fix verify.** Spawn a fresh reviewer in fix-verify mode, on `opus`, or on `sonnet` at `medium` when every listed finding is purely mechanical, with the review file, the finding ids sent to the fixer, both tree IDs (the contents of the two `.tree` files), the packet, and the fixer's `EXTRA` and `ORACLE` lines and its reported check result. It appends round `r<k+1>` to the review file. For each finding it says whether the fix resolves it and on what basis:
@@ -239,8 +244,8 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
    - Resolve conflicts that have a mechanical owner (regenerate generated files, take the union of append-only registries). Halt on any conflict that needs judgment. A resolution that changes source by hand is listed in the task's review file like a fixup made after the review.
    - Never use a bare `git stash`: the stash stack is shared with every other worktree and session.
 8. **Commit.**
-   - One commit per task, subject `<name> <id>: <imperative summary>`. The squash merge has staged the task's changes; add the task's own review files by path (`git add <run dir>/reviews/<id>-*`) and the `PROGRESS.md` tick, and commit the index. `git add -A` in this checkout would sweep in other in-flight tasks' review files.
-   - Tick the task log in `PROGRESS.md` with the short SHA and the review summary. Close each deferred finding this task carried, using the reviewer's `carried` rows: fixed, with the SHA, or still open and routed to a new owner. The tick can ride along with the next commit.
+   - One commit per task, subject `<name> <id>: <imperative summary>`. The squash merge has staged the task's changes; add the task's own review files by path (`git add <run dir>/reviews/<id>-*`) and the `PROGRESS.md` tick with any `DEFERRED.md` and `HISTORY.md` lines that go with it, and commit the index. `git add -A` in this checkout would sweep in other in-flight tasks' review files.
+   - Tick the task log in `PROGRESS.md`: one line with the short SHA, the review file and its counts. What the review found is told in the review file, not repeated here. Close each deferred finding this task carried, using the reviewer's `carried` rows: one that is fixed leaves `DEFERRED.md` and becomes a `- closed` line in `HISTORY.md` with the SHA; one still open stays, routed to a new owner. The tick can ride along with the next commit.
    - Remove the worktree and its branch once the commit exists: `git worktree remove --force <worktree>`, then `git branch -D <branch>`. The branch needs `-D` because a squash merge leaves it looking unmerged. See "Worktrees and temporary directories".
 9. **Merge check.** When the tasks that were in flight together are merged, run the task check once over their test files in this checkout. The full build and suite wait for the handoff or the milestone gate. See "Where tests run".
 
@@ -362,15 +367,15 @@ Record a gate row in `PROGRESS.md`. A gate is not a STOP unless the plan declare
 
 ## Deferral pass
 
-Deferring is a decision to revisit, not to forget. At each milestone end, after the gate, go over every open entry under "Deferred findings":
+Deferring is a decision to revisit, not to forget. At each milestone end, after the gate, read `DEFERRED.md` whole and go over every entry. This pass is what catches an entry its owner never picked up, so it is the one time the whole list is read:
 
 - **Fix:** it matters now. The milestone's work may have raised its cost, or its owner never picked it up. Make it a fix task, or add it to an upcoming task's goal.
 - **Carry:** it still does not matter yet and a later task owns it. Confirm the owner exists in the plan.
-- **Close:** it no longer applies, or it is not worth fixing. Mark it closed with a reason: already fixed, obsolete, or won't fix because of what it would cost.
+- **Close:** it no longer applies, or it is not worth fixing. Move it out of `DEFERRED.md` into `HISTORY.md` as a `- closed` line with a reason: already fixed, obsolete, or won't fix because of what it would cost.
 
 When the list is long, or you are not sure an entry still applies, send it to a fresh reviewer in deferral mode, which checks each entry against the current code and recommends one of the three. You decide.
 
-At the last milestone nothing can carry. Every open entry is fixed or closed before the final STOP. The final STOP report lists each won't-fix with its reason, so the human can overturn any of them.
+At the last milestone nothing can carry. Every open entry is fixed or closed before the final STOP. The final STOP report lists each won't-fix with its reason, so the human can overturn any of them; `grep -n "won't fix" <run dir>/HISTORY.md` finds them.
 
 When the next milestone is "detailed at start":
 
@@ -441,21 +446,29 @@ The orchestrator's cost per turn grows with its context:
 
 At a handoff, run full validation, sweep the worktrees and temporary directories this session's finished work left behind ("Worktrees and temporary directories"), write the handoff, and commit.
 
-The session handoff in `PROGRESS.md` records:
+A handoff has two parts, because the next session and the record need different things.
+
+What the next session acts on replaces "Resume here" in `PROGRESS.md`; it is rewritten, not added to:
+
+- anything in flight;
+- what the next session must know to run things, such as a local stack that is up or a path that changes per session;
+- the carry-over items the next tasks must take, when `DEFERRED.md` does not already hold them;
+- a "Next" list.
+
+What the session did is appended to `HISTORY.md` as its report:
 
 - tasks merged, as a count of done over total;
 - the merge checks and the full validation result, with how long the suite took;
 - what the routing bought: for each model that wrote tasks this session, how many it wrote, the findings their reviews raised by severity (structure rows counted apart: source `structure`, or a claim that starts `Structure:`), the fix rounds they took, and each run-time hatch with the task it opened on;
-- anything in flight;
-- decisions made, each with how to undo it;
-- the carry-over items the next tasks must take;
-- a "Next" list.
+- decisions made, each with how to undo it.
 
-The handoff is also what the human reads, so the closing message of the session summarizes it in plain language rather than pointing at the file, and ends with the exact command that starts the next session, on the orchestrator's model and effort.
+A handoff leaves `PROGRESS.md` holding only live state. When it holds more, move that text out with a shell command (`sed`, `awk`) instead of retyping it, since text you retype is paid for again as output: earlier sessions' reports and closed findings go to `HISTORY.md`, and a list of open deferred findings goes to `DEFERRED.md`. Create either file from its template when the run does not have it yet.
+
+The report is also what the human reads, so the closing message of the session summarizes both parts in plain language rather than pointing at the files, and ends with the exact command that starts the next session, on the orchestrator's model and effort.
 
 ## Decisions to report
 
-A call you make on the human's behalf gets one line under "Decisions to report" in `PROGRESS.md` when you make it: what you decided in plain words, why, and how to undo it. That covers unplanned work you kept or reverted beyond a small necessary fix, a task row, criterion or architecture detail you corrected, tasks you added or dropped, and each human-review reason you decided yourself. Routine keeps can share one line per task. The next message that ends a turn reports them all, whether it is a handoff, a STOP report or a halt, and the entries then move into that session's handoff record. A fresh session reports whatever is still listed.
+A call you make on the human's behalf gets one line under "Decisions to report" in `PROGRESS.md` when you make it: what you decided in plain words, why, and how to undo it. That covers unplanned work you kept or reverted beyond a small necessary fix, a task row, criterion or architecture detail you corrected, tasks you added or dropped, and each human-review reason you decided yourself. Routine keeps can share one line per task. The next message that ends a turn reports them all, whether it is a handoff, a STOP report or a halt, and the entries then move into that session's report in `HISTORY.md`. A fresh session reports whatever is still listed.
 
 ## Halts
 

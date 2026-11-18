@@ -41,7 +41,9 @@ Working files live in `.archflow/`. `config.yaml` (reviewer routing) and `consti
   runs/
     my-run/
       PLAN.md                 # Requirements, architecture, invariants, task table, STOPs
-      PROGRESS.md             # Status line, task log, handoffs
+      PROGRESS.md             # Live state: status line, resume notes, task log
+      DEFERRED.md             # Open deferred findings, each with its owning task
+      HISTORY.md              # The record: session reports, closed findings
       DECISIONS.md            # Decisions and waivers
       BRIEF.md                # Reference-and-validation brief for every counter-review
       reviews/                # Per-task findings
