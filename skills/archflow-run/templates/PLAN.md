@@ -5,13 +5,18 @@ Run: `<name>` · Branch: `<run branch>` · Planned: <date> · Approved at STOP 0
 ## 1. Requirements
 <What the human gets, and what is out of scope. Size it to the work: a paragraph for a well-understood target,
 an interviewed requirements list for new product intent. These are the human's: the run does not drop, weaken or
-change one without asking.>
+change one without asking. Number them (R1, R2, …): each gate and STOP report accounts for them one by one.>
 
 ## 2. Architecture
 <The decisions tasks depend on, numbered so packets can cite them (§2.1, §2.2, …). Record each consequential
 choice as an ADR in DECISIONS.md and link it here, marked `human` when the human chose it and `orchestrator`
 otherwise. The architecture is the approved means of meeting the requirements: the orchestrator corrects a detail
 the code shows to be wrong, updates this section, and reports it.>
+
+**Code shape.** <Where the run's new code goes: the units it adds and the one job of each, the existing units it
+extends, and the existing patterns it follows. Name any pattern in the touched code that new work must not copy, and
+what to do instead. A line per unit is enough. Packets carry the entries for a task's files, and the structure review
+and the architecture lens judge against them.>
 
 ## 3. Invariants
 <Rules every agent and every task follows. Number them; agents and reviews cite them as I1, I2, …>
@@ -21,7 +26,7 @@ the code shows to be wrong, updates this section, and reports it.>
 against it: golden tests, probes, docs to diff. When the run has several domains, give each its own reference and
 validation. Generated agents carry this, and a short version in `BRIEF.md` goes to every cross-model counter-review.>
 
-**Test policy.** <What a test in this run should cost as well as cover, from the protocol's "What tests to write":
+**Test policy.** <What a test in this run should cost as well as cover, from "What tests to write" in the skill's `PLANNING.md`:
 the layer each kind of behavior is tested at, which boundaries get a real integration test and how few, what makes a
 test slow here and which group slow tests join, and how long the full suite takes today. Agents and `BRIEF.md` carry
 it too.>
@@ -49,9 +54,9 @@ The agent follows the kind of work. The model follows the run's routing: impleme
 | `<name>-<domain>-implementer` | <the domain and its paths> | <what its guidance holds that the rest of the run does not: its reference, how it is validated, how it goes wrong> | `sonnet` / `high` |
 | `<name>-<domain>-reviewer` | task-review, merge, fix-verify and verify for that domain's tasks | <the lenses that work is reviewed through> | `opus` / `high` |
 | `<name>-implementer` | tasks outside every domain | general; the packet carries what a task needs | `sonnet` / `high` |
-| `<name>-reviewer` | reviews of those tasks; deferral, plan review, gate lenses | general | `opus` / `high` |
+| `<name>-reviewer` | reviews of those tasks; deferral, gate lenses | general | `opus` / `high` |
 
-<One implementer and reviewer pair per domain, sized by the protocol's "Run agents". When the whole run is one kind of
+<One implementer and reviewer pair per domain, sized by "Run agents" in the skill's `PLANNING.md`. When the whole run is one kind of
 work, keep only the general pair and give it that guidance.>
 
 ### Model and effort
@@ -64,7 +69,7 @@ work, keep only the general pair and give it that guidance.>
 | Task review, `full` or `light`; fix verify; verify | the domain's reviewer | `opus` / `high` |
 | Counter-review merge; check of a purely mechanical fix | the domain's reviewer + override | `sonnet` / `medium` |
 | Deferral pass | `<name>-reviewer` | `opus` / `high` |
-| Plan review; fidelity and architecture lenses | `<name>-reviewer` + override | `fable` / `high` |
+| Fidelity and architecture lenses | `<name>-reviewer` + override | `fable` / `high` |
 | Dogfood and runtime lenses | `<name>-reviewer` | `opus` / `high` |
 
 Defaults from the protocol's "Model routing"; adjust to this run, and name both model and effort in every row.
@@ -82,6 +87,9 @@ checks.>
 |---|---|---|---|---|
 | M1 | <goal> | detailed now | <fidelity, architecture, …> | — |
 | M2 | <goal> | detailed at start | <…> | STOP 1: <what the human does> |
+
+<The plan chooses each gate's lenses, except that the last milestone always runs fidelity, over every requirement in
+§1, and runtime.>
 
 ## 8. Tasks
 Sizes: S ≤ ~200 changed lines, M ≤ ~450, L ≤ ~600 (split before spawning). `Tn` hard dependency, `Tn (soft)` preference.

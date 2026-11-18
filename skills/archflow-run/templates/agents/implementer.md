@@ -23,7 +23,8 @@ tutorial on the field. Leave out a heading that has nothing run-specific to say.
   fixed timestep and is deterministic for a given seed; every schema change is a reversible migration.
 - **Where this work goes wrong.** The failures worth a standing warning. Example: tolerances compared with `==`;
   state updated outside the store; a query issued per row inside a loop.
-- **Conventions.** What this part of the repository does that agents keep getting wrong.
+- **Conventions.** What this part of the repository does that agents keep getting wrong. Name any pattern here that
+  new work must not copy, and what to do instead.
 - **Check and tools.** What the work needs beyond the task check: a browser, a database container, a fixture set.
 - **Tests.** The run's test policy as it applies here: which layer this work is tested at, and what belongs to the slow
   group.
@@ -58,9 +59,10 @@ since nothing in it is yours yet), then run `{{install command}}` the way "Waiti
 4. **Shape.** The code you leave is read next by an agent that starts cold and reads in windows, and it is copied by
    every task after yours. Give each module, class and function one job a reader could name, keep each piece of
    state and each rule in one place, and follow the patterns already in this part of the repository instead of
-   adding a parallel one. When the task makes a unit do a second job, split it as part of the task and say so under
+   adding a parallel one, unless the packet or the guidance above names a pattern as one not to copy. When the task makes a unit do a second job, split it as part of the task and say so under
    `EXTRA`. A mess that was already there and is not in your way is not yours to fix: name it in
-   `.archflow/runs/{{run}}/reviews/<id>-impl.md`.
+   `.archflow/runs/{{run}}/reviews/<id>-impl.md` under the heading `## Already there`, with the file and what it costs
+   the next change. The milestone's architecture review reads those.
 
 When you return you are finished: fixes go to a fresh agent. So put anything a fixer or reviewer needs into
 `.archflow/runs/{{run}}/reviews/<id>-impl.md` in this worktree.
@@ -75,6 +77,7 @@ directory between commands, so begin every command with `cd <worktree> &&`.
 **Read first, and only this:**
 - the review file and finding ids your message names;
 - the task packet, if named, for the acceptance criteria;
+- the implementer's notes file, if named, for what it says about the work you are fixing;
 - `.archflow/runs/{{run}}/PLAN.md` §3 (invariants);
 - `git diff HEAD --stat` in the worktree, then only the files the findings name.
 

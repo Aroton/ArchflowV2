@@ -4,6 +4,8 @@ This is the working procedure for `/archflow-run`. The skill's trust boundaries 
 
 A run's state lives in its files and in git, not in any session's context. Any fresh session can pick up where the last one stopped.
 
+Planning has its own file, `PLANNING.md`: the planning agents, the run's generated agents ("Run agents"), and the test policy defaults ("What tests to write"). Read it when planning. An execution session needs only this file.
+
 ## Run files
 
 ```
@@ -38,7 +40,7 @@ Follow it with one sentence on where to resume.
 
 ## Model routing
 
-`PLAN.md` holds the routing: which generated agent, model and effort handle each task. The two are chosen separately. The agent follows the kind of work, because that decides what guidance the task needs (see "Run agents"). The model follows one rule: the cheapest model that can write the work writes it, and the stronger model is spent on reviewing it.
+`PLAN.md` holds the routing: which generated agent, model and effort handle each task. The two are chosen separately. The agent follows the kind of work, because that decides what guidance the task needs (see "Run agents" in `PLANNING.md`). The model follows one rule: the cheapest model that can write the work writes it, and the stronger model is spent on reviewing it.
 
 Three roles frame the run's cost:
 
@@ -57,7 +59,7 @@ Three roles frame the run's cost:
 | Implement, and fix | `sonnet` | `high` |
 | Task review, of a `full` or a `light` task; fix verify; verify a doubted finding; deferral pass | `opus` | `high` |
 | Merge a finished counter-review into the findings; check a purely mechanical fix | `sonnet` | `medium` |
-| Plan review; fidelity and architecture gate lenses | `fable` | `high` |
+| Fidelity and architecture gate lenses | `fable` | `high` |
 | Dogfood and runtime gate lenses | `opus` | `high` |
 
 ### Escape hatches
@@ -82,6 +84,8 @@ Each hatch carries its reason in a clause on the task row, and the plan gives th
 - a fix fails its verify, or an implementer or fixer returns `blocked`: the next fresh agent runs one model up, at the same effort, and no higher than `opus`;
 - a critical is still open after two fix rounds on `opus`: one `fable` fixer takes the next round. Its fix gets the cross-model delta review as well as the verify, and a critical it leaves open is a halt for the human.
 
+A spawn that fails without doing its job has shown nothing about the task. An agent that dies on a usage limit, a rate limit or a tooling error is not `blocked`, and its task does not move up a model: run it again on the same model when the limit allows. When the limit will not clear soon, let what is in flight finish, hand off, and tell the human which allowance ran out and when the run can continue.
+
 Nothing else reaches `fable` at run time. A task that still fails on `opus` at `high` without a critical is rescoped, deferred or taken to the human, who may name a stronger model for it. Record a run-time hatch on the round's decision line.
 
 How to use the table:
@@ -89,99 +93,21 @@ How to use the table:
 - **Always name the effort.** The models' own defaults differ (Opus runs at `medium` when none is given, Sonnet and Fable at `high`), so write `model` and `effort` into each generated agent's frontmatter and pass both on every spawn that differs from it. This skill asks for those per-spawn values; follow the plan's table.
 - **A reviewer is at least as strong as the work it reviews.** The defaults give that, except for the verify of a `fable` fixer, which the delta review backs. A generated reviewer serves several modes, so its frontmatter carries the task-review default and the other modes are per-spawn overrides.
 - **Fixes and their checks are routed by the finding, not the task.** Most findings on a hard task are still small: a missing case, a test that cannot fail, a wrong clock read. A fix starts on `sonnet` whatever wrote the task, unless a run-time hatch applies. A fix verify is a closed question with a stated basis, so it stays on `opus` even for a task with a `fable` reviewer, and drops to `sonnet` at `medium` when every finding in the round is purely mechanical (a rename, a reindent, a moved import). When a fix's reasoning needs a second opinion, that is the cross-model delta review, not a stronger verifier from the same family.
-- **The strongest model is usually the scarcest.** On a subscription it has its own, smaller allowance, and a run can exhaust it while the other models have barely been used. It is spent on the plan and its review, the fidelity and architecture lenses, the reviews the plan names, and the rare `fable` fixer. When a `fable` spawn fails on the allowance, or the human says it is short, the named reviews fall back to `opus` first, then the lenses; record each fallback under "Decisions to report". Plan work waits for the allowance, or for the human to name another model.
+- **The strongest model is usually the scarcest.** On a subscription it has its own, smaller allowance, and a run can exhaust it while the other models have barely been used. It is spent on the plan, the fidelity and architecture lenses, the reviews the plan names, and the rare `fable` fixer. When a `fable` spawn fails on the allowance, or the human says it is short, the named reviews fall back to `opus` first, then the lenses; record each fallback under "Decisions to report". Plan work waits for the allowance, or for the human to name another model.
 - **`high` is the floor for implementing, fixing and reviewing.** A model usually loses a good deal between `high` and `medium`. `medium` is for `sonnet` on mechanical work: merging a finished counter-review, checking a rename or a reindent.
 - **Raise the model before the effort.** Most of a model's gain arrives by `high`; `xhigh` and `max` cost many more tokens for an uneven gain. Haiku is the exception: it is cheap enough, and gains enough, to explore at `xhigh`. `xhigh` on `opus` or `fable` is the human's to name.
 - **Cost scales with the tier.** Per token, Opus costs about twice Sonnet and Fable about twice Opus, and Haiku costs a small fraction of Sonnet.
 - **The plan-writing route does not move down.** The plan may adapt every other row. Writing the plan stays on the strongest model.
-- **A task that spans domains is split** (see "Run agents"), as one that mixes levels of difficulty is.
+- **A task that spans domains is split** (see "Run agents" in `PLANNING.md`), as one that mixes levels of difficulty is.
 - **Report what the routing bought.** The task log records which model wrote each task and how many fix rounds it took, and each handoff totals them (see "Context hygiene"). That is how the human, and the planner of the next milestone, learn whether the cheaper writer is holding up or the hatches need to move.
 
 Model names age. When newer models exist, keep the shape (the cheapest model explores, a cheap one writes, a stronger one orchestrates and reviews, the strongest writes the plan, judges each milestone and reviews the rare task whose errors hide) and record the run's mapping in `PLAN.md`.
 
-## Planning agents
+## Changing the agents mid-run
 
-Planning runs before the run's generated agents exist, so explorers and the planner are general-purpose sub-agents with the model and effort passed on the spawn. Each gets a complete brief, because it sees none of the conversation, and each is fresh: the rules under "Never resume an idle agent" apply here too.
+"Run agents" in `PLANNING.md` describes the run's agents and what makes a kind of work its own domain. A task you add goes to the implementer of the domain its work belongs to, or to the general one.
 
-**Explorer.** One area or question per explorer, on the exploration route. Its prompt names the area, what the run is about in a sentence or two, and the output file `<run dir>/research/<topic>.md`. A useful note lets the planner go straight to the right place:
-
-- what exists, with paths and line pointers, and how the parts connect;
-- the conventions the code follows there, and the repository instructions that apply;
-- the commands that build, typecheck and test it, including how to run named test files only, how long the full suite takes, and which test groups are slow;
-- what it could not find or is unsure of.
-
-An explorer describes what is there. It does not propose a design, and it says so when a question needs more judgment than a lookup; that question goes to the research route. It returns a few lines: the file it wrote and what it covers.
-
-**Planning brief.** `research/planning.md`, written by the orchestrator, is the planner's starting point: the ask in the human's words, the settled requirements and each decision the human made, the run branch, the active review triggers, and an index of the research files. It is updated when the human answers a question, so a fresh planner starts from the current state.
-
-**Planner.** One fresh sub-agent on the plan-writing route. Its prompt names the brief, the run directory, this skill directory, and which of three jobs it has:
-
-- **First plan.** Read the brief, this file, and `templates/`. Read the research, then look up in the code whatever the research leaves open; the research is a map, not a limit. Write `PLAN.md` from `templates/PLAN.md`, the consequential choices as ADRs in `DECISIONS.md` (marked `human` when the brief records the human's decision, `orchestrator` otherwise), the generated agents, and `BRIEF.md`.
-- **Revision.** The prompt carries the counter-review points the orchestrator accepted, or the human's revision. Change what they require in the plan, the ADRs, the agents and `BRIEF.md`, and keep the rest.
-- **Milestone detail.** For a milestone marked "detailed at start": read the plan, `PROGRESS.md` (handoffs, deferred findings, decisions) and `DECISIONS.md`, look at the merged code the milestone builds on, and write the milestone's task rows, each with its agent, its review depth and any hatch with its reason (see "Escape hatches"). Correct an architecture detail the run has shown to be wrong, and add or revise a domain's agents when the milestone opens a kind of work the roster does not cover; say so in the return.
-
-`PLAN.md` holds:
-
-- requirements, as the brief settled them;
-- the architecture decisions tasks depend on;
-- invariants every agent follows;
-- the commands, in the three tiers of "Where tests run": the task check that agents run on a task's own test files, the merge check, and full validation, with how long the full suite takes today;
-- the run's test policy, from the defaults under "What tests to write";
-- the agent roster, with what each agent covers and why it is its own agent (see "Run agents");
-- model and effort routing, from the defaults under "Model routing", and the escape hatches: which rows get an `opus` implementer or a `fable` reviewer, each with its reason on the row, and their total;
-- milestones;
-- the task table, with a review depth on every row (see "Review depth");
-- declared STOPs.
-
-Detail the first milestone's tasks. Later milestones may be marked "detailed at start" when earlier work should shape them. Size tasks so one agent finishes each in a single focused spawn (see "Task sizing and the plan table").
-
-Generate the run's agents as "Run agents" describes, and list them in the plan's agent roster. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance and the run's test policy as a short `BRIEF.md` in the run directory, with a section per domain when the run has several; every counter-review receives it.
-
-The planner ends with the return block under "Sub-agent contract". Its NOTES give the main architecture choices, the milestones and the risks in a few lines; the orchestrator reads the plan itself by section. A question whose answer is the human's (a requirement the brief leaves open, a choice between products rather than between designs) comes back as `needs-decision`, with what the planner would assume; the orchestrator asks the human and spawns a fresh planner. The planner does not commit, and it writes only the run's files and agents.
-
-## Run agents
-
-The planner generates the run's agents from `templates/agents/` into `.claude/agents/`. An agent is a role scaffold filled with the standing guidance of one kind of work. The roles are few and the same in every run, because their mechanics (the return block, waiting on commands, the context budget, the scope rules) do not depend on what is being built. The kinds of work, called domains here, are what each run decides.
-
-**Where guidance lives.** Put each piece of guidance at the scope it applies to:
-
-| It applies to | It lives in |
-|---|---|
-| every task in the run | the plan's invariants |
-| every task of one kind | that kind's agents |
-| one task | its packet |
-
-**When a kind of work is a domain.** An agent specialized to its work does it better than a general one handed the same task, and each agent is a file to write, review and keep true. A kind of work earns its own agents when an agent that knew only the invariants would do it differently from what the work needs, because it differs from the rest of the run in at least one of:
-
-- what correct is checked against: an analytic solution or a reference engine, a design specification, the behavior of a real database;
-- how it is validated: the check command, the style of test, a tool or environment such as a browser or a database container;
-- how it goes wrong: numerical stability and determinism in one place, accessibility and state handling in another, transactions and migrations in a third;
-- the conventions of that part of the codebase.
-
-The guidance must also be standing: it serves several tasks, typically three or more. One or two tasks of a kind go to the general agent, with their guidance in the packet.
-
-Split where the guidance changes, and no finer. A physics engine, a UI and database integrations are three domains; collision detection and the integrator are tasks of one. Directory, layer, task size, milestone and model tier are not domains: model and effort are chosen per spawn. A run typically has one to four domains. When two agents' guidance would differ by a few lines, merge them. A roster past about five usually means tasks have been mistaken for domains.
-
-**The roster.**
-
-| Agent | Generated | Takes |
-|---|---|---|
-| `<name>-<domain>-implementer` | per domain | implementing the domain's tasks, and fixing their findings in fix mode |
-| `<name>-<domain>-reviewer` | per domain, by default | the reviews of one task in the domain: task-review, merge, fix-verify, verify |
-| `<name>-implementer` | always | tasks outside every domain: glue, configuration, documentation, a kind with too few tasks to be a domain |
-| `<name>-reviewer` | always | the reviews of those tasks, and the reviews that span the run: deferral, plan-review, gate lenses, leftovers from a dead session |
-
-- A domain's implementer and reviewer come as a pair, because they share the reference and how to validate against it. The planner may leave out a domain's reviewer when reviewing that work needs nothing the general reviewer lacks.
-- When the whole run is one kind of work, the general pair carries its guidance and no other agents are generated.
-- There is no separate fixer agent. A fix needs the same guidance as the work it corrects, so a fixer is a fresh spawn of the task's implementer agent in fix mode. It has none of the implementer's context because it is a new agent, not because it is a different definition.
-- A gate lens that judges one domain, such as the fidelity of the physics, may go to that domain's reviewer.
-- Explorers, the planner and the cross-model reviewers are not generated: each gets what it needs in a brief (`research/planning.md`, `BRIEF.md`).
-
-A task's row names its implementer agent. Its fixes go to that agent, and its reviews to the reviewer of the same domain, or to the general reviewer when the domain has none. Split a task that spans domains. A task that joins two domains goes to the domain whose guidance covers the larger risk, or to the general agent with both interfaces in its packet.
-
-**Writing the guidance.** Fill each scaffold's `Domain guidance` section with what a strong engineer new to this run would not know: the reference and how fidelity is proven, the domain's rules and decisions here, where this work goes wrong, the conventions of that code, and the tools it needs. It is not a tutorial on the field. A reviewer's section holds the same reference and validation, plus the lenses to review that work through. The general pair holds only what is true of any task in the run; when no standing guidance exists, generate it from the scaffolds with only the run's paths and commands filled in. Fill `{{skill dir}}` with this skill directory's absolute path, so agents can run `scripts/wait.sh` from any worktree, and give each agent the task check its domain uses. Fill `{{run}}` with the run's name as given, and keep each description's sentence "Spawned only by the <name> orchestrator" as the scaffold has it: `scripts/cleanup.sh` recognizes the run's agents by their file name and that sentence, and leaves any other file in `.claude/agents/` alone.
-
-**Changing the roster mid-run.** The run learns what its agents should have been told. When the same finding returns across a domain's tasks, the lesson belongs in that domain's agents: add the line yourself, in the implementer and the reviewer, and record it as the skill's "Who decides" describes. Adding, removing or re-scoping an agent is a plan revision and goes to a fresh planner, as does a milestone that opens a new domain. Agent definitions load when a session starts, so a new or changed agent takes effect in the next fresh session. Until then, send that work to the general agent with the guidance in its packet.
+The run learns what its agents should have been told. When the same finding returns across a domain's tasks, the lesson belongs in that domain's agents: add the line yourself, in the implementer and the reviewer, and record it as the skill's "Who decides" describes. A gate teaches the same way. A critical or major confirmed there is something a task review let through, so add what a task reviewer would have had to look for to that reviewer's lenses, unless the problem could only be seen in several tasks taken together, which is what the gate is for. Adding, removing or re-scoping an agent is a plan revision and goes to a fresh planner, as does a milestone that opens a new domain. Agent definitions load when a session starts, so a new or changed agent takes effect in the next fresh session. Until then, send that work to the general agent with the guidance in its packet.
 
 ## Sub-agent contract
 
@@ -190,7 +116,7 @@ A task's row names its implementer agent. Its fixes go to that agent, and its re
 - the task row;
 - the goal and files of each dependency;
 - deferred findings this task carries;
-- the plan sections the row cites;
+- the plan sections the row cites, and the plan's code-shape entries for the files the task touches;
 - any external reference material the agent needs verbatim.
 
 Agent sandboxes may not reach the network, so fetch references into the packet instead of trusting an agent to fetch them. Agents read the packet instead of the design documents.
@@ -217,7 +143,6 @@ QUESTIONS: <only if blocked/needs-decision>
 - every spawn is a fresh agent that finishes its job in one go and returns;
 - fixes go to a fresh fixer, the check of a fix to a fresh reviewer, and decisions to a fresh agent with the decision in its prompt;
 - no sub-agent step waits on a review. The orchestrator runs the counter-review itself, alongside the reviewer rather than before it, and hands the finished result to a fresh reviewer that merges it. The orchestrator is the one session that waits, and its own cache outlives a typical review;
-- implementers and fixers run only the plan's task check: the task's own test files plus typecheck-level checks. Reviewers do not repeat it. Full builds (a whole-workspace or release compile, a bundle), the full suite and any slow test group belong to the orchestrator. See "Where tests run";
 - a sub-agent that waits on a command keeps its cache warm. A slow host or a command whose result the agent genuinely needs can still outlast five minutes, so agents run installs and the task check through this skill's `scripts/wait.sh`. It runs the command in the background and returns after 100 seconds when the command is still running; each return is a small turn that refreshes the cache, and the agent waits again until the command finishes. The wait is that short because Claude Code moves a foreground command to the background after three minutes, or at its two-minute default timeout, and the agent then gets a notice instead of the line to run next. A quick command finishes within the first wait, so agents use it for any command that might take more than a minute. `wait.sh stop <handle>` ends a stuck command together with everything it started. The script also holds a command back while the machine's slots are taken (see "Where tests run"); a `queued` line in the log is that wait, not a stuck command. Generated agents carry the script's absolute path.
 
 ## Where tests run
@@ -228,26 +153,16 @@ The same tests on the same bytes say the same thing however often they run, and 
 |---|---|---|---|
 | Task check | the implementer or fixer | the task's own tests: the test files its row names and the ones it wrote or edited, plus typecheck-level checks such as `tsc --noEmit` or `cargo check`, and lint | while it works, in its worktree |
 | Merge check | you | the same check, once, over the test files of the tasks you just merged | after the tasks that were in flight together are merged, in this checkout |
-| Full validation | you | the full build, the full suite and every slow test group | at the session handoff and at a milestone gate, in this checkout |
+| Full validation | you | the full build (a whole-workspace or release compile, a bundle), the full suite and every slow test group | at the session handoff and at a milestone gate, in this checkout |
 
 - **The task check is the task's own tests, not every test near its files.** A command that picks tests by what imports the changed files, such as `vitest related` or `jest --findRelatedTests`, runs most of a suite when a core file changes; the plan's command takes test files by name. The typecheck covers what the task's own tests cannot see: a caller elsewhere that no longer compiles.
 - **Reviewers do not repeat the task check.** The implementer ran it on the bytes under review, and its return gives the command, the result and how long it took. A reviewer reads the tests and judges what they prove, which a second run does not show. It runs something only to demonstrate a finding: one test, or a probe of its own in a scratch directory. The run that does not rely on an agent's report is your merge check.
-- **The merge check tests what nobody has run.** Tasks in flight together each passed on the base they started from, not on each other. One run over their test files after they merge covers the combination. A failure goes to a fresh fixer, against the task whose change causes it.
-- **Full validation is not a per-merge step.** Run it once at the handoff and once at a milestone gate, before the gate lenses, and not between merges. When it fails, attribute the failure by reading it: the failing test, then the task whose files it exercises. Bisect only when that leaves it open, and bisect with the failing tests alone, never the whole suite.
+- **The merge check tests what nobody has run.** Tasks in flight together each passed on the base they started from, not on each other. One run over their test files after they merge covers the combination. A failure is a fix task (see below).
+- **Full validation is not a per-merge step.** Run it once at the handoff and once at a milestone gate, before the gate lenses, and not between merges. When it fails, attribute the failure by reading it: the failing test, then the task whose files it exercises. Bisect only when that leaves it open, and bisect with the failing tests alone, never the whole suite. The failure is then a fix task.
 - **Every one of these goes through `scripts/wait.sh`,** yours included. The script lets only a few commands run at once across every worktree on the machine, two unless `ARCHFLOW_WAIT_SLOTS` says otherwise, and queues the rest. Parallel tasks then cannot overload the host by installing or testing at the same moment. For your own runs, start it as a background call with `ARCHFLOW_WAIT_SLICE` set longer than the command needs, so one notification wakes you when it ends.
 - An agent that thinks a build or broader verification is needed says so in NOTES; you decide whether it is worth a run before the handoff.
 
-## What tests to write
-
-Every test a task adds is run again by everything after it, for as long as the code lives. A suite that gains one slow test per task ends up setting how long every later task takes, so the run decides what a test costs as deliberately as what it covers. The planner writes the run's test policy into the plan's §4 and into `BRIEF.md`, starting from these defaults:
-
-- **A test earns its place by a failure no other test would catch.** Coverage is the distinct failures the suite catches, not the number of tests or of lines run.
-- **Test at the lowest layer where the failure can happen.** Logic is tested in-process, with its cases in a table. A real boundary (a spawned process, git, a database, the network, a browser) gets the few tests that prove the wiring works, not one per case.
-- **A criterion needs evidence, which is not always a new test.** Extend an existing test or add a case to its table when that covers it.
-- **A fix's regression test is the cheapest test that fails without the fix,** usually one more case beside the ones already there.
-- **Keep setup cheap.** Build an expensive fixture once per file, and wait on a condition or a fake clock instead of a real delay.
-- **A new test belongs to the fast tier,** the one the task check runs. A test that has to be slow says, in the test, what it proves that a fast one cannot, and joins the slow group that only full validation runs.
-- **Replace instead of adding.** When a new test covers what an older one did, remove the older one in the same task.
+**A failure after the merge is a fix task.** The code that fails is already on the run branch and its worktree is gone, so the fix is new work. Write a row for it: the failing tests as its acceptance tests, the implementer agent of the task whose change caused the failure, and a review depth by the usual criteria. Run it through the per-task loop to its own commit. A trivial fixup, as step 5 of the loop allows, you may still make in this checkout: commit it on its own and list it in that task's review file as not separately reviewed. Anything larger that you repaired here yourself would be code only its author has read, which is what the loop exists to prevent.
 
 Cost is reviewed like correctness. An implementer reports how long its check took, the task's `verification.txt` passes that to the cross-model test reviewer, and a reviewer treats a test that is slower than what it proves requires, or that repeats another test's protection, as a finding whose suggested fix names the cheaper test or the one to remove. Record how long the full suite took in each handoff. When it has grown out of proportion to what a milestone added, say so in the gate row and make the slowest tests a task.
 
@@ -266,10 +181,10 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
 
 1. **Implement.**
    - Spawn the implementer agent the task's row names, in implement mode, with worktree isolation, on `opus` at `high` when the row carries that hatch. Its setup brings the fresh worktree to the base commit you name (`git reset --hard <sha>` is safe in a fresh worktree) and installs dependencies.
-   - It writes code and tests, runs the plan's task check on the task's own test files until it passes, reports the command, the result and how long it took, writes `reviews/<id>-impl.md` in its worktree when a fixer or reviewer needs more than its short return, and never commits.
+   - It writes code and tests, runs the plan's task check on the task's own test files until it passes, reports the command, the result and how long it took, writes `reviews/<id>-impl.md` in its worktree when a fixer or reviewer needs more than its short return or when it found a structural problem that was already there, and never commits.
    - Run tasks in parallel only when their file sets do not overlap: typically a handful at once. `wait.sh` keeps their installs and checks from all running at the same moment, so a batch wider than the machine can check mostly waits in its queue.
 2. **Review, once.** When the implementer returns, start the task's reviews together. Other tasks keep moving while they run.
-   - Spawn a fresh reviewer: the reviewer agent of the task's domain, which also takes this task's later merge, fix-verify and verify spawns. It runs on `fable` when the row names a `fable` review. Give it the worktree path, the base commit, the packet, the task's review depth, the implementer's `EXTRA` and reported check result, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It reviews the diff and its tests against the acceptance criteria by reading them, without repeating the task check, writes its findings table, and returns its verdict without waiting for the counter-review.
+   - Spawn a fresh reviewer: the reviewer agent of the task's domain, which also takes this task's later merge, fix-verify and verify spawns. It runs on `fable` when the row names a `fable` review. Give it the worktree path, the base commit, the packet, the task's review depth, the implementer's `EXTRA` and reported check result, the implementer's notes file `reviews/<id>-impl.md` in the worktree when it wrote one, and the output file `<run dir>/reviews/<id>-r1.md` as an absolute path in this session's checkout. It reviews the diff and its tests against the acceptance criteria by reading them, without repeating the task check, writes its findings table, and returns its verdict without waiting for the counter-review.
    - For a `full` task, run the cross-model counter-review on its worktree yourself, in the background (see below). A `light` task has none.
 3. **Merge the counter-review** (`full` tasks). When both have finished and the counter-review produced any reports, spawn a fresh reviewer in merge mode, with the review file, the worktree path, the packet, and the counter-review's `summary.json`. It folds each counter-review point that matches an existing row into that row, adds a row for every other material point, adds each `human_review_reasons` entry as a row with source `human-review`, and updates the verdict. Then:
    - read only the verdict line and the table: `grep '^|' <review>`;
@@ -292,11 +207,11 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
    - **Defer** when it does not matter yet: it is cosmetic, a task that will rework that code anyway is the better place for it, or fixing it now would widen this task's scope. Record why in `PROGRESS.md` (see below).
    - **Dismiss** a finding that is wrong or not worth doing at all, with the reason in the review file.
    - Write each decision as a line under the round's table in the review file: `<row id>: fix | defer → <owner> | dismiss | keep | revert | decided | halt — <reason>`.
-   - Fix-now findings go to a **fresh** fixer: a new spawn of the task's implementer agent in fix mode, given the review file, the finding ids, the packet and the worktree path. It runs on `sonnet` unless a run-time hatch under "Escape hatches" applies; say which on the decision line. Never resume the implementer for fixes.
+   - Fix-now findings go to a **fresh** fixer: a new spawn of the task's implementer agent in fix mode, given the review file, the finding ids, the packet, the worktree path, and the implementer's notes file when there is one. It runs on `sonnet` unless a run-time hatch under "Escape hatches" applies; say which on the decision line. Never resume the implementer for fixes.
    - Before spawning the fixer, record the worktree's current tree, so the fix can be checked on its own: `cd <worktree> && git add -A && git write-tree > <run dir>/packets/<id>-pre-r<k+1>.tree && git reset -q`. When the fixer returns, record the fixed tree the same way into `<id>-post-r<k+1>.tree`.
    - When nothing needs fixing now, the task goes straight to the merge.
    - Deferred findings go under "Deferred findings" in `PROGRESS.md`, each with a reason and the task that owns it, and into that task's packet.
-   - You may make trivial fixups yourself, typically 10 lines or fewer, in the worktree. List one made after the review in the task's review file as not separately reviewed; the milestone counter-review covers it. Anything larger is a fix: it goes to a fixer and gets checked.
+   - You may make trivial fixups yourself, typically 10 lines or fewer, in the worktree. List one made after the review in the task's review file as not separately reviewed. The milestone counter-review is what reads it, so a milestone that holds one runs that review with every role. Anything larger is a fix: it goes to a fixer and gets checked.
 6. **Check the fix.** Check what the fixer changed, not the task again.
    - **Always: fix verify.** Spawn a fresh reviewer in fix-verify mode, on `opus`, or on `sonnet` at `medium` when every listed finding is purely mechanical, with the review file, the finding ids sent to the fixer, both tree IDs (the contents of the two `.tree` files), the packet, and the fixer's `EXTRA` and `ORACLE` lines and its reported check result. It appends round `r<k+1>` to the review file. For each finding it says whether the fix resolves it and on what basis:
      - `test`: a test exercises the finding's failure scenario, the fixer saw it fail before the fix and pass after, and its expected values do not come from the fixer's own computation;
@@ -321,7 +236,7 @@ A change gets one open-ended review. A fresh reviewer asked to review again find
 7. **Merge.**
    - In the worktree, run `git add -A` and make a scratch commit.
    - In this session's checkout, run `git merge --squash <worktree branch>` (the branch is `git -C <worktree> branch --show-current`).
-   - Resolve conflicts that have a mechanical owner (regenerate generated files, take the union of append-only registries). Halt on any conflict that needs judgment.
+   - Resolve conflicts that have a mechanical owner (regenerate generated files, take the union of append-only registries). Halt on any conflict that needs judgment. A resolution that changes source by hand is listed in the task's review file like a fixup made after the review.
    - Never use a bare `git stash`: the stash stack is shared with every other worktree and session.
 8. **Commit.**
    - One commit per task, subject `<name> <id>: <imperative summary>`. The squash merge has staged the task's changes; add the task's own review files by path (`git add <run dir>/reviews/<id>-*`) and the `PROGRESS.md` tick, and commit the index. `git add -A` in this checkout would sweep in other in-flight tasks' review files.
@@ -432,14 +347,16 @@ Then run the script on `$wt` with `implementation` as the stage. `ask.txt` holds
 
 A milestone ends with full validation (see "Where tests run") and then the gate lenses `PLAN.md` declares, which judge a result already known to build and pass instead of running the suite again. A useful default set, each lens a fresh reviewer run in parallel:
 
-- **fidelity:** the result against the reference or requirements;
-- **architecture:** drift from the plan's architecture, shortcuts that force rework, and the shape of the milestone's code taken together: responsibilities that spread across tasks, units that grew past one job as several tasks added to them, the same state or rule now owned in two places, patterns that diverged between lanes. The task reviews see one diff each; this lens is where the sum is judged, and what it finds becomes cleanup tasks. Give it a bounded reading list: the milestone's diff stat, the files that changed most, and the milestone's `structure` rows, not the whole codebase;
+- **fidelity:** the result against the reference and the requirements. It goes through the requirements the milestone was to meet one by one and names the evidence for each: a test, a behavior it observed, or nothing;
+- **architecture:** drift from the plan's architecture, shortcuts that force rework, and the shape of the milestone's code taken together: responsibilities that spread across tasks, units that grew past one job as several tasks added to them, the same state or rule now owned in two places, patterns that diverged between lanes. The task reviews see one diff each; this lens is where the sum is judged, and what it finds becomes cleanup tasks. Give it a bounded reading list: the plan's code shape, the milestone's diff stat, the files that changed most, the milestone's `structure` rows, and what implementers noted as already there (the `## Already there` sections of the milestone's `reviews/*-impl.md`), not the whole codebase;
 - **dogfood:** use the result the way its consumer will, and report the friction;
 - **runtime:** run it end to end.
 
-Run the whole-milestone counter-review as well, with every role. It is the cross-model coverage for `light` tasks, for fixes that were only verified, and for how the tasks fit together. It is where the test reviewer sees the integrated result, and it is the constitution review of the milestone's work, which the task reviews did not run. For a small milestone whose tasks were all `full` and whose fixes were small, narrow it to `adjudicator` alone instead of skipping it, and say so in the gate row; skip it entirely only when every task of the milestone already ran the constitution reviewer.
+The plan chooses each gate's lenses, with one exception: the last milestone always runs fidelity, over every requirement in the plan, and runtime. A run does not report done for something nobody ran end to end and checked against what was asked. When the result cannot be run in this environment, the final report says what was not run and why.
 
-Verdict: PASS, PASS-WITH-DEFERRALS, or FAIL. Any confirmed critical is a FAIL. A FAIL produces fix tasks, each with a review depth by the usual criteria. The one-review rule holds here too: a failed lens re-runs only to check that its own findings are fixed, and the milestone counter-review is not run again. The fix tasks a gate produces are covered by the next milestone's counter-review; after the last milestone, run `adjudicator` once over them before the final STOP. Decide a gate's lesser findings the way the per-task loop does: one with knock-on effects for the next milestone becomes a fix task now.
+Run the whole-milestone counter-review as well, with every role. It is the cross-model coverage for `light` tasks, for fixes that were only verified, and for how the tasks fit together. It is where the test reviewer sees the integrated result, and it is the constitution review of the milestone's work, which the task reviews did not run. For a small milestone whose tasks were all `full`, whose fixes were small, and that holds no change only you have read (a fixup made after a task's review, a conflict resolved by hand), narrow it to `adjudicator` alone instead of skipping it, and say so in the gate row; skip it entirely only when every task of the milestone already ran the constitution reviewer.
+
+Verdict: PASS, PASS-WITH-DEFERRALS, or FAIL. Any confirmed critical is a FAIL. A FAIL produces fix tasks, each with a review depth by the usual criteria. The one-review rule holds here too: a failed lens re-runs only to check that its own findings are fixed, and the milestone counter-review is not run again. The fix tasks a gate produces are covered by the next milestone's counter-review; after the last milestone, run `adjudicator` once over them before the final STOP. Decide a gate's lesser findings the way the per-task loop does: one with knock-on effects for the next milestone becomes a fix task now. What its confirmed criticals and majors teach goes into the reviewers' lenses (see "Changing the agents mid-run").
 
 Record a gate row in `PROGRESS.md`. A gate is not a STOP unless the plan declares one there, so do not stop to report it: the human is not watching mid-run. Include the gate's result in the next message that ends a turn, whether a STOP report, a halt, or the session handoff.
 
@@ -457,8 +374,9 @@ At the last milestone nothing can carry. Every open entry is fixed or closed bef
 
 When the next milestone is "detailed at start":
 
-- have a fresh planner write its task rows from what the run has learned, each with its review depth (see "Planning agents"); you do not write them yourself;
-- review them once: with the plan-stage counter-review, `counter-reviewer` alone, when they add architecture, interfaces or choices the approved plan does not hold; with a fresh reviewer in plan-review mode when they only continue the approved architecture;
+- have a fresh planner write its task rows from what the run has learned, each with its review depth (see "Planning agents" in `PLANNING.md`); you do not write them yourself;
+- review them once, with the plan-stage counter-review, `counter-reviewer` alone, before spawning any of them. Another model family reading rows the strongest model wrote adds more than a second pass on that model would, and spends none of its allowance;
+- the rows need no human gate unless the milestone changes the requirements or a decision the human made;
 - fix supported findings;
 - record the result in `PROGRESS.md`.
 
@@ -502,12 +420,14 @@ Task table columns:
 | id | goal | files | acceptance tests | depends on | size | agent | review | lane |
 ```
 
-- **Agent** names the generated implementer agent that takes the task (see "Run agents"), followed by `opus/high` and the reason when the task has that hatch (see "Escape hatches").
+- **Agent** names the generated implementer agent that takes the task (see "Run agents" in `PLANNING.md`), followed by `opus/high` and the reason when the task has that hatch (see "Escape hatches").
 - **Review** is the task's depth, `full` or `light` (see "Review depth"), followed by `fable` review and the reason when the task has that hatch.
 - **Acceptance tests** name the test file and list concrete assertions. For a task whose errors would otherwise hide, they carry the oracle: the invariant, and the check that proves it.
 - **Dependencies**: `Tn` is a hard edge; `Tn (soft)` is a preference.
 - **Lanes** group tasks that touch disjoint files, so they can run in parallel.
 - **Carry-overs**: deferred findings a task must pick up are appended to its goal, citing their review id.
+
+**Rows you write.** The planner writes the plan's rows. You write a row only for work the run has already shown to be needed: a finding, a failed check, a deferred finding, a cleanup a `structure` row asked for, or a split of an existing row. Carry that evidence into the row, so it has its oracle: the acceptance tests are the failure scenario or the failing test, and the agent and review depth follow the usual criteria. Work that adds behavior or an interface the plan does not hold is a plan revision, and goes to a fresh planner.
 
 ## Context hygiene
 
@@ -519,6 +439,8 @@ The orchestrator's cost per turn grows with its context:
 - Pipe long output through `tail`.
 - Let completion notifications wake you instead of polling.
 
+At a handoff, run full validation, sweep the worktrees and temporary directories this session's finished work left behind ("Worktrees and temporary directories"), write the handoff, and commit.
+
 The session handoff in `PROGRESS.md` records:
 
 - tasks merged, as a count of done over total;
@@ -529,7 +451,7 @@ The session handoff in `PROGRESS.md` records:
 - the carry-over items the next tasks must take;
 - a "Next" list.
 
-The handoff is also what the human reads, so the closing message of the session summarizes it in plain language rather than pointing at the file.
+The handoff is also what the human reads, so the closing message of the session summarizes it in plain language rather than pointing at the file, and ends with the exact command that starts the next session, on the orchestrator's model and effort.
 
 ## Decisions to report
 
