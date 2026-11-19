@@ -57,7 +57,7 @@ Follow it with one sentence on where to resume.
 Three roles frame the run's cost:
 
 - **The orchestrator runs on `opus` at `high` effort.** Its context is re-read on every turn of a long session, so its model sets a large part of what a run costs. It keeps the judgment that needs the whole run in view: the requirements, the packets, the decision on each finding, merges, and the conversation with the human.
-- **The plan is written on the strongest model available (`fable` today), always.** An error in the plan is repeated in every task built on it, and writing it is one bounded spawn, not a session. The planner is also how the strongest model's understanding reaches every cheaper agent: through the invariants, the interfaces and the checks it writes into the rows.
+- **The first plan is written on the strongest model available (`fable` today), always.** An error in the plan is repeated in every task built on it, and writing it is one bounded spawn, not a session. The planner is also how the strongest model's understanding reaches every cheaper agent: through the architecture, the invariants, the interfaces and the checks it writes into the rows. Later planning works inside that architecture, with merged code to read, so it runs on `opus` and reaches `fable` only when it has to decide the architecture again (see "Planner routing").
 - **Exploration runs on the cheapest model (`haiku`), at `xhigh` effort.** Locating code and describing what is there needs no strong model, but the planner builds on the notes, and Haiku is the one model that keeps gaining well past `high`. At its price the extra effort costs little; the planner reads the notes and looks up the rest itself.
 
 **Sonnet writes, Opus reviews.** On the same model, writing a task costs about twice what reviewing it does. Every task is reviewed by an `opus` reviewer that did not write it, and every behavior change by another model family as well. That net is what lets a cheaper model write: most of what it gets wrong on a first pass comes back as findings, and a fix round on the cheap model costs little. Defaults for the current Claude models:
@@ -67,12 +67,27 @@ Three roles frame the run's cost:
 | Orchestrate (this session) | `opus` | `high` |
 | Explore during planning: locate code, map files, collect conventions and commands | `haiku` | `xhigh` |
 | Research that needs judgment: compare approaches, read a specification or a design | `sonnet` | `medium` |
-| Write the plan; detail a later milestone; a significant plan revision | `fable` | `high` |
+| Write the first plan; a revision the human asks for that changes the requirements, the architecture or the invariants | `fable` | `high` |
+| Detail a later milestone; every other plan revision, including every revision from a review | `opus` | `high` (`fable` on the triggers in "Planner routing") |
 | Implement, and fix | `sonnet` | `high` |
 | Task review, of a `full` or a `light` task; fix verify; verify a doubted finding; deferral pass | `opus` | `high` |
 | Merge a finished counter-review into the findings; check a purely mechanical fix | `sonnet` | `medium` |
 | Fidelity and architecture gate lenses | `fable` | `high` |
 | Dogfood and runtime gate lenses | `opus` | `high` |
+
+### Planner routing
+
+A planner job is routed by whether it decides the run's architecture. The first plan does, with no code yet to read, and that is where the strongest model buys the most. Later planning mostly works out rows inside the architecture it set, from merged code, which `opus` does well; the cross-model counter-review of each milestone's file and the `fable` gate lenses still judge what it writes.
+
+- **First plan:** `fable` / `high`.
+- **A revision the human asks for:** `fable` / `high` when it changes the requirements, the architecture or the invariants; `opus` / `high` otherwise.
+- **A revision from a review**, carrying out the counter-review points you accepted on the plan or on a milestone's file: `opus` / `high`, always. The reviewer found the defect and you decided it, so the planner carries out a decision rather than making one. A plan-stage revision still reaches the human at STOP 0.
+- **Milestone detail:** `opus` / `high`, moving to a fresh `fable` / `high` planner when:
+  - the plan's milestone table marks the milestone `fable`, with a reason. The first planner does this for a milestone whose architecture it knowingly leaves open, and the human approves it at STOP 0;
+  - the last gate's fidelity or architecture lens confirmed a critical or major, so the design the milestone builds on has been shown wrong;
+  - the `opus` planner returns `escalate`: the milestone needs a change to what a requirement, an architecture decision or an invariant in `PLAN.md` commits the run to, or an agent added or re-scoped. It writes nothing then, and names what has to be decided; put that in the `fable` planner's prompt.
+
+  When an `opus` milestone planner returns `done`, read its diff of `PLAN.md` and `.claude/agents/`. A change there beyond correcting a detail, as you could yourself, is one that should have escalated: give the milestone to a fresh `fable` planner, with the `opus` planner's file as a draft. Record which route detailed each milestone, and why, under "Decisions to report".
 
 ### Escape hatches
 
@@ -105,15 +120,15 @@ How to use the table:
 - **Always name the effort.** The models' own defaults differ (Opus runs at `medium` when none is given, Sonnet and Fable at `high`), so write `model` and `effort` into each generated agent's frontmatter and pass both on every spawn that differs from it. This skill asks for those per-spawn values; follow the plan's table.
 - **A reviewer is at least as strong as the work it reviews.** The defaults give that, except for the verify of a `fable` fixer, which the delta review backs. A generated reviewer serves several modes, so its frontmatter carries the task-review default and the other modes are per-spawn overrides.
 - **Fixes and their checks are routed by the finding, not the task.** Most findings on a hard task are still small: a missing case, a test that cannot fail, a wrong clock read. A fix starts on `sonnet` whatever wrote the task, unless a run-time hatch applies. A fix verify is a closed question with a stated basis, so it stays on `opus` even for a task with a `fable` reviewer, and drops to `sonnet` at `medium` when every finding in the round is purely mechanical (a rename, a reindent, a moved import). When a fix's reasoning needs a second opinion, that is the cross-model delta review, not a stronger verifier from the same family.
-- **The strongest model is usually the scarcest.** On a subscription it has its own, smaller allowance, and a run can exhaust it while the other models have barely been used. It is spent on the plan, the fidelity and architecture lenses, the reviews the plan names, and the rare `fable` fixer. When a `fable` spawn fails on the allowance, or the human says it is short, the named reviews fall back to `opus` first, then the lenses; record each fallback under "Decisions to report". Plan work waits for the allowance, or for the human to name another model.
+- **The strongest model is usually the scarcest.** On a subscription it has its own, smaller allowance, and a run can exhaust it while the other models have barely been used. It is spent on the first plan, the fidelity and architecture lenses, the reviews the plan names, a milestone's detail when it escalates, and the rare `fable` fixer. When a `fable` spawn fails on the allowance, or the human says it is short, the named reviews fall back to `opus` first, then the lenses; record each fallback under "Decisions to report". Planner work routed to `fable` waits for the allowance, or for the human to name another model.
 - **`high` is the floor for implementing, fixing and reviewing.** A model usually loses a good deal between `high` and `medium`. `medium` is for `sonnet` on mechanical work: merging a finished counter-review, checking a rename or a reindent.
 - **Raise the model before the effort.** Most of a model's gain arrives by `high`; `xhigh` and `max` cost many more tokens for an uneven gain. Haiku is the exception: it is cheap enough, and gains enough, to explore at `xhigh`. `xhigh` on `opus` or `fable` is the human's to name.
 - **Cost scales with the tier.** Per token, Opus costs about twice Sonnet and Fable about twice Opus, and Haiku costs a small fraction of Sonnet.
-- **The plan-writing route does not move down.** The plan may adapt every other row. Writing the plan stays on the strongest model.
+- **The first plan's route does not move down.** The plan may adapt every other row, including which later milestones are detailed on `fable`. Writing the first plan stays on the strongest model.
 - **A task that spans domains is split** (see "Run agents" in `PLANNING.md`), as one that mixes levels of difficulty is.
 - **Report what the routing bought.** The task log records which model wrote each task and how many fix rounds it took, and each session's report in `HISTORY.md` totals them (see "Context hygiene"). That is how the human, and the planner of the next milestone, learn whether the cheaper writer is holding up or the hatches need to move.
 
-Model names age. When newer models exist, keep the shape (the cheapest model explores, a cheap one writes, a stronger one orchestrates and reviews, the strongest writes the plan, judges each milestone and reviews the rare task whose errors hide) and record the run's mapping in `PLAN.md`.
+Model names age. When newer models exist, keep the shape (the cheapest model explores, a cheap one writes, a stronger one orchestrates and reviews, the strongest writes the first plan and any later planning that changes its architecture, judges each milestone and reviews the rare task whose errors hide) and record the run's mapping in `PLAN.md`.
 
 ## Changing the agents mid-run
 
@@ -386,10 +401,10 @@ At the last milestone nothing can carry. Every open entry is fixed or closed bef
 
 When the next milestone is "detailed at start":
 
-- have a fresh planner write its file, `milestones/M<n>.md`, from what the run has learned: the milestone's design and its task rows, each with its review depth (see "Planning agents" in `PLANNING.md`); you do not write them yourself;
-- review it once, with the plan-stage counter-review, `counter-reviewer` alone, before spawning any of its tasks. Its `plan.txt` is `PLAN.md` and the new file, not the earlier milestones' files. Another model family reading rows the strongest model wrote adds more than a second pass on that model would, and spends none of its allowance;
+- have a fresh planner, on the route "Planner routing" gives the milestone, write its file, `milestones/M<n>.md`, from what the run has learned: the milestone's design and its task rows, each with its review depth (see "Planning agents" in `PLANNING.md`); you do not write them yourself;
+- review it once, with the plan-stage counter-review, `counter-reviewer` alone, before spawning any of its tasks. Its `plan.txt` is `PLAN.md` and the new file, not the earlier milestones' files. Another model family reading the rows adds more than a second pass from the same family would, and spends none of the strongest model's allowance;
 - the rows need no human gate unless the milestone changes the requirements or a decision the human made;
-- fix supported findings;
+- send supported findings that change its design or rows to a fresh `opus` planner as a revision, and make a wording fix yourself;
 - record the result in `PROGRESS.md`.
 
 ## Findings format

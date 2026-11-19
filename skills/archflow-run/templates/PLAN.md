@@ -72,7 +72,8 @@ work, keep only the general pair and give it that guidance.>
 |---|---|---|
 | Orchestrate | this session | `opus` / `high` |
 | Explore during planning | general-purpose + override | `haiku` / `xhigh` |
-| Write the plan; detail a later milestone; a significant plan revision | general-purpose + override | `fable` / `high` (always the strongest model) |
+| Write the first plan; a human's revision of the requirements, architecture or invariants | general-purpose + override | `fable` / `high` (always the strongest model) |
+| Detail a later milestone; every other revision, including every revision from a review | general-purpose + override | `opus` / `high` (`fable` when the milestone is marked so, or on escalation) |
 | Implement; fix | the task's implementer agent | `sonnet` / `high` |
 | Task review, `full` or `light`; fix verify; verify | the domain's reviewer | `opus` / `high` |
 | Counter-review merge; check of a purely mechanical fix | the domain's reviewer + override | `sonnet` / `medium` |
@@ -94,7 +95,7 @@ checks.>
 | Milestone | Goal | Detail | Gate lenses | STOP |
 |---|---|---|---|---|
 | M1 | <goal> | detailed now: `milestones/M1.md` | <fidelity, architecture, …> | — |
-| M2 | <goal> | detailed at start | <…> | STOP 1: <what the human does> |
+| M2 | <goal> | detailed at start, `opus` <or `fable`: the architecture decision it leaves open> | <…> | STOP 1: <what the human does> |
 
 <A milestone is one complete set of work that is designed together: what must be built and seen working before the
 rest can be designed well. See "What a milestone is" in the skill's `PLANNING.md`. The plan chooses each gate's lenses,
