@@ -12,6 +12,7 @@ const skillNames = [
   "archflow-init",
   "archflow-explore",
   "archflow-constitution",
+  "archflow-counter-review",
   "archflow-run",
 ] as const;
 function skill(name: typeof skillNames[number]): string {

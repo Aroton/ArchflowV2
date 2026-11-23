@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -119,4 +120,267 @@ describe("archflow-run wait script", () => {
     // The handle this run created is still there for the caller to read.
     expect(readdirSync(temp).filter((name) => name.startsWith("archflow-wait.")).length).toBe(4);
   });
+
+  it("returns quickly for a fast command without waiting a full polling interval", () => {
+    const temp = temporaryRoot("wait-fast-path");
+    const env = { ...process.env, TMPDIR: temp, ARCHFLOW_WAIT_SLICE: "20", ARCHFLOW_WAIT_SYSTEMD: "0" };
+    const start = Date.now();
+    const result = spawnSync("bash", [script, "run", "echo fast-ok"], { encoding: "utf8", env });
+    const elapsedMs = Date.now() - start;
+
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain("exit=0");
+    expect(result.stdout).toContain("fast-ok");
+    expect(elapsedMs).toBeLessThan(1500);
+  });
+
+  it("runs --full exclusively across all slots and blocks normal jobs until it completes", async () => {
+    const temp = temporaryRoot("wait-full-exclusive");
+    const env = { ...process.env, TMPDIR: temp, ARCHFLOW_WAIT_SLOTS: "2", ARCHFLOW_WAIT_SYSTEMD: "0" };
+    const normalMarker = join(temp, "normal-running");
+    const fullMarker = join(temp, "full-running");
+
+    // Start a normal job in slot 1.
+    const normal1 = run(script, ["run", `touch '${normalMarker}'; sleep 1.5; rm '${normalMarker}'`], {
+      ...env,
+      ARCHFLOW_WAIT_SLICE: "20",
+    });
+    while (!existsSync(normalMarker)) await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // --full must wait for normal1 to finish before running, and fail if normalMarker still exists.
+    const fullJob = run(
+      script,
+      ["run", "--full", `[ ! -e '${normalMarker}' ] && touch '${fullMarker}' && sleep 1.5 && rm '${fullMarker}'`],
+      { ...env, ARCHFLOW_WAIT_SLICE: "20" },
+    );
+
+    // Wait until --full actually holds the exclusive lock and creates its marker.
+    const normal1Res = await normal1;
+    expect(normal1Res.status, normal1Res.stdout + normal1Res.stderr).toBe(0);
+    while (!existsSync(fullMarker)) await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // A normal job submitted while --full is running must wait until --full finishes.
+    const normal2 = await run(script, ["run", `[ ! -e '${fullMarker}' ] && echo after-full`], {
+      ...env,
+      ARCHFLOW_WAIT_SLICE: "20",
+    });
+    const fullRes = await fullJob;
+
+    expect(fullRes.status, fullRes.stdout + fullRes.stderr).toBe(0);
+    expect(normal2.status, normal2.stdout + normal2.stderr).toBe(0);
+    expect(normal2.stdout).toContain("after-full");
+  }, 20_000);
+
+  it("assigns sliced CPU affinity per slot and full usable CPUs for --full", () => {
+    if (process.platform !== "linux" || availableParallelism() < 6) return;
+
+    const temp = temporaryRoot("wait-cpuset");
+    const nodeCmd = `node -e 'console.log("CPUS=" + require("node:os").availableParallelism() + " CARGO=" + process.env.CARGO_BUILD_JOBS)'`;
+
+    for (const mode of ["0", "auto"] as const) {
+      const env = {
+        ...process.env,
+        TMPDIR: temp,
+        ARCHFLOW_WAIT_SLOTS: "3",
+        ARCHFLOW_WAIT_SLICE: "20",
+        ARCHFLOW_WAIT_SYSTEMD: mode,
+      };
+      const normal = spawnSync("bash", [script, "run", nodeCmd], { encoding: "utf8", env });
+      const full = spawnSync("bash", [script, "run", "--full", nodeCmd], { encoding: "utf8", env });
+
+      expect(normal.status, normal.stdout + normal.stderr).toBe(0);
+      expect(full.status, full.stdout + full.stderr).toBe(0);
+
+      const normalCpus = Number(/CPUS=(\d+)/.exec(normal.stdout)?.[1] ?? 0);
+      const normalCargo = Number(/CARGO=(\d+)/.exec(normal.stdout)?.[1] ?? 0);
+      const fullCpus = Number(/CPUS=(\d+)/.exec(full.stdout)?.[1] ?? 0);
+      const expectedUsable = availableParallelism() - 2;
+
+      expect(normalCpus, `mode=${mode}`).toBeGreaterThan(0);
+      expect(normalCpus, `mode=${mode}`).toBeLessThan(expectedUsable);
+      expect(normalCargo, `mode=${mode}`).toBe(normalCpus);
+      expect(fullCpus, `mode=${mode}`).toBe(expectedUsable);
+    }
+  });
+
+  it("allows the first job when free RAM is below the floor, and holds a second concurrent job until it finishes", async () => {
+    if (!existsSync("/proc/meminfo")) return;
+
+    const temp = temporaryRoot("wait-ram-gate");
+    const env = {
+      ...process.env,
+      TMPDIR: temp,
+      ARCHFLOW_WAIT_SLOTS: "2",
+      ARCHFLOW_WAIT_MIN_FREE_MB: "999999999",
+      ARCHFLOW_WAIT_SYSTEMD: "0",
+    };
+    const marker = join(temp, "first-ram-running");
+
+    // First job must NOT deadlock even though free RAM is below the configured floor.
+    const first = run(script, ["run", `touch '${marker}'; sleep 2; rm '${marker}'`], {
+      ...env,
+      ARCHFLOW_WAIT_SLICE: "20",
+    });
+    while (!existsSync(marker)) await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // Second concurrent job sees another job active and queues on free RAM.
+    const second = await run(script, ["run", `[ ! -e '${marker}' ] && echo ram-ok`], {
+      ...env,
+      ARCHFLOW_WAIT_SLICE: "1",
+    });
+
+    expect(second.status, second.stdout + second.stderr).toBe(0);
+    expect(second.stdout).toContain("queued: waiting for free RAM");
+    expect((await first).status).toBe(0);
+
+    const handle = /continue with: bash '.*' wait '(.*)'/.exec(second.stdout)?.[1] ?? "";
+    const finished = await run(script, ["wait", handle], { ...env, ARCHFLOW_WAIT_SLICE: "20" });
+    expect(finished.status, finished.stdout + finished.stderr).toBe(0);
+    expect(finished.stdout).toContain("ram-ok");
+  }, 20_000);
+
+  it("stops a running command and releases its slot immediately", async () => {
+    const temp = temporaryRoot("wait-stop");
+    const env = { ...process.env, TMPDIR: temp, ARCHFLOW_WAIT_SLOTS: "1", ARCHFLOW_WAIT_SLICE: "1" };
+    const started = join(temp, "stop-started");
+
+    const first = await run(script, ["run", `touch '${started}'; sleep 60`], env);
+    expect(first.status, first.stdout + first.stderr).toBe(0);
+    const handle = /^handle=([^;]+);/.exec(first.stdout)?.[1] ?? "";
+    while (!existsSync(started)) await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const stopped = spawnSync("bash", [script, "stop", handle], { encoding: "utf8", env });
+    expect(stopped.status, stopped.stdout + stopped.stderr).toBe(0);
+    expect(stopped.stdout).toContain("stopped");
+
+    // Slot must now be free so the next job completes immediately.
+    const after = spawnSync("bash", [script, "run", "echo slot-freed"], {
+      encoding: "utf8",
+      env: { ...env, ARCHFLOW_WAIT_SLICE: "20" },
+    });
+    expect(after.status, after.stdout + after.stderr).toBe(0);
+    expect(after.stdout).toContain("slot-freed");
+  }, 20_000);
+
+  it("slices CPU masks strictly within inherited non-zero-based CPU affinity", () => {
+    if (process.platform !== "linux" || availableParallelism() < 12) return;
+
+    const temp = temporaryRoot("wait-inherited-affinity");
+    const upperStart = availableParallelism() - 8;
+    const upperEnd = availableParallelism() - 1;
+    const inherited = `${upperStart}-${upperEnd}`;
+    const probeCmd = `awk '$1 == "Cpus_allowed_list:" { print "ALLOWED=" $2 }' /proc/self/status; echo "CARGO=$CARGO_BUILD_JOBS"`;
+
+    const result = spawnSync(
+      "taskset",
+      ["-c", inherited, "bash", script, "run", probeCmd],
+      {
+        encoding: "utf8",
+        env: { ...process.env, TMPDIR: temp, ARCHFLOW_WAIT_SLOTS: "2", ARCHFLOW_WAIT_SLICE: "20", ARCHFLOW_WAIT_SYSTEMD: "0" },
+      },
+    );
+
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    const allowed = /ALLOWED=([0-9,-]+)/.exec(result.stdout)?.[1] ?? "";
+    const cargo = Number(/CARGO=(\d+)/.exec(result.stdout)?.[1] ?? 0);
+    expect(allowed).not.toBe("");
+    // 8 inherited CPUs -> 6 usable CPUs (reserving top 2), 2 slots -> 3 CPUs in slot 1: upperStart..(upperStart+2).
+    expect(allowed).toBe(`${upperStart}-${upperStart + 2}`);
+    expect(cargo).toBe(3);
+  });
+
+  it("configures systemd slice properties, scope flags, OOMPolicy fallback (<253), and stops recorded units", async () => {
+    const temp = temporaryRoot("wait-systemd-stubs");
+    const bin = join(temp, "bin");
+    const log = join(temp, "systemd.log");
+    mkdirSync(bin);
+
+    // Deterministic PATH stubs for systemctl and systemd-run so we assert exact host-protection arguments
+    // regardless of the host's systemd version or user bus availability.
+    const systemctlStub = join(bin, "systemctl");
+    writeFileSync(
+      systemctlStub,
+      `#!/usr/bin/env bash
+printf 'systemctl %s\\n' "$*" >> '${log}'
+exit 0
+`,
+    );
+    const systemdRunStub = join(bin, "systemd-run");
+    writeFileSync(
+      systemdRunStub,
+      `#!/usr/bin/env bash
+printf 'systemd-run %s\\n' "$*" >> '${log}'
+if [ "\${STUB_REJECT_OOM:-0}" = "1" ] && [[ " $* " == *"OOMPolicy=kill"* ]]; then
+  exit 1
+fi
+if [ "\${STUB_REJECT_SCOPE:-0}" = "1" ]; then
+  exit 1
+fi
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; break; fi
+  shift
+done
+exec "$@"
+`,
+    );
+    chmodSync(systemctlStub, 0o755);
+    chmodSync(systemdRunStub, 0o755);
+
+    const stubEnv = {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      TMPDIR: temp,
+      ARCHFLOW_WAIT_SLOTS: "2",
+      ARCHFLOW_WAIT_SLICE: "20",
+      ARCHFLOW_WAIT_SYSTEMD: "auto",
+    };
+
+    // 1. Full systemd (>=253): slice properties, scope properties with OOMPolicy=kill, and systemctl stop.
+    const started = join(temp, "sd-running");
+    const first = await run(script, ["run", `touch '${started}'; sleep 60`], { ...stubEnv, ARCHFLOW_WAIT_SLICE: "1" });
+    expect(first.status, first.stdout + first.stderr).toBe(0);
+    const handle = /^handle=([^;]+);/.exec(first.stdout)?.[1] ?? "";
+    while (!existsSync(started)) await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const unit = readFileSync(join(handle, "unit"), "utf8").trim();
+    expect(unit).toMatch(/^archflow-wait-.*\.scope$/);
+    expect(readFileSync(join(handle, "meta"), "utf8")).toContain("systemd=1 oom_policy=1");
+
+    const stopRes = spawnSync("bash", [script, "stop", handle], { encoding: "utf8", env: stubEnv });
+    expect(stopRes.status, stopRes.stdout + stopRes.stderr).toBe(0);
+
+    const calls = readFileSync(log, "utf8");
+    expect(calls).toMatch(/systemctl --user set-property --runtime archflow-jobs\.slice CPUQuota=\d+% CPUWeight=50 IOWeight=20/);
+    if (existsSync("/proc/meminfo")) {
+      expect(calls).toMatch(/MemoryHigh=\d+M MemoryMax=\d+M/);
+    }
+    expect(calls).toContain(`systemd-run --user --scope --quiet --unit=${unit} --slice=archflow-jobs.slice -p CPUWeight=100 -p IOWeight=20 -p OOMPolicy=kill`);
+    expect(calls).toContain(`systemctl --user stop ${unit}`);
+
+    // 2. Older systemd (<253) rejecting OOMPolicy=kill on scopes: stays on systemd without OOMPolicy=kill.
+    writeFileSync(log, "");
+    const noOom = spawnSync("bash", [script, "run", "echo legacy-systemd-ok"], {
+      encoding: "utf8",
+      env: { ...stubEnv, STUB_REJECT_OOM: "1" },
+    });
+    expect(noOom.status, noOom.stdout + noOom.stderr).toBe(0);
+    expect(noOom.stdout).toContain("legacy-systemd-ok");
+    const noOomHandle = /^handle=([^;]+);/.exec(noOom.stdout)?.[1] ?? "";
+    expect(readFileSync(join(noOomHandle, "meta"), "utf8")).toContain("systemd=1 oom_policy=0");
+    const noOomUnit = readFileSync(join(noOomHandle, "unit"), "utf8").trim();
+    const noOomCalls = readFileSync(log, "utf8");
+    expect(noOomCalls).toContain(`--unit=${noOomUnit}`);
+    const actualScopeLine = noOomCalls.split("\n").find((line) => line.includes(`--unit=${noOomUnit}`)) ?? "";
+    expect(actualScopeLine).not.toContain("OOMPolicy=kill");
+
+    // 3. Scope creation denied: falls back cleanly without systemd instead of failing commands.
+    const fallback = spawnSync("bash", [script, "run", "echo fallback-ok"], {
+      encoding: "utf8",
+      env: { ...stubEnv, STUB_REJECT_SCOPE: "1" },
+    });
+    expect(fallback.status, fallback.stdout + fallback.stderr).toBe(0);
+    expect(fallback.stdout).toContain("fallback-ok");
+    const fallbackHandle = /^handle=([^;]+);/.exec(fallback.stdout)?.[1] ?? "";
+    expect(readFileSync(join(fallbackHandle, "meta"), "utf8")).toContain("systemd=0 oom_policy=0");
+  }, 20_000);
 });

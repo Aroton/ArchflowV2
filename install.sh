@@ -379,12 +379,12 @@ echo "ArchFlow bundle installed to $BUNDLE_DIR/"
 echo "ArchFlow launcher installed to $ARCHFLOW_BIN_DIR/archflow-local"
 echo ""
 if [ "$install_claude" = true ]; then
-  echo "Claude Code: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-run"
+  echo "Claude Code: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-counter-review, /archflow-run"
 fi
 if [ "$install_codex" = true ]; then
-  echo 'Codex: $archflow-init, $archflow-constitution, $archflow-explore'
+  echo 'Codex: $archflow-init, $archflow-constitution, $archflow-explore, $archflow-counter-review'
   echo "Restart Codex if the skills do not appear immediately."
 fi
 if [ "$install_antigravity" = true ]; then
-  echo "Antigravity: /archflow-init, /archflow-constitution, /archflow-explore"
+  echo "Antigravity: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-counter-review"
 fi

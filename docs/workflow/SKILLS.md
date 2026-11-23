@@ -2,22 +2,24 @@
 
 **Explored:** 2026-11-11 · **Commit:** `f1fe689` · **Covers:** `skills/`, `src/init/`, `src/local/`, `assets/constitution/`, `skills/archflow-run/scripts/counter-review.sh`, `skills/archflow-run/scripts/cleanup.sh`, `skills/archflow-run/scripts/wait.sh`
 
-ArchFlow ships four skills. Each is a short, portable instruction file (the Agent Skills format) in `skills/`, and the installer copies the same set into Claude Code, Codex and Antigravity. Skills do not carry workflow state or talk to a server: the only program behind them is `archflow-local` ([COMMANDS](../cli/COMMANDS.md)), and the only durable state is ordinary files in the repository and Git.
+ArchFlow ships five skills. Each is a short, portable instruction file (the Agent Skills format) in `skills/`, and the installer copies the same set into Claude Code, Codex and Antigravity. Skills do not carry workflow state or talk to a server: the only program behind them is `archflow-local` ([COMMANDS](../cli/COMMANDS.md)), and the only durable state is ordinary files in the repository and Git.
 
 | Skill | Purpose |
 | --- | --- |
 | `archflow-init` | Scaffold the files `archflow-local review` reads and clean up registrations older versions left behind |
 | `archflow-constitution` | Explain and edit the repository's constitution rules |
 | `archflow-explore` | Produce or refresh the maintained `docs/` set |
+| `archflow-counter-review [model]` | Run a standalone cross-model counter-review of the working tree or a plan, optionally targeting a specific model or shorthand |
 | `archflow-run <name> [ask]` | Plan a large job once, then orchestrate it across fresh sessions with sub-agents, worktrees and cross-model review |
 
-Claude Code and Antigravity invoke skills with `/` (`/archflow-init`); Codex uses `$` (`$archflow-init`). `archflow-run` is installed for every client but needs Claude Code as the orchestrator, because it generates `.claude/agents` and spawns worktree-isolated sub-agents; in another client it says so and stops.
+Claude Code and Antigravity invoke skills with `/` (`/archflow-init`, `/archflow-counter-review sol-6.2`); Codex uses `$` (`$archflow-init`, `$archflow-counter-review sol-6.2`). `archflow-run` is installed for every client but needs Claude Code as the orchestrator, because it generates `.claude/agents` and spawns worktree-isolated sub-agents; in another client it says so and stops.
 
 ```mermaid
 flowchart LR
     I["archflow-init"] -->|archflow-local init| F[".archflow/config.yaml<br/>.archflow/constitution/"]
     K["archflow-constitution"] -->|edits rules| F
-    R["archflow-run"] -->|counter-review.sh| L["archflow-local review"]
+    C["archflow-counter-review"] -->|archflow-local review| L["archflow-local review"]
+    R["archflow-run"] -->|counter-review.sh| L
     F -->|read on every review| L
     E["archflow-explore"] -->|writes| D["docs/"]
 ```
@@ -39,6 +41,10 @@ It also says out loud, before changing them, that the rules about explicit human
 ## archflow-explore
 
 Produces or refreshes the maintained documentation set (this directory): caps-named pages, each with a stamp of date, commit and covered paths. In refresh mode it diffs each page's covered paths since its stamped commit and re-explores only the pages whose code changed, plus any focus area the user names. It may delegate large explorations to parallel sub-agents with complete briefs, reviews the pages against the code, checks links and stamps, and commits the documentation without another approval. It also makes sure the target repository's `CLAUDE.md` lists the pages and states the rule that a change altering behavior a page describes must update that page.
+
+## archflow-counter-review
+
+Runs a standalone `archflow-local review` against the current working tree (or a proposed plan) without configuring an orchestrated run. With no arguments, it runs every applicable role under `.archflow/config.yaml` (or the shipped defaults). When the user passes a model or shorthand such as `sol-6.2`, `sol-6.1`, `opus`, or `gemini`, it resolves the model ID and passes per-call `review_routes` in the payload for `counter-reviewer` and `test-reviewer`, leaving `.archflow/config.yaml` untouched. Scratch payload and result files live in a temporary directory outside the repository so they never contaminate the reviewed subject or trigger `SUBJECT_CHANGED`. The skill translates the returned reports into a plain-language summary, honors every `human_review_reasons` entry, refuses to substitute self-review when a role fails, and waits for the user before editing files or committing.
 
 ## archflow-run
 
@@ -151,7 +157,7 @@ A reviewer reads the tests and the reported result instead of repeating the chec
 
 A failure in the merge check or in full validation is a fix task that goes through the per-task loop. By then the code is on the run branch and its worktree is gone, and this is the first test run that does not rely on an agent's report, so it is also where an orchestrator is most tempted to repair something in its own checkout. Anything beyond a trivial fixup that it repaired there would be code only its author had read. For the same reason a fixup made after a task's review, or a conflict resolved by hand, is listed in the review file, and a milestone that holds one runs its counter-review with every role.
 
-**Why `wait.sh` limits how many commands run at once.** Asking agents to mind the machine's load does not hold when each one sees only its own worktree. Every sub-agent already runs its installs and checks through `wait.sh`, so the script is where the limit lives: its runner takes one of a few machine-wide slots (two unless `ARCHFLOW_WAIT_SLOTS` says otherwise) before starting the command, and a command with no free slot waits, showing a `queued` line. A slot is a `flock` on a file in a directory only that user can write, held by the runner alone, so the kernel releases it when the runner ends, however it ends, and nothing is left to clean up. Where `flock` is missing the script runs commands without a limit.
+**Why `wait.sh` manages host resources across every build and test.** Asking agents to mind the machine's load does not hold when each one sees only its own worktree, and telling them to wrap only commands that "might take more than a minute" lets "quick" builds, typechecks, and tests run bare and collide across parallel worktrees — thrashing the host and busting prompt caches anyway. So agents route every install, build, compile, typecheck, lint, and test command through `wait.sh` (only instant inspection commands run bare), and short backoff polling lets fast commands return immediately. Across worktrees, the runner auto-sizes slots from host CPUs and RAM (unless `ARCHFLOW_WAIT_SLOTS` is set), queues excess commands FIFO using kernel-owned `flock` locks, gates additional concurrent jobs when `MemAvailable` is below a safety floor, and gives each slot an overlapping CPU affinity mask (reserving host cores) plus standard concurrency environment variables so tools reading `nproc` or `os.availableParallelism()` cap their own worker pools and memory. On Linux with a reachable user systemd session, each job runs in a transient scope under `archflow-jobs.slice` with runtime-only slice ceilings (`CPUQuota`, `CPUWeight=50`, `IOWeight=20`, `MemoryHigh`/`MemoryMax`) and equal per-job `CPUWeight=100` (plus `OOMPolicy=kill` when supported), so the kernel dynamically splits and reclaims CPU across active jobs as they enter and finish; elsewhere it falls back to `taskset`, `nice`, and `ionice`. For full validation between batches, `wait.sh run --full` acquires an exclusive lock across all slots and runs with all usable CPUs. Where `flock` is missing the script still applies priority and concurrency hints without slot queueing.
 
 **Why a test's cost is reviewed with its coverage.** Every rule about tests used to push one way: a test per criterion, a test per fix, and a test reviewer that looks for missing coverage. Nobody saw how long a test took, so suites gained slow tests task after task, and every later task paid for them. "What tests to write" in `PLANNING.md` gives the planner the defaults for the run's test policy: a test earns its place by a failure no other test catches; test at the lowest layer where the failure can happen, with a few real tests per boundary rather than one per case; a criterion can be covered by extending a test; a fix's regression test is the cheapest one that fails without it; a slow test says what it proves that a fast one cannot; a test that is replaced is removed. Implementers report how long their check took, that figure reaches the cross-model test reviewer in the verification evidence, and both the in-model reviewer and the shipped `test-quality` criterion treat a needlessly slow or repeated test as a finding whose fix is the cheaper equivalent. The handoff records how long the full suite took, so growth is visible at the milestone gate.
 

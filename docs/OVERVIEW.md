@@ -12,7 +12,7 @@ This page is the map. It describes the system as built, for humans auditing it. 
 
 | Surface | What it is | What it is trusted with |
 |---|---|---|
-| **Skills** (`skills/archflow-*`) | Prose playbooks the agent follows: `archflow-init`, `archflow-constitution`, `archflow-explore`, `archflow-run`. | Nothing. They are instructions, not enforcement. |
+| **Skills** (`skills/archflow-*`) | Prose playbooks the agent follows: `archflow-init`, `archflow-constitution`, `archflow-explore`, `archflow-counter-review`, `archflow-run`. | Nothing. They are instructions, not enforcement. |
 | **`archflow-local` CLI** (`src/local/`) | One bundled program with two commands: `review` and `init`. | Reading the repository and its config, running reviewer processes, printing a result. `init` writes only the scaffold files and removes old registrations it can prove it wrote. |
 | **Reviewer CLIs** (`claude`, `codex`, `agy`) | The external model command lines the CLI launches as child processes. | Producing review text. Every output is parsed against a strict schema before it counts. |
 
@@ -92,7 +92,7 @@ In a repository, ArchFlow owns only `.archflow/config.yaml`, `.archflow/constitu
 - [cli/COMMANDS.md](cli/COMMANDS.md): the two commands, flags, input and output.
 - [review/COUNTER-REVIEW.md](review/COUNTER-REVIEW.md): prompts, rubrics, routing, constitution review, result shape.
 - [mcp/DISPATCH.md](mcp/DISPATCH.md): reviewer child processes, adapters, workspace, failure handling.
-- [workflow/SKILLS.md](workflow/SKILLS.md): the four skills.
+- [workflow/SKILLS.md](workflow/SKILLS.md): the five skills.
 - [COMPLEXITY.md](COMPLEXITY.md): per-subsystem simplification audit.
 - [PATTERNS.md](PATTERNS.md): code idioms and conventions, with file references.
 - [DEPENDENCIES.md](DEPENDENCIES.md): runtime and toolchain surface, external CLIs, release.

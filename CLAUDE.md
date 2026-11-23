@@ -11,16 +11,17 @@ A lightweight, human-centered development workflow for Claude Code, Codex, and G
 
 ## Skills
 
-The canonical set contains four portable skills:
+The canonical set contains five portable skills:
 
 | Skill | Purpose |
 |---------|---------|
 | `/archflow-init` | Scaffold `.archflow/config.yaml` and the constitution by running `archflow-local init`, and clean up registrations older versions left |
 | `/archflow-constitution` | Explain and configure repository-owned constitution rules |
 | `/archflow-explore` | Explore codebase, produce or refresh the maintained `docs/` documentation set |
+| `/archflow-counter-review [model]` | Run a standalone cross-model counter-review of the working tree or a plan via `archflow-local review`, optionally targeting a specific model or shorthand (e.g. `sol-6.2`, `sol-6.1`) |
 | `/archflow-run <name> [ask]` | Plan a large job once, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, and cross-model review sized to each task's risk; markdown state (Claude Code orchestrator) |
 
-In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, and `$archflow-explore`. `/archflow-run` is installed for every client but currently needs Claude Code as its orchestrator.
+In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-explore`, and `$archflow-counter-review`. `/archflow-run` is installed for every client but currently needs Claude Code as its orchestrator.
 
 ## When ArchFlow applies
 
@@ -78,7 +79,7 @@ docs/
   DEPENDENCIES.md          # dependency surface and toolchain
   TESTING.md               # test layout and validation matrix
   LIMITATIONS.md           # honest reliability/security boundaries
-  workflow/SKILLS.md       # the four skills
+  workflow/SKILLS.md       # the five skills
   mcp/DISPATCH.md          # child reviewer dispatch, sandbox, repo views
   cli/COMMANDS.md          # archflow-local review and init
   review/COUNTER-REVIEW.md # dispatch envelopes, review flow, constitution review, waivers

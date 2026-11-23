@@ -235,14 +235,19 @@ describe("installer", () => {
       expect(await readFile(join(skillRoot, "archflow-explore", "SKILL.md"), "utf8")).toBe(exploreSkill);
       expect(await readFile(join(skillRoot, ".archflow-installed"), "utf8")).toContain("archflow-explore/SKILL.md");
     }
+    const counterReviewSkill = await readFile(join(root, "skills", "archflow-counter-review", "SKILL.md"), "utf8");
+    for (const skillRoot of [claudeSkillRoot, codexSkillRoot, antigravitySkillRoot]) {
+      expect(await readFile(join(skillRoot, "archflow-counter-review", "SKILL.md"), "utf8")).toBe(counterReviewSkill);
+      expect(await readFile(join(skillRoot, ".archflow-installed"), "utf8")).toContain("archflow-counter-review/SKILL.md");
+    }
     const runSkill = await readFile(join(root, "skills", "archflow-run", "SKILL.md"), "utf8");
     for (const skillRoot of [claudeSkillRoot, codexSkillRoot, antigravitySkillRoot]) {
       expect(await readFile(join(skillRoot, "archflow-run", "SKILL.md"), "utf8")).toBe(runSkill);
       expect(await readFile(join(skillRoot, "archflow-run", "scripts", "counter-review.sh"), "utf8")).toContain("archflow-local} review");
     }
-    expect(installed.stdout).toContain("Claude Code: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-run\n");
-    expect(installed.stdout).toContain("Codex: $archflow-init, $archflow-constitution, $archflow-explore\n");
-    expect(installed.stdout).toContain("Antigravity: /archflow-init, /archflow-constitution, /archflow-explore\n");
+    expect(installed.stdout).toContain("Claude Code: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-counter-review, /archflow-run\n");
+    expect(installed.stdout).toContain("Codex: $archflow-init, $archflow-constitution, $archflow-explore, $archflow-counter-review\n");
+    expect(installed.stdout).toContain("Antigravity: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-counter-review\n");
     for (const skill of RETIRED_SKILLS) expect(installed.stdout).not.toContain(skill);
   });
 
@@ -303,7 +308,7 @@ describe("installer", () => {
       for (const skill of RETIRED_SKILLS) expect(await exists(join(skillRoot, skill)), `${skillRoot}/${skill}`).toBe(false);
       expect(await exists(join(skillRoot, "archflow-phase"))).toBe(false);
       expect((await readdir(skillRoot)).filter((name) => name.startsWith("archflow-")).sort())
-        .toEqual(["archflow-constitution", "archflow-explore", "archflow-init", "archflow-run"]);
+        .toEqual(["archflow-constitution", "archflow-counter-review", "archflow-explore", "archflow-init", "archflow-run"]);
       const manifest = await readFile(join(skillRoot, ".archflow-installed"), "utf8");
       for (const skill of RETIRED_SKILLS) expect(manifest).not.toContain(`${skill}/`);
     }
@@ -434,7 +439,7 @@ describe("installer", () => {
     const manifest = await readFile(join(skillRoot, ".archflow-installed"), "utf8");
     expect(manifest).not.toContain("archflow-init/");
     expect(manifest).toContain("archflow-run/SKILL.md\n");
-    expect(installed.stdout).toContain("Claude Code: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-run\n");
+    expect(installed.stdout).toContain("Claude Code: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-counter-review, /archflow-run\n");
 
     expect(await realHomeFingerprint()).toEqual(realHomeBefore);
   }, TEST_TIMEOUT_MS);
@@ -509,7 +514,7 @@ describe("installer", () => {
       expect(installed.stderr).not.toContain("    at ");
       expect((await readdir(dirname(path))).sort()).toEqual(["mcp_config.json", "skills"]);
       expect(installed.stdout).toContain(`ArchFlow bundle installed to ${join(home, "archflow-home", "bundle")}/`);
-      expect(installed.stdout).toContain("Antigravity: /archflow-init, /archflow-constitution, /archflow-explore\n");
+      expect(installed.stdout).toContain("Antigravity: /archflow-init, /archflow-constitution, /archflow-explore, /archflow-counter-review\n");
     }, TEST_TIMEOUT_MS);
 
     it("is not touched by an install that does not target Antigravity", async () => {

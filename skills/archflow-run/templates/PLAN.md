@@ -49,9 +49,10 @@ it too.>
 
 <Add a task check row per domain when a domain validates its work differently.> Each run of the tests has one owner
 (the protocol's "Where tests run"): implementers and fixers run the task check, reviewers read the result instead of
-repeating it, and the orchestrator runs the merge check and full validation. Every one of these goes through the
-skill's `scripts/wait.sh`, which keeps a waiting agent's prompt cache warm and lets only a few commands run at once
-across all worktrees, so parallel tasks cannot overload the machine.
+repeating it, and the orchestrator runs the merge check and full validation. Every install, build, typecheck, lint,
+and test command goes through the skill's `scripts/wait.sh`, which keeps a waiting agent's prompt cache warm and
+manages CPU, RAM, and slot concurrency across all worktrees so parallel tasks use the machine without thrashing. Full
+validation uses `wait.sh run --full` between batches to run exclusively across all usable CPUs.
 
 ## 6. Agents and routing (shared)
 The agent follows the kind of work. The model follows the run's routing: implementers write on the cheaper model, reviewers judge on the stronger one, and a task leaves that only through a hatch named below.

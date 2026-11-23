@@ -10,13 +10,14 @@ ArchFlow has three parts:
 - **`archflow-local init`**: scaffolds what the review reads: `.archflow/config.yaml` (reviewer routing) and `.archflow/constitution/` (repository policy rules).
 - **`/archflow-run`**: the workflow. You plan a large job once and approve it; the orchestrating session then hands each task to a sub-agent in its own worktree, reviews every task (in-model review plus the cross-model counter-review), and keeps its state in markdown and git.
 
-Four skills put these in front of you:
+Five skills put these in front of you:
 
 | Skill | What it does |
 |-------|--------------|
 | `/archflow-init` | Runs `archflow-local init` and explains the result |
 | `/archflow-constitution` | Explains and configures the repository's constitution rules |
 | `/archflow-explore` | Maps a codebase into a maintained `docs/` set |
+| `/archflow-counter-review [model]` | Runs a standalone counter-review of the current working tree or a plan, optionally targeting a specific model (e.g. `sol-6.2`, `sol-6.1`) |
 | `/archflow-run <name> [ask]` | Plans a large job, then orchestrates it across fresh sessions |
 
 ## Install
@@ -29,7 +30,7 @@ cd ArchflowV2
 
 This verifies the tracked offline payload, installs the bundle under
 `${ARCHFLOW_HOME:-$HOME/.archflow}/bundle/`, creates the `archflow-local` launcher under
-`${ARCHFLOW_BIN:-$HOME/.local/bin}/`, and installs the four skills:
+`${ARCHFLOW_BIN:-$HOME/.local/bin}/`, and installs the five skills:
 
 - Claude Code skills in `~/.claude/skills/`
 - Codex skills in `~/.agents/skills/`
@@ -40,7 +41,7 @@ The launcher directory must already be on `PATH`; otherwise the installer prints
 `./install.sh --claude`, `./install.sh --codex`, or `./install.sh --antigravity`. Restart Codex after installing if the skills
 are not listed yet. Reviewer CLIs (Claude, Codex, Antigravity) must be installed and authenticated for the clients your routes use.
 
-In Codex, invoke skills with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-explore`. `/archflow-run` is installed for every client but currently needs Claude Code as its orchestrator.
+In Codex, invoke skills with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-explore`, `$archflow-counter-review`. `/archflow-run` is installed for every client but currently needs Claude Code as its orchestrator.
 
 ## Usage
 
@@ -73,7 +74,15 @@ Produces or refreshes the maintained documentation set in `docs/`, each page sta
 
 ### 4. Review directly
 
-Any agent can ask for a counter-review without the workflow:
+Run a standalone counter-review of the current working tree (or a plan) without an orchestrated run:
+
+```
+/archflow-counter-review
+/archflow-counter-review sol-6.2
+/archflow-counter-review sol-6.1
+```
+
+With no argument it uses `.archflow/config.yaml` (or shipped defaults); naming a model or shorthand overrides the route for that call only without modifying your config. You can also call the CLI directly:
 
 ```bash
 archflow-local review --producer claude --input review.json

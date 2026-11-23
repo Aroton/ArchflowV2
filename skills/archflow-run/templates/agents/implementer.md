@@ -94,19 +94,20 @@ directory between commands, so begin every command with `cd <worktree> &&`.
    drop or weaken a requirement, or contradict a decision marked `human`, returns `needs-decision`.
 
 ## Waiting on commands
-Your prompt cache expires about five minutes after your last turn, and a command still running past that makes your next
-turn re-read everything uncached. Run every command that might take more than a minute (`{{install command}}`,
-`{{task check command}}`, a single test) as `bash {{skill dir}}/scripts/wait.sh run '<command>'`. It returns when
-the command finishes, or after 100 seconds with a `wait` line to run next; keep running that line until it reports
-`exit=<code>`. A quick command finishes within the first call, so using it costs nothing. Make each of these its own
+Your prompt cache expires about five minutes after your last turn, and parallel worktrees building or testing at the
+same time can stall the host and bust caches even on commands that look quick alone. Route **every** install, build,
+compile, typecheck, lint, test, and heavy script (`{{install command}}`, `{{task check command}}`, a single test)
+through `bash {{skill dir}}/scripts/wait.sh run '<command>'`. Run only instant inspection commands (`git`, `grep`,
+`awk`, `jq`, `ls`) bare. Fast commands return as soon as they finish; slower ones return after 100 seconds with a
+`wait` line to run next — keep running that line until it reports `exit=<code>`. Make each of these its own
 foreground Bash call: Claude Code gives you no turn while a backgrounded call runs, and a pipe after the script holds
 back the `wait` line. If Claude Code reports that it moved the call to the background anyway, the command itself is
 unaffected, so run the `wait` line. The script already prints the output's last 40 lines and the log path, so don't
-pipe the command into `tail`. The script lets only a few commands run at once on the machine: a `queued` line means
-yours is waiting its turn behind other agents' commands, so keep waiting. If the log shows no progress across several waits, or the command is clearly stuck, stop
-it and everything it started with
-`bash {{skill dir}}/scripts/wait.sh stop <handle>` and say so in NOTES; don't return while a command you started is still
-running.
+pipe the command into `tail`. The script manages CPU, RAM, and slot concurrency across every worktree on the machine:
+a `queued` line means yours is waiting its turn in the FIFO queue behind other agents' commands or for free RAM, so
+keep waiting. If the log shows no progress across several waits after it has started running, or the command is clearly
+stuck, stop it and everything it started with `bash {{skill dir}}/scripts/wait.sh stop <handle>` and say so in NOTES;
+don't return while a command you started is still running.
 
 ## Context budget
 Every tool result stays in your context and is re-read on every later turn.
