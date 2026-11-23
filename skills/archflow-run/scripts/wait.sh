@@ -23,8 +23,9 @@
 #
 # Several agents in several worktrees run builds, installs, typechecks, lints, and tests at once, and running all of
 # them unconstrained can thrash CPU and swap. The runner therefore manages host resources across every worktree:
-# - FIFO slot queue using kernel-owned `flock` locks (auto-sized from available CPUs and RAM unless ARCHFLOW_WAIT_SLOTS
-#   is set; 0 turns the slot limit off), with `--full` taking an exclusive lock across all slots for full-suite runs.
+# - FIFO slot queue using an atomic `mkdir` mutex, monotonic sequence tickets, and per-slot PID holder files with
+#   dead-PID recovery across Linux and macOS (auto-sized from available CPUs and RAM unless ARCHFLOW_WAIT_SLOTS is
+#   set; 0 turns the slot limit off), with `--full` taking an exclusive lock across all slots for full-suite runs.
 # - Overlapping CPU affinity masks built from the caller's actual allowed CPU IDs (reserving host cores for interactive
 #   responsiveness) so tools reading `nproc` / `os.availableParallelism()` cap their own worker pools and memory, plus
 #   standard concurrency env vars when unset. ARCHFLOW_WAIT_CPUS overrides usable CPU count (0 disables pinning).
@@ -45,6 +46,9 @@ set -u
 
 main() {
   local slice=${ARCHFLOW_WAIT_SLICE:-100}
+  local tmp_root=${TMPDIR:-/tmp}
+  tmp_root=${tmp_root%/}
+  [ -n "$tmp_root" ] || tmp_root=/
   local self handle detach pid sig p end full_mode=0 cmd=""
   local uid total_cpus usable_cpus pin_cpus=1 total_ram_mb slots min_free_mb slot_dir
   local use_systemd=0 sd_oom_policy=0 sd_xdg="" sd_dbus="" unit="" sweep_pid=""
@@ -155,7 +159,7 @@ main() {
       if allowed_list=$(detect_allowed_cpulist); then
         read -r -a all_cpu_arr <<< "$(expand_cpulist "$allowed_list")"
       fi
-      if [ "${#all_cpu_arr[@]}" -gt 0 ]; then
+      if [ -n "${all_cpu_arr[0]+x}" ]; then
         total_cpus=${#all_cpu_arr[@]}
       else
         total_cpus=$(detect_total_cpus)
@@ -215,7 +219,7 @@ main() {
       slot_dir=${ARCHFLOW_WAIT_SLOT_DIR:-}
       if [ -z "$slot_dir" ]; then
         if [ -n "${TMPDIR:-}" ]; then
-          slot_dir="${TMPDIR}/archflow-wait-slots.${uid}"
+          slot_dir="${tmp_root}/archflow-wait-slots.${uid}"
         elif [ -d "/run/user/$uid" ] && [ -w "/run/user/$uid" ]; then
           slot_dir="/run/user/${uid}/archflow-wait-slots"
         else
@@ -233,10 +237,10 @@ main() {
           [ "$slice_mem_max" -ge 1536 ] && slice_props+=("MemoryMax=${slice_mem_max}M")
         fi
         XDG_RUNTIME_DIR="$sd_xdg" DBUS_SESSION_BUS_ADDRESS="$sd_dbus" \
-          systemctl --user set-property --runtime archflow-jobs.slice "${slice_props[@]}" >/dev/null 2>&1 || true
+          systemctl --user set-property --runtime archflow-jobs.slice ${slice_props[@]+"${slice_props[@]}"} >/dev/null 2>&1 || true
       fi
 
-      handle=$(mktemp -d "${TMPDIR:-/tmp}/archflow-wait.XXXXXX") || exit 2
+      handle=$(mktemp -d "${tmp_root}/archflow-wait.XXXXXX") || exit 2
       printf '%s\n' "$cmd" > "$handle/command"
       echo "handle=$handle; continue with: bash '$self' wait '$handle'"
       detach=
@@ -245,7 +249,7 @@ main() {
       # The pid file is moved into place whole: a reader never sees it empty and mistakes a starting runner for a dead
       # one.
       [ -n "$detach" ] && : > "$handle/detached"
-      # The command runs with the slot descriptors (8, 9) closed, so something it leaves running cannot keep a slot.
+      # Holder files track the runner PID, so background processes left behind by a command cannot keep a slot.
       $detach nohup bash -c '
         set -u
         handle=$1 slots=$2 slot_dir=$3 full_mode=$4 usable_cpu_ids=$5 pin_cpus=$6
@@ -259,7 +263,7 @@ main() {
 
         format_cpulist() {
           local cpu start="" prev="" out=""
-          for cpu in "$@"; do
+          for cpu in ${1+"$@"}; do
             if [ -z "$start" ]; then
               start=$cpu; prev=$cpu
             elif [ "$cpu" -eq $((prev + 1)) ]; then
@@ -279,21 +283,115 @@ main() {
 
         assigned_slot=0
         ticket=""
-        cleanup_ticket() { [ -n "$ticket" ] && rm -f "$ticket"; }
-        trap cleanup_ticket EXIT INT TERM
+        lock_dir="$slot_dir/lock.d"
+        holds_lockdir=0
+        slot_lock_file=""
 
-        if [ "$slots" -gt 0 ] 2>/dev/null && command -v flock >/dev/null 2>&1 \
+        release_lockdir() {
+          if [ "$holds_lockdir" -eq 1 ]; then
+            rm -f "$lock_dir/owner.$$" 2>/dev/null || true
+            rmdir "$lock_dir" 2>/dev/null || true
+            holds_lockdir=0
+          fi
+        }
+
+        acquire_lockdir() {
+          local tries=0 f="" owner=""
+          while :; do
+            if mkdir "$lock_dir" 2>/dev/null; then
+              holds_lockdir=1
+              if : > "$lock_dir/owner.$$" 2>/dev/null; then
+                return 0
+              fi
+              release_lockdir
+              return 1
+            fi
+            tries=$((tries + 1))
+            if [ "$tries" -ge 4 ]; then
+              owner=""
+              for f in "$lock_dir"/owner.*; do
+                [ -e "$f" ] || continue
+                owner=${f##*.}
+                if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+                  rm -f "$f" 2>/dev/null || true
+                  rmdir "$lock_dir" 2>/dev/null || true
+                  tries=0
+                fi
+                break
+              done
+              if [ -z "$owner" ] && [ "$tries" -ge 40 ]; then
+                rmdir "$lock_dir" 2>/dev/null || true
+                tries=0
+              fi
+            fi
+            sleep_short 0.05
+          done
+        }
+
+        prune_dead_holders() {
+          local hf="" hpid=""
+          for hf in "$slot_dir"/full.pid "$slot_dir"/slot-*.pid; do
+            [ -f "$hf" ] || continue
+            hpid=$(cat "$hf" 2>/dev/null || true)
+            case "$hpid" in
+              ""|*[!0-9]*) rm -f "$hf" 2>/dev/null || true ;;
+              *) kill -0 "$hpid" 2>/dev/null || rm -f "$hf" 2>/dev/null || true ;;
+            esac
+          done
+        }
+
+        enqueue_ticket() {
+          local seq_file="$slot_dir/queue.seq" seq=0 next=1 formatted=""
+          if acquire_lockdir; then
+            if [ -f "$seq_file" ]; then
+              seq=$(cat "$seq_file" 2>/dev/null || echo 0)
+              case "$seq" in
+                ""|*[!0-9]*) seq=0 ;;
+              esac
+            fi
+            next=$((seq + 1))
+            if printf "%s\n" "$next" > "${seq_file}.tmp.$$" 2>/dev/null \
+              && mv "${seq_file}.tmp.$$" "$seq_file" 2>/dev/null; then
+              formatted=$(printf "%012d" "$next")
+              if : > "$slot_dir/queue/${formatted}-$$" 2>/dev/null; then
+                ticket="$slot_dir/queue/${formatted}-$$"
+              fi
+            else
+              rm -f "${seq_file}.tmp.$$" 2>/dev/null || true
+            fi
+            release_lockdir
+          fi
+        }
+
+        cleanup_ticket() {
+          [ -n "$ticket" ] && rm -f "$ticket" 2>/dev/null || true
+          ticket=""
+        }
+
+        release_slot_lock() {
+          if [ -n "$slot_lock_file" ]; then
+            rm -f "$slot_lock_file" 2>/dev/null || true
+            slot_lock_file=""
+          fi
+        }
+
+        cleanup_all() {
+          cleanup_ticket
+          release_slot_lock
+          release_lockdir
+        }
+
+        trap cleanup_all EXIT
+        trap "cleanup_all; exit 130" INT
+        trap "cleanup_all; exit 143" TERM
+
+        if [ "$slots" -gt 0 ] 2>/dev/null \
           && mkdir -p -m 700 "$slot_dir" 2>/dev/null && [ -O "$slot_dir" ] && [ ! -L "$slot_dir" ] \
           && mkdir -p -m 700 "$slot_dir/queue" 2>/dev/null && [ -O "$slot_dir/queue" ] && [ ! -L "$slot_dir/queue" ]; then
 
-          ts=$(date +%s%N 2>/dev/null || true)
-          case "$ts" in
-            ""|*[!0-9]*) ts="$(date +%s)000000000" ;;
-          esac
-          ticket="$slot_dir/queue/${ts}-$$"
-          : > "$ticket"
+          enqueue_ticket
 
-          while :; do
+          while [ -n "$ticket" ]; do
             # Determine our FIFO position, pruning tickets left by dead runners.
             pos=0
             for entry in "$slot_dir/queue/"*; do
@@ -308,47 +406,71 @@ main() {
             done
 
             if [ "$pos" -le 1 ]; then
-              if [ "$full_mode" -eq 1 ]; then
-                if exec 8>>"$slot_dir/mode.lock" && flock -x -n 8; then
-                  assigned_slot=0
-                  break
-                fi
-                exec 8>&- 2>/dev/null || true
-                printf "queued: waiting for all %s slots (exclusive); other commands are running\n" "$slots" > "$handle/log"
-              else
-                # Only enforce the RAM floor when at least one other job is already running.
-                ram_ok=1
-                if [ "$min_free_mb" -gt 0 ] 2>/dev/null && [ -r /proc/meminfo ]; then
-                  if ! (exec 7>>"$slot_dir/mode.lock" && flock -x -n 7); then
+              acquired=0
+              ram_ok=1
+              avail=""
+              if acquire_lockdir; then
+                prune_dead_holders
+                if [ "$full_mode" -eq 1 ]; then
+                  busy=0
+                  for hf in "$slot_dir"/full.pid "$slot_dir"/slot-*.pid; do
+                    [ -f "$hf" ] && { busy=1; break; }
+                  done
+                  if [ "$busy" -eq 0 ]; then
+                    if printf "%s\n" "$$" > "$slot_dir/full.pid.tmp.$$" 2>/dev/null \
+                      && mv "$slot_dir/full.pid.tmp.$$" "$slot_dir/full.pid" 2>/dev/null; then
+                      slot_lock_file="$slot_dir/full.pid"
+                      assigned_slot=0
+                      acquired=1
+                    else
+                      rm -f "$slot_dir/full.pid.tmp.$$" 2>/dev/null || true
+                    fi
+                  fi
+                else
+                  # Only enforce the RAM floor when at least one other job is already running.
+                  other_running=0
+                  for hf in "$slot_dir"/full.pid "$slot_dir"/slot-*.pid; do
+                    [ -f "$hf" ] && { other_running=1; break; }
+                  done
+                  if [ "$other_running" -eq 1 ] && [ "$min_free_mb" -gt 0 ] 2>/dev/null && [ -r /proc/meminfo ]; then
                     avail=$(awk '\''$1 == "MemAvailable:" { printf "%d\n", int($2 / 1024); exit }'\'' /proc/meminfo 2>/dev/null || echo "")
                     case "$avail" in
                       ""|*[!0-9]*) ;;
                       *)
                         if [ "$avail" -lt "$min_free_mb" ]; then
                           ram_ok=0
-                          printf "queued: waiting for free RAM (%s MiB available, need %s MiB); other commands are running\n" "$avail" "$min_free_mb" > "$handle/log"
                         fi
                         ;;
                     esac
                   fi
-                fi
-
-                if [ "$ram_ok" -eq 1 ]; then
-                  if exec 8>>"$slot_dir/mode.lock" && flock -s -n 8; then
+                  if [ "$ram_ok" -eq 1 ] && [ ! -f "$slot_dir/full.pid" ]; then
                     for s in $(seq "$slots"); do
-                      if exec 9>>"$slot_dir/slot-$s" && flock -x -n 9; then
-                        assigned_slot=$s
-                        break
+                      if [ ! -f "$slot_dir/slot-$s.pid" ]; then
+                        if printf "%s\n" "$$" > "$slot_dir/slot-$s.pid.tmp.$$" 2>/dev/null \
+                          && mv "$slot_dir/slot-$s.pid.tmp.$$" "$slot_dir/slot-$s.pid" 2>/dev/null; then
+                          slot_lock_file="$slot_dir/slot-$s.pid"
+                          assigned_slot=$s
+                          acquired=1
+                          break
+                        else
+                          rm -f "$slot_dir/slot-$s.pid.tmp.$$" 2>/dev/null || true
+                        fi
                       fi
                     done
-                    if [ "$assigned_slot" -gt 0 ]; then
-                      break
-                    fi
-                    exec 9>&- 2>/dev/null || true
                   fi
-                  exec 8>&- 2>/dev/null || true
-                  printf "queued: waiting for one of %s slots (position %s); other commands are running\n" "$slots" "$pos" > "$handle/log"
                 fi
+                release_lockdir
+              fi
+
+              if [ "$acquired" -eq 1 ]; then
+                break
+              fi
+              if [ "$full_mode" -eq 1 ]; then
+                printf "queued: waiting for all %s slots (exclusive); other commands are running\n" "$slots" > "$handle/log"
+              elif [ "$ram_ok" -eq 0 ]; then
+                printf "queued: waiting for free RAM (%s MiB available, need %s MiB); other commands are running\n" "$avail" "$min_free_mb" > "$handle/log"
+              else
+                printf "queued: waiting for one of %s slots (position %s); other commands are running\n" "$slots" "$pos" > "$handle/log"
               fi
             else
               if [ "$full_mode" -eq 1 ]; then
@@ -362,7 +484,6 @@ main() {
           done
 
           cleanup_ticket
-          ticket=""
         fi
 
         # Slice the actual allowed CPU IDs for the assigned slot so inherited affinity masks are always respected.
@@ -423,26 +544,27 @@ main() {
           fi
           XDG_RUNTIME_DIR="$sd_xdg" DBUS_SESSION_BUS_ADDRESS="$sd_dbus" \
             systemd-run --user --scope --quiet --unit="$unit" --slice=archflow-jobs.slice \
-            "${sd_props[@]}" -- "${prio[@]}" \
-            bash -o pipefail "$handle/command" > "$handle/log" 2>&1 < /dev/null 8>&- 9>&-
+            ${sd_props[@]+"${sd_props[@]}"} -- ${prio[@]+"${prio[@]}"} \
+            bash -o pipefail "$handle/command" > "$handle/log" 2>&1 < /dev/null
           rc=$?
         else
           affinity=()
           if [ "$pin_cpus" -eq 1 ] && command -v taskset >/dev/null 2>&1 && taskset -c "$cpuset" true 2>/dev/null; then
             affinity=(taskset -c "$cpuset")
           fi
-          "${affinity[@]}" "${prio[@]}" \
-            bash -o pipefail "$handle/command" > "$handle/log" 2>&1 < /dev/null 8>&- 9>&-
+          ${affinity[@]+"${affinity[@]}"} ${prio[@]+"${prio[@]}"} \
+            bash -o pipefail "$handle/command" > "$handle/log" 2>&1 < /dev/null
           rc=$?
         fi
 
+        release_slot_lock
         echo "$rc" > "$handle/exit.tmp" && mv "$handle/exit.tmp" "$handle/exit"
       ' wait-run "$handle" "$slots" "$slot_dir" "$full_mode" "$usable_cpu_ids" "$pin_cpus" \
           "$min_free_mb" "$use_systemd" "$sd_oom_policy" "$sd_xdg" "$sd_dbus" > /dev/null 2>&1 &
 
       # Sweep old handles concurrently so startup is never delayed, then join before returning.
       (
-        find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'archflow-wait.*' -user "$uid" -mmin +1440 2> /dev/null \
+        find "$tmp_root" -maxdepth 1 -type d -name 'archflow-wait.*' -user "$uid" -mmin +1440 2> /dev/null \
           | while IFS= read -r old; do
               [ -f "$old/command" ] || continue
               if [ ! -f "$old/exit" ] && [ -f "$old/pid" ] && kill -0 "$(cat "$old/pid")" 2> /dev/null; then continue; fi
@@ -514,4 +636,4 @@ main() {
   fi
 }
 
-main "$@"; exit
+main ${1+"$@"}; exit

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -383,4 +383,143 @@ exec "$@"
     const fallbackHandle = /^handle=([^;]+);/.exec(fallback.stdout)?.[1] ?? "";
     expect(readFileSync(join(fallbackHandle, "meta"), "utf8")).toContain("systemd=0 oom_policy=0");
   }, 20_000);
+
+  it("works without Linux-only tools (macOS-like PATH: no flock, setsid, taskset, ionice, systemd, nproc)", async () => {
+    const temp = temporaryRoot("wait-macos-compat");
+    const bin = join(temp, "bin");
+    mkdirSync(bin);
+
+    // Expose only POSIX/macOS utilities (deliberately omitting flock, setsid, taskset, ionice, systemd-run, systemctl, nproc, nice).
+    const pathDirs = (process.env.PATH ?? "/usr/bin:/bin").split(":").filter(Boolean);
+    const macTools = [
+      "awk",
+      "basename",
+      "bash",
+      "cat",
+      "date",
+      "dirname",
+      "env",
+      "find",
+      "getconf",
+      "id",
+      "mkdir",
+      "mktemp",
+      "mv",
+      "nohup",
+      "pgrep",
+      "rm",
+      "rmdir",
+      "seq",
+      "sleep",
+      "tail",
+      "touch",
+      "tr",
+      "true",
+    ];
+    for (const tool of macTools) {
+      const found = pathDirs.map((dir) => join(dir, tool)).find((candidate) => existsSync(candidate));
+      if (found) symlinkSync(found, join(bin, tool));
+    }
+
+    // Trailing slash mirrors macOS TMPDIR (/var/folders/.../T/).
+    const macEnv: NodeJS.ProcessEnv = {
+      PATH: bin,
+      HOME: process.env.HOME,
+      TMPDIR: `${temp}/`,
+      ARCHFLOW_WAIT_SLICE: "20",
+    };
+
+    // 1. Zero-argument usage works cleanly under set -u, and a normal run works with both affinity=() and prio=().
+    const usage = spawnSync("bash", [script], { encoding: "utf8", env: macEnv });
+    expect(usage.status).toBe(2);
+    expect(usage.stdout).toContain("usage:");
+
+    const basic = spawnSync("bash", [script, "run", "echo mac-ok CARGO=$CARGO_BUILD_JOBS"], {
+      encoding: "utf8",
+      env: { ...macEnv, ARCHFLOW_WAIT_SLOTS: "2" },
+    });
+    expect(basic.status, basic.stdout + basic.stderr).toBe(0);
+    expect(basic.stdout).toContain("mac-ok");
+    const basicHandle = /^handle=([^;]+);/.exec(basic.stdout)?.[1] ?? "";
+    expect(basicHandle).not.toContain("//");
+    expect(readFileSync(join(basicHandle, "meta"), "utf8")).toMatch(/^slot=1 full=0 /);
+
+    // 2. Slot queueing + --full exclusivity work via the portable mkdir lock protocol, even across mixed PATHs.
+    const normalMarker = join(temp, "mac-normal");
+    const fullMarker = join(temp, "mac-full");
+    const slotEnv = { ...macEnv, ARCHFLOW_WAIT_SLOTS: "2" };
+
+    // Start normal1 with the host PATH (which has flock on Linux) and --full with macEnv (no flock), sharing one slot_dir.
+    const hostPathSlotEnv: NodeJS.ProcessEnv = { ...process.env, TMPDIR: `${temp}/`, ARCHFLOW_WAIT_SLOTS: "2", ARCHFLOW_WAIT_SLICE: "20" };
+    const normal1 = run(script, ["run", `touch '${normalMarker}'; sleep 1.2; rm '${normalMarker}'`], hostPathSlotEnv);
+    while (!existsSync(normalMarker)) await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const fullJob = run(
+      script,
+      ["run", "--full", `[ ! -e '${normalMarker}' ] && touch '${fullMarker}' && sleep 1.2 && rm '${fullMarker}'`],
+      slotEnv,
+    );
+
+    expect((await normal1).status).toBe(0);
+    while (!existsSync(fullMarker)) await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const normal2 = await run(script, ["run", `[ ! -e '${fullMarker}' ] && echo after-mac-full`], slotEnv);
+    expect((await fullJob).status).toBe(0);
+    expect(normal2.status, normal2.stdout + normal2.stderr).toBe(0);
+    expect(normal2.stdout).toContain("after-mac-full");
+
+    // 3. Strict FIFO order across two queued jobs even without high-resolution date.
+    const fifoSlotDir = join(temp, "fifo-slots");
+    const fifoMarker = join(temp, "fifo-first");
+    const fifoOrder = join(temp, "fifo-order");
+    const fifoEnv = { ...macEnv, ARCHFLOW_WAIT_SLOTS: "1", ARCHFLOW_WAIT_SLOT_DIR: fifoSlotDir };
+
+    const first = run(script, ["run", `touch '${fifoMarker}'; sleep 1.2; rm '${fifoMarker}'`], fifoEnv);
+    while (!existsSync(fifoMarker)) await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const second = run(script, ["run", `echo second >> '${fifoOrder}'`], fifoEnv);
+    const queueDir = join(fifoSlotDir, "queue");
+    while (!existsSync(queueDir) || readdirSync(queueDir).length < 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const third = run(script, ["run", `echo third >> '${fifoOrder}'`], fifoEnv);
+
+    expect((await first).status).toBe(0);
+    expect((await second).status).toBe(0);
+    expect((await third).status).toBe(0);
+    expect(readFileSync(fifoOrder, "utf8")).toBe("second\nthird\n");
+
+    // 4. stop without setsid terminates via pgrep -P, removes slot-1.pid immediately, and a later wait reports exit=unknown.
+    const stopSlotDir = join(temp, "stop-slots");
+    const stopStarted = join(temp, "mac-stop-started");
+    const oneSlotEnv = { ...macEnv, ARCHFLOW_WAIT_SLOTS: "1", ARCHFLOW_WAIT_SLICE: "1", ARCHFLOW_WAIT_SLOT_DIR: stopSlotDir };
+    const stuck = await run(script, ["run", `touch '${stopStarted}'; sleep 60`], oneSlotEnv);
+    expect(stuck.status, stuck.stdout + stuck.stderr).toBe(0);
+    const stuckHandle = /^handle=([^;]+);/.exec(stuck.stdout)?.[1] ?? "";
+    while (!existsSync(stopStarted)) await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(existsSync(join(stopSlotDir, "slot-1.pid"))).toBe(true);
+
+    const stopped = spawnSync("bash", [script, "stop", stuckHandle], { encoding: "utf8", env: oneSlotEnv });
+    expect(stopped.status, stopped.stdout + stopped.stderr).toBe(0);
+    expect(stopped.stdout).toContain("stopped");
+    expect(existsSync(join(stopSlotDir, "slot-1.pid"))).toBe(false);
+
+    const afterWait = spawnSync("bash", [script, "wait", stuckHandle], { encoding: "utf8", env: oneSlotEnv });
+    expect(afterWait.status).toBe(125);
+    expect(afterWait.stdout).toContain("exit=unknown");
+
+    // 5. Stale slot/mutex locks left by dead PIDs are reclaimed instead of deadlocking.
+    const slotDir = join(temp, "stale-slots");
+    mkdirSync(join(slotDir, "lock.d"), { recursive: true });
+    writeFileSync(join(slotDir, "lock.d", "owner.2147483646"), "");
+    writeFileSync(join(slotDir, "slot-1.pid"), "2147483646\n");
+    writeFileSync(join(slotDir, "full.pid"), "2147483646\n");
+
+    const recovered = spawnSync("bash", [script, "run", "echo stale-recovered"], {
+      encoding: "utf8",
+      env: { ...macEnv, ARCHFLOW_WAIT_SLOTS: "1", ARCHFLOW_WAIT_SLOT_DIR: slotDir },
+    });
+    expect(recovered.status, recovered.stdout + recovered.stderr).toBe(0);
+    expect(recovered.stdout).toContain("stale-recovered");
+  }, 25_000);
 });
