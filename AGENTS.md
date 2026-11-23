@@ -18,7 +18,7 @@ The canonical set contains five portable skills:
 | `/archflow-init` | Scaffold `.archflow/config.yaml` and the constitution by running `archflow-local init`, and clean up registrations older versions left |
 | `/archflow-constitution` | Explain and configure repository-owned constitution rules |
 | `/archflow-explore` | Explore codebase, produce or refresh the maintained `docs/` documentation set |
-| `/archflow-counter-review [model]` | Run a standalone cross-model counter-review of the working tree or a plan via `archflow-local review`, optionally targeting a specific model or shorthand (e.g. `sol-6.2`, `sol-6.1`) |
+| `/archflow-counter-review [model]` | Run a standalone cross-model counter-review of the working tree or a plan via `archflow-local review`, optionally targeting a specific model or shorthand (e.g. `sol-6.2`, `astra-6.2`, `opus`, `fable`, `hydrogen`, `neon`) |
 | `/archflow-run <name> [ask]` | Plan a large job once, then orchestrate it across fresh sessions with per-task sub-agents, worktrees, and cross-model review sized to each task's risk; markdown state (Claude Code orchestrator) |
 
 In Claude Code and Antigravity, invoke skills with `/` (e.g. `/archflow-init`). In Codex, invoke the same skill names with `$` instead of `/`: `$archflow-init`, `$archflow-constitution`, `$archflow-explore`, and `$archflow-counter-review`. `/archflow-run` is installed for every client but currently needs Claude Code as its orchestrator.

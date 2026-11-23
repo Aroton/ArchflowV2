@@ -17,7 +17,7 @@ Five skills put these in front of you:
 | `/archflow-init` | Runs `archflow-local init` and explains the result |
 | `/archflow-constitution` | Explains and configures the repository's constitution rules |
 | `/archflow-explore` | Maps a codebase into a maintained `docs/` set |
-| `/archflow-counter-review [model]` | Runs a standalone counter-review of the current working tree or a plan, optionally targeting a specific model (e.g. `sol-6.2`, `sol-6.1`) |
+| `/archflow-counter-review [model]` | Runs a standalone counter-review of the current working tree or a plan, optionally targeting a specific model (e.g. `sol-6.2`, `astra-6.2`, `opus`, `fable`, `hydrogen`, `neon`) |
 | `/archflow-run <name> [ask]` | Plans a large job, then orchestrates it across fresh sessions |
 
 ## Install
@@ -79,7 +79,7 @@ Run a standalone counter-review of the current working tree (or a plan) without 
 ```
 /archflow-counter-review
 /archflow-counter-review sol-6.2
-/archflow-counter-review sol-6.1
+/archflow-counter-review neon
 ```
 
 With no argument it uses `.archflow/config.yaml` (or shipped defaults); naming a model or shorthand overrides the route for that call only without modifying your config. You can also call the CLI directly:

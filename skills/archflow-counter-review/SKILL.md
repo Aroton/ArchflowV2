@@ -1,6 +1,6 @@
 ---
 name: archflow-counter-review
-description: Run a standalone cross-model counter-review of the current working tree or a plan via archflow-local review, optionally targeting a specific model or shorthand such as sol-6.2, sol-6.1, opus, or gemini. Works without an orchestrated run configured.
+description: Run a standalone cross-model counter-review of the current working tree or a plan via archflow-local review, optionally targeting a specific model or shorthand such as sol-6.2, astra-6.2, opus, fable, sonnet, hydrogen, or neon. Works without an orchestrated run configured.
 ---
 
 # Counter-Review
@@ -12,7 +12,7 @@ Run a standalone cross-model counter-review of the current working tree (or a pr
 The user may pass any combination of:
 
 - **No arguments:** run every configured role from `.archflow/config.yaml` (or ArchFlow's shipped defaults when none exists).
-- **A target model or shorthand** (e.g. `sol-6.2`, `sol-6.1`, `gpt-6.2-sol`, `gpt-6.1-sol`, `opus`, `claude-opus-5-5`, `gemini`, `gemini-4-hydrogen-high`): override the reviewer route for this call only using `review_routes` in the payload — never edit `.archflow/config.yaml`.
+- **A target model or shorthand** (e.g. `sol-6.2`, `astra-6.2`, `opus`, `fable`, `sonnet`, `hydrogen`, `neon`, or a full model ID such as `gpt-6.2-sol`, `claude-opus-5-5`, `gemini-4-neon-high`): override the reviewer route for this call only using `review_routes` in the payload — never edit `.archflow/config.yaml`.
 - **An optional effort** (`low`, `medium`, `high`, `xhigh`, `max`, `ultra`), **stage** (`plan` or `implementation`), **roles** (`counter-reviewer`, `test-reviewer`, `adjudicator`), or **focus notes** describing what to pay attention to.
 
 ### Model shorthand resolution
@@ -21,10 +21,13 @@ Resolve common shorthands to exact model IDs before building the payload:
 
 | Shorthand | Model ID |
 | --- | --- |
-| `sol-6.2`, `sol 6.2`, `sol` | `gpt-6.2-sol` |
-| `sol-6.1`, `sol 6.1` | `gpt-6.1-sol` |
-| `opus`, `opus-5.5` | `claude-opus-5-5` |
-| `gemini`, `hydrogen` | `gemini-4-hydrogen-high` |
+| `opus`, `opus-5.5`, `opus 5.5` | `claude-opus-5-5` |
+| `fable`, `fable-5.2`, `fable 5.2` | `claude-fable-5-2` |
+| `sonnet`, `sonnet-5.5`, `sonnet 5.5` | `claude-sonnet-5-5` |
+| `sol`, `sol-6.2`, `sol 6.2` | `gpt-6.2-sol` |
+| `astra`, `astra-6.2`, `astra 6.2` | `gpt-6.2-astra` |
+| `hydrogen`, `gemini` | `gemini-4-hydrogen-high` |
+| `neon` | `gemini-4-neon-high` |
 
 Pass any full model ID (`gpt-*`, `claude-*`, `gemini-*`, or a model paired with a cc-switch `provider`) verbatim. If the user passes an unfamiliar alias that does not match a known prefix or a route in `.archflow/config.yaml`, ask the human for the exact model ID rather than guessing (an unrecognized model family is rejected before dispatch).
 
