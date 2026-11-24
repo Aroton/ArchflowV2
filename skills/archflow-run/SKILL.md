@@ -34,7 +34,7 @@ These are hard rules for the whole run:
 - Between STOPs, halt and ask the human only for a decision that is theirs:
   - a change to what the human gets: a requirement is dropped or weakened, or the product would behave differently from what they approved;
   - reversing or narrowing a decision the human made, or replacing the approved approach rather than correcting it;
-  - a risky change the approved plan does not already cover: one that can lose or corrupt data, weakens a security or access boundary, breaks a contract something outside the run depends on, or spends money;
+  - a risky change the approved plan does not already cover: one that can lose or corrupt data, weakens a security or access boundary, breaks a contract something outside the run depends on, or spends money on external APIs (LLM, image, or hosted model calls outside the run's own coding sessions): never dispatch paid external calls without explicit human consent naming both the provider and the dollar cap, and never silently fall back to another provider or a higher-priced service tier;
   - a kind of change the repository's own rules ask a human to see, such as database behavior or a path under an approval rule, when the change is real;
   - a critical finding still unresolved after the fix-round limit;
   - anything outward-facing or hard to reverse: push, deploy, shared databases, installs into machine-global locations, deleting user data.

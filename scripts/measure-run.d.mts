@@ -4,6 +4,7 @@ export interface ModelRateCard {
   cacheWrite5m: number;
   cacheWrite1h: number;
   output: number;
+  inputIncludesCached?: boolean;
   longContextAbove?: number;
   longContextMult?: number;
 }

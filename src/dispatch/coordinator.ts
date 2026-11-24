@@ -1,6 +1,6 @@
 import { writeDispatchUsageRecord } from "./usage-log.js";
 import type { DispatchUsage } from "../contracts/dispatch-usage.js";
-import { claudeDispatchUsage } from "./usage.js";
+import { dispatchUsageForAdapter } from "./usage.js";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -140,7 +140,7 @@ export function createReviewDispatcher(
       const failure = adapter.classifyFailure(childResult);
       if (failure !== undefined) throw new CliAdapterError(failure);
       failureStage = "output-parse";
-      const usage = route.adapter === "claude-cli" ? claudeDispatchUsage(childResult.stdout) : undefined;
+      const usage = dispatchUsageForAdapter(route.adapter, childResult.stdout);
       return Object.freeze({
         cli_version: preflight.cli_version,
         extracted_output_bytes: adapter.parseOutput(childResult),
@@ -152,7 +152,7 @@ export function createReviewDispatcher(
     } finally {
       if (ownsWorkspace) await workspace?.dispose().catch(() => undefined);
       const channels = childResult ?? (primaryError instanceof DispatchProcessError ? primaryError.channels : undefined);
-      const usage = route.adapter === "claude-cli" && channels !== undefined ? claudeDispatchUsage(channels.stdout) : undefined;
+      const usage = channels !== undefined ? dispatchUsageForAdapter(route.adapter, channels.stdout) : undefined;
       const completedAt = new Date();
       await writeDispatchUsageRecord({
         schema_version: "1", dispatch_id: attemptId,

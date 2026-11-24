@@ -22675,6 +22675,9 @@ async function writeDispatchUsageRecord(record2, directory = installedDispatchUs
 }
 
 // src/dispatch/usage.ts
+function isNonNegativeSafeInt(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
 function claudeDispatchUsage(stdout) {
   try {
     const wrapper = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(stdout));
@@ -22700,6 +22703,59 @@ function claudeDispatchUsage(stdout) {
   } catch {
     return void 0;
   }
+}
+function codexDispatchUsage(stdout) {
+  let text2;
+  try {
+    text2 = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
+  } catch {
+    return void 0;
+  }
+  const totals = {};
+  let turnsWithUsage = 0;
+  for (const line of text2.split(/\r?\n/u)) {
+    if (line.trim() === "") continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+    const event = parsed;
+    if (event.type !== "turn.completed") continue;
+    const usage = event.usage;
+    if (usage === null || typeof usage !== "object" || Array.isArray(usage)) continue;
+    const u = usage;
+    const mapped = [
+      ["input_tokens", u.input_tokens],
+      ["output_tokens", u.output_tokens],
+      ["cache_read_input_tokens", u.cached_input_tokens],
+      ["cache_creation_input_tokens", u.cache_write_input_tokens],
+      ["thinking_tokens", u.reasoning_output_tokens]
+    ];
+    let turnHadField = false;
+    for (const [name, value] of mapped) {
+      if (!isNonNegativeSafeInt(value)) continue;
+      const next = (totals[name] ?? 0) + value;
+      if (!Number.isSafeInteger(next)) continue;
+      totals[name] = next;
+      turnHadField = true;
+    }
+    if (turnHadField) turnsWithUsage += 1;
+  }
+  if (turnsWithUsage === 0) return void 0;
+  totals.num_turns = turnsWithUsage;
+  try {
+    return dispatchUsageSchema.parse(totals);
+  } catch {
+    return void 0;
+  }
+}
+function dispatchUsageForAdapter(adapter2, stdout) {
+  if (adapter2 === "claude-cli") return claudeDispatchUsage(stdout);
+  if (adapter2 === "codex-cli") return codexDispatchUsage(stdout);
+  return void 0;
 }
 
 // src/dispatch/coordinator.ts
@@ -23967,7 +24023,7 @@ function createReviewDispatcher(input, observeAttempt) {
       const failure3 = adapter2.classifyFailure(childResult);
       if (failure3 !== void 0) throw new CliAdapterError(failure3);
       failureStage = "output-parse";
-      const usage = route2.adapter === "claude-cli" ? claudeDispatchUsage(childResult.stdout) : void 0;
+      const usage = dispatchUsageForAdapter(route2.adapter, childResult.stdout);
       return Object.freeze({
         cli_version: preflight2.cli_version,
         extracted_output_bytes: adapter2.parseOutput(childResult),
@@ -23979,7 +24035,7 @@ function createReviewDispatcher(input, observeAttempt) {
     } finally {
       if (ownsWorkspace) await workspace?.dispose().catch(() => void 0);
       const channels = childResult ?? (primaryError instanceof DispatchProcessError ? primaryError.channels : void 0);
-      const usage = route2.adapter === "claude-cli" && channels !== void 0 ? claudeDispatchUsage(channels.stdout) : void 0;
+      const usage = channels !== void 0 ? dispatchUsageForAdapter(route2.adapter, channels.stdout) : void 0;
       const completedAt = /* @__PURE__ */ new Date();
       await writeDispatchUsageRecord({
         schema_version: "1",

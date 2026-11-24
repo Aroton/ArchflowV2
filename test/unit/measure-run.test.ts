@@ -33,6 +33,14 @@ describe("measure-run metrics helpers", () => {
     });
     expect(haikuShort).toBeCloseTo(0.01, 5);
     expect(haikuLong).toBeCloseTo((110_000 * 0.1 + 10_000 * 0.5) * 5 / 1_000_000, 5);
+
+    // OpenAI/Codex input_tokens includes cached_input_tokens
+    const sol = calcMessageCostUsd("gpt-6.2-sol", {
+      input_tokens: 100_000,
+      cache_read_input_tokens: 80_000,
+      output_tokens: 10_000,
+    });
+    expect(sol).toBeCloseTo((20_000 * 2.0 + 80_000 * 0.1 + 10_000 * 10.0) / 1_000_000, 5);
   });
 
   it("deduplicates streaming assistant chunks by message.id", () => {

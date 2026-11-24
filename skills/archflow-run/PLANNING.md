@@ -42,6 +42,8 @@ Each milestone's file holds that milestone's design and its task table, with a r
 
 A boundary has to buy something. Every later milestone costs a planner, a plan review and a gate, so a milestone is typically tens of tasks, and a handful of tasks that could have been designed with their neighbors are part of that milestone. A run whose whole design can be settled now is one milestone.
 
+**When the ask turns on an unproven technical or quality bet** — a new generative pipeline, an unverified external API, or a representation whose output quality cannot be judged from code alone — do not sink a 30-task M1 into an unvalidated design. Make M1 a small **1–2 task vertical spike** (ending at STOP 1 with real output the human can judge) before detailing the full build in M2. Only reach for a spike when the approach itself is uncertain, not when the design is already clear.
+
 Detail the first milestone's tasks. A later milestone is marked "detailed at start" when earlier work should shape it, which is the usual reason it is a milestone of its own. It is detailed on `opus`, which escalates when it meets an architecture decision it cannot make inside the plan; mark it `fable`, with the reason, only when you know it leaves such a decision open, one that earlier work has to settle. Size tasks so one agent finishes each in a single focused spawn (see "Task sizing and the plan table").
 
 Generate the run's agents as "Run agents" describes, and list them in the plan's agent roster. The cross-model reviewer never sees agent files, so write the standing reference-and-validation guidance and the run's test policy as a short `BRIEF.md` in the run directory, with a section per domain when the run has several; every counter-review receives it.

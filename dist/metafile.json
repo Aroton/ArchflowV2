@@ -3312,7 +3312,7 @@
       ]
     },
     "src/dispatch/coordinator.ts": {
-      "bytes": 7598,
+      "bytes": 7561,
       "format": "esm",
       "imports": [
         {
@@ -3452,7 +3452,7 @@
       ]
     },
     "src/dispatch/usage.ts": {
-      "bytes": 1743,
+      "bytes": 4199,
       "format": "esm",
       "imports": [
         {
@@ -4118,7 +4118,7 @@
   },
   "outputs": {
     "archflow-local.mjs": {
-      "bytes": 989306,
+      "bytes": 991079,
       "entryPoint": "src/local/main.ts",
       "exports": [],
       "imports": [
@@ -4877,7 +4877,7 @@
           "bytesInOutput": 25055
         },
         "src/dispatch/coordinator.ts": {
-          "bytesInOutput": 4653
+          "bytesInOutput": 4615
         },
         "src/dispatch/failure-classification.ts": {
           "bytesInOutput": 4237
@@ -4892,7 +4892,7 @@
           "bytesInOutput": 1527
         },
         "src/dispatch/usage.ts": {
-          "bytesInOutput": 1360
+          "bytesInOutput": 3171
         },
         "src/dispatch/workspace.ts": {
           "bytesInOutput": 10540

@@ -17,6 +17,11 @@ export const PRICING = {
   // Legacy / fallback Claude model aliases
   "claude-sonnet-5": { input: 3.0, cacheRead: 0.3, cacheWrite5m: 3.75, cacheWrite1h: 6.0, output: 15.0 },
   "claude-opus-5": { input: 5.0, cacheRead: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10.0, output: 25.0 },
+  // OpenAI / Codex list rates (input_tokens includes cached_input_tokens on Responses/Codex API)
+  "gpt-6.2-sol": { input: 2.0, cacheRead: 0.1, cacheWrite5m: 2.5, cacheWrite1h: 5.0, output: 10.0, inputIncludesCached: true, longContextAbove: 272_000, longContextMult: 2.0 },
+  "gpt-6.1-sol": { input: 2.0, cacheRead: 0.1, cacheWrite5m: 2.5, cacheWrite1h: 5.0, output: 10.0, inputIncludesCached: true, longContextAbove: 272_000, longContextMult: 2.0 },
+  "gpt-6.2-astra": { input: 10.0, cacheRead: 1.0, cacheWrite5m: 12.5, cacheWrite1h: 20.0, output: 40.0, inputIncludesCached: true },
+  "gpt-6-luna": { input: 0.25, cacheRead: 0.025, cacheWrite5m: 0.3125, cacheWrite1h: 0.5, output: 1.0, inputIncludesCached: true },
 };
 
 const IGNORED_LOC_PATTERNS = [
@@ -32,7 +37,7 @@ const CODE_FILE_EXT = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|py|rs|go|sql|sh|bash|css
 export function calcMessageCostUsd(model, usage) {
   const rates = PRICING[model];
   if (!rates || !usage || typeof usage !== "object") return 0;
-  const inp = Number(usage.input_tokens || 0);
+  const rawInp = Number(usage.input_tokens || 0);
   const cr = Number(usage.cache_read_input_tokens || 0);
   const cwTotal = Number(usage.cache_creation_input_tokens || 0);
   const cc = usage.cache_creation && typeof usage.cache_creation === "object" ? usage.cache_creation : {};
@@ -40,7 +45,8 @@ export function calcMessageCostUsd(model, usage) {
   const cw1 = Number(cc.ephemeral_1h_input_tokens || 0);
   if (cw5 + cw1 === 0 && cwTotal > 0) cw5 = cwTotal;
   const out = Number(usage.output_tokens || 0);
-  const promptTotal = inp + cr + cwTotal;
+  const inp = rates.inputIncludesCached ? Math.max(0, rawInp - cr - cwTotal) : rawInp;
+  const promptTotal = rates.inputIncludesCached ? rawInp : inp + cr + cwTotal;
   const mult = rates.longContextAbove && promptTotal > rates.longContextAbove ? (rates.longContextMult ?? 1) : 1;
   return (
     (inp * rates.input + cr * rates.cacheRead + cw5 * rates.cacheWrite5m + cw1 * rates.cacheWrite1h + out * rates.output) *
@@ -564,9 +570,22 @@ export function measureRun({
     gates.note += gc.note;
   }
 
-  // 3. Parse counter-review packets
+  // 3. Parse counter-review packets (summary.json + result.json for reviewer usage)
   const packetsDir = join(absRunDir, "packets");
-  const counterReview = { total: 0, taskR1: 0, taskDelta: 0, plan: 0, milestoneGate: 0, failures: 0, issuesFound: 0, deltaIssuesFound: 0, humanReviewReasons: 0 };
+  const counterReview = {
+    total: 0,
+    taskR1: 0,
+    taskDelta: 0,
+    plan: 0,
+    milestoneGate: 0,
+    failures: 0,
+    issuesFound: 0,
+    deltaIssuesFound: 0,
+    humanReviewReasons: 0,
+    usageReports: 0,
+    usageTokens: 0,
+    usageCostUsd: 0,
+  };
   if (existsSync(packetsDir)) {
     for (const entry of readdirSync(packetsDir)) {
       if (!/-cr\d+$/u.test(entry)) continue;
@@ -596,8 +615,32 @@ export function measureRun({
         counterReview.issuesFound += 1;
         if (isDelta) counterReview.deltaIssuesFound += 1;
       }
+
+      const rp = join(packetsDir, entry, "result.json");
+      if (existsSync(rp)) {
+        try {
+          const res = JSON.parse(readFileSync(rp, "utf8"));
+          const fullReports = Array.isArray(res?.value?.reports) ? res.value.reports : [];
+          for (const rep of fullReports) {
+            const u = rep?.usage;
+            if (!u || typeof u !== "object") continue;
+            counterReview.usageReports += 1;
+            const model = rep?.route?.model || "";
+            const inTok = Number(u.input_tokens || 0);
+            const outTok = Number(u.output_tokens || 0);
+            const crTok = Number(u.cache_read_input_tokens || 0);
+            const cwTok = Number(u.cache_creation_input_tokens || 0);
+            const rates = PRICING[model];
+            counterReview.usageTokens += rates?.inputIncludesCached ? inTok + outTok : inTok + crTok + cwTok + outTok;
+            counterReview.usageCostUsd += typeof u.total_cost_usd === "number" ? u.total_cost_usd : calcMessageCostUsd(model, u);
+          }
+        } catch {
+          // ignore malformed result.json
+        }
+      }
     }
   }
+  counterReview.usageCostUsd = round(counterReview.usageCostUsd, 2);
 
   // 4. Parse Claude session & subagent JSONLs
   const claude = {
@@ -1121,8 +1164,12 @@ export function renderMetricsMarkdown(history) {
     lines.push("");
 
     if (latest.counterReview.total > 0) {
+      const usageNote =
+        latest.counterReview.usageReports > 0
+          ? ` Reported counter-review usage across ${latest.counterReview.usageReports} reports: **${round(latest.counterReview.usageTokens / 1_000_000, 1)}M tokens (~${fmtUsd(latest.counterReview.usageCostUsd)})**.`
+          : "";
       lines.push(
-        `Cross-model counter-review reliability: **${latest.counterReview.total - latest.counterReview.failures}/${latest.counterReview.total}** succeeded (${round(((latest.counterReview.total - latest.counterReview.failures) / latest.counterReview.total) * 100, 1)}%), raising issues on **${latest.counterReview.issuesFound}/${latest.counterReview.total}** packets (including **${latest.counterReview.deltaIssuesFound}/${latest.counterReview.taskDelta}** post-fix delta reviews).`,
+        `Cross-model counter-review reliability: **${latest.counterReview.total - latest.counterReview.failures}/${latest.counterReview.total}** succeeded (${round(((latest.counterReview.total - latest.counterReview.failures) / latest.counterReview.total) * 100, 1)}%), raising issues on **${latest.counterReview.issuesFound}/${latest.counterReview.total}** packets (including **${latest.counterReview.deltaIssuesFound}/${latest.counterReview.taskDelta}** post-fix delta reviews).${usageNote}`,
       );
       lines.push("");
     }

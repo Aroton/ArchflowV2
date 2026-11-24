@@ -33,8 +33,8 @@ Resume: run `/archflow-run <name>` in a fresh session on the orchestrator's mode
 <!-- one line per later STOP or halt: - <STOP n | halt: topic> — <date>: <the question in a few words> → <the human's answer> -->
 
 ## Task log
-<!-- one line per merged task: - <id> — <short sha> — <full | light> — written on <model> — reviews/<id>-r<k>.md (critical/major/minor; structure n) <fix rounds; a run-time hatch if one opened; delta review if one ran; carried ids → owner> -->
-<!-- The line points at the review file. What the review found and what was done about it is told there, not here. -->
+<!-- Active milestone only: one line per merged task: - <id> — <short sha> — <full | light> — written on <model> — reviews/<id>-r<k>.md (critical/major/minor; structure n) <fix rounds; a run-time hatch if one opened; delta review if one ran; carried ids → owner> -->
+<!-- The line points at the review file. What the review found and what was done about it is told there, not here. When a milestone finishes, move its task-log lines to HISTORY.md with a shell command. -->
 
 ## Decisions to report
 <!-- Calls the orchestrator made on the human's behalf that they have not been told about yet. Reported in full in the
