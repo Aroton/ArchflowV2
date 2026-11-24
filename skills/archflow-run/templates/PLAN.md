@@ -9,9 +9,9 @@ Run: `<name>` · Branch: `<run branch>` · Planned: <date> · Approved at STOP 0
      planner's: what an executing agent needs from them is carried in each milestone's file. -->
 
 ## 1. Requirements (shared)
-<What the human gets, and what is out of scope. Size it to the work: a paragraph for a well-understood target,
-an interviewed requirements list for new product intent. These are the human's: the run does not drop, weaken or
-change one without asking. Number them (R1, R2, …): each gate and STOP report accounts for them one by one.>
+<What the human gets — including settled UX and behavior — and what is out of scope (non-goals), sized to the work
+from `research/planning.md`. These are the human's: the run does not drop, weaken or change one without asking. Number
+them (R1, R2, …): each gate and STOP report accounts for them one by one.>
 
 ## 2. Architecture
 <The decisions the run depends on, numbered (§2.1, §2.2, …). The planner reads this section; the agents that

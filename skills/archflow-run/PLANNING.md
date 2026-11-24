@@ -10,12 +10,13 @@ Planning runs before the run's generated agents exist, so explorers and the plan
 
 - what exists, with paths and line pointers, and how the parts connect;
 - the conventions the code follows there, including where the same thing is done in more than one way, and the repository instructions that apply;
+- constraints, conflicting patterns, or integration seams that affect the ask and leave a real choice open (flag the fork so the orchestrator can clarify it with the human; do not pick a design);
 - the commands that build, typecheck and test it, including how to run named test files only, how long the full suite takes, and which test groups are slow;
 - what it could not find or is unsure of.
 
-An explorer describes what is there. It does not propose a design, and it says so when a question needs more judgment than a lookup; that question goes to the research route. It returns a few lines: the file it wrote and what it covers.
+An explorer describes what is there. It does not propose a design, and it says so when a question needs more judgment than a lookup; that question goes to the research route. It returns a few lines: the file it wrote, what it covers, and any open forks or constraints the orchestrator should know before planning.
 
-**Planning brief.** `research/planning.md`, written by the orchestrator, is the planner's starting point: the ask in the human's words, the settled requirements and each decision the human made, the run branch, the active review triggers, and an index of the research files. It is updated when the human answers a question, so a fresh planner starts from the current state.
+**Planning brief.** `research/planning.md`, maintained by the orchestrator across clarification rounds, is the planner's starting point: the ask in the human's words, the settled requirements, UX and behavior choices, architecture and integration decisions or constraints, non-goals, any minor residual assumptions, the run branch, the active review triggers, and an index of the research files. Update it as the human answers questions, so multi-round planning survives a session break and a fresh planner starts from the current state.
 
 **Planner.** One fresh sub-agent, on the route its job takes ("Planner routing" in `PROTOCOL.md`). Its prompt names the brief, the run directory, this skill directory, and which of three jobs it has:
 
@@ -47,7 +48,7 @@ Generate the run's agents as "Run agents" describes, and list them in the plan's
 
 The planner ends with a short return block: `STATUS: done | needs-decision | escalate`, `FILES:` the paths it wrote, `NOTES:` the main architecture choices, the milestones and the risks in a few lines, and `QUESTIONS:`. The orchestrator reads the plan itself by section. The planner does not commit, and it writes only the run's files and agents.
 
-A question whose answer is the human's (a requirement the brief leaves open, a choice between products rather than between designs) does not stop the planner. It writes the plan on the answer it would assume, and returns `done` with every such question under QUESTIONS: what is open, what it assumed, and what in the plan changes on the other answer. The orchestrator puts them to the human with the plan, at STOP 0 or in a halt for a milestone detailed mid-run, and only an answer that differs from the assumption goes to a fresh planner, as a revision. One planning pass then serves however many questions there are. The planner returns `needs-decision` without writing a plan only when the whole plan turns on the answer, so that no assumption would leave most of it standing.
+This is a fallback for residual questions the orchestrator's clarification could not anticipate — not a substitute for settling UX, scope and architecture up front. When the planner still uncovers a question whose answer is the human's (a requirement the brief left open, a product or UX choice exposed only deep in the code), it does not stop: it writes the plan on the answer it would assume, and returns `done` with every such question under QUESTIONS: what is open, what it assumed, and what in the plan changes on the other answer. The orchestrator puts them to the human with the plan, at STOP 0 or in a halt for a milestone detailed mid-run, and only an answer that differs from the assumption goes to a fresh planner, as a revision. One planning pass then serves however many questions there are. The planner returns `needs-decision` without writing a plan only when the whole plan turns on the answer, so that no assumption would leave most of it standing.
 
 ## Run agents
 
