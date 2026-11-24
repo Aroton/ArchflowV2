@@ -25,6 +25,7 @@
     "check:schemas": "node scripts/generate-schemas.mjs --check",
     "check:notices": "node scripts/check-notices.mjs",
     "test:notices-policy": "node scripts/test-notices-policy.mjs",
+    "metrics": "node scripts/measure-run.mjs",
     "check": "npm run typecheck && npm test && npm run check:notices",
     "check:deep": "npm run check && node scripts/run-concurrent.mjs --npm check:schemas test:notices-policy test:extended check:release && npm run test:integration"
   },

@@ -76,6 +76,7 @@ describe("package.json dependencies and scripts", () => {
       "check:release",
       "check:schemas",
       "generate:schemas",
+      "metrics",
       "release:check",
       "release:mutations",
       "release:reproduce",
@@ -99,6 +100,7 @@ describe("package.json dependencies and scripts", () => {
       "test:integration",
       "test:notices-policy",
       "check:release",
+      "metrics",
       "test:real-host",
     ]) {
       expect(manifest.scripts["check"], excluded).not.toContain(excluded);

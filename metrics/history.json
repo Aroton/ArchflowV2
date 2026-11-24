@@ -1,0 +1,1774 @@
+{
+  "schemaVersion": 1,
+  "runs": [
+    {
+      "id": "baseline-2026-11-18",
+      "label": "Pre-routing baseline",
+      "kind": "baseline",
+      "date": "2026-11-18",
+      "dateRange": "2026-11-17..2026-11-18",
+      "status": "BASELINE (PURPOSE.md)",
+      "kpis": {
+        "mergedTasks": 52,
+        "totalCostUsd": 813,
+        "costPerTaskUsd": 15.63,
+        "costPerKlocUsd": 0,
+        "fableSharePct": 46,
+        "reviewToWriteRatio": 0.56,
+        "seriousCaught": 32,
+        "seriousCaughtPerTask": 0.62,
+        "seriousEscapedToGates": 4,
+        "signalRatePct": 94.8,
+        "noDecisionRowSharePct": 72.2
+      }
+    },
+    {
+      "id": "p0-security",
+      "label": "p0-security",
+      "kind": "measured",
+      "date": "2026-11-24",
+      "dateRange": "2026-11-24..2026-11-24",
+      "status": "RUNNING",
+      "kpis": {
+        "mergedTasks": 16,
+        "totalCostUsd": 130.88,
+        "costPerTaskUsd": 8.18,
+        "costPerKlocUsd": 12.74,
+        "costPerSourceKlocUsd": 28.74,
+        "tokensPerTaskM": 17.73,
+        "outputTokensPerTaskK": 146.7,
+        "fableSharePct": 34.5,
+        "opusSharePct": 51.1,
+        "sonnetSharePct": 11.7,
+        "haikuSharePct": 2.7,
+        "costPerDayUsd": 130.88,
+        "reviewToWriteRatio": 1.11,
+        "seriousCaught": 6,
+        "seriousCaughtPerTask": 0.38,
+        "totalBugsCaught": 26,
+        "totalBugsCaughtPerTask": 1.63,
+        "seriousEscapedToGates": 0,
+        "gateEscapeRatePct": 0,
+        "signalRatePct": 90,
+        "noDecisionRowSharePct": 54.4,
+        "structureFindingsPerTask": 0.13,
+        "crossModelOnlyMajorSharePct": 0,
+        "crossModelOnlyMinorSharePct": 10,
+        "planningCostUsd": 48.74,
+        "planningInitCostUsd": 31.47,
+        "planningRevisionCostUsd": 17.27,
+        "planningSharePct": 37.2,
+        "planningTokensM": 103.6,
+        "planningRevisionTokensM": 14.7,
+        "implementCostUsd": 21.89,
+        "implementTokensM": 56.6,
+        "fixCostUsd": 5.91,
+        "fixTokensM": 15.6,
+        "fixOutputTokensM": 0.16,
+        "reviewCostUsd": 30.84,
+        "reviewTokensM": 44.9,
+        "orchestratorCostUsd": 23.49,
+        "orchestratorTokensM": 62.9,
+        "progressFileKb": 6.8,
+        "counterfactual": {
+          "unreviewedOpusFloorUsd": 40,
+          "debugAdjustedLowUsd": 58,
+          "debugAdjustedHighUsd": 76,
+          "workflowOverheadRatio": 3.25,
+          "costPerSeriousBugUsd": 15.1
+        }
+      },
+      "writers": {
+        "sonnet": 12,
+        "opusHatch": 4,
+        "other": 0
+      },
+      "hatches": {
+        "fableReview": 0,
+        "runtimeHatch": 1
+      },
+      "fixRoundsDist": {
+        "0": 8,
+        "1": 7,
+        "2": 1,
+        "3+": 0
+      },
+      "orchestratorFixups": 4,
+      "findings": {
+        "reviewFiles": 16,
+        "totalRows": 57,
+        "critical": 1,
+        "major": 5,
+        "minor": 20,
+        "note": 31,
+        "structureRows": 2,
+        "noDecisionRows": 31,
+        "minorOnlyFixTasks": 1,
+        "postR1": {
+          "critical": 0,
+          "major": 0,
+          "minor": 0,
+          "note": 0
+        },
+        "byOrigin": {
+          "in_model_only": {
+            "critical": 1,
+            "major": 4,
+            "minor": 16
+          },
+          "cross_model_only": {
+            "critical": 0,
+            "major": 0,
+            "minor": 2
+          },
+          "both": {
+            "critical": 0,
+            "major": 1,
+            "minor": 0
+          },
+          "structure": {
+            "critical": 0,
+            "major": 0,
+            "minor": 2
+          }
+        },
+        "decisions": {
+          "fix": 30,
+          "defer": 6,
+          "dismiss": 4,
+          "keep": 14,
+          "revert": 0,
+          "decided": 20,
+          "halt": 0,
+          "other": 0
+        },
+        "byMilestone": {
+          "M1": {
+            "tasks": 16,
+            "critical": 1,
+            "major": 5,
+            "minor": 20,
+            "note": 31,
+            "structure": 2
+          }
+        }
+      },
+      "gates": {
+        "files": 0,
+        "critical": 0,
+        "major": 0,
+        "minor": 0,
+        "note": 0
+      },
+      "counterReview": {
+        "total": 22,
+        "taskR1": 16,
+        "taskDelta": 3,
+        "plan": 3,
+        "milestoneGate": 0,
+        "failures": 0,
+        "issuesFound": 10,
+        "deltaIssuesFound": 2,
+        "humanReviewReasons": 12
+      },
+      "git": {
+        "repos": [
+          {
+            "repo": "security-cleanup",
+            "commits": 23,
+            "sourceFiles": 32,
+            "sourceAdded": 4674,
+            "sourceDeleted": 121,
+            "testFiles": 23,
+            "testAdded": 5717,
+            "testDeleted": 0,
+            "grossAdded": 10391,
+            "grossDeleted": 121
+          }
+        ],
+        "commits": 23,
+        "sourceFiles": 32,
+        "testFiles": 23,
+        "netSourceLoc": 4553,
+        "netTestLoc": 5717,
+        "netTotalLoc": 10270,
+        "grossAdded": 10391,
+        "grossDeleted": 121
+      },
+      "claude": {
+        "sessions": 4,
+        "subagents": 64,
+        "activeDays": 1,
+        "orchestratorPeakCtxMax": 286907,
+        "orchestratorPeakCtxAvg": 232284,
+        "orchestratorOver300k": 0,
+        "fixVerifyOnOpus": 8,
+        "fixVerifyOnSonnet": 1,
+        "totals": {
+          "turns": 2214,
+          "inputTokens": 4444,
+          "cacheReadTokens": 273642258,
+          "cacheWriteTokens": 7714472,
+          "cacheWrite5mTokens": 6892768,
+          "cacheWrite1hTokens": 821704,
+          "outputTokens": 2346451,
+          "thinkingTokens": 969552,
+          "costUsd": 130.88
+        },
+        "byModel": {
+          "claude-opus-5-5": {
+            "turns": 1146,
+            "inputTokens": 2306,
+            "cacheReadTokens": 139509681,
+            "cacheWriteTokens": 3417054,
+            "cacheWrite5mTokens": 2595350,
+            "cacheWrite1hTokens": 821704,
+            "outputTokens": 971043,
+            "thinkingTokens": 376833,
+            "costUsd": 66.88
+          },
+          "claude-fable-5-2": {
+            "turns": 204,
+            "inputTokens": 410,
+            "cacheReadTokens": 38061979,
+            "cacheWriteTokens": 1278057,
+            "cacheWrite5mTokens": 1278057,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 427880,
+            "thinkingTokens": 231055,
+            "costUsd": 45.12
+          },
+          "claude-haiku-5-5": {
+            "turns": 290,
+            "inputTokens": 580,
+            "cacheReadTokens": 45431933,
+            "cacheWriteTokens": 1034667,
+            "cacheWrite5mTokens": 1034667,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 414784,
+            "thinkingTokens": 227341,
+            "costUsd": 3.51
+          },
+          "claude-sonnet-5-5": {
+            "turns": 574,
+            "inputTokens": 1148,
+            "cacheReadTokens": 50638665,
+            "cacheWriteTokens": 1984694,
+            "cacheWrite5mTokens": 1984694,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 532744,
+            "thinkingTokens": 134323,
+            "costUsd": 15.36
+          }
+        },
+        "byCategory": {
+          "orchestrator": {
+            "spawns": 4,
+            "turns": 340,
+            "inputTokens": 694,
+            "cacheReadTokens": 61890326,
+            "cacheWriteTokens": 821704,
+            "cacheWrite5mTokens": 0,
+            "cacheWrite1hTokens": 821704,
+            "outputTokens": 226964,
+            "thinkingTokens": 38549,
+            "costUsd": 23.49
+          },
+          "planning_plan": {
+            "spawns": 3,
+            "turns": 247,
+            "inputTokens": 496,
+            "cacheReadTokens": 40739002,
+            "cacheWriteTokens": 970870,
+            "cacheWrite5mTokens": 970870,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 302730,
+            "thinkingTokens": 145785,
+            "costUsd": 27.96
+          },
+          "planning_revision": {
+            "spawns": 2,
+            "turns": 85,
+            "inputTokens": 170,
+            "cacheReadTokens": 14043337,
+            "cacheWriteTokens": 505800,
+            "cacheWrite5mTokens": 505800,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 164861,
+            "thinkingTokens": 87440,
+            "costUsd": 17.27
+          },
+          "planning_explore": {
+            "spawns": 4,
+            "turns": 290,
+            "inputTokens": 580,
+            "cacheReadTokens": 45431933,
+            "cacheWriteTokens": 1034667,
+            "cacheWrite5mTokens": 1034667,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 414784,
+            "thinkingTokens": 227341,
+            "costUsd": 3.51
+          },
+          "review_task": {
+            "spawns": 17,
+            "turns": 401,
+            "inputTokens": 802,
+            "cacheReadTokens": 35275572,
+            "cacheWriteTokens": 1460884,
+            "cacheWrite5mTokens": 1460884,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 377349,
+            "thinkingTokens": 211533,
+            "costUsd": 25.23
+          },
+          "implement": {
+            "spawns": 20,
+            "turns": 567,
+            "inputTokens": 1134,
+            "cacheReadTokens": 54174957,
+            "cacheWriteTokens": 1839637,
+            "cacheWrite5mTokens": 1839637,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 609312,
+            "thinkingTokens": 168882,
+            "costUsd": 21.89
+          },
+          "fix": {
+            "spawns": 9,
+            "turns": 174,
+            "inputTokens": 348,
+            "cacheReadTokens": 14829624,
+            "cacheWriteTokens": 595197,
+            "cacheWrite5mTokens": 595197,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 158839,
+            "thinkingTokens": 50563,
+            "costUsd": 5.91
+          },
+          "review_fix_verify": {
+            "spawns": 9,
+            "turns": 110,
+            "inputTokens": 220,
+            "cacheReadTokens": 7257507,
+            "cacheWriteTokens": 485713,
+            "cacheWrite5mTokens": 485713,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 91612,
+            "thinkingTokens": 39459,
+            "costUsd": 5.61
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "Cost per merged task",
+          "status": "good",
+          "value": "$8.18/task",
+          "target": "≤ $10/task (baseline $15.60)"
+        },
+        {
+          "name": "Strongest-model (Fable) share",
+          "status": "warn",
+          "value": "34.5%",
+          "target": "≤ 20% (baseline 46%)"
+        },
+        {
+          "name": "Review-to-write cost ratio",
+          "status": "good",
+          "value": "1.11x",
+          "target": "≤ 1.2x (Claude review vs write+fix)"
+        },
+        {
+          "name": "Review signal rate (acted on)",
+          "status": "good",
+          "value": "90%",
+          "target": "≥ 85%"
+        },
+        {
+          "name": "No-decision review rows",
+          "status": "warn",
+          "value": "54.4%",
+          "target": "≤ 40% (baseline 72%)"
+        },
+        {
+          "name": "PROGRESS.md live-state hygiene",
+          "status": "good",
+          "value": "6.8 KB",
+          "target": "≤ 20 KB (archive finished milestones)"
+        },
+        {
+          "name": "Fix-verify Opus share",
+          "status": "bad",
+          "value": "89% (8/9)",
+          "target": "≤ 65% (route minor test-backed verifies to Sonnet)"
+        }
+      ]
+    },
+    {
+      "id": "stage-missing-features",
+      "label": "stage-missing-features",
+      "kind": "measured",
+      "date": "2026-11-24",
+      "dateRange": "2026-11-19..2026-11-24",
+      "status": "RUNNING",
+      "kpis": {
+        "mergedTasks": 107,
+        "totalCostUsd": 972.27,
+        "costPerTaskUsd": 9.09,
+        "costPerKlocUsd": 9.72,
+        "costPerSourceKlocUsd": 17.77,
+        "tokensPerTaskM": 29.45,
+        "outputTokensPerTaskK": 166.9,
+        "fableSharePct": 6.3,
+        "opusSharePct": 59.8,
+        "sonnetSharePct": 32.9,
+        "haikuSharePct": 0.9,
+        "costPerDayUsd": 162.04,
+        "reviewToWriteRatio": 0.94,
+        "seriousCaught": 68,
+        "seriousCaughtPerTask": 0.64,
+        "totalBugsCaught": 387,
+        "totalBugsCaughtPerTask": 3.62,
+        "seriousEscapedToGates": 0,
+        "gateEscapeRatePct": 0,
+        "signalRatePct": 97.8,
+        "noDecisionRowSharePct": 39.6,
+        "structureFindingsPerTask": 0.44,
+        "crossModelOnlyMajorSharePct": 22,
+        "crossModelOnlyMinorSharePct": 31.7,
+        "planningCostUsd": 61.21,
+        "planningInitCostUsd": 39.63,
+        "planningRevisionCostUsd": 21.58,
+        "planningSharePct": 6.3,
+        "planningTokensM": 204.4,
+        "planningRevisionTokensM": 31.9,
+        "implementCostUsd": 326.61,
+        "implementTokensM": 1515.2,
+        "fixCostUsd": 53.23,
+        "fixTokensM": 183.6,
+        "fixOutputTokensM": 1.37,
+        "reviewCostUsd": 356.14,
+        "reviewTokensM": 751.8,
+        "orchestratorCostUsd": 175.08,
+        "orchestratorTokensM": 496.3,
+        "progressFileKb": 50.8,
+        "counterfactual": {
+          "unreviewedOpusFloorUsd": 721,
+          "debugAdjustedLowUsd": 925,
+          "debugAdjustedHighUsd": 1129,
+          "workflowOverheadRatio": 1.35,
+          "costPerSeriousBugUsd": 3.7
+        }
+      },
+      "writers": {
+        "sonnet": 101,
+        "opusHatch": 6,
+        "other": 0
+      },
+      "hatches": {
+        "fableReview": 1,
+        "runtimeHatch": 4
+      },
+      "fixRoundsDist": {
+        "0": 28,
+        "1": 72,
+        "2": 4,
+        "3+": 3
+      },
+      "orchestratorFixups": 9,
+      "findings": {
+        "reviewFiles": 107,
+        "totalRows": 641,
+        "critical": 9,
+        "major": 59,
+        "minor": 319,
+        "note": 254,
+        "structureRows": 47,
+        "noDecisionRows": 254,
+        "minorOnlyFixTasks": 24,
+        "postR1": {
+          "critical": 2,
+          "major": 4,
+          "minor": 20,
+          "note": 3
+        },
+        "byOrigin": {
+          "in_model_only": {
+            "critical": 5,
+            "major": 29,
+            "minor": 178
+          },
+          "cross_model_only": {
+            "critical": 2,
+            "major": 13,
+            "minor": 101
+          },
+          "both": {
+            "critical": 2,
+            "major": 13,
+            "minor": 24
+          },
+          "structure": {
+            "critical": 0,
+            "major": 4,
+            "minor": 13
+          }
+        },
+        "decisions": {
+          "fix": 373,
+          "defer": 70,
+          "dismiss": 10,
+          "keep": 105,
+          "revert": 0,
+          "decided": 55,
+          "halt": 0,
+          "other": 0
+        },
+        "byMilestone": {
+          "M1": {
+            "tasks": 91,
+            "critical": 6,
+            "major": 45,
+            "minor": 230,
+            "note": 195,
+            "structure": 34
+          },
+          "M2": {
+            "tasks": 16,
+            "critical": 3,
+            "major": 14,
+            "minor": 89,
+            "note": 59,
+            "structure": 13
+          }
+        }
+      },
+      "gates": {
+        "files": 0,
+        "critical": 0,
+        "major": 0,
+        "minor": 0,
+        "note": 0
+      },
+      "counterReview": {
+        "total": 116,
+        "taskR1": 91,
+        "taskDelta": 21,
+        "plan": 3,
+        "milestoneGate": 1,
+        "failures": 0,
+        "issuesFound": 72,
+        "deltaIssuesFound": 12,
+        "humanReviewReasons": 1
+      },
+      "git": {
+        "repos": [
+          {
+            "repo": "engine-improvements",
+            "commits": 164,
+            "sourceFiles": 268,
+            "sourceAdded": 58119,
+            "sourceDeleted": 3429,
+            "testFiles": 163,
+            "testAdded": 44531,
+            "testDeleted": 392,
+            "grossAdded": 106558,
+            "grossDeleted": 7729
+          },
+          {
+            "repo": "engine-improvements",
+            "commits": 11,
+            "sourceFiles": 5,
+            "sourceAdded": 52,
+            "sourceDeleted": 29,
+            "testFiles": 15,
+            "testAdded": 1227,
+            "testDeleted": 84,
+            "grossAdded": 1305,
+            "grossDeleted": 139
+          }
+        ],
+        "commits": 175,
+        "sourceFiles": 273,
+        "testFiles": 178,
+        "netSourceLoc": 54713,
+        "netTestLoc": 45282,
+        "netTotalLoc": 99995,
+        "grossAdded": 107863,
+        "grossDeleted": 7868
+      },
+      "claude": {
+        "sessions": 22,
+        "subagents": 429,
+        "activeDays": 6,
+        "orchestratorPeakCtxMax": 332305,
+        "orchestratorPeakCtxAvg": 263980,
+        "orchestratorOver300k": 3,
+        "fixVerifyOnOpus": 80,
+        "fixVerifyOnSonnet": 8,
+        "totals": {
+          "turns": 20562,
+          "inputTokens": 41676,
+          "cacheReadTokens": 3070822551,
+          "cacheWriteTokens": 62465697,
+          "cacheWrite5mTokens": 56862253,
+          "cacheWrite1hTokens": 5603444,
+          "outputTokens": 17854504,
+          "thinkingTokens": 6688514,
+          "costUsd": 972.27
+        },
+        "byModel": {
+          "claude-opus-5-5": {
+            "turns": 9807,
+            "inputTokens": 20162,
+            "cacheReadTokens": 1358910101,
+            "cacheWriteTokens": 29493221,
+            "cacheWrite5mTokens": 23889777,
+            "cacheWrite1hTokens": 5603444,
+            "outputTokens": 7286168,
+            "thinkingTokens": 2934499,
+            "costUsd": 581.86
+          },
+          "claude-sonnet-5-5": {
+            "turns": 9769,
+            "inputTokens": 19542,
+            "cacheReadTokens": 1524498551,
+            "cacheWriteTokens": 29190261,
+            "cacheWrite5mTokens": 29190261,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 9479610,
+            "thinkingTokens": 3223810,
+            "costUsd": 320.26
+          },
+          "claude-fable-5-2": {
+            "turns": 321,
+            "inputTokens": 642,
+            "cacheReadTokens": 60378427,
+            "cacheWriteTokens": 1832091,
+            "cacheWrite5mTokens": 1832091,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 478025,
+            "thinkingTokens": 222171,
+            "costUsd": 61.6
+          },
+          "claude-haiku-5-5": {
+            "turns": 665,
+            "inputTokens": 1330,
+            "cacheReadTokens": 127035472,
+            "cacheWriteTokens": 1950124,
+            "cacheWrite5mTokens": 1950124,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 610701,
+            "thinkingTokens": 308034,
+            "costUsd": 8.55
+          }
+        },
+        "byCategory": {
+          "orchestrator": {
+            "spawns": 22,
+            "turns": 2693,
+            "inputTokens": 5934,
+            "cacheReadTokens": 489042086,
+            "cacheWriteTokens": 5603444,
+            "cacheWrite5mTokens": 0,
+            "cacheWrite1hTokens": 5603444,
+            "outputTokens": 1620963,
+            "thinkingTokens": 208286,
+            "costUsd": 175.08
+          },
+          "implement": {
+            "spawns": 101,
+            "turns": 7873,
+            "inputTokens": 15748,
+            "cacheReadTokens": 1484511119,
+            "cacheWriteTokens": 22226278,
+            "cacheWrite5mTokens": 22226278,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 8432937,
+            "thinkingTokens": 3008440,
+            "costUsd": 326.61
+          },
+          "fix": {
+            "spawns": 68,
+            "turns": 1872,
+            "inputTokens": 3744,
+            "cacheReadTokens": 176517591,
+            "cacheWriteTokens": 5664473,
+            "cacheWrite5mTokens": 5664473,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 1374018,
+            "thinkingTokens": 424065,
+            "costUsd": 53.23
+          },
+          "review_task": {
+            "spawns": 140,
+            "turns": 5024,
+            "inputTokens": 10050,
+            "cacheReadTokens": 556570211,
+            "cacheWriteTokens": 17494135,
+            "cacheWrite5mTokens": 17494135,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 3774593,
+            "thinkingTokens": 1853861,
+            "costUsd": 250.47
+          },
+          "review_fix_verify": {
+            "spawns": 88,
+            "turns": 1564,
+            "inputTokens": 3128,
+            "cacheReadTokens": 109585772,
+            "cacheWriteTokens": 5572330,
+            "cacheWrite5mTokens": 5572330,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 996861,
+            "thinkingTokens": 434206,
+            "costUsd": 68.73
+          },
+          "review_merge": {
+            "spawns": 14,
+            "turns": 189,
+            "inputTokens": 378,
+            "cacheReadTokens": 13840867,
+            "cacheWriteTokens": 791623,
+            "cacheWrite5mTokens": 791623,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 114389,
+            "thinkingTokens": 38928,
+            "costUsd": 7.3
+          },
+          "planning_revision": {
+            "spawns": 3,
+            "turns": 182,
+            "inputTokens": 364,
+            "cacheReadTokens": 30880547,
+            "cacheWriteTokens": 739923,
+            "cacheWrite5mTokens": 739923,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 231575,
+            "thinkingTokens": 110658,
+            "costUsd": 21.58
+          },
+          "planning_plan": {
+            "spawns": 3,
+            "turns": 182,
+            "inputTokens": 364,
+            "cacheReadTokens": 39786829,
+            "cacheWriteTokens": 1382114,
+            "cacheWrite5mTokens": 1382114,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 385392,
+            "thinkingTokens": 170662,
+            "costUsd": 30.39
+          },
+          "gate_lens": {
+            "spawns": 4,
+            "turns": 245,
+            "inputTokens": 490,
+            "cacheReadTokens": 36173067,
+            "cacheWriteTokens": 800483,
+            "cacheWrite5mTokens": 800483,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 242344,
+            "thinkingTokens": 95531,
+            "costUsd": 27.02
+          },
+          "planning_explore": {
+            "spawns": 6,
+            "turns": 665,
+            "inputTokens": 1330,
+            "cacheReadTokens": 127035472,
+            "cacheWriteTokens": 1950124,
+            "cacheWrite5mTokens": 1950124,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 610701,
+            "thinkingTokens": 308034,
+            "costUsd": 8.55
+          },
+          "planning_research": {
+            "spawns": 1,
+            "turns": 18,
+            "inputTokens": 36,
+            "cacheReadTokens": 1270140,
+            "cacheWriteTokens": 110615,
+            "cacheWrite5mTokens": 110615,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 28328,
+            "thinkingTokens": 14397,
+            "costUsd": 0.69
+          },
+          "deferral_pass": {
+            "spawns": 1,
+            "turns": 55,
+            "inputTokens": 110,
+            "cacheReadTokens": 5608850,
+            "cacheWriteTokens": 130155,
+            "cacheWrite5mTokens": 130155,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 42403,
+            "thinkingTokens": 21446,
+            "costUsd": 2.62
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "Cost per merged task",
+          "status": "good",
+          "value": "$9.09/task",
+          "target": "≤ $10/task (baseline $15.60)"
+        },
+        {
+          "name": "Strongest-model (Fable) share",
+          "status": "good",
+          "value": "6.3%",
+          "target": "≤ 20% (baseline 46%)"
+        },
+        {
+          "name": "Review-to-write cost ratio",
+          "status": "good",
+          "value": "0.94x",
+          "target": "≤ 1.2x (Claude review vs write+fix)"
+        },
+        {
+          "name": "Review signal rate (acted on)",
+          "status": "good",
+          "value": "97.8%",
+          "target": "≥ 85%"
+        },
+        {
+          "name": "No-decision review rows",
+          "status": "good",
+          "value": "39.6%",
+          "target": "≤ 40% (baseline 72%)"
+        },
+        {
+          "name": "PROGRESS.md live-state hygiene",
+          "status": "bad",
+          "value": "50.8 KB",
+          "target": "≤ 20 KB (archive finished milestones)"
+        },
+        {
+          "name": "Fix-verify Opus share",
+          "status": "bad",
+          "value": "91% (80/88)",
+          "target": "≤ 65% (route minor test-backed verifies to Sonnet)"
+        }
+      ]
+    },
+    {
+      "id": "stage-templates",
+      "label": "stage-templates",
+      "kind": "measured",
+      "date": "2026-11-24",
+      "dateRange": "2026-11-20..2026-11-24",
+      "status": "RUNNING",
+      "kpis": {
+        "mergedTasks": 100,
+        "totalCostUsd": 1129.27,
+        "costPerTaskUsd": 11.29,
+        "costPerKlocUsd": 21.69,
+        "costPerSourceKlocUsd": 27.09,
+        "tokensPerTaskM": 31.6,
+        "outputTokensPerTaskK": 194.6,
+        "fableSharePct": 12.4,
+        "opusSharePct": 63,
+        "sonnetSharePct": 24.3,
+        "haikuSharePct": 0.3,
+        "costPerDayUsd": 225.85,
+        "reviewToWriteRatio": 0.87,
+        "seriousCaught": 143,
+        "seriousCaughtPerTask": 1.43,
+        "totalBugsCaught": 680,
+        "totalBugsCaughtPerTask": 6.8,
+        "seriousEscapedToGates": 13,
+        "gateEscapeRatePct": 8.3,
+        "signalRatePct": 96.4,
+        "noDecisionRowSharePct": 31.2,
+        "structureFindingsPerTask": 0.49,
+        "crossModelOnlyMajorSharePct": 26.4,
+        "crossModelOnlyMinorSharePct": 38.9,
+        "planningCostUsd": 91.57,
+        "planningInitCostUsd": 64.66,
+        "planningRevisionCostUsd": 26.91,
+        "planningSharePct": 8.1,
+        "planningTokensM": 142.2,
+        "planningRevisionTokensM": 33.6,
+        "implementCostUsd": 311.26,
+        "implementTokensM": 1321.3,
+        "fixCostUsd": 138.36,
+        "fixTokensM": 438.7,
+        "fixOutputTokensM": 3.22,
+        "reviewCostUsd": 391.28,
+        "reviewTokensM": 720.4,
+        "orchestratorCostUsd": 196.78,
+        "orchestratorTokensM": 537.4,
+        "progressFileKb": 36.8,
+        "counterfactual": {
+          "unreviewedOpusFloorUsd": 627,
+          "debugAdjustedLowUsd": 1056,
+          "debugAdjustedHighUsd": 1485,
+          "workflowOverheadRatio": 1.8,
+          "costPerSeriousBugUsd": 3.51
+        }
+      },
+      "writers": {
+        "sonnet": 85,
+        "opusHatch": 12,
+        "other": 0
+      },
+      "hatches": {
+        "fableReview": 1,
+        "runtimeHatch": 11
+      },
+      "fixRoundsDist": {
+        "0": 87,
+        "1": 0,
+        "2": 4,
+        "3+": 6
+      },
+      "orchestratorFixups": 25,
+      "findings": {
+        "reviewFiles": 100,
+        "totalRows": 988,
+        "critical": 18,
+        "major": 125,
+        "minor": 537,
+        "note": 308,
+        "structureRows": 49,
+        "noDecisionRows": 308,
+        "minorOnlyFixTasks": 19,
+        "postR1": {
+          "critical": 2,
+          "major": 10,
+          "minor": 98,
+          "note": 5
+        },
+        "byOrigin": {
+          "in_model_only": {
+            "critical": 13,
+            "major": 71,
+            "minor": 258
+          },
+          "cross_model_only": {
+            "critical": 1,
+            "major": 33,
+            "minor": 209
+          },
+          "both": {
+            "critical": 4,
+            "major": 16,
+            "minor": 28
+          },
+          "structure": {
+            "critical": 0,
+            "major": 5,
+            "minor": 31
+          }
+        },
+        "decisions": {
+          "fix": 603,
+          "defer": 146,
+          "dismiss": 28,
+          "keep": 146,
+          "revert": 2,
+          "decided": 84,
+          "halt": 0,
+          "other": 0
+        },
+        "byMilestone": {
+          "M1": {
+            "tasks": 34,
+            "critical": 3,
+            "major": 23,
+            "minor": 145,
+            "note": 95,
+            "structure": 18
+          },
+          "M2": {
+            "tasks": 21,
+            "critical": 5,
+            "major": 33,
+            "minor": 108,
+            "note": 70,
+            "structure": 10
+          },
+          "M3": {
+            "tasks": 45,
+            "critical": 10,
+            "major": 69,
+            "minor": 284,
+            "note": 143,
+            "structure": 21
+          }
+        }
+      },
+      "gates": {
+        "files": 10,
+        "critical": 0,
+        "major": 13,
+        "minor": 39,
+        "note": 17
+      },
+      "counterReview": {
+        "total": 129,
+        "taskR1": 95,
+        "taskDelta": 31,
+        "plan": 3,
+        "milestoneGate": 0,
+        "failures": 1,
+        "issuesFound": 107,
+        "deltaIssuesFound": 29,
+        "humanReviewReasons": 0
+      },
+      "git": {
+        "repos": [
+          {
+            "repo": "makko-stage-templates",
+            "commits": 194,
+            "sourceFiles": 238,
+            "sourceAdded": 41591,
+            "sourceDeleted": 46,
+            "testFiles": 41,
+            "testAdded": 9955,
+            "testDeleted": 25,
+            "grossAdded": 64132,
+            "grossDeleted": 12615
+          },
+          {
+            "repo": "makko-stage-templates",
+            "commits": 5,
+            "sourceFiles": 6,
+            "sourceAdded": 156,
+            "sourceDeleted": 14,
+            "testFiles": 13,
+            "testAdded": 484,
+            "testDeleted": 44,
+            "grossAdded": 690,
+            "grossDeleted": 108
+          }
+        ],
+        "commits": 199,
+        "sourceFiles": 244,
+        "testFiles": 54,
+        "netSourceLoc": 41687,
+        "netTestLoc": 10370,
+        "netTotalLoc": 52057,
+        "grossAdded": 64822,
+        "grossDeleted": 12723
+      },
+      "claude": {
+        "sessions": 26,
+        "subagents": 487,
+        "activeDays": 5,
+        "orchestratorPeakCtxMax": 354959,
+        "orchestratorPeakCtxAvg": 266257,
+        "orchestratorOver300k": 4,
+        "fixVerifyOnOpus": 103,
+        "fixVerifyOnSonnet": 3,
+        "totals": {
+          "turns": 21143,
+          "inputTokens": 42712,
+          "cacheReadTokens": 3074924903,
+          "cacheWriteTokens": 65540243,
+          "cacheWrite5mTokens": 58786407,
+          "cacheWrite1hTokens": 6753836,
+          "outputTokens": 19458563,
+          "thinkingTokens": 8129655,
+          "costUsd": 1129.27
+        },
+        "byModel": {
+          "claude-opus-5-5": {
+            "turns": 11499,
+            "inputTokens": 23386,
+            "cacheReadTokens": 1605125053,
+            "cacheWriteTokens": 34429072,
+            "cacheWrite5mTokens": 27675236,
+            "cacheWrite1hTokens": 6753836,
+            "outputTokens": 9889987,
+            "thinkingTokens": 4170066,
+            "costUsd": 711.33
+          },
+          "claude-sonnet-5-5": {
+            "turns": 8703,
+            "inputTokens": 17434,
+            "cacheReadTokens": 1295266981,
+            "cacheWriteTokens": 25531796,
+            "cacheWrite5mTokens": 25531796,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 8054979,
+            "thinkingTokens": 3173326,
+            "costUsd": 273.94
+          },
+          "claude-fable-5-2": {
+            "turns": 612,
+            "inputTokens": 1234,
+            "cacheReadTokens": 123727963,
+            "cacheWriteTokens": 4507789,
+            "cacheWrite5mTokens": 4507789,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 1142172,
+            "thinkingTokens": 581696,
+            "costUsd": 140.27
+          },
+          "claude-haiku-5-5": {
+            "turns": 329,
+            "inputTokens": 658,
+            "cacheReadTokens": 50804906,
+            "cacheWriteTokens": 1071586,
+            "cacheWrite5mTokens": 1071586,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 371425,
+            "thinkingTokens": 204567,
+            "costUsd": 3.73
+          }
+        },
+        "byCategory": {
+          "orchestrator": {
+            "spawns": 26,
+            "turns": 2793,
+            "inputTokens": 5924,
+            "cacheReadTokens": 528744215,
+            "cacheWriteTokens": 6753836,
+            "cacheWrite5mTokens": 0,
+            "cacheWrite1hTokens": 6753836,
+            "outputTokens": 1849024,
+            "thinkingTokens": 294686,
+            "costUsd": 196.78
+          },
+          "review_task": {
+            "spawns": 113,
+            "turns": 3883,
+            "inputTokens": 7802,
+            "cacheReadTokens": 436245163,
+            "cacheWriteTokens": 13257391,
+            "cacheWrite5mTokens": 13257391,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 3505908,
+            "thinkingTokens": 1711979,
+            "costUsd": 212.73
+          },
+          "review_fix_verify": {
+            "spawns": 106,
+            "turns": 2262,
+            "inputTokens": 4526,
+            "cacheReadTokens": 186032035,
+            "cacheWriteTokens": 7692033,
+            "cacheWrite5mTokens": 7692033,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 1828539,
+            "thinkingTokens": 863063,
+            "costUsd": 111.91
+          },
+          "review_merge": {
+            "spawns": 46,
+            "turns": 187,
+            "inputTokens": 374,
+            "cacheReadTokens": 8567541,
+            "cacheWriteTokens": 1853025,
+            "cacheWrite5mTokens": 1853025,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 113048,
+            "thinkingTokens": 13379,
+            "costUsd": 6.62
+          },
+          "fix": {
+            "spawns": 101,
+            "turns": 3686,
+            "inputTokens": 7374,
+            "cacheReadTokens": 424906003,
+            "cacheWriteTokens": 10540458,
+            "cacheWrite5mTokens": 10540458,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 3216998,
+            "thinkingTokens": 1366762,
+            "costUsd": 138.36
+          },
+          "implement": {
+            "spawns": 103,
+            "turns": 7198,
+            "inputTokens": 14432,
+            "cacheReadTokens": 1294714054,
+            "cacheWriteTokens": 19291943,
+            "cacheWrite5mTokens": 19291943,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 7293593,
+            "thinkingTokens": 3052674,
+            "costUsd": 311.26
+          },
+          "gate_lens": {
+            "spawns": 8,
+            "turns": 452,
+            "inputTokens": 912,
+            "cacheReadTokens": 58588718,
+            "cacheWriteTokens": 2277336,
+            "cacheWrite5mTokens": 2277336,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 457642,
+            "thinkingTokens": 215780,
+            "costUsd": 60.02
+          },
+          "planning_research": {
+            "spawns": 1,
+            "turns": 8,
+            "inputTokens": 18,
+            "cacheReadTokens": 360408,
+            "cacheWriteTokens": 51869,
+            "cacheWrite5mTokens": 51869,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 12117,
+            "thinkingTokens": 598,
+            "costUsd": 0.29
+          },
+          "planning_revision": {
+            "spawns": 3,
+            "turns": 176,
+            "inputTokens": 354,
+            "cacheReadTokens": 32535148,
+            "cacheWriteTokens": 797467,
+            "cacheWrite5mTokens": 797467,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 316914,
+            "thinkingTokens": 147087,
+            "costUsd": 26.91
+          },
+          "planning_plan": {
+            "spawns": 2,
+            "turns": 169,
+            "inputTokens": 338,
+            "cacheReadTokens": 53426712,
+            "cacheWriteTokens": 1953299,
+            "cacheWrite5mTokens": 1953299,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 493355,
+            "thinkingTokens": 259080,
+            "costUsd": 60.64
+          },
+          "planning_explore": {
+            "spawns": 4,
+            "turns": 329,
+            "inputTokens": 658,
+            "cacheReadTokens": 50804906,
+            "cacheWriteTokens": 1071586,
+            "cacheWrite5mTokens": 1071586,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 371425,
+            "thinkingTokens": 204567,
+            "costUsd": 3.73
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "Cost per merged task",
+          "status": "warn",
+          "value": "$11.29/task",
+          "target": "≤ $10/task (baseline $15.60)"
+        },
+        {
+          "name": "Strongest-model (Fable) share",
+          "status": "good",
+          "value": "12.4%",
+          "target": "≤ 20% (baseline 46%)"
+        },
+        {
+          "name": "Review-to-write cost ratio",
+          "status": "good",
+          "value": "0.87x",
+          "target": "≤ 1.2x (Claude review vs write+fix)"
+        },
+        {
+          "name": "Review signal rate (acted on)",
+          "status": "good",
+          "value": "96.4%",
+          "target": "≥ 85%"
+        },
+        {
+          "name": "No-decision review rows",
+          "status": "good",
+          "value": "31.2%",
+          "target": "≤ 40% (baseline 72%)"
+        },
+        {
+          "name": "PROGRESS.md live-state hygiene",
+          "status": "warn",
+          "value": "36.8 KB",
+          "target": "≤ 20 KB (archive finished milestones)"
+        },
+        {
+          "name": "Fix-verify Opus share",
+          "status": "bad",
+          "value": "97% (103/106)",
+          "target": "≤ 65% (route minor test-backed verifies to Sonnet)"
+        }
+      ]
+    },
+    {
+      "id": "3d-model-tool",
+      "label": "3d-model-tool",
+      "kind": "measured",
+      "date": "2026-11-24",
+      "dateRange": "2026-11-19..2026-11-24",
+      "status": "RUNNING",
+      "kpis": {
+        "mergedTasks": 171,
+        "totalCostUsd": 1274.88,
+        "costPerTaskUsd": 7.46,
+        "costPerKlocUsd": 13.51,
+        "costPerSourceKlocUsd": 31.44,
+        "tokensPerTaskM": 16.62,
+        "outputTokensPerTaskK": 126.3,
+        "fableSharePct": 14.2,
+        "opusSharePct": 66.3,
+        "sonnetSharePct": 19.3,
+        "haikuSharePct": 0.2,
+        "costPerDayUsd": 212.48,
+        "reviewToWriteRatio": 1.5,
+        "seriousCaught": 78,
+        "seriousCaughtPerTask": 0.46,
+        "totalBugsCaught": 834,
+        "totalBugsCaughtPerTask": 4.88,
+        "seriousEscapedToGates": 11,
+        "gateEscapeRatePct": 12.4,
+        "signalRatePct": 94.4,
+        "noDecisionRowSharePct": 36.7,
+        "structureFindingsPerTask": 0.37,
+        "crossModelOnlyMajorSharePct": 25,
+        "crossModelOnlyMinorSharePct": 53.2,
+        "planningCostUsd": 157.49,
+        "planningInitCostUsd": 70.69,
+        "planningRevisionCostUsd": 86.8,
+        "planningSharePct": 12.4,
+        "planningTokensM": 222.3,
+        "planningRevisionTokensM": 116.3,
+        "implementCostUsd": 222.11,
+        "implementTokensM": 694.5,
+        "fixCostUsd": 108.35,
+        "fixTokensM": 304.6,
+        "fixOutputTokensM": 3.07,
+        "reviewCostUsd": 496.1,
+        "reviewTokensM": 811.7,
+        "orchestratorCostUsd": 290.83,
+        "orchestratorTokensM": 808.9,
+        "progressFileKb": 66.7,
+        "counterfactual": {
+          "unreviewedOpusFloorUsd": 468,
+          "debugAdjustedLowUsd": 702,
+          "debugAdjustedHighUsd": 936,
+          "workflowOverheadRatio": 2.72,
+          "costPerSeriousBugUsd": 10.34
+        }
+      },
+      "writers": {
+        "sonnet": 153,
+        "opusHatch": 18,
+        "other": 0
+      },
+      "hatches": {
+        "fableReview": 6,
+        "runtimeHatch": 9
+      },
+      "fixRoundsDist": {
+        "0": 32,
+        "1": 99,
+        "2": 29,
+        "3+": 11
+      },
+      "orchestratorFixups": 30,
+      "findings": {
+        "reviewFiles": 171,
+        "totalRows": 1317,
+        "critical": 14,
+        "major": 64,
+        "minor": 756,
+        "note": 483,
+        "structureRows": 63,
+        "noDecisionRows": 483,
+        "minorOnlyFixTasks": 63,
+        "postR1": {
+          "critical": 0,
+          "major": 5,
+          "minor": 92,
+          "note": 10
+        },
+        "byOrigin": {
+          "in_model_only": {
+            "critical": 10,
+            "major": 29,
+            "minor": 221
+          },
+          "cross_model_only": {
+            "critical": 0,
+            "major": 16,
+            "minor": 402
+          },
+          "both": {
+            "critical": 4,
+            "major": 16,
+            "minor": 79
+          },
+          "structure": {
+            "critical": 0,
+            "major": 3,
+            "minor": 46
+          }
+        },
+        "decisions": {
+          "fix": 738,
+          "defer": 116,
+          "dismiss": 51,
+          "keep": 194,
+          "revert": 5,
+          "decided": 118,
+          "halt": 0,
+          "other": 0
+        },
+        "byMilestone": {
+          "M1": {
+            "tasks": 31,
+            "critical": 0,
+            "major": 8,
+            "minor": 116,
+            "note": 83,
+            "structure": 6
+          },
+          "M2": {
+            "tasks": 63,
+            "critical": 11,
+            "major": 36,
+            "minor": 302,
+            "note": 186,
+            "structure": 25
+          },
+          "M3": {
+            "tasks": 53,
+            "critical": 2,
+            "major": 15,
+            "minor": 249,
+            "note": 152,
+            "structure": 23
+          },
+          "M4": {
+            "tasks": 24,
+            "critical": 1,
+            "major": 5,
+            "minor": 89,
+            "note": 62,
+            "structure": 9
+          }
+        }
+      },
+      "gates": {
+        "files": 17,
+        "critical": 1,
+        "major": 10,
+        "minor": 47,
+        "note": 61
+      },
+      "counterReview": {
+        "total": 216,
+        "taskR1": 159,
+        "taskDelta": 49,
+        "plan": 8,
+        "milestoneGate": 0,
+        "failures": 0,
+        "issuesFound": 204,
+        "deltaIssuesFound": 47,
+        "humanReviewReasons": 4
+      },
+      "git": {
+        "repos": [
+          {
+            "repo": "3d-model-tool",
+            "commits": 244,
+            "sourceFiles": 95,
+            "sourceAdded": 11102,
+            "sourceDeleted": 142,
+            "testFiles": 62,
+            "testAdded": 14489,
+            "testDeleted": 3,
+            "grossAdded": 26994,
+            "grossDeleted": 1548
+          },
+          {
+            "repo": "3d-model-tool",
+            "commits": 128,
+            "sourceFiles": 200,
+            "sourceAdded": 29614,
+            "sourceDeleted": 21,
+            "testFiles": 132,
+            "testAdded": 39301,
+            "testDeleted": 0,
+            "grossAdded": 84316,
+            "grossDeleted": 15422
+          }
+        ],
+        "commits": 372,
+        "sourceFiles": 295,
+        "testFiles": 194,
+        "netSourceLoc": 40553,
+        "netTestLoc": 53787,
+        "netTotalLoc": 94340,
+        "grossAdded": 111310,
+        "grossDeleted": 16970
+      },
+      "claude": {
+        "sessions": 35,
+        "subagents": 832,
+        "activeDays": 6,
+        "orchestratorPeakCtxMax": 345970,
+        "orchestratorPeakCtxAvg": 280398,
+        "orchestratorOver300k": 11,
+        "fixVerifyOnOpus": 174,
+        "fixVerifyOnSonnet": 11,
+        "totals": {
+          "turns": 22703,
+          "inputTokens": 45972,
+          "cacheReadTokens": 2732678014,
+          "cacheWriteTokens": 87637507,
+          "cacheWrite5mTokens": 77995082,
+          "cacheWrite1hTokens": 9642425,
+          "outputTokens": 21596793,
+          "thinkingTokens": 8346019,
+          "costUsd": 1274.88
+        },
+        "byModel": {
+          "claude-opus-5-5": {
+            "turns": 13555,
+            "inputTokens": 27658,
+            "cacheReadTokens": 1750243602,
+            "cacheWriteTokens": 46457369,
+            "cacheWrite5mTokens": 36814944,
+            "cacheWrite1hTokens": 9642425,
+            "outputTokens": 11677445,
+            "thinkingTokens": 4872733,
+            "costUsd": 844.92
+          },
+          "claude-sonnet-5-5": {
+            "turns": 8077,
+            "inputTokens": 16172,
+            "cacheReadTokens": 801927622,
+            "cacheWriteTokens": 33852908,
+            "cacheWrite5mTokens": 33852908,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 8105762,
+            "thinkingTokens": 2572220,
+            "costUsd": 245.91
+          },
+          "claude-fable-5-2": {
+            "turns": 872,
+            "inputTokens": 1744,
+            "cacheReadTokens": 155135877,
+            "cacheWriteTokens": 5727109,
+            "cacheWrite5mTokens": 5727109,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 1554436,
+            "thinkingTokens": 765061,
+            "costUsd": 181.52
+          },
+          "claude-haiku-5-5": {
+            "turns": 199,
+            "inputTokens": 398,
+            "cacheReadTokens": 25370913,
+            "cacheWriteTokens": 1600121,
+            "cacheWrite5mTokens": 1600121,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 259150,
+            "thinkingTokens": 136005,
+            "costUsd": 2.53
+          }
+        },
+        "byCategory": {
+          "orchestrator": {
+            "spawns": 35,
+            "turns": 4211,
+            "inputTokens": 8944,
+            "cacheReadTokens": 796518220,
+            "cacheWriteTokens": 9642425,
+            "cacheWrite5mTokens": 0,
+            "cacheWrite1hTokens": 9642425,
+            "outputTokens": 2717524,
+            "thinkingTokens": 428788,
+            "costUsd": 290.83
+          },
+          "implement": {
+            "spawns": 177,
+            "turns": 5529,
+            "inputTokens": 11072,
+            "cacheReadTokens": 666014261,
+            "cacheWriteTokens": 21904346,
+            "cacheWrite5mTokens": 21904346,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 6590929,
+            "thinkingTokens": 2404971,
+            "costUsd": 222.11
+          },
+          "review_task": {
+            "spawns": 184,
+            "turns": 4612,
+            "inputTokens": 9242,
+            "cacheReadTokens": 441141292,
+            "cacheWriteTokens": 19087294,
+            "cacheWrite5mTokens": 19087294,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 4262104,
+            "thinkingTokens": 2294204,
+            "costUsd": 280.22
+          },
+          "review_fix_verify": {
+            "spawns": 185,
+            "turns": 2290,
+            "inputTokens": 4582,
+            "cacheReadTokens": 156104110,
+            "cacheWriteTokens": 10261039,
+            "cacheWrite5mTokens": 10261039,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 1923384,
+            "thinkingTokens": 925170,
+            "costUsd": 119.7
+          },
+          "fix": {
+            "spawns": 174,
+            "turns": 3363,
+            "inputTokens": 6730,
+            "cacheReadTokens": 288809938,
+            "cacheWriteTokens": 12668796,
+            "cacheWrite5mTokens": 12668796,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 3066168,
+            "thinkingTokens": 1024076,
+            "costUsd": 108.35
+          },
+          "gate_lens": {
+            "spawns": 14,
+            "turns": 1087,
+            "inputTokens": 2180,
+            "cacheReadTokens": 147871690,
+            "cacheWriteTokens": 2757567,
+            "cacheWrite5mTokens": 2757567,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 707985,
+            "thinkingTokens": 247839,
+            "costUsd": 80.89
+          },
+          "review_merge": {
+            "spawns": 69,
+            "turns": 343,
+            "inputTokens": 686,
+            "cacheReadTokens": 17053926,
+            "cacheWriteTokens": 2974774,
+            "cacheWrite5mTokens": 2974774,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 202443,
+            "thinkingTokens": 30569,
+            "costUsd": 11.97
+          },
+          "planning_research": {
+            "spawns": 5,
+            "turns": 69,
+            "inputTokens": 138,
+            "cacheReadTokens": 6529683,
+            "cacheWriteTokens": 597142,
+            "cacheWrite5mTokens": 597142,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 147008,
+            "thinkingTokens": 46885,
+            "costUsd": 9.14
+          },
+          "planning_plan": {
+            "spawns": 4,
+            "turns": 271,
+            "inputTokens": 542,
+            "cacheReadTokens": 68684619,
+            "cacheWriteTokens": 2233060,
+            "cacheWrite5mTokens": 2233060,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 613749,
+            "thinkingTokens": 309983,
+            "costUsd": 59.02
+          },
+          "planning_revision": {
+            "spawns": 14,
+            "turns": 647,
+            "inputTokens": 1294,
+            "cacheReadTokens": 111531782,
+            "cacheWriteTokens": 3705614,
+            "cacheWrite5mTokens": 3705614,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 1062628,
+            "thinkingTokens": 483814,
+            "costUsd": 86.8
+          },
+          "planning_explore": {
+            "spawns": 4,
+            "turns": 199,
+            "inputTokens": 398,
+            "cacheReadTokens": 25370913,
+            "cacheWriteTokens": 1600121,
+            "cacheWrite5mTokens": 1600121,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 259150,
+            "thinkingTokens": 136005,
+            "costUsd": 2.53
+          },
+          "deferral_pass": {
+            "spawns": 2,
+            "turns": 82,
+            "inputTokens": 164,
+            "cacheReadTokens": 7047580,
+            "cacheWriteTokens": 205329,
+            "cacheWrite5mTokens": 205329,
+            "cacheWrite1hTokens": 0,
+            "outputTokens": 43721,
+            "thinkingTokens": 13715,
+            "costUsd": 3.31
+          }
+        }
+      },
+      "checks": [
+        {
+          "name": "Cost per merged task",
+          "status": "good",
+          "value": "$7.46/task",
+          "target": "≤ $10/task (baseline $15.60)"
+        },
+        {
+          "name": "Strongest-model (Fable) share",
+          "status": "good",
+          "value": "14.2%",
+          "target": "≤ 20% (baseline 46%)"
+        },
+        {
+          "name": "Review-to-write cost ratio",
+          "status": "warn",
+          "value": "1.5x",
+          "target": "≤ 1.2x (Claude review vs write+fix)"
+        },
+        {
+          "name": "Review signal rate (acted on)",
+          "status": "good",
+          "value": "94.4%",
+          "target": "≥ 85%"
+        },
+        {
+          "name": "No-decision review rows",
+          "status": "good",
+          "value": "36.7%",
+          "target": "≤ 40% (baseline 72%)"
+        },
+        {
+          "name": "PROGRESS.md live-state hygiene",
+          "status": "bad",
+          "value": "66.7 KB",
+          "target": "≤ 20 KB (archive finished milestones)"
+        },
+        {
+          "name": "Fix-verify Opus share",
+          "status": "bad",
+          "value": "94% (174/185)",
+          "target": "≤ 65% (route minor test-backed verifies to Sonnet)"
+        }
+      ]
+    }
+  ]
+}
